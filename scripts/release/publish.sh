@@ -13,6 +13,9 @@
 # then the tag is deleted and made again at this commit; if that is refused too, it is put back and
 # the run only warns (the release's files are still this build's; its title names it).
 #
+# In GitHub Actions it writes `published=true` (or `false` when it published nothing) to the step's
+# outputs, so the job that installs the published APK runs only when there is one.
+#
 # Usage: publish.sh <tag> <title> <notes file> <dist dir> <feed file name>
 set -euo pipefail
 tag=$1 title=$2 notes=$3 dist=$4 feed=$5
@@ -60,6 +63,7 @@ case $tag in
       live=$(curl -fsSL --retry 3 "https://github.com/$repo/releases/download/$tag/$feed" 2> /dev/null | feed_version_code 2> /dev/null || echo 0)
       if [ "$live" -ge "$ours" ]; then
         echo "::warning::the $tag release already has versionCode $live (this build: $ours); nothing published"
+        [ -z "${GITHUB_OUTPUT:-}" ] || echo "published=false" >> "$GITHUB_OUTPUT"
         exit 0
       fi
       move_tag
@@ -94,3 +98,4 @@ case $tag in
     ;;
 esac
 gh release view "$tag" -R "$repo" --json assets -q '.assets[] | "\(.name) \(.size)"'
+[ -z "${GITHUB_OUTPUT:-}" ] || echo "published=true" >> "$GITHUB_OUTPUT"

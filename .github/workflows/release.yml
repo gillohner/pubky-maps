@@ -5,9 +5,9 @@ name: release
 # - a manual run builds any branch and replaces the `dev` pre-release, which is how changes to the
 #   release are tried before they merge. It never touches `edge` or a version.
 #
-# After publishing, install-published downloads the APK from the release it just published, checks
-# its signing certificate (release/release-cert.sha256; dev: release-cert-dev.sha256) and the
-# release's SHA256SUMS, installs it on the API 35 emulator and runs the smoke test on it.
+# After publishing (when a build was published), install-published downloads the APK from the
+# release, checks its signing certificate (release/release-cert.sha256; dev: release-cert-dev.sha256)
+# and the release's SHA256SUMS, installs it on the API 35 emulator and runs the smoke test on it.
 #
 # Each release has the signed APK (`direct`, with the in-app updater), the signed .aab for app stores
 # (`store`, no updater), SHA256SUMS, and the signed update feed the APK reads:
@@ -157,6 +157,9 @@ jobs:
     needs: [meta, sign]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    outputs:
+      # false when the release already had a newer build (a re-run of an old run): nothing to install.
+      published: ${{ steps.publish.outputs.published }}
     environment: ${{ needs.meta.outputs.channel == 'dev' && 'dev' || 'release' }}
     permissions:
       contents: write
@@ -214,6 +217,7 @@ jobs:
             echo "Check downloads against \`SHA256SUMS\`."
           } > "$RUNNER_TEMP/notes.md"
       - name: publish
+        id: publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -227,6 +231,7 @@ jobs:
   # The APK people download: from the release just published, not from the build artefacts.
   install-published:
     needs: [meta, publish]
+    if: needs.publish.outputs.published == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
