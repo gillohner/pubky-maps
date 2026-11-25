@@ -330,6 +330,20 @@ pub fn build_collection(
     build_collection_in(Root::Pub, author, name, description, items)
 }
 
+/// A list, public under `/pub` or with `private` under `/priv` (the same object; `/priv` is
+/// alpha and readable by the homeserver operator). Its id is minted now, so the app can queue
+/// it and send it later to the same path.
+#[uniffi::export]
+pub fn build_list(
+    author: String,
+    name: String,
+    description: Option<String>,
+    items: Vec<CollectionItem>,
+    private: bool,
+) -> Result<BuiltObject, CoreError> {
+    build_collection_in(root_of(private), author, name, description, items)
+}
+
 /// A list under `root`: `/pub` (public) or `/priv` (private, the same object; `/priv` is
 /// alpha and readable by the homeserver operator).
 pub(crate) fn build_collection_in(
@@ -1048,6 +1062,23 @@ mod tests {
         );
         assert_eq!(edited.uri, private.uri);
         assert_eq!(collection_of(&edited.json).unwrap().items.len(), 1);
+    }
+
+    #[test]
+    fn build_list_mints_under_the_chosen_root() {
+        let private = build_list(AUTHOR.into(), "Mine".into(), None, items(1), true).unwrap();
+        assert!(
+            private.path.starts_with("/priv/social/v1/posts/"),
+            "{}",
+            private.path
+        );
+        let public = build_list(AUTHOR.into(), "Ours".into(), None, items(1), false).unwrap();
+        assert!(
+            public.path.starts_with("/pub/social/v1/posts/"),
+            "{}",
+            public.path
+        );
+        assert!(build_list(AUTHOR.into(), "Big".into(), None, items(101), false).is_err());
     }
 
     #[test]

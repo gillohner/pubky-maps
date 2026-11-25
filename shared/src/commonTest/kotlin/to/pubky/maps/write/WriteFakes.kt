@@ -16,6 +16,15 @@ class FakePubkyWrites : PubkyWrites {
     var gate: CompletableDeferred<Unit>? = null
 
     val photos = mutableListOf<ByteArray>()
+
+    /** Objects built, as `kind(arguments)`: what the core's builders were asked for. */
+    val builds = mutableListOf<String>()
+
+    /** When set, reading the lists waits for it. */
+    var listGate: CompletableDeferred<Unit>? = null
+
+    /** Thrown when the private lists are read (a homeserver refusing /priv). */
+    var privateListsFailure: Throwable? = null
     var scans: Map<Boolean, ListScan> = mapOf(true to ListScan(emptyList(), emptyList()), false to ListScan(emptyList(), emptyList()))
     val skipped = mutableListOf<List<String>>()
     private var posts = 0
@@ -39,34 +48,67 @@ class FakePubkyWrites : PubkyWrites {
         label: String,
     ) = call("untag($place, $label)")
 
-    override suspend fun post(
+    override fun buildPost(
+        author: String,
         place: String,
         text: String,
-    ): String {
-        call("post($place, $text)")
-        return "pubky://me/pub/social/v1/posts/P${++posts}"
+    ): BuiltWrite {
+        builds += "post($place, $text)"
+        val id = "P${++posts}"
+        return BuiltWrite(
+            "/pub/social/v1/posts/$id/$id.json",
+            "pubky://$author/pub/social/v1/posts/$id",
+            """{"kind":"note","parent":"$place"}""",
+        )
     }
 
-    override suspend fun postPhoto(
+    override fun buildPhoto(
+        author: String,
         place: String,
         image: ByteArray,
         mimeType: String,
         alt: String?,
         caption: String?,
-    ): String {
-        call("photo($place, $mimeType, $alt, $caption)")
-        photos += image
-        return "pubky://me/pub/social/v1/posts/I${++posts}"
+    ): BuiltPhoto {
+        builds += "photo($place, $mimeType, $alt, $caption)"
+        val id = "I${++posts}"
+        return BuiltPhoto(
+            filePath = "/pub/social/v1/files/F${image.size}.jpg",
+            post =
+                BuiltWrite(
+                    "/pub/social/v1/posts/$id/$id.json",
+                    "pubky://$author/pub/social/v1/posts/$id",
+                    """{"kind":"image","alt":"$alt","caption":"$caption"}""",
+                ),
+        )
     }
 
-    override suspend fun createList(
+    override fun buildList(
+        author: String,
         name: String,
         places: List<String>,
         private: Boolean,
-    ): OwnList {
-        call("createList($name, $places, private=$private)")
+    ): BuiltWrite {
+        if (name.length > 100) {
+            throw to.pubky.maps.account.CoreFailure
+                .Other("name: at most 100 characters")
+        }
+        builds += "list($name, $places, private=$private)"
         val root = if (private) "priv" else "pub"
-        return OwnList("pubky://me/$root/social/v1/posts/L$name", if (private) Kept.Private else Kept.Public, name, places.map(::normalize))
+        return BuiltWrite("/$root/social/v1/posts/L$name/L$name.json", "pubky://$author/$root/social/v1/posts/L$name", "{}")
+    }
+
+    override suspend fun put(
+        path: String,
+        json: String,
+    ) = call("put($path)")
+
+    override suspend fun putFile(
+        path: String,
+        bytes: ByteArray,
+    ) {
+        call("putFile($path)")
+        photos += bytes
     }
 
     override suspend fun editList(
@@ -85,6 +127,8 @@ class FakePubkyWrites : PubkyWrites {
         skip: List<String>,
     ): ListScan {
         call("lists(private=$private)")
+        listGate?.await()
+        if (private) privateListsFailure?.let { throw it }
         skipped += skip
         return scans.getValue(private)
     }

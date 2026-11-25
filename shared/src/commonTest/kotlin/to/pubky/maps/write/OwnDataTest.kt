@@ -13,6 +13,7 @@ import kotlin.test.assertTrue
 private const val ME = "8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo"
 private const val OSM = "https://www.openstreetmap.org/node/1"
 private const val GOOGLE = "https://maps.app.goo.gl/abc"
+private const val NEW_LIST = "pubky://me/priv/social/v1/posts/L2"
 
 class OwnDataTest {
     private fun data(
@@ -39,7 +40,7 @@ class OwnDataTest {
         val own = data(cached, queue = listOf(WriteOp.Tag(OSM, "cake"), WriteOp.Untag(OSM, "coffee")))
 
         assertEquals(listOf(OwnTag(OSM, "cake", pending = true)), own.tags)
-        assertEquals(1, own.pending)
+        assertEquals(2, own.pending)
         assertEquals(setOf("cake"), own.forPlace(setOf(OSM)).labels)
     }
 
@@ -80,23 +81,38 @@ class OwnDataTest {
         val own =
             data(
                 lists = listOf(list),
-                queue = listOf(WriteOp.EditList(OSM, list.uri, remove = true), WriteOp.CreateList(GOOGLE, "New", true, "x")),
+                queue =
+                    listOf(
+                        WriteOp.EditList(OSM, list.uri, remove = true),
+                        WriteOp.CreateList(GOOGLE, "New", true, "/priv/x", NEW_LIST, "{}"),
+                    ),
             )
 
         val edited = own.lists.first { it.uri == list.uri }
         assertEquals(emptyList(), edited.items)
         assertTrue(edited.pending)
-        val created = own.lists.first { it.uri == "pending:x" }
+        val created = own.lists.first { it.uri == NEW_LIST }
         assertEquals(Kept.Private, created.kept)
         assertEquals(listOf(GOOGLE), created.items)
         assertEquals(listOf(created), own.forPlace(setOf(GOOGLE)).lists)
-        assertEquals(setOf(list.uri, "pending:x"), own.forPlace(setOf(GOOGLE)).allLists)
+        assertEquals(setOf(list.uri, NEW_LIST), own.forPlace(setOf(GOOGLE)).allLists)
     }
 
     @Test
     fun postsWrittenHereShowNewestFirstUntilNexusHasThem() {
-        val sent = Confirmed(WriteOp.Post(OSM, "Good", at = 10), at = 11, uri = "pubky://me/pub/social/v1/posts/P1")
-        val waiting = WriteOp.Photo(OSM, "/outbox/1.photo", "image/jpeg", "Bench", null, at = 20)
+        val post = WriteOp.Post(OSM, "Good", at = 10, path = "/p/P1", uri = "pubky://me/pub/social/v1/posts/P1", json = "{}")
+        val sent = Confirmed(post, at = 11, uri = post.uri)
+        val waiting =
+            WriteOp.Photo(
+                OSM,
+                "/outbox/1.photo",
+                null,
+                at = 20,
+                filePath = "/f/1.jpg",
+                path = "/p/I1",
+                uri = "pubky://me/pub/social/v1/posts/I1",
+                json = "{}",
+            )
 
         val own = data(confirmed = listOf(sent), queue = listOf(waiting)).forPlace(setOf(OSM))
 

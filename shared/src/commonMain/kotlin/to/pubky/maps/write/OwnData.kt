@@ -213,8 +213,7 @@ private fun apply(
         }
 
         is WriteOp.CreateList -> {
-            val uri = OwnList.PENDING_PREFIX + op.localId
-            lists[uri] = OwnList(uri, if (op.private) Kept.Private else Kept.Public, op.name, listOf(place), pending = pending)
+            lists[op.uri] = OwnList(op.uri, if (op.private) Kept.Private else Kept.Public, op.name, listOf(place), pending = pending)
         }
 
         is WriteOp.EditList -> {

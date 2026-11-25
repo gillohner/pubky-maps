@@ -133,13 +133,11 @@ private fun ListRow(
     onToggle: (ListChoice) -> Unit,
 ) {
     val list = choice.list
-    val sending = list.uri.startsWith(OwnList.PENDING_PREFIX)
-    // A full list can still lose the place; a list not created yet cannot change.
-    val enabled = !sending && (choice.holds || !list.full)
+    // A full list can still lose the place. Changes to a list not sent yet are sent after it.
+    val enabled = choice.holds || !list.full
     val count = list.items.size
     val detail =
         when {
-            sending -> "Not sent yet"
             list.full && !choice.holds -> "Full: $count of ${OwnList.MAX_LIST_ITEMS} places"
             count == 1 -> "1 place"
             else -> "$count places"
@@ -149,7 +147,7 @@ private fun ListRow(
         supportingContent = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 KeptBadge(list.kept)
-                Text(detail + if (list.pending && !sending) " · changes not sent yet" else "")
+                Text(detail + if (list.pending) " · not sent yet" else "")
             }
         },
         leadingContent = { Checkbox(checked = choice.holds, onCheckedChange = null, enabled = enabled) },

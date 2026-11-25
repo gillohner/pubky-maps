@@ -22,30 +22,48 @@ interface PubkyWrites {
         label: String,
     )
 
-    /** Posts [text] about [place]: a `note` whose `parent` is the place. Returns the post's URI. */
-    suspend fun post(
+    /**
+     * A post about [place] by [author]: a `note` whose `parent` is the place. Built (its id minted)
+     * now, so it can wait in the outbox and is sent with [put] to this same path, however often.
+     */
+    fun buildPost(
+        author: String,
         place: String,
         text: String,
-    ): String
+    ): BuiltWrite
 
     /**
-     * Uploads [image] (JPEG, PNG or WebP, its metadata already stripped) and posts it as an `image`
-     * post with `embed` = [place]. Returns the post's URI.
+     * A photo of [place]: the file's address (from the bytes' hash) and an `image` post with `embed`
+     * = the place and the file attached. [image] is JPEG, PNG or WebP with its metadata stripped.
      */
-    suspend fun postPhoto(
+    fun buildPhoto(
+        author: String,
         place: String,
         image: ByteArray,
         mimeType: String,
         alt: String?,
         caption: String?,
-    ): String
+    ): BuiltPhoto
 
-    /** Creates a list (public under `/pub`, [private] under `/priv`) holding [places]. */
-    suspend fun createList(
+    /** A list holding [places]: public under `/pub`, [private] under `/priv`. */
+    fun buildList(
+        author: String,
         name: String,
         places: List<String>,
         private: Boolean,
-    ): OwnList
+    ): BuiltWrite
+
+    /** Writes a built object to the user's homeserver. */
+    suspend fun put(
+        path: String,
+        json: String,
+    )
+
+    /** Uploads a file unless it is already there (files are named by their content). */
+    suspend fun putFile(
+        path: String,
+        bytes: ByteArray,
+    )
 
     /**
      * Adds [place] to, or with [remove] removes it from, the newest version of the list [listUri] (the
@@ -72,6 +90,19 @@ interface PubkyWrites {
     /** [place] spelled as the core stores it (OSM URLs canonical, `geo:` rounded); [place] itself when it is not a place URI. */
     fun normalize(place: String): String
 }
+
+/** An object built by the core's spec builders, ready to PUT. */
+data class BuiltWrite(
+    val path: String,
+    val uri: String,
+    val json: String,
+)
+
+/** A photo post and the path of the file it attaches. */
+data class BuiltPhoto(
+    val filePath: String,
+    val post: BuiltWrite,
+)
 
 /** The lists found in one root, and the posts read that are not lists (pass them as `skip` next time). */
 data class ListScan(

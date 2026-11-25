@@ -23,6 +23,7 @@ import kotlinx.coroutines.withContext
 import to.pubky.maps.write.PhotoInput
 import to.pubky.maps.write.PhotoLaunchers
 import to.pubky.maps.write.PhotoResult
+import to.pubky.maps.write.PreparedPhoto
 import java.io.File
 
 /** Hands camera photos to the camera app: a file in the cache's camera/ folder (res/xml/photo_files.xml). */
@@ -39,14 +40,13 @@ private fun rememberAndroidPhotoLaunchers(onResult: (PhotoResult) -> Unit): Phot
     var keepLocation by rememberSaveable { mutableStateOf(false) }
     var cameraFile by rememberSaveable { mutableStateOf<String?>(null) }
 
-    fun prepare(read: () -> ByteArray?) {
+    fun prepare(read: () -> PreparedPhoto) {
         report(PhotoResult.Preparing)
         scope.launch {
             val result =
                 withContext(Dispatchers.Default) {
                     try {
-                        val bytes = read() ?: throw PhotoException("The photo could not be read.")
-                        PhotoResult.Ready(PhotoPreparer.prepare(bytes, keepLocation))
+                        PhotoResult.Ready(read())
                     } catch (e: PhotoException) {
                         PhotoResult.Failed(e.message)
                     } catch (e: OutOfMemoryError) {
@@ -62,7 +62,7 @@ private fun rememberAndroidPhotoLaunchers(onResult: (PhotoResult) -> Unit): Phot
             if (uri == null) {
                 report(PhotoResult.Cancelled)
             } else {
-                prepare { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } }
+                prepare { PhotoPreparer.prepare(context.contentResolver, uri, keepLocation) }
             }
         }
     val camera =
@@ -73,7 +73,13 @@ private fun rememberAndroidPhotoLaunchers(onResult: (PhotoResult) -> Unit): Phot
                 file?.delete()
                 report(PhotoResult.Cancelled)
             } else {
-                prepare { file.readBytes().also { file.delete() } }
+                prepare {
+                    try {
+                        PhotoPreparer.prepare(context.contentResolver, Uri.fromFile(file), keepLocation)
+                    } finally {
+                        file.delete()
+                    }
+                }
             }
         }
     val hasCamera = remember(context) { context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY) }

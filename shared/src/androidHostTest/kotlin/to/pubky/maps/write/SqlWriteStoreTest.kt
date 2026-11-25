@@ -31,7 +31,17 @@ class SqlWriteStoreTest {
     }
 
     private val tag = WriteOp.Tag("https://www.openstreetmap.org/node/1", "coffee")
-    private val photo = WriteOp.Photo("geo:47.1,8.5", "/data/x.photo", "image/jpeg", "A bench", null, 5)
+    private val photo =
+        WriteOp.Photo(
+            "geo:47.1,8.5",
+            "/data/x.photo",
+            "A bench",
+            5,
+            "/pub/social/v1/files/F.jpg",
+            "/pub/social/v1/posts/I/I.json",
+            "pubky://x",
+            "{}",
+        )
     private val list = OwnList("pubky://$USER/pub/social/v1/posts/0034A0000000", Kept.Public, "Coffee", listOf("geo:1,2"))
     private val privateList = OwnList("pubky://$USER/priv/social/v1/posts/0034A0000001", Kept.Private, "Secret", emptyList())
 

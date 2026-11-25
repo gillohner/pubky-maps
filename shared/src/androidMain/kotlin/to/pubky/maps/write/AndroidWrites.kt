@@ -11,7 +11,8 @@ import to.pubky.maps.account.SharedCore
 import to.pubky.maps.config.AppSettings
 import to.pubky.maps.write.db.PhoneDataDatabase
 import java.io.File
-import java.security.MessageDigest
+import java.io.IOException
+import java.util.UUID
 
 /**
  * The user's writes for the app process: the outbox and lists in the account cache's database
@@ -43,24 +44,17 @@ fun androidWriteController(
     )
 }
 
-/** [OutboxFiles] in one folder; a file is named by the hash of its bytes, so the same photo is stored once. */
+/** [OutboxFiles] in one folder, one file per queued photo (the same photo queued twice is two files). */
 class DirectoryOutboxFiles(
     private val dir: File,
 ) : OutboxFiles {
     override fun write(bytes: ByteArray): String {
         dir.mkdirs()
-        val name =
-            MessageDigest
-                .getInstance("SHA-256")
-                .digest(bytes)
-                .joinToString("") { "%02x".format(it) }
-                .take(32)
+        val name = "${System.currentTimeMillis()}-${UUID.randomUUID()}"
+        val partial = File(dir, "$name.part")
         val file = File(dir, "$name.photo")
-        if (!file.exists()) {
-            val partial = File(dir, "$name.part")
-            partial.writeBytes(bytes)
-            partial.renameTo(file)
-        }
+        partial.writeBytes(bytes)
+        if (!partial.renameTo(file)) throw IOException("the photo could not be stored on this phone")
         return file.path
     }
 

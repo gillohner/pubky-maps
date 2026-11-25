@@ -112,7 +112,12 @@ class WriteControllerTest {
             writer.save(pasted)
             runCurrent()
 
-            assertEquals(listOf("tag($GOOGLE, view)", "post($GOOGLE, Great view from the top.)", "save($GOOGLE)"), sent)
+            assertEquals(listOf("post($GOOGLE, Great view from the top.)"), writes.builds)
+            assertEquals(
+                listOf("tag($GOOGLE, view)", "put(/pub/social/v1/posts/P1/P1.json)", "save($GOOGLE)"),
+                sent,
+                "each write once, in order",
+            )
             assertEquals("Pasted place", store.names[GOOGLE], "the name is kept for the Saved screen")
         }
 
@@ -173,11 +178,13 @@ class WriteControllerTest {
                     .map { it.text },
             )
             assertEquals(
-                "pubky://me/pub/social/v1/posts/P1",
+                "pubky://$ME/pub/social/v1/posts/P1",
                 writer.own.value.posts
                     .single()
                     .uri,
             )
+            // Sent again to the same path: a retry after a lost answer makes no second post.
+            assertEquals(listOf("put(/pub/social/v1/posts/P1/P1.json)", "put(/pub/social/v1/posts/P1/P1.json)"), sent)
         }
 
     @Test
@@ -350,10 +357,11 @@ class WriteControllerTest {
             homeserver.complete(Unit)
             runCurrent()
 
-            assertEquals(listOf("photo($OSM, image/jpeg, A bench, null)"), sent)
+            assertEquals(listOf("photo($OSM, image/jpeg, A bench, null)"), writes.builds)
+            assertEquals(listOf("putFile(/pub/social/v1/files/F6.jpg)", "put(/pub/social/v1/posts/I1/I1.json)"), sent, "the file first")
             assertContentEquals(bytes, writes.photos.single())
             assertEquals(
-                "pubky://me/pub/social/v1/posts/I1",
+                "pubky://$ME/pub/social/v1/posts/I1",
                 writer.own.value.posts
                     .single()
                     .uri,
@@ -375,7 +383,10 @@ class WriteControllerTest {
             runCurrent()
             assertEquals(1, files.files.size)
 
-            // The account cache (and the outbox in it) is cleared by the sign-out itself.
+            // Signing out: first the account is marked signing out, then the cache (and the outbox in
+            // it) is cleared and it is signed out.
+            account.value = (account.value as AccountState.SignedIn).copy(signingOut = true)
+            runCurrent()
             store.outbox.clear()
             account.value = AccountState.SignedOut()
             runCurrent()
@@ -442,7 +453,8 @@ class WriteControllerTest {
             writer.createList(target, "Picnic", Kept.Phone)
             runCurrent()
 
-            assertEquals(listOf("createList(Coffee, [$OSM], private=false)", "createList(Secret, [$OSM], private=true)"), sent)
+            assertEquals(listOf("list(Coffee, [$OSM], private=false)", "list(Secret, [$OSM], private=true)"), writes.builds)
+            assertEquals(listOf("put(/pub/social/v1/posts/LCoffee/LCoffee.json)", "put(/priv/social/v1/posts/LSecret/LSecret.json)"), sent)
             val onPhone = phone.data.lists.single()
             assertEquals("Picnic", onPhone.name)
             assertEquals(Kept.Phone, onPhone.kept)
@@ -481,5 +493,73 @@ class WriteControllerTest {
                     .items,
             )
             assertEquals(emptyList(), writes.calls)
+        }
+
+    @Test
+    fun aListWrittenWhileTheListsAreReadStays() =
+        runTest {
+            signedIn()
+            val writer = controller()
+            val reading = CompletableDeferred<Unit>()
+            writes.listGate = reading
+
+            writer.refreshLists()
+            runCurrent()
+            writer.createList(target, "New", Kept.Public)
+            runCurrent()
+            reading.complete(Unit)
+            runCurrent()
+
+            assertEquals(
+                listOf("New"),
+                writer.own.value.lists
+                    .map { it.name },
+                "the older scan does not remove it",
+            )
+            assertEquals(listOf("New"), store.stored.map { it.name })
+        }
+
+    @Test
+    fun aHomeserverRefusingPrivateListsStillListsThePublicOnes() =
+        runTest {
+            writes.scans = mapOf(false to ListScan(listOf(coffeeList), emptyList()), true to ListScan(emptyList(), emptyList()))
+            writes.privateListsFailure = CoreFailure.Other("forbidden")
+            signedIn()
+            val writer = controller()
+
+            assertEquals(listOf(coffeeList), writer.own.value.lists)
+            assertFalse(writer.own.value.listsLoaded, "the page says the lists may be out of date")
+            // Not read again on every change of the account; only when asked.
+            val reads = writes.calls.count { it.startsWith("lists(") }
+            signedIn(tags = listOf(CachedTag("/t", OSM, "x", 1)))
+            runCurrent()
+            assertEquals(reads, writes.calls.count { it.startsWith("lists(") })
+        }
+
+    @Test
+    fun aCoreThatDoesNotLoadLeavesTheAppRunning() =
+        runTest {
+            settings = AppSettings().withStorage(DataKind.SavedPlaces, StorageChoice.PhoneOnly)
+            account.value = AccountState.SignedOut()
+            val writer =
+                WriteController(
+                    writes = { throw NotImplementedError("libpubky_maps_core.so not found") },
+                    store = store,
+                    phone = phone,
+                    files = files,
+                    account = account,
+                    updateAccount = {},
+                    refreshAccount = {},
+                    settings = { settings },
+                    scope = backgroundScope,
+                    io = StandardTestDispatcher(testScheduler),
+                    now = { 1_000L },
+                )
+            runCurrent()
+
+            writer.save(target)
+            runCurrent()
+
+            assertEquals(listOf(OSM), phone.data.saved.map { it.place })
         }
 }

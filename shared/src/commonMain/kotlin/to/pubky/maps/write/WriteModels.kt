@@ -46,14 +46,13 @@ data class OwnList(
     companion object {
         const val MAX_LIST_ITEMS = 100
         const val PHONE_PREFIX = "phone:"
-        const val PENDING_PREFIX = "pending:"
     }
 }
 
 /**
- * A write about a place, kept in the outbox until the homeserver took it. Ids that the core mints
- * (posts, lists) are minted when the write is sent; tag and bookmark paths follow from the place, so
- * sending one twice changes nothing.
+ * A write about a place, kept in the outbox until the homeserver took it. Posts, photos and lists
+ * are built (their ids minted) when the user makes them and tag and bookmark paths follow from the
+ * place, so sending a write again (its answer was lost) writes the same path and changes nothing.
  */
 @Serializable
 sealed interface WriteOp {
@@ -74,6 +73,7 @@ sealed interface WriteOp {
         val label: String,
     ) : WriteOp
 
+    /** A post built when the user wrote it ([path], [uri], [json] from the core's builder). */
     @Serializable
     @SerialName("post")
     data class Post(
@@ -81,18 +81,23 @@ sealed interface WriteOp {
         val text: String,
         /** When the user wrote it, epoch ms. */
         val at: Long,
+        val path: String,
+        val uri: String,
+        val json: String,
     ) : WriteOp
 
-    /** A photo post; [file] is the prepared photo (metadata stripped) on this phone until it is sent. */
+    /** A photo post; [file] is the prepared photo (metadata stripped) on this phone until it is sent to [filePath]. */
     @Serializable
     @SerialName("photo")
     data class Photo(
         override val place: String,
         val file: String,
-        val mimeType: String,
-        val alt: String?,
         val caption: String?,
         val at: Long,
+        val filePath: String,
+        val path: String,
+        val uri: String,
+        val json: String,
     ) : WriteOp
 
     @Serializable
@@ -107,14 +112,16 @@ sealed interface WriteOp {
         override val place: String,
     ) : WriteOp
 
-    /** A new list holding [place]; [localId] names it until the homeserver has it. */
+    /** A new list holding [place], built when the user made it. */
     @Serializable
     @SerialName("list_create")
     data class CreateList(
         override val place: String,
         val name: String,
         val private: Boolean,
-        val localId: String,
+        val path: String,
+        val uri: String,
+        val json: String,
     ) : WriteOp
 
     @Serializable

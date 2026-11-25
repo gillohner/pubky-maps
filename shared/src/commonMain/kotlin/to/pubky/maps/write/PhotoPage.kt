@@ -177,7 +177,8 @@ internal fun locationText(
         }
 
         keepLocation -> {
-            "Camera and phone details are removed from the photo. Its location is kept (Photo locations is set to Public)."
+            "Camera and phone details are removed from the photo. A location in it is kept (Photo locations is set to Public); " +
+                "photos chosen from the gallery usually come without one."
         }
 
         else -> {

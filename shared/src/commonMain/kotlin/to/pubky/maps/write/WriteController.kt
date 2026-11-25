@@ -98,6 +98,15 @@ class WriteController(
     private var labels: Map<String, String> = emptyMap()
     private var viewer: String? = null
     private var listsLoaded = false
+
+    /** The lists were read once since the account came online (a failed read is retried only when asked). */
+    private var listsTried = false
+
+    /** Lists written while a scan runs, kept over its result. */
+    private var listsSinceScan: Map<String, OwnList> = emptyMap()
+
+    /** The outbox entry being sent, until its result is applied. */
+    private var inFlight: Long? = null
     private var listsLoading = false
     private var offline = false
     private var toldOffline = false
@@ -131,6 +140,7 @@ class WriteController(
         }
         // The core spells places for comparing them; it is built once, beside the queue.
         scope.launch {
+            // A native library that does not load is an Error; the app goes on without writes.
             val built = attempt { writes() }.getOrNull()
             enqueue {
                 if (core == null) core = built
@@ -203,7 +213,12 @@ class WriteController(
     fun post(
         target: WriteTarget,
         text: String,
-    ) = write(target, WriteOp.Post(target.uri, text.trim(), now()))
+    ) = enqueue {
+        val trimmed = text.trim()
+        val built = build { core, author -> core.buildPost(author, target.uri, trimmed) } ?: return@enqueue
+        add(target, WriteOp.Post(target.uri, trimmed, now(), built.path, built.uri, built.json))
+        send()
+    }
 
     /** Posts [photo] of the place with its [alt] text and [caption]. */
     fun photo(
@@ -212,16 +227,23 @@ class WriteController(
         alt: String?,
         caption: String?,
     ) = enqueue {
+        val shownCaption = caption?.trim()?.ifEmpty { null }
+        val built =
+            build { core, author ->
+                core.buildPhoto(author, target.uri, photo.bytes, photo.mimeType, alt?.trim()?.ifEmpty { null }, shownCaption)
+            } ?: return@enqueue
         val file = io { files.write(photo.bytes) }
         add(
             target,
             WriteOp.Photo(
                 place = target.uri,
                 file = file,
-                mimeType = photo.mimeType,
-                alt = alt?.trim()?.ifEmpty { null },
-                caption = caption?.trim()?.ifEmpty { null },
+                caption = shownCaption,
                 at = now(),
+                filePath = built.filePath,
+                path = built.post.path,
+                uri = built.post.uri,
+                json = built.post.json,
             ),
         )
         send()
@@ -308,8 +330,8 @@ class WriteController(
         name: String,
         kept: Kept,
     ) = enqueue {
-        val id = "${now()}-${(phoneData.lists.size + queue.size)}"
         if (kept == Kept.Phone) {
+            val id = "${now()}-${phoneData.lists.size}"
             val place = normalize(target.uri)
             val list =
                 OwnList(
@@ -323,7 +345,9 @@ class WriteController(
             phoneData = phoneData.copy(lists = phoneData.lists + list)
             publish()
         } else {
-            add(target, WriteOp.CreateList(target.uri, name.trim(), private = kept == Kept.Private, localId = id))
+            val private = kept == Kept.Private
+            val built = build { core, author -> core.buildList(author, name.trim(), listOf(target.uri), private) } ?: return@enqueue
+            add(target, WriteOp.CreateList(target.uri, name.trim(), private, built.path, built.uri, built.json))
             send()
         }
     }
@@ -346,6 +370,27 @@ class WriteController(
     ) = enqueue {
         add(target, op)
         send()
+    }
+
+    /**
+     * Builds an object with the core's spec builders for the signed-in user, or says why it cannot be
+     * (signed out, or the builder refused it: too long, not a place) and returns null.
+     */
+    private suspend fun <T> build(block: (PubkyWrites, String) -> T): T? {
+        val author = signedIn?.user?.publicKey
+        if (author == null) {
+            tell("Sign in to change this.")
+            return null
+        }
+        val result =
+            attempt {
+                val core = core ?: writes().also { core = it }
+                block(core, author)
+            }
+        result.exceptionOrNull()?.let { failure ->
+            tell("Couldn't make that: ${(failure as? CoreFailure)?.reason ?: failure.message}")
+        }
+        return result.getOrNull()
     }
 
     /** Puts [op] in the outbox (and on screen). */
@@ -380,7 +425,10 @@ class WriteController(
             listsJob?.cancel()
             listsJob = null
             confirmed = emptyList()
+            inFlight = null
             listsLoaded = false
+            listsTried = false
+            listsSinceScan = emptyMap()
             listsLoading = false
             offline = false
             toldOffline = false
@@ -395,14 +443,15 @@ class WriteController(
                 queue = emptyList()
                 lists = emptyList()
                 labels = emptyMap()
-                // A sign-out deleted the outbox; its photos go too. (Loading at start is not signed out.)
-                if (state is AccountState.SignedOut) io { files.deleteAllBut(emptySet()) }
             }
         }
+        // Signed out, the account's cache and the outbox in it are gone (sign-out, or a start with no
+        // stored session); the outbox's photos go too. Loading at start is not signed out.
+        if (state is AccountState.SignedOut) io { files.deleteAllBut(emptySet()) }
         publish()
         if (canSend()) {
             send()
-            if (!listsLoaded) loadLists()
+            if (!listsTried) loadLists()
         }
     }
 
@@ -412,9 +461,12 @@ class WriteController(
 
     /** Sends the first write of the outbox, then the next; one at a time. */
     private fun send() {
-        if (sendJob?.isActive == true || !canSend()) return
+        // A finished send hands its result to the queue, which may run other actions first: until
+        // that result is applied the write is still in flight and must not be sent again.
+        if (inFlight != null || !canSend()) return
         val head = queue.firstOrNull() ?: return
         val made = generation
+        inFlight = head.seq
         sendJob =
             scope.launch {
                 val result = attempt { execute(head.op) }
@@ -434,12 +486,16 @@ class WriteController(
             }
 
             is WriteOp.Post -> {
-                core.post(op.place, op.text)
+                core.put(op.path, op.json)
+                op.uri
             }
 
+            // The file first, then the post that attaches it.
             is WriteOp.Photo -> {
                 val bytes = io { files.read(op.file) } ?: throw CoreFailure.Other("the photo is no longer on this phone")
-                core.postPhoto(op.place, bytes, op.mimeType, op.alt, op.caption)
+                core.putFile(op.filePath, bytes)
+                core.put(op.path, op.json)
+                op.uri
             }
 
             is WriteOp.Save -> {
@@ -451,7 +507,8 @@ class WriteController(
             }
 
             is WriteOp.CreateList -> {
-                core.createList(op.name, listOf(op.place), op.private)
+                core.put(op.path, op.json)
+                OwnList(op.uri, if (op.private) Kept.Private else Kept.Public, op.name, listOf(normalize(op.place)))
             }
 
             is WriteOp.EditList -> {
@@ -465,9 +522,12 @@ class WriteController(
         result: Result<Any?>,
         made: Int,
     ) {
+        // Signed out or another account since: the outbox it belonged to is gone (and a new send of
+        // that account may be in flight).
+        if (made != generation) return
         sendJob = null
-        // Signed out or another account since: the outbox it belonged to is gone.
-        if (made != generation || queue.firstOrNull()?.seq != head.seq) return
+        inFlight = null
+        if (queue.firstOrNull()?.seq != head.seq) return
         val failure = result.exceptionOrNull()
         when {
             failure == null -> {
@@ -507,7 +567,9 @@ class WriteController(
     private suspend fun drop(head: QueuedOp) {
         io { store.remove(head.seq) }
         queue = queue.drop(1)
-        (head.op as? WriteOp.Photo)?.let { op -> io { files.delete(op.file) } }
+        (head.op as? WriteOp.Photo)?.let { op ->
+            if (queue.none { (it.op as? WriteOp.Photo)?.file == op.file }) io { files.delete(op.file) }
+        }
         publish()
     }
 
@@ -546,6 +608,7 @@ class WriteController(
                 if (list != null) {
                     io { store.putList(list) }
                     lists = lists.filterNot { it.uri == list.uri } + list
+                    if (listsJob?.isActive == true) listsSinceScan = listsSinceScan + (list.uri to list)
                 }
             }
 
@@ -573,39 +636,42 @@ class WriteController(
     private fun loadLists() {
         if (listsJob?.isActive == true || !canSend()) return
         val made = generation
+        listsTried = true
         listsLoading = true
+        listsSinceScan = emptyMap()
         publish()
         listsJob =
             scope.launch {
-                val result =
-                    attempt {
-                        val core = core ?: writes().also { core = it }
-                        val public = core.lists(private = false, skip = io { store.otherPosts(false) })
-                        val private = core.lists(private = true, skip = io { store.otherPosts(true) })
-                        public to private
-                    }
-                enqueue { listsLoaded(result, made) }
+                val core = attempt { core ?: writes().also { core = it } }.getOrNull()
+                // Each root on its own: a homeserver refusing /priv (alpha) still lists the public ones.
+                val public = core?.let { c -> attempt { c.lists(private = false, skip = io { store.otherPosts(false) }) } }
+                val private = core?.let { c -> attempt { c.lists(private = true, skip = io { store.otherPosts(true) }) } }
+                enqueue { listsLoaded(public, private, made) }
             }
     }
 
     private suspend fun listsLoaded(
-        result: Result<Pair<ListScan, ListScan>>,
+        public: Result<ListScan>?,
+        private: Result<ListScan>?,
         made: Int,
     ) {
-        listsJob = null
         if (made != generation) return
+        listsJob = null
         listsLoading = false
-        result.onSuccess { (public, private) ->
+        val scans = listOf(false to public?.getOrNull(), true to private?.getOrNull())
+        scans.forEach { (isPrivate, scan) ->
+            if (scan == null) return@forEach
+            // A list written while the scan ran is newer than what the scan read.
+            val written = listsSinceScan.values.filter { (it.kept == Kept.Private) == isPrivate }
+            val merged = scan.lists.filterNot { found -> written.any { it.uri == found.uri } } + written
             io {
-                store.replaceLists(false, public.lists)
-                store.replaceLists(true, private.lists)
-                store.addOtherPosts(false, public.otherPostIds)
-                store.addOtherPosts(true, private.otherPostIds)
+                store.replaceLists(isPrivate, merged)
+                store.addOtherPosts(isPrivate, scan.otherPostIds)
             }
-            lists = public.lists + private.lists
-            listsLoaded = true
+            lists = lists.filterNot { (it.kept == Kept.Private) == isPrivate } + merged
         }
-        // A failed read keeps the lists as last read; the page says they may be out of date.
+        // A root that could not be read keeps its lists as last read; the page says they may be out of date.
+        listsLoaded = scans.all { it.second != null }
         publish()
     }
 
@@ -638,7 +704,8 @@ class WriteController(
         } catch (e: CoreFailure) {
             Result.failure(e)
         } catch (
-            @Suppress("TooGenericExceptionCaught") e: Exception,
+            // Also an Error: a Rust library that did not load (UnsatisfiedLinkError) must not crash the app.
+            @Suppress("TooGenericExceptionCaught") e: Throwable,
         ) {
             Result.failure(CoreFailure.Other(e.message ?: e::class.simpleName ?: "unexpected error"))
         }

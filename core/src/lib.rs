@@ -33,7 +33,7 @@ pub use crate::links::{
 };
 pub use crate::objects::{
     BuiltFile, BuiltObject, CollectionEdit, CollectionItem, build_bookmark, build_collection,
-    build_photo_file, build_photo_post, build_review, build_tag, edit_collection,
+    build_list, build_photo_file, build_photo_post, build_review, build_tag, edit_collection,
 };
 pub use crate::place::{
     GEO_MAX_FRACTION_DIGITS, OsmElement, geo_place_uri, normalize_place_uri, osm_place_uri,

@@ -4,6 +4,11 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.media.ExifInterface
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -12,11 +17,6 @@ import org.robolectric.annotation.GraphicsMode
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
-import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
-import kotlin.test.assertFalse
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 /** Photos are re-encoded on the phone: camera and phone details and (unless asked) the GPS spot never leave it. */
 @RunWith(RobolectricTestRunner::class)
@@ -56,7 +56,7 @@ class PhotoPreparerTest {
     @Test
     fun cameraAndPhoneDetailsAndTheLocationAreRemoved() {
         val original = cameraPhoto()
-        assertTrue(exif(original).getLatLong(FloatArray(2)), "the test photo has a location")
+        assertTrue("the test photo has a location", exif(original).getLatLong(FloatArray(2)))
 
         val prepared = PhotoPreparer.prepare(original, keepLocation = false)
 
@@ -101,7 +101,7 @@ class PhotoPreparerTest {
         val prepared = PhotoPreparer.prepare(cameraPhoto(5000, 1000, ExifInterface.ORIENTATION_NORMAL), keepLocation = false)
 
         assertEquals(PhotoPreparer.MAX_EDGE, prepared.width)
-        assertEquals(410, prepared.height, "the shape stays")
+        assertEquals("the shape stays", 410, prepared.height)
     }
 
     @Test
@@ -114,13 +114,13 @@ class PhotoPreparerTest {
         assertEquals("image/jpeg", prepared.mimeType)
         assertEquals(0xFF.toByte(), prepared.bytes[0])
         assertEquals(0xD8.toByte(), prepared.bytes[1])
-        assertFalse(prepared.keptLocation, "a photo without a location gets none")
+        assertFalse("a photo without a location gets none", prepared.keptLocation)
         assertFalse(prepared.removedLocation)
     }
 
     @Test
     fun somethingThatIsNotAPhotoIsRefusedWithAReason() {
-        val error = assertFailsWith<PhotoException> { PhotoPreparer.prepare("not a photo".toByteArray(), keepLocation = false) }
+        val error = assertThrows(PhotoException::class.java) { PhotoPreparer.prepare("not a photo".toByteArray(), keepLocation = false) }
         assertEquals("This file is not a photo Pubky Maps can read.", error.message)
     }
 

@@ -980,7 +980,7 @@ impl PubkyMapsCore {
     }
 
     /// The user's lists in `/pub` (or with `private`, `/priv`): every post folder is read
-    /// (newest version only) except those in `skip`, at most 2000 posts. A folder whose
+    /// (newest version only), newest posts first, except those in `skip`, at most 2000 posts. A folder whose
     /// newest version cannot be read as a post is left out of both results.
     pub async fn list_collections(
         &self,
@@ -996,8 +996,10 @@ impl PubkyMapsCore {
             let posts_dir = social_path(root, "posts/");
             let skip: std::collections::HashSet<String> = skip.into_iter().collect();
             let mut ids = Vec::new();
+            // Newest posts first, so a capped scan still finds the lists made last.
             let mut options = ListOptions {
                 shallow: true,
+                reverse: true,
                 ..ListOptions::default()
             };
             loop {
