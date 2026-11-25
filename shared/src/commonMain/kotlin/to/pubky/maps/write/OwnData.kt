@@ -147,9 +147,20 @@ internal fun ownData(
             val reflected = done.at <= readAt
             val op = done.op
             when {
-                op is WriteOp.Post -> posts += OwnPost(normalize(op.place), op.text, op.at, done.uri)
-                op is WriteOp.Photo -> posts += OwnPost(normalize(op.place), op.caption.orEmpty(), op.at, done.uri, photoFile = op.file)
-                !reflected -> apply(op, pending = false, tags, saved, ownLists, labels, normalize)
+                op is WriteOp.Post -> {
+                    posts += OwnPost(normalize(op.place), op.text, op.at, done.uri)
+                }
+
+                op is WriteOp.Photo -> {
+                    posts += OwnPost(normalize(op.place), op.caption.orEmpty(), op.at, done.uri, photoFile = op.file)
+                }
+
+                // Lists sent are stored as the homeserver returned them (in [lists]).
+                op is WriteOp.CreateList || op is WriteOp.EditList -> {}
+
+                !reflected -> {
+                    apply(op, pending = false, tags, saved, ownLists, labels, normalize)
+                }
             }
         }
         queue.forEach { (_, op) ->

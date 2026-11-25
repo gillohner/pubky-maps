@@ -66,7 +66,9 @@ class SqlWriteStore(
             QueuedOp(queries.lastSeq().executeAsOne(), op)
         }
 
-    override fun remove(seq: Long) = queries.deleteOutboxItem(seq)
+    override fun remove(seq: Long) {
+        queries.deleteOutboxItem(seq)
+    }
 
     override fun lists(): List<OwnList> =
         queries.ownLists().executeAsList().mapNotNull { runCatching { storeJson.decodeFromString(OwnList.serializer(), it) }.getOrNull() }
@@ -79,8 +81,9 @@ class SqlWriteStore(
         lists.forEach { putList(it) }
     }
 
-    override fun putList(list: OwnList) =
+    override fun putList(list: OwnList) {
         queries.putOwnList(list.uri, if (list.kept == Kept.Private) 1L else 0L, storeJson.encodeToString(OwnList.serializer(), list))
+    }
 
     override fun otherPosts(private: Boolean): List<String> = queries.otherPosts(if (private) 1L else 0L).executeAsList()
 
@@ -94,7 +97,9 @@ class SqlWriteStore(
     override fun putLabel(
         place: String,
         name: String,
-    ) = queries.putPlaceLabel(place, name)
+    ) {
+        queries.putPlaceLabel(place, name)
+    }
 }
 
 /** What the user keeps on this phone only. Calls block on disk. */
@@ -123,9 +128,15 @@ class SqlPhoneStore(
                 },
         )
 
-    override fun save(saved: PhoneSaved) = queries.putSavedPlace(saved.place, saved.name, saved.savedAt)
+    override fun save(saved: PhoneSaved) {
+        queries.putSavedPlace(saved.place, saved.name, saved.savedAt)
+    }
 
-    override fun unsave(place: String) = queries.deleteSavedPlace(place)
+    override fun unsave(place: String) {
+        queries.deleteSavedPlace(place)
+    }
 
-    override fun putList(list: OwnList) = queries.putList(list.uri, storeJson.encodeToString(OwnList.serializer(), list))
+    override fun putList(list: OwnList) {
+        queries.putList(list.uri, storeJson.encodeToString(OwnList.serializer(), list))
+    }
 }
