@@ -3670,6 +3670,7 @@ name = "pubky-maps-core"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "map-links",
  "pubky 0.18.0",
  "pubky-social-specs",
  "pubky-testnet",

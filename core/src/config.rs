@@ -149,7 +149,19 @@ pub(crate) fn icann_client(timeout: Duration) -> Result<reqwest::Client, CoreErr
         .map_err(|e| CoreError::internal(format!("HTTP client: {e}")))
 }
 
-/// Builds the one HTTP client the core uses for everything.
+/// The map-link client: like [`icann_client`], but it never follows a redirect, so a short
+/// link's hops are read one `Location` header at a time.
+pub(crate) fn link_client(timeout: Duration) -> Result<reqwest::Client, CoreError> {
+    reqwest::Client::builder()
+        .user_agent(USER_AGENT)
+        .timeout(timeout)
+        .redirect(reqwest::redirect::Policy::none())
+        .tls_backend_preconfigured(webpki_tls_config()?)
+        .build()
+        .map_err(|e| CoreError::internal(format!("HTTP client: {e}")))
+}
+
+/// Builds the Pubky HTTP client (homeservers, Pkarr relays, the DHT).
 pub(crate) fn build_client(config: &ValidConfig) -> Result<PubkyHttpClient, CoreError> {
     let relay_http = icann_client(config.request_timeout)?;
 

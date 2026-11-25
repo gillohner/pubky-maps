@@ -12,6 +12,7 @@ name = "pubky_maps_core"
 crate-type = ["cdylib", "staticlib", "lib"]
 
 [dependencies]
+map-links = { path = "map-links" }
 pubky = { version = "0.18.0", features = ["json"] }
 pubky-social-specs = "=1.0.0-rc.2"
 rand = "0.9"
