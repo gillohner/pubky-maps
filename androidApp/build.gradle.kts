@@ -10,7 +10,7 @@ plugins {
     alias(libs.plugins.aboutlibraries.android)
 }
 
-// Release builds get their version and update channel from scripts/release/version.sh; a local
+// Release builds get their version and update channel from scripts/release/version.py; a local
 // build is versionCode 1 and does not update itself.
 val appVersion = providers.gradleProperty("pubkymaps.version").get()
 val appVersionCode = providers.gradleProperty("pubkymaps.versionCode").orNull?.toInt() ?: 1
