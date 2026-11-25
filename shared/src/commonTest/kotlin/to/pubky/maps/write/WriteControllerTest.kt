@@ -674,7 +674,7 @@ class WriteControllerTest {
             val first = controller()
             assertFalse(first.publicTagsExplained.value)
 
-            first.publicTagsExplained()
+            first.markPublicTagsExplained()
             runCurrent()
 
             assertTrue(first.publicTagsExplained.value)

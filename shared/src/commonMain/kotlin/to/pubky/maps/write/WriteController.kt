@@ -192,7 +192,7 @@ class WriteController(
     }
 
     /** The user read that tags are public; the explainer does not come again on this phone. */
-    fun publicTagsExplained() {
+    fun markPublicTagsExplained() {
         mutablePublicTagsExplained.value = true
         enqueue { io { phone.setFlag(PUBLIC_TAGS_EXPLAINED) } }
     }
@@ -236,17 +236,18 @@ class WriteController(
     fun tag(
         target: WriteTarget,
         label: String,
-    ) = enqueue {
-        if (!add(target, WriteOp.Tag(target.uri, label))) return@enqueue
-        send()
-        tell(
-            WriteMessage("Tagged “$label”. Tags are public.", "Undo") {
-                enqueue {
-                    if (add(target, WriteOp.Untag(target.uri, label))) send()
-                }
-            },
-        )
-    }
+    ): Unit =
+        enqueue {
+            if (!add(target, WriteOp.Tag(target.uri, label))) return@enqueue
+            send()
+            tell(
+                WriteMessage("Tagged “$label”. Tags are public.", "Undo") {
+                    enqueue {
+                        if (add(target, WriteOp.Untag(target.uri, label))) send()
+                    }
+                },
+            )
+        }
 
     /**
      * Removes the user's tag [label] from the place whose links are [links]: from every link they
@@ -256,24 +257,25 @@ class WriteController(
         target: WriteTarget,
         links: Set<String>,
         label: String,
-    ) = enqueue {
-        val tagged =
-            own.value.tags
-                .filter { it.label == label && it.place in links }
-                .map { it.place }
-        val places = tagged.ifEmpty { listOf(target.uri) }.distinct()
-        val added = places.map { place -> add(target, WriteOp.Untag(place, label)) }
-        if (added.none { it }) return@enqueue
-        send()
-        tell(
-            WriteMessage("Removed your tag “$label”.", "Undo") {
-                enqueue {
-                    places.forEach { place -> add(target, WriteOp.Tag(place, label)) }
-                    send()
-                }
-            },
-        )
-    }
+    ): Unit =
+        enqueue {
+            val tagged =
+                own.value.tags
+                    .filter { it.label == label && it.place in links }
+                    .map { it.place }
+            val places = tagged.ifEmpty { listOf(target.uri) }.distinct()
+            val added = places.map { place -> add(target, WriteOp.Untag(place, label)) }
+            if (added.none { it }) return@enqueue
+            send()
+            tell(
+                WriteMessage("Removed your tag “$label”.", "Undo") {
+                    enqueue {
+                        places.forEach { place -> add(target, WriteOp.Tag(place, label)) }
+                        send()
+                    }
+                },
+            )
+        }
 
     /** Posts [text] about the place (a review). */
     fun post(
@@ -349,26 +351,28 @@ class WriteController(
     fun addToList(
         target: WriteTarget,
         list: OwnList,
-    ) = enqueue {
-        if (list.full) {
-            tell("“${list.name}” already holds ${OwnList.MAX_LIST_ITEMS} places, the most a list can hold.")
-            return@enqueue
+    ): Unit =
+        enqueue {
+            if (list.full) {
+                tell("“${list.name}” already holds ${OwnList.MAX_LIST_ITEMS} places, the most a list can hold.")
+                return@enqueue
+            }
+            if (!editList(target, list, remove = false)) return@enqueue
+            tell(WriteMessage("Added to “${list.name}”.", "Undo") { removeFromList(target, setOf(normalize(target.uri)), list) })
         }
-        if (!editList(target, list, remove = false)) return@enqueue
-        tell(WriteMessage("Added to “${list.name}”.", "Undo") { removeFromList(target, setOf(normalize(target.uri)), list) })
-    }
 
     /** Removes the place whose links are [links] from [list]. */
     fun removeFromList(
         target: WriteTarget,
         links: Set<String>,
         list: OwnList,
-    ) = enqueue {
-        val stored = list.items.filter { normalize(it) in links }.ifEmpty { listOf(target.uri) }
-        val changed = stored.map { editList(target.copy(uri = it), list, remove = true) }
-        if (changed.none { it }) return@enqueue
-        tell(WriteMessage("Removed from “${list.name}”.", "Undo") { addToList(target, list) })
-    }
+    ): Unit =
+        enqueue {
+            val stored = list.items.filter { normalize(it) in links }.ifEmpty { listOf(target.uri) }
+            val changed = stored.map { editList(target.copy(uri = it), list, remove = true) }
+            if (changed.none { it }) return@enqueue
+            tell(WriteMessage("Removed from “${list.name}”.", "Undo") { addToList(target, list) })
+        }
 
     /** False when the change could not be made (signed out, for a homeserver list). */
     private suspend fun editList(

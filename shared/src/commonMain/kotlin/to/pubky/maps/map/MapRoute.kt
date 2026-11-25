@@ -626,7 +626,7 @@ internal fun placeWriteActions(
         onPhoto = { open(WriteIntent.Photo) },
         onAddToList = { open(WriteIntent.AddToList) },
         publicTagsExplained = publicTagsExplained,
-        onPublicTagsExplained = writes::publicTagsExplained,
+        onPublicTagsExplained = writes::markPublicTagsExplained,
         waiting = own.offline,
         busy = own.busy,
     )
