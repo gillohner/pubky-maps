@@ -169,6 +169,17 @@ def find(pred, timeout, what):
     raise RuntimeError(f"timed out waiting for {what}")
 
 
+def scroll_to(pred, what, swipes=6):
+    """Scrolls the Settings list down until a node matching `pred` shows (About is below the fold
+    on a phone), then waits for it like find."""
+    for _ in range(swipes):
+        if any(pred(n) for n in ui_nodes()):
+            break
+        adb("shell", "input", "swipe", "540", "1800", "540", "900", "300")
+        time.sleep(1)
+    return find(pred, 60, what)
+
+
 def has(text):
     """A node whose text or content description contains `text` (Compose merges a row's texts)."""
     return lambda n: re.search(r'(text|content-desc)="[^"]*' + re.escape(text), n) is not None
@@ -250,7 +261,7 @@ def main():
         elif any(has("Update available")(n) for n in nodes):
             failures.append("tampered feed: an update was offered")
         tap(find(is_("Settings"), 120, "the Settings button"), "Settings")
-        find(has("not signed with the Pubky Maps key"), 60, "the refused feed's reason in Settings")
+        scroll_to(has("not signed with the Pubky Maps key"), "the refused feed's reason in Settings")
         shot("1-tampered-feed")
 
         # 2. The right feed, a changed APK: the download is refused and N stays.
@@ -325,7 +336,7 @@ def main():
             elif started.group(1) != "off":
                 failures.append("update: the app's data did not survive (automatic checks are on again)")
             tap(find(is_("Settings"), 120, "the Settings button in N+1"), "Settings")
-            tap(find(has("Check for updates"), 30, "Check for updates in N+1"), "Check for updates")
+            tap(scroll_to(has("Check for updates"), "Check for updates in N+1"), "Check for updates")
             find(has("Up to date"), 120, "N+1 finding itself the newest")
             shot("4-up-to-date")
     except Exception as e:  # noqa: BLE001 (reported with the evidence)
