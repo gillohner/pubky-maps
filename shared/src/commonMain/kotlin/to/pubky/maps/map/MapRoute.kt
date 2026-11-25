@@ -280,20 +280,23 @@ private fun rememberMapSearch(
         if (points.isEmpty() || fittedQuery == state.resultsQuery.trim()) return@LaunchedEffect
         fittedQuery = state.resultsQuery.trim()
         val area = mapState.searchArea()
-        val near = points.filter { distanceMeters(area.centre, it) <= area.pinakesRadiusMeters }.ifEmpty { points.take(1) }
-        if (near.size == 1) {
-            mapState.animateCamera(CameraUpdate(center = Position(longitude = near[0].lon, latitude = near[0].lat), zoom = PLACE_ZOOM))
-        } else {
-            mapState.animateCameraToBounds(
-                BoundingBox(
-                    west = near.minOf { it.lon },
-                    south = near.minOf { it.lat },
-                    east = near.maxOf { it.lon },
-                    north = near.maxOf { it.lat },
-                ),
-                CameraFit(fitPadding = resultsFitPadding(mapState.viewport?.size)),
-            )
-        }
+        // The results near the area searched; when none is (the map was elsewhere), those near the best one.
+        val near =
+            points.filter { distanceMeters(area.centre, it) <= area.pinakesRadiusMeters }.ifEmpty {
+                points.filter { distanceMeters(points.first(), it) <= area.pinakesRadiusMeters }
+            }
+        // A lone result gets a small box around it, so it too lands clear of the sheet or the panel (the
+        // fit padding is for this move only; camera padding would stay for every later move).
+        val margin = if (near.size == 1) LONE_RESULT_MARGIN_DEGREES else 0.0
+        mapState.animateCameraToBounds(
+            BoundingBox(
+                west = near.minOf { it.lon } - margin,
+                south = near.minOf { it.lat } - margin,
+                east = near.maxOf { it.lon } + margin,
+                north = near.maxOf { it.lat } + margin,
+            ),
+            CameraFit(fitPadding = resultsFitPadding(mapState.viewport?.size)),
+        )
     }
 
     val userLocation = locationState.lastLocation?.position?.let { GeoPoint(it.latitude, it.longitude) }
@@ -311,6 +314,9 @@ private fun rememberMapSearch(
         }
     return MapSearch(state = state, recents = recents, userLocation = userLocation, actions = actions)
 }
+
+/** About 100 m: the box a lone result is shown in, a street's worth around it. */
+private const val LONE_RESULT_MARGIN_DEGREES = 0.001
 
 /**
  * The room around fitted results: beside the panel on a wide screen, above the half-open results
