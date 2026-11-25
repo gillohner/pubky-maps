@@ -50,7 +50,7 @@ on request, a compass when the map is rotated, and Settings:
   be reached the app stays signed in, shows the cached data and says so in one line over the map.
 - The open-source licence list is generated at build time: the AboutLibraries Gradle plugin lists the
   app's Gradle dependencies, and `scripts/rust-licences.py` (Gradle task `listRustLicences`) lists the
-  Rust crates linked into the core with their licence files, from `cargo metadata`.
+  Rust crates linked into the core with their licence files, from `cargo tree` for the Android targets.
 - Versions of every tool and library are in `gradle/libs.versions.toml`.
 
 ## Build
