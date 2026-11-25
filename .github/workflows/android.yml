@@ -5,7 +5,8 @@ name: android
 # the map to draw, opens Settings and each settings page, checks that a setting survives a restart,
 # goes back, fails on a crash, then runs the sign-in probe (scripts/ci/sign-in-probe.py): Settings >
 # Account, the QR code's pubkyauth:// link on a fixture relay, Ring's return links, a process kill in
-# the middle.
+# the middle; and the map links (scripts/ci/emulator-links.sh): a geo: link, a Google Maps link and
+# shared text each open the app on their place (screenshots in the artifact).
 # When the app, the core or CI changed, synonym-blocked runs the app with every Synonym host
 # unreachable (scripts/ci/synonym-blocked.py): the map, the cached account and the degraded banner,
 # and a second time with the first map style blocked too.
@@ -149,6 +150,7 @@ jobs:
           script: |
             bash scripts/ci/emulator-smoke.sh apk/androidApp-direct-debug.apk /tmp/smoke/smoke
             python3 -I scripts/ci/sign-in-probe.py apk/androidApp-direct-debug.apk /tmp/smoke/sign-in
+            bash scripts/ci/emulator-links.sh /tmp/smoke/links
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

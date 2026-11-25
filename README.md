@@ -11,21 +11,32 @@ on request, a compass when the map is rotated, and Settings:
 - **Server lists:** an ordered list of servers per service (map styles, Photon, Pinakes, Nexus,
   Pkarr relays, sign-in relay). Users add, remove, reorder and reset them; servers run by Synonym are
   marked. The map uses its style list in order, the next style taking over when one fails to load;
-  sign-in uses the Pkarr and sign-in relay lists (from the next start after a change); the Photon,
-  Pinakes and Nexus lists are stored and editable, and no feature reads them yet.
+  sign-in uses the Pkarr and sign-in relay lists (from the next start after a change); opening a
+  map link asks the Pinakes list; the Photon and Nexus lists are stored and editable, and no feature
+  reads them yet.
 - **What is stored online:** per kind of data (saved places, home and work, lists, check-ins, tracks,
   location history, photo locations) phone only, homeserver private or public. Tags and reviews are
   public by nature. The choices are stored; nothing uploads data yet.
 - **Open in other apps:** a switch per app a place can be opened in (stored for the place page's
-  Open in menu, which does not exist yet).
+  Open in menu, which does not exist yet; the list it will show is built in `links/OpenIn.kt`).
 - **Follow local rules:** hides features a country forbids (stored; no feature has a rule yet).
 - **About:** version, updates (in the APK from GitHub releases, which updates itself from a signed
   update feed), licence, source code and the open-source licences of the bundled libraries and of
   the Rust crates in the core.
 - **Map data:** the credits of every map source.
 
+**Map links.** Links from other map apps open in Pubky Maps: tapped (`geo:`, `om://`, `cm://`,
+and Google Maps, Apple Maps, Waze, OpenStreetMap, OsmAnd, Organic Maps, CoMaps and HERE web links
+when the user lets the app open them) or shared as text from another app's Share. The map moves to
+the place, pins it and shows a card with its name, where it is and Share (the name plus an
+openstreetmap.org link). Short links (`maps.app.goo.gl`, `maps.apple/p/`) are followed by their
+redirect header only; the place's name and point come from Pinakes when it knows the link, else from
+the link text. The link the user had stays the place's URI.
+
 ## How it is built
 
+- Map links are read and built by the Rust crate `core/map-links` (see its README for every
+  format), exposed through the core.
 - Kotlin Multiplatform with Compose Multiplatform. `shared` holds the UI and logic (targets Android,
   iosArm64 and iosSimulatorArm64); `androidApp` is the Android app (`to.pubky.maps`).
 - The map is drawn by MapLibre Native through [maplibre-compose](https://github.com/maplibre/maplibre-compose)

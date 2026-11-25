@@ -19,13 +19,19 @@ data class CoreServers(
     val authRelays: List<String>,
 )
 
-/** Builds the core (its client is built on the core's own thread). Throws [CoreFailure]. */
-suspend fun createUniffiPubkyCore(servers: CoreServers): PubkyCore {
+/** Builds the Rust core (its client is built on the core's own thread). Throws [CoreException]. */
+suspend fun createPubkyMapsCore(servers: CoreServers): PubkyMapsCore {
     val config: CoreConfig = defaultCoreConfig()
     config.pkarrRelays = servers.pkarrRelays
     config.authRelayUrls = servers.authRelays
-    return UniffiPubkyCore(mapped { PubkyMapsCore.create(config) })
+    return PubkyMapsCore.create(config)
 }
+
+/** Builds the core (its client is built on the core's own thread). Throws [CoreFailure]. */
+suspend fun createUniffiPubkyCore(servers: CoreServers): PubkyCore = createUniffiPubkyCore { createPubkyMapsCore(servers) }
+
+/** [PubkyCore] on the core [core] returns (for example the process's [SharedCore]). Throws [CoreFailure]. */
+suspend fun createUniffiPubkyCore(core: suspend () -> PubkyMapsCore): PubkyCore = UniffiPubkyCore(mapped { core() })
 
 /** [PubkyCore] on the Rust core's UniFFI bindings. */
 class UniffiPubkyCore(

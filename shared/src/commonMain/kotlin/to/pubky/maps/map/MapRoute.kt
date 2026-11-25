@@ -45,11 +45,11 @@ import org.maplibre.compose.overlay.DisappearingScaleBar
 import org.maplibre.compose.style.BaseStyle
 import org.maplibre.spatialk.geojson.Position
 import to.pubky.maps.config.ServerLists
-import to.pubky.maps.status.ServicePart
 import to.pubky.maps.links.LinkedPlaceState
 import to.pubky.maps.place.OpeningLinkCard
 import to.pubky.maps.place.PlaceCard
 import to.pubky.maps.place.PlaceRef
+import to.pubky.maps.status.ServicePart
 import kotlin.math.max
 
 /** Where the map opens before it knows anything about the user: the whole world. */
