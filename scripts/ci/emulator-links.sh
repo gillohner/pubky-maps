@@ -39,7 +39,8 @@ adb logcat -b crash -c || true
 adb shell am force-stop "$pkg"
 
 send_intent -a android.intent.action.VIEW -d "'geo:47.37,8.54?q=Test'"
-expect_card link-geo "Test" "47.37, 8.54 · From a map link"
+# q=Test is a search near the point (as in Google Maps): the map moves there, no pin, no coordinates.
+expect_card link-geo "Test" "From a map link"
 
 google='https://www.google.com/maps/place/Z%C3%BCrich+HB/@47.3721439,8.5351212,17z/data=!3m1!4b1!4m6!3m5!1s0x0:0x0!8m2!3d47.3778579!4d8.5403226'
 send_intent -a android.intent.action.VIEW -d "'$google'"
