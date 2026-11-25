@@ -44,6 +44,9 @@ enum class DataKind(
         require(default in choices) { "$this: the default must be one of its choices" }
     }
 
+    /** The most private place this kind can be kept. */
+    val mostPrivate: StorageChoice get() = choices.minBy { it.ordinal }
+
     /** True when the user can choose; false for kinds that are public by nature. */
     val hasChoice: Boolean get() = choices.size > 1
 
@@ -77,7 +80,8 @@ enum class OpenInApp(
 /**
  * Everything the user can set. Only the user's own changes are kept ([serverOverrides],
  * [storageChoices], [openInChoices]); everything else follows the defaults, so a new app version's
- * defaults reach users who never changed that setting.
+ * defaults reach users who never changed that setting. A storage choice, once made, stays even when
+ * it equals today's default, so a later default can never make the user's data more public.
  */
 data class AppSettings(
     val serverOverrides: Map<Service, List<ServerEntry>> = emptyMap(),
@@ -85,6 +89,16 @@ data class AppSettings(
     val openInChoices: Map<OpenInApp, Boolean> = emptyMap(),
     val followLocalRules: Boolean = true,
 ) {
+    companion object {
+        /**
+         * What the app starts from when the settings file was lost (unreadable): the defaults, except
+         * that every kind of data is kept as privately as it can be, since what the user had chosen is
+         * unknown and must not turn into an upload.
+         */
+        fun afterLostFile(): AppSettings =
+            AppSettings(storageChoices = DataKind.entries.filter { it.hasChoice }.associateWith { it.mostPrivate })
+    }
+
     init {
         require(serverOverrides.values.none { it.isEmpty() }) { "A server list cannot be empty" }
         require(storageChoices.all { (kind, choice) -> choice in kind.choices }) { "A storage choice the kind does not offer" }
@@ -112,7 +126,7 @@ data class AppSettings(
     fun withOpenIn(
         app: OpenInApp,
         enabled: Boolean,
-    ): AppSettings = copy(openInChoices = openInChoices + (app to enabled))
+    ): AppSettings = copy(openInChoices = if (enabled == app.onByDefault) openInChoices - app else openInChoices + (app to enabled))
 
     // Server list edits. A list that ends up equal to the defaults stops being an override.
 
@@ -146,27 +160,36 @@ data class AppSettings(
         return AddServerResult.Added(withServerList(service, list + ServerEntry(shownName, parsed.url, attribution)))
     }
 
-    /** Moves the server at [from] to [to] in [service]'s list. */
+    /**
+     * Moves the server with address [url] by [steps] places (negative: towards the top) in [service]'s
+     * list. Servers are named by address, not position, so a change made from an older screen state
+     * (a double tap) never moves another server; a move past either end or of a server no longer in
+     * the list changes nothing.
+     */
     fun withServerMoved(
         service: Service,
-        from: Int,
-        to: Int,
+        url: String,
+        steps: Int,
     ): AppSettings {
         val list = servers[service].toMutableList()
-        require(from in list.indices && to in list.indices) { "Move $from -> $to outside 0..${list.lastIndex}" }
+        val from = list.indexOfFirst { it.url == url }
+        val to = from + steps
+        if (from < 0 || to !in list.indices) return this
         list.add(to, list.removeAt(from))
         return withServerList(service, list)
     }
 
-    /** Removes the server at [index] from [service]'s list. The last server cannot be removed. */
+    /**
+     * Removes the server with address [url] from [service]'s list. The last server stays (a list is
+     * never empty), and a server no longer in the list changes nothing.
+     */
     fun withServerRemoved(
         service: Service,
-        index: Int,
+        url: String,
     ): AppSettings {
         val list = servers[service]
-        require(index in list.indices) { "Remove $index outside 0..${list.lastIndex}" }
-        require(list.size > 1) { "The last server of a list cannot be removed" }
-        return withServerList(service, list.filterIndexed { i, _ -> i != index })
+        if (list.size <= 1 || list.none { it.url == url }) return this
+        return withServerList(service, list.filterNot { it.url == url })
     }
 
     /** Puts [service]'s list back to the defaults. */

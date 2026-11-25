@@ -23,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import to.pubky.maps.config.AppSettings
 import to.pubky.maps.config.DataKind
@@ -65,6 +66,7 @@ fun StoredOnlineScreen(
                     headlineContent = { Text(kind.title) },
                     supportingContent = { Text(PUBLIC_BY_NATURE) },
                     trailingContent = { Badge("Public") },
+                    modifier = Modifier.semantics(mergeDescendants = true) {},
                 )
             }
         }

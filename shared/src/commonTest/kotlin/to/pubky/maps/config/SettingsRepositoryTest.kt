@@ -56,9 +56,9 @@ class SettingsRepositoryTest {
                 repository.loaded()
                 repository.update { it.withOpenIn(OpenInApp.Waze, false) }
                 repository.update { it.withStorage(DataKind.Lists, StorageChoice.Public) }
-                repository.update { it.withServerMoved(Service.MapStyleDark, 1, 0) }
-                repository.update { it.copy(followLocalRules = false) }
-                assertFalse(repository.loaded().followLocalRules)
+                repository.update { it.withServerMoved(Service.MapStyleDark, "https://tiles.openfreemap.org/styles/dark", 1) }
+                repository.update { it.copy(followLocalRules = false) }.join()
+                assertFalse(repository.settings.first { it?.followLocalRules == false }!!.followLocalRules)
             }
             assertTrue(fileSystem.exists(path))
 
@@ -75,23 +75,37 @@ class SettingsRepositoryTest {
     fun resetIsStoredToo() =
         runTest {
             withRepository { repository ->
-                repository.update { it.withServerRemoved(Service.PkarrRelay, 0) }
-                repository.update { it.withServersReset(Service.PkarrRelay) }
+                repository.update { it.withServerRemoved(Service.PkarrRelay, "https://pkarr.pubky.app") }.join()
             }
+            withRepository { assertFalse(it.loaded().isDefaultServerList(Service.PkarrRelay)) }
+            withRepository { repository -> repository.update { it.withServersReset(Service.PkarrRelay) }.join() }
             withRepository { assertTrue(it.loaded().isDefaultServerList(Service.PkarrRelay)) }
         }
 
     @Test
-    fun anUnreadableFileIsReplacedByTheDefaults() =
+    fun anUnreadableFileIsReplacedByTheMostPrivateSettings() =
         runTest {
             fileSystem.createDirectories(path.parent!!)
             fileSystem.write(path) { writeUtf8("{ this is not json") }
 
             withRepository { repository ->
-                assertEquals(AppSettings(), repository.loaded())
-                repository.update { it.withOpenIn(OpenInApp.HereWeGo, false) }
+                assertEquals(AppSettings.afterLostFile(), repository.loaded())
+                repository.update { it.withOpenIn(OpenInApp.HereWeGo, false) }.join()
             }
             withRepository { assertFalse(it.loaded().isOpenInEnabled(OpenInApp.HereWeGo)) }
+        }
+
+    @Test
+    fun aChangeThatNoLongerAppliesIsDroppedWithoutStoppingTheStore() =
+        runTest {
+            withRepository { repository ->
+                repository.update { it.withStorage(DataKind.Tags, StorageChoice.PhoneOnly) }.join()
+                repository.update { it.withOpenIn(OpenInApp.OsmAnd, false) }.join()
+                assertFalse(
+                    repository.settings.first { it?.isOpenInEnabled(OpenInApp.OsmAnd) == false }!!.isOpenInEnabled(OpenInApp.OsmAnd),
+                )
+                assertEquals(StorageChoice.Public, repository.loaded().storage(DataKind.Tags))
+            }
         }
 
     @Test
@@ -107,7 +121,7 @@ class SettingsRepositoryTest {
 
             withRepository(v2) { repository ->
                 assertFalse(repository.loaded().isOpenInEnabled(OpenInApp.CoMaps))
-                repository.update { it.withOpenIn(OpenInApp.Waze, false) }
+                repository.update { it.withOpenIn(OpenInApp.Waze, false) }.join()
             }
             val stored = fileSystem.read(path) { readUtf8() }
             assertTrue("\"schemaVersion\": 2" in stored, stored)
@@ -119,11 +133,12 @@ class SettingsRepositoryTest {
         runTest {
             val own = "https://tiles.example.org/style.json"
             withRepository { repository ->
-                repository.update {
-                    (it.withServerAdded(Service.MapStyleLight, own, "Own") as AppSettings.AddServerResult.Added)
-                        .settings
-                        .withServerMoved(Service.MapStyleLight, 2, 0)
-                }
+                repository
+                    .update {
+                        (it.withServerAdded(Service.MapStyleLight, own, "Own") as AppSettings.AddServerResult.Added)
+                            .settings
+                            .withServerMoved(Service.MapStyleLight, own, -2)
+                    }.join()
             }
             withRepository { repository ->
                 val styles = repository.loaded().servers.mapStyles(darkTheme = false)

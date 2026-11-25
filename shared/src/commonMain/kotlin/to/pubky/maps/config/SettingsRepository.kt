@@ -6,11 +6,15 @@ import androidx.datastore.core.DataStoreFactory
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.core.okio.OkioSerializer
 import androidx.datastore.core.okio.OkioStorage
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import okio.BufferedSink
 import okio.BufferedSource
 import okio.FileSystem
@@ -23,41 +27,57 @@ interface SettingsRepository {
     val settings: StateFlow<AppSettings?>
 
     /**
-     * Changes the settings and stores them. When the file cannot be written (a full disk), nothing
-     * changes, so the screen keeps showing what is stored.
+     * Changes the settings and stores them, in the repository's own scope, so leaving a screen or
+     * turning the phone does not cancel a change on its way to disk. [transform] gets the stored
+     * settings at that moment. When the file cannot be written (a full disk), nothing changes, so the
+     * screens keep showing what is stored.
      */
-    suspend fun update(transform: (AppSettings) -> AppSettings)
+    fun update(transform: (AppSettings) -> AppSettings): Job
 }
 
 /**
  * Settings in one JSON file at [path], written atomically by AndroidX DataStore. A file that cannot
- * be read is replaced by the defaults; one that cannot be opened at all leaves the defaults in use.
- * Only one instance may exist per file in a process.
+ * be read is replaced by [AppSettings.afterLostFile]; while the file cannot be opened at all, the
+ * same settings are used and reading is tried again. Only one instance may exist per file in a
+ * process.
  */
 class DataStoreSettingsRepository(
     fileSystem: FileSystem,
     path: Path,
-    scope: CoroutineScope,
+    private val scope: CoroutineScope,
     codec: SettingsCodec = SettingsCodec(),
 ) : SettingsRepository {
     private val store: DataStore<AppSettings> =
         DataStoreFactory.create(
             storage = OkioStorage(fileSystem, CodecSerializer(codec), producePath = { path }),
-            corruptionHandler = ReplaceFileCorruptionHandler { AppSettings() },
+            corruptionHandler = ReplaceFileCorruptionHandler { AppSettings.afterLostFile() },
             scope = scope,
         )
 
     override val settings: StateFlow<AppSettings?> =
         store.data
-            .catch { e -> if (e is IOException) emit(AppSettings()) else throw e }
-            .stateIn(scope, SharingStarted.Eagerly, null)
+            .retryWhen { cause, attempt ->
+                if (cause !is IOException) return@retryWhen false
+                if (attempt == 0L) emit(AppSettings.afterLostFile())
+                delay(READ_RETRY_DELAY_MS * (attempt + 1).coerceAtMost(MAX_READ_RETRY_FACTOR))
+                true
+            }.stateIn(scope, SharingStarted.Eagerly, null)
 
-    override suspend fun update(transform: (AppSettings) -> AppSettings) {
-        try {
-            store.updateData(transform)
-        } catch (e: IOException) {
-            // Not stored; the settings flow still holds the stored state, so the screen shows it.
+    override fun update(transform: (AppSettings) -> AppSettings): Job =
+        scope.launch {
+            try {
+                store.updateData(transform)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Not stored (disk full, or a change that no longer applies); the settings flow still
+                // holds the stored state, so the screens show it.
+            }
         }
+
+    private companion object {
+        const val READ_RETRY_DELAY_MS = 1_000L
+        const val MAX_READ_RETRY_FACTOR = 30L
     }
 }
 

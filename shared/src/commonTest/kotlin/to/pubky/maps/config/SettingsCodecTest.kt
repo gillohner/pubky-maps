@@ -14,8 +14,8 @@ class SettingsCodecTest {
 
     private val edited =
         assertAdded(AppSettings().withServerAdded(Service.MapStyleLight, "https://tiles.example.org/style.json", "Mine"))
-            .withServerMoved(Service.MapStyleLight, 2, 0)
-            .withServerRemoved(Service.PkarrRelay, 1)
+            .withServerMoved(Service.MapStyleLight, "https://tiles.example.org/style.json", -2)
+            .withServerRemoved(Service.PkarrRelay, "https://pkarr.pubky.org")
             .withStorage(DataKind.CheckIns, StorageChoice.Public)
             .withOpenIn(OpenInApp.Waze, false)
             .copy(followLocalRules = false)
@@ -35,6 +35,50 @@ class SettingsCodecTest {
         assertTrue("\"schemaVersion\": $SETTINGS_SCHEMA_VERSION" in text, text)
         assertTrue("\"waze\": false" in text, text)
         assertFalse("photon" in text, text)
+    }
+
+    @Test
+    fun settingsEqualToTheDefaultsAreNotWritten() {
+        val text = codec.encode(AppSettings().withOpenIn(OpenInApp.Waze, false).withOpenIn(OpenInApp.Waze, true))
+
+        assertFalse("waze" in text, text)
+        assertFalse("followLocalRules" in text, text)
+        assertTrue("\"followLocalRules\": false" in codec.encode(AppSettings(followLocalRules = false)))
+    }
+
+    @Test
+    fun aStorageChoiceTheKindDoesNotOfferBecomesItsMostPrivateOne() {
+        val settings =
+            codec.decode(
+                """{ "storage": { "saved_places": "public", "lists": "elsewhere", "photo_locations": "homeserver_private" } }""",
+            )
+
+        assertEquals(StorageChoice.PhoneOnly, settings.storage(DataKind.SavedPlaces))
+        assertEquals(StorageChoice.PhoneOnly, settings.storage(DataKind.Lists))
+        assertEquals(StorageChoice.PhoneOnly, settings.storage(DataKind.PhotoLocations))
+    }
+
+    @Test
+    fun creditLinksThatAreNotServerAddressesAreDropped() {
+        val text =
+            """{ "servers": { "map_style_dark": [{ "name": "Own", "url": "https://tiles.example.org/dark.json",
+            "attribution": [{ "label": "Own", "url": "javascript:alert(1)" }, { "label": "OSM", "url": "https://www.openstreetmap.org/copyright" }] }] } }"""
+
+        val credits =
+            codec
+                .decode(text)
+                .servers[Service.MapStyleDark]
+                .single()
+                .attribution
+
+        assertEquals(listOf(AttributionLink("OSM", "https://www.openstreetmap.org/copyright")), credits)
+    }
+
+    @Test
+    fun aMigrationThatFailsMakesTheFileUnreadableInsteadOfCrashing() {
+        val v2 = SettingsCodec(schemaVersion = 2, migrations = mapOf(1 to SettingsMigration { error("unexpected file") }))
+
+        assertFailsWith<UnreadableSettingsException> { v2.decode("{}") }
     }
 
     @Test

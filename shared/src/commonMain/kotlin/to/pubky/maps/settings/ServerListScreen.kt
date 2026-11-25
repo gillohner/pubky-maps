@@ -5,9 +5,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -62,9 +65,9 @@ fun ServerListScreen(
                     canMoveUp = index > 0,
                     canMoveDown = index < list.lastIndex,
                     canRemove = list.size > 1,
-                    onMoveUp = { onUpdate { it.withServerMoved(service, index, index - 1) } },
-                    onMoveDown = { onUpdate { it.withServerMoved(service, index, index + 1) } },
-                    onRemove = { onUpdate { it.withServerRemoved(service, index) } },
+                    onMoveUp = { onUpdate { it.withServerMoved(service, entry.url, -1) } },
+                    onMoveDown = { onUpdate { it.withServerMoved(service, entry.url, 1) } },
+                    onRemove = { onUpdate { it.withServerRemoved(service, entry.url) } },
                 )
             }
         }
@@ -179,7 +182,9 @@ private fun ServerRow(
                 }
             }
         },
-        modifier = Modifier.semantics { customActions = actions },
+        // One TalkBack stop per server (position, name, address, badge), with the actions on it; the
+        // options button stays a stop of its own.
+        modifier = Modifier.semantics(mergeDescendants = true) { customActions = actions },
     )
 }
 
@@ -217,7 +222,7 @@ fun AddServerDialog(
         onDismissRequest = onDismiss,
         title = { Text("Add a server") },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text("Added at the end of ${service.title}. Move it up to use it first.")
                 OutlinedTextField(
                     value = url,
@@ -230,7 +235,7 @@ fun AddServerDialog(
                     supportingText = { Text(error ?: "https:// only. http:// works for localhost.") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
-                    modifier = Modifier.padding(top = 16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
                 )
                 OutlinedTextField(
                     value = name,
@@ -238,6 +243,7 @@ fun AddServerDialog(
                     label = { Text("Name (optional)") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         },

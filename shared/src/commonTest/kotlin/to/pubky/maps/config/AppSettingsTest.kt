@@ -75,6 +75,22 @@ class AppSettingsTest {
     }
 
     @Test
+    fun anOpenInSwitchBackAtItsDefaultFollowsTheDefaultAgain() {
+        assertEquals(defaults, defaults.withOpenIn(OpenInApp.Waze, false).withOpenIn(OpenInApp.Waze, true))
+    }
+
+    @Test
+    fun afterALostFileEveryKindIsKeptAsPrivatelyAsItCanBe() {
+        val recovered = AppSettings.afterLostFile()
+
+        for (kind in DataKind.entries) {
+            val expected = if (kind.hasChoice) StorageChoice.PhoneOnly else StorageChoice.Public
+            assertEquals(expected, recovered.storage(kind), "$kind")
+        }
+        assertEquals(defaults.servers[Service.Nexus], recovered.servers[Service.Nexus])
+    }
+
+    @Test
     fun followLocalRulesIsOnByDefault() {
         assertTrue(defaults.followLocalRules)
     }
@@ -122,23 +138,42 @@ class AppSettingsTest {
         val added = defaults.added(light, "https://tiles.example.org/style.json")
 
         val third = "https://tiles.example.org/style.json"
-        assertEquals(listOf(third, first, second), added.withServerMoved(light, 2, 0).urls(light))
-        assertEquals(listOf(second, first, third), added.withServerMoved(light, 0, 1).urls(light))
-        assertFailsWith<IllegalArgumentException> { added.withServerMoved(light, 0, 3) }
+        assertEquals(listOf(third, first, second), added.withServerMoved(light, third, -2).urls(light))
+        assertEquals(listOf(second, first, third), added.withServerMoved(light, first, 1).urls(light))
+        assertEquals(added, added.withServerMoved(light, first, -1), "past the top")
+        assertEquals(added, added.withServerMoved(light, third, 1), "past the end")
+        assertEquals(added, added.withServerMoved(light, "https://gone.example", 1), "no longer in the list")
     }
 
     @Test
     fun serversCanBeRemovedButNotTheLastOne() {
-        val relays = defaults.withServerRemoved(Service.PkarrRelay, 0)
+        val relays = defaults.withServerRemoved(Service.PkarrRelay, "https://pkarr.pubky.app")
 
         assertEquals(listOf("https://pkarr.pubky.org"), relays.urls(Service.PkarrRelay))
-        assertFailsWith<IllegalArgumentException> { relays.withServerRemoved(Service.PkarrRelay, 0) }
-        assertFailsWith<IllegalArgumentException> { defaults.withServerRemoved(Service.AuthRelay, 0) }
+        assertEquals(relays, relays.withServerRemoved(Service.PkarrRelay, "https://pkarr.pubky.org"), "the last one stays")
+        assertEquals(defaults, defaults.withServerRemoved(Service.AuthRelay, "https://httprelay.pubky.app/inbox"))
+    }
+
+    @Test
+    fun aRepeatedChangeFromAnOlderScreenNeverHitsAnotherServer() {
+        val light = Service.MapStyleLight
+        val own = "https://tiles.example.org/style.json"
+        val three = defaults.added(light, own)
+
+        // A double tap on Remove of the second server: the second tap must not remove the next one.
+        val once = three.withServerRemoved(light, three.urls(light)[1])
+        assertEquals(once, once.withServerRemoved(light, three.urls(light)[1]))
+        assertEquals(listOf(three.urls(light)[0], own), once.urls(light))
     }
 
     @Test
     fun resetBringsBackTheDefaults() {
-        val edited = defaults.added(Service.Pinakes, "https://pinakes.example.org").withServerMoved(Service.Pinakes, 1, 0)
+        val edited =
+            defaults
+                .added(
+                    Service.Pinakes,
+                    "https://pinakes.example.org",
+                ).withServerMoved(Service.Pinakes, "https://pinakes.example.org", -1)
 
         val reset = edited.withServersReset(Service.Pinakes)
 
@@ -149,10 +184,11 @@ class AppSettingsTest {
 
     @Test
     fun aListEditedBackToTheDefaultsFollowsTheDefaultsAgain() {
-        val moved = defaults.withServerMoved(Service.MapStyleLight, 0, 1)
+        val first = ServerDefaults.lists[Service.MapStyleLight].first().url
+        val moved = defaults.withServerMoved(Service.MapStyleLight, first, 1)
         assertFalse(moved.isDefaultServerList(Service.MapStyleLight))
 
-        val movedBack = moved.withServerMoved(Service.MapStyleLight, 1, 0)
+        val movedBack = moved.withServerMoved(Service.MapStyleLight, first, -1)
         assertTrue(movedBack.isDefaultServerList(Service.MapStyleLight))
         assertEquals(defaults, movedBack)
     }

@@ -168,7 +168,22 @@ adb shell input tap $xy
 wait_for "Map style, light" 15 > /dev/null || fail "Server lists did not open"
 screenshot servers
 check_alive "servers"
-visit "Map style, light" "Add server" server-list "Map style, dark"
+# One server list, and its Add server dialog (closed again with back).
+xy=$(wait_for "Map style, light" 10) || fail "no Map style, light row"
+adb shell input tap $xy
+xy=$(wait_for "Add server" 15) || fail "the Map style, light list did not open"
+screenshot server-list
+check_alive "server list"
+adb shell input tap $xy
+wait_for "Add a server" 15 > /dev/null || fail "the Add server dialog did not open"
+screenshot add-server
+check_alive "add server dialog"
+adb shell input keyevent KEYCODE_BACK
+sleep 1
+if centre_of "$(dump_ui add-server-closed)" "Add a server" > /dev/null; then adb shell input keyevent KEYCODE_BACK; fi
+wait_for "Add server" 15 > /dev/null || fail "the Add server dialog did not close"
+adb shell input keyevent KEYCODE_BACK
+wait_for "Map style, dark" 15 > /dev/null || fail "back from the server list did not return to Server lists"
 adb shell input keyevent KEYCODE_BACK
 wait_for "What is stored online" 15 > /dev/null || fail "back from Server lists did not return to Settings"
 visit "What is stored online" "Saved places" stored-online "Open in other apps"

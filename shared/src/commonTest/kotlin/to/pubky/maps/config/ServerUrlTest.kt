@@ -68,6 +68,22 @@ class ServerUrlTest {
     }
 
     @Test
+    fun theDefaultPortIsDroppedAndOnlyDigitsMakeAPort() {
+        assertEquals("https://a.example/x", valid("https://a.example:443/x").url)
+        assertEquals("http://localhost", valid("http://localhost:80").url)
+        assertEquals("https://a.example:8443", valid("https://a.example:8443").url)
+        assertEquals("https://a.example", valid("https://a.example:0443").url)
+        assertTrue(invalid("https://a.example:+443").startsWith("The port"))
+        assertTrue(invalid("https://a.example:").startsWith("The port"))
+    }
+
+    @Test
+    fun controlCharactersAreRefused() {
+        assertEquals("The address holds a character that cannot be typed.", invalid("https://a.example/\u0000x"))
+        assertEquals("The address holds a character that cannot be typed.", invalid("https://a.example/\u007f"))
+    }
+
+    @Test
     fun ipAddressesAreHosts() {
         assertEquals("203.0.113.5", valid("https://203.0.113.5/style.json").host)
         assertEquals("[2001:db8::1]", valid("https://[2001:db8::1]:8443/style.json").host)

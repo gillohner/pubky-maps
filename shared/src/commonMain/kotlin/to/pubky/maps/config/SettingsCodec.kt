@@ -29,8 +29,9 @@ class UnreadableSettingsException(
  * Reading is lenient so that no app version loses the user's settings: a file from an older version
  * goes through [migrations] one version at a time ([migrations] maps a version to the step that
  * lifts it to the next one); a file from a newer version is read as far as this version understands
- * it; a server list, storage kind or app this version does not know is left out, and an entry that is
- * not valid (a bad address, a choice the kind does not offer) falls back to the default.
+ * it; a server list, storage kind or app this version does not know is left out, a bad address or
+ * credit link is dropped, and a storage choice the kind does not offer becomes the kind's most private
+ * choice (never its default, which may be less private than what the user chose).
  */
 class SettingsCodec(
     private val schemaVersion: Int = SETTINGS_SCHEMA_VERSION,
@@ -40,6 +41,7 @@ class SettingsCodec(
         Json {
             ignoreUnknownKeys = true
             encodeDefaults = true
+            explicitNulls = false
             prettyPrint = true
         }
 
@@ -56,10 +58,13 @@ class SettingsCodec(
                 version++
             }
             return json.decodeFromJsonElement(StoredSettings.serializer(), document).toSettings()
+        } catch (e: UnreadableSettingsException) {
+            throw e
         } catch (e: SerializationException) {
             throw UnreadableSettingsException("The settings file is not valid", e)
-        } catch (e: IllegalArgumentException) {
-            throw UnreadableSettingsException("The settings file is not valid", e)
+        } catch (e: Exception) {
+            // A migration step that fails on an unexpected file must not stop the app from starting.
+            throw UnreadableSettingsException("The settings file could not be read", e)
         }
     }
 
@@ -88,7 +93,8 @@ private data class StoredSettings(
     val servers: Map<String, List<StoredServer>> = emptyMap(),
     val storage: Map<String, String> = emptyMap(),
     val openIn: Map<String, Boolean> = emptyMap(),
-    val followLocalRules: Boolean = true,
+    /** Written only when off, so the default (on) can change for users who never touched it. */
+    val followLocalRules: Boolean? = null,
 )
 
 private fun AppSettings.toStored(schemaVersion: Int) =
@@ -104,7 +110,7 @@ private fun AppSettings.toStored(schemaVersion: Int) =
                 },
         storage = storageChoices.entries.associate { it.key.key to it.value.key },
         openIn = openInChoices.mapKeys { it.key.key },
-        followLocalRules = followLocalRules,
+        followLocalRules = if (followLocalRules) null else false,
     )
 
 private fun StoredSettings.toSettings(): AppSettings {
@@ -119,7 +125,10 @@ private fun StoredSettings.toSettings(): AppSettings {
                             ServerEntry(
                                 name = server.name.ifBlank { url.host },
                                 url = url.url,
-                                attribution = server.attribution.map { AttributionLink(it.label, it.url) },
+                                attribution =
+                                    server.attribution
+                                        .filter { ServerUrl.parse(it.url) is ServerUrl.Valid }
+                                        .map { AttributionLink(it.label, it.url) },
                             )
                         }.distinctBy { it.url }
                 if (list.isEmpty()) null else service to list
@@ -127,10 +136,10 @@ private fun StoredSettings.toSettings(): AppSettings {
     val storageChoices =
         storage.entries
             .mapNotNull { (key, value) ->
-                val kind = DataKind.fromKey(key)
-                val choice = StorageChoice.fromKey(value)
-                if (kind != null && choice != null && choice in kind.choices) kind to choice else null
+                val kind = DataKind.fromKey(key) ?: return@mapNotNull null
+                val choice = StorageChoice.fromKey(value)?.takeIf { it in kind.choices } ?: kind.mostPrivate
+                kind to choice
             }.toMap()
     val openInChoices = openIn.entries.mapNotNull { (key, on) -> OpenInApp.fromKey(key)?.let { it to on } }.toMap()
-    return AppSettings(serverOverrides, storageChoices, openInChoices, followLocalRules)
+    return AppSettings(serverOverrides, storageChoices, openInChoices, followLocalRules ?: true)
 }

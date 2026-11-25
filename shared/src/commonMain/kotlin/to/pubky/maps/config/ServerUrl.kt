@@ -25,6 +25,8 @@ sealed interface ServerUrl {
         const val MAX_LENGTH = 2000
         private const val MAX_HOST_LENGTH = 253
         private const val MAX_PORT = 65535
+        private const val HTTPS_PORT = 443
+        private const val HTTP_PORT = 80
 
         private val loopbackHosts = setOf("localhost", "127.0.0.1")
         private val schemeAndRest = Regex("^([A-Za-z][A-Za-z0-9+.-]*)://(.*)$")
@@ -50,6 +52,10 @@ sealed interface ServerUrl {
 
                 text.any { it.isWhitespace() } -> {
                     Invalid("An address has no spaces.")
+                }
+
+                text.any { it.isISOControl() } -> {
+                    Invalid("The address holds a character that cannot be typed.")
                 }
 
                 match == null -> {
@@ -81,7 +87,10 @@ sealed interface ServerUrl {
                 }
 
                 else -> {
-                    val origin = "$scheme://${authority.lowercase()}"
+                    val port = hostAndPort.second
+                    val defaultPort = if (scheme == "https") HTTPS_PORT else HTTP_PORT
+                    // https://a.example:443 and https://a.example are one server.
+                    val origin = "$scheme://$host" + if (port == null || port == defaultPort) "" else ":$port"
                     val pathAndQuery = rest.removePrefix(authority)
                     // A path of just "/" is dropped: https://a.example/ and https://a.example are one server.
                     Valid(url = if (pathAndQuery == "/") origin else origin + pathAndQuery, host = host, origin = origin)
@@ -96,7 +105,8 @@ sealed interface ServerUrl {
         private fun splitPort(authority: String): Pair<String, Int?>? {
             val portSeparator = authority.lastIndexOf(':')
             if (portSeparator < 0 || authority.endsWith("]")) return authority to null
-            val port = authority.substring(portSeparator + 1).toIntOrNull()
+            val digits = authority.substring(portSeparator + 1)
+            val port = digits.takeIf { it.isNotEmpty() && it.length <= 5 && it.all(Char::isDigit) }?.toInt()
             if (port == null || port !in 1..MAX_PORT) return null
             return authority.substring(0, portSeparator) to port
         }
