@@ -30,6 +30,7 @@ import to.pubky.maps.ui.PubkyMapsTheme
 
 private const val PHONE = "w412dp-h915dp"
 private const val TABLET = "w1280dp-h800dp"
+private const val SETTLE_MS = 1_000L
 
 /**
  * The settings dialogs, opened the way a user opens them, on top of their page. Dialogs are windows
@@ -59,11 +60,24 @@ class DialogScreenshotTest {
 
     // Add a server: a refused address shows why, below the field.
 
-    private fun addServerWithBadAddress(name: String) {
+    /**
+     * Opens the Add server dialog and types [address]. The test clock is driven by hand here: under
+     * Robolectric, the dialog's text field never lets a phone-sized screen report idle on its own.
+     */
+    private fun openAddServerAndType(address: String) {
+        compose.mainClock.autoAdvance = false
         show { onUpdate -> ServerListScreen(Service.Photon, settings, onUpdate, onBack = {}) }
+        compose.mainClock.advanceTimeBy(SETTLE_MS)
         compose.onNodeWithText("Add server").performClick()
-        compose.onNode(hasSetTextAction() and hasText("https://")).performTextReplacement("http://photon.example.org")
+        compose.mainClock.advanceTimeBy(SETTLE_MS)
+        compose.onNode(hasSetTextAction() and hasText("https://")).performTextReplacement(address)
+        compose.mainClock.advanceTimeBy(SETTLE_MS)
         compose.onNodeWithText("Add").performClick()
+        compose.mainClock.advanceTimeBy(SETTLE_MS)
+    }
+
+    private fun addServerWithBadAddress(name: String) {
+        openAddServerAndType("http://photon.example.org")
         compose.onNodeWithText("Use https://. Plain http:// works only for localhost and 127.0.0.1.").assertExists()
         capture(name)
     }
@@ -87,10 +101,7 @@ class DialogScreenshotTest {
     @Test
     @Config(qualifiers = "$PHONE-notnight-mdpi")
     fun aValidServerIsAddedAtTheEnd() {
-        show { onUpdate -> ServerListScreen(Service.Photon, settings, onUpdate, onBack = {}) }
-        compose.onNodeWithText("Add server").performClick()
-        compose.onNode(hasSetTextAction() and hasText("https://")).performTextReplacement("https://photon.example.org")
-        compose.onNodeWithText("Add").performClick()
+        openAddServerAndType("https://photon.example.org")
 
         assertEquals("https://photon.example.org", settings.servers[Service.Photon].last().url)
         compose.onNodeWithText("Reset to defaults").assertExists()
