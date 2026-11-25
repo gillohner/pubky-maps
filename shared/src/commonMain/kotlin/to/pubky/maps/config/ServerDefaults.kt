@@ -15,6 +15,9 @@ object ServerDefaults {
     private val openFreeMapCredits = listOf(openFreeMap, openMapTiles, openStreetMap)
     private val versaTilesCredits = listOf(versaTiles, openStreetMap)
 
+    /** Search results come from Photon's OpenStreetMap index (komoot's public server by default). */
+    val photon = AttributionLink("Search: Photon by komoot", "https://photon.komoot.io")
+
     val lists =
         ServerLists(
             mapOf(
@@ -44,7 +47,7 @@ object ServerDefaults {
                             attribution = versaTilesCredits,
                         ),
                     ),
-                Service.Photon to listOf(ServerEntry("Photon by Komoot", "https://photon.komoot.io")),
+                Service.Photon to listOf(ServerEntry("Photon by Komoot", "https://photon.komoot.io", listOf(photon, openStreetMap))),
                 Service.Pinakes to
                     listOf(ServerEntry("Pinakes (development)", "https://8092--main--pinakes--gil.coder.riginode.xyz")),
                 Service.Nexus to

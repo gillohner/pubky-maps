@@ -36,6 +36,9 @@ import to.pubky.maps.config.ServerDefaults
 import to.pubky.maps.config.Service
 import to.pubky.maps.config.StorageChoice
 import to.pubky.maps.map.MapScreen
+import to.pubky.maps.map.MapSearch
+import to.pubky.maps.search.SearchActions
+import to.pubky.maps.search.SearchState
 import to.pubky.maps.settings.LicencesScreen
 import to.pubky.maps.settings.OpenInAppsScreen
 import to.pubky.maps.settings.ServerListScreen
@@ -119,6 +122,7 @@ class ScreenshotTest {
             onMyLocation = {},
             onOpenSettings = {},
             missing = missing,
+            search = MapSearch(SearchState(), recents = emptyList(), userLocation = null, actions = SearchActions()),
         ) { MapPlaceholder() }
     }
 
@@ -151,6 +155,7 @@ class ScreenshotTest {
                     dialog = null,
                 ),
             account = account,
+            recentSearchCount = 12,
         )
     }
 

@@ -101,11 +101,10 @@ class AppSettingsTest {
 
         assertEquals(listOf("https://photon.komoot.io", "https://photon.example.org"), settings.urls(Service.Photon))
         assertEquals("photon.example.org", settings.servers[Service.Photon].last().name)
-        assertTrue(
-            settings.servers[Service.Photon]
-                .last()
-                .attribution
-                .isEmpty(),
+        // A search server credits its own host, like a map style (see anAddedPhotonServerIsCreditedForSearch).
+        assertEquals(
+            listOf(AttributionLink("photon.example.org", "https://photon.example.org"), ServerDefaults.openStreetMap),
+            settings.servers[Service.Photon].last().attribution,
         )
         assertFalse(settings.isDefaultServerList(Service.Photon))
         assertTrue(settings.isDefaultServerList(Service.Nexus))
@@ -119,6 +118,25 @@ class AppSettingsTest {
         assertEquals("Night", entry.name)
         assertEquals(listOf(AttributionLink("Night", "https://tiles.example.org"), ServerDefaults.openStreetMap), entry.attribution)
         assertTrue(AttributionLink("Night", "https://tiles.example.org") in style.servers.allAttribution())
+    }
+
+    @Test
+    fun anAddedPhotonServerIsCreditedForSearch() {
+        val own = defaults.added(Service.Photon, "https://photon.example.org", "My Photon")
+
+        val credit = AttributionLink("My Photon", "https://photon.example.org")
+        assertEquals(listOf(credit, ServerDefaults.openStreetMap), own.servers[Service.Photon].last().attribution)
+        assertTrue(credit in own.servers.searchAttribution())
+        assertTrue(credit in own.servers.allAttribution())
+        // Other services carry no credit of their own.
+        assertEquals(
+            emptyList(),
+            defaults
+                .added(Service.Nexus, "https://nexus.example.org")
+                .servers[Service.Nexus]
+                .last()
+                .attribution,
+        )
     }
 
     @Test

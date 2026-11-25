@@ -30,8 +30,9 @@ import to.pubky.maps.ui.AppIcons
 private val MaxCardWidth = 560.dp
 
 /**
- * The card of a place opened from a link: its name, where it is, and Share. The place page replaces
- * it later; until then it is the one place surface.
+ * The card of a place opened from a link or picked in search: its name, what it is and how far,
+ * where it is, and Share. The place page replaces it later; until then it is the one place surface.
+ * [distance] is how far the place is from the user ("1.2 km"), null when unknown.
  */
 @Composable
 fun PlaceCard(
@@ -40,6 +41,7 @@ fun PlaceCard(
     onShare: (() -> Unit)?,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    distance: String? = null,
 ) {
     Surface(
         modifier = modifier.widthIn(max = MaxCardWidth).fillMaxWidth(),
@@ -61,6 +63,14 @@ fun PlaceCard(
                             .semantics { heading() },
                 )
                 IconButton(onClick = onClose) { Icon(AppIcons.Close, contentDescription = "Close") }
+            }
+            val facts = listOfNotNull(place.category, distance)
+            if (facts.isNotEmpty()) {
+                Text(
+                    text = facts.joinToString(" · "),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(end = 8.dp),
+                )
             }
             val details = listOfNotNull(place.detailLine(), provider?.let { "From ${it.withArticle} link" })
             if (details.isNotEmpty()) {
@@ -128,8 +138,12 @@ private val PlaceRef.offlineNote: String?
             else -> null
         }
 
-/** The coordinates of a pinned place, unless the title already is them (a view or a search has none). */
+/**
+ * The address, else the coordinates of a pinned place unless the title already is them (a view or a
+ * search has none).
+ */
 private fun PlaceRef.detailLine(): String? {
+    if (address != null) return address
     if (!pinned) return null
     val point = point ?: return null
     val coordinates = "${formatCoordinate(point.lat)}, ${formatCoordinate(point.lon)}"

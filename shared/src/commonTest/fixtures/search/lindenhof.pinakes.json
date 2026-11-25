@@ -1,0 +1,129 @@
+{
+ "items": [
+  {
+   "id": "5746ef834e0acd1ba1e931b693160acd",
+   "uri": "https://www.openstreetmap.org/way/10594810",
+   "status": "ok",
+   "type": "Place",
+   "type_path": [
+    "Thing",
+    "Place"
+   ],
+   "name": "Lindenhof",
+   "description": null,
+   "image": null,
+   "embed": {
+    "provider": "openstreetmap",
+    "kind": "map",
+    "src": "https://www.openstreetmap.org/export/embed.html?bbox=8.54015%2C47.37262%2C8.54146%2C47.37335&layer=mapnik&marker=47.37300%2C8.54080",
+    "height": null,
+    "aspect": 1.7778,
+    "allow": [],
+    "autoplay_param": null
+   },
+   "site": "OpenStreetMap",
+   "point": {
+    "lat": 47.3729964,
+    "lon": 8.5407992
+   },
+   "start": null,
+   "end": null,
+   "group": null,
+   "also_on": [],
+   "refs": [
+    "https://www.openstreetmap.org/way/10594810"
+   ],
+   "collections": 0,
+   "open_in": [],
+   "attribution": "© OpenStreetMap contributors (ODbL)",
+   "credits": []
+  },
+  {
+   "id": "c10fedfa853bcdbdd4b18d8257250518",
+   "uri": "https://www.openstreetmap.org/node/270803095",
+   "status": "ok",
+   "type": "CafeOrCoffeeShop",
+   "type_path": [
+    "Thing",
+    "Organization",
+    "Place",
+    "LocalBusiness",
+    "FoodEstablishment",
+    "CafeOrCoffeeShop"
+   ],
+   "name": "Conditorei schober",
+   "description": null,
+   "image": null,
+   "embed": {
+    "provider": "openstreetmap",
+    "kind": "map",
+    "src": "https://www.openstreetmap.org/export/embed.html?bbox=8.54177%2C47.37082%2C8.54187%2C47.37092&layer=mapnik&marker=47.37087%2C8.54182",
+    "height": null,
+    "aspect": 1.7778,
+    "allow": [],
+    "autoplay_param": null
+   },
+   "site": "OpenStreetMap",
+   "point": {
+    "lat": 47.3708689,
+    "lon": 8.5418241
+   },
+   "start": null,
+   "end": null,
+   "group": null,
+   "also_on": [],
+   "refs": [
+    "https://www.openstreetmap.org/node/270803095",
+    "http://www.openstreetmap.org/node/270803095",
+    "https://openstreetmap.org/node/270803095",
+    "https://www.openstreetmap.org/node/270803095/"
+   ],
+   "collections": 3,
+   "open_in": [],
+   "attribution": "© OpenStreetMap contributors (ODbL)",
+   "credits": []
+  },
+  {
+   "id": "904e637664579372ae794307fa0dbb63",
+   "uri": "https://www.openstreetmap.org/way/89967877",
+   "status": "ok",
+   "type": "PlaceOfWorship",
+   "type_path": [
+    "Thing",
+    "Place",
+    "CivicStructure",
+    "PlaceOfWorship"
+   ],
+   "name": "Fraumünster",
+   "description": null,
+   "image": null,
+   "embed": {
+    "provider": "openstreetmap",
+    "kind": "map",
+    "src": "https://www.openstreetmap.org/export/embed.html?bbox=8.54079%2C47.36957%2C8.54162%2C47.36986&layer=mapnik&marker=47.36972%2C8.54120",
+    "height": null,
+    "aspect": 1.7778,
+    "allow": [],
+    "autoplay_param": null
+   },
+   "site": "OpenStreetMap",
+   "point": {
+    "lat": 47.3697153,
+    "lon": 8.5411996
+   },
+   "start": null,
+   "end": null,
+   "group": null,
+   "also_on": [],
+   "refs": [
+    "https://www.openstreetmap.org/way/89967877"
+   ],
+   "collections": 0,
+   "open_in": [],
+   "attribution": "© OpenStreetMap contributors (ODbL)",
+   "credits": []
+  }
+ ],
+ "cursor": null,
+ "reach_truncated": false
+}

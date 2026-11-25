@@ -1,0 +1,271 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "R",
+    "osm_id": 2888417,
+    "osm_key": "place",
+    "osm_value": "city",
+    "type": "city",
+    "name": "Lugano",
+    "county": "Bezirk Lugano",
+    "state": "Tessin",
+    "country": "Schweiz",
+    "countrycode": "CH",
+    "extra": {
+     "admin_level": "8"
+    },
+    "extent": [
+     8.893658,
+     46.1191468,
+     9.0896151,
+     45.939673
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.9512275,
+     46.0038007
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 2460241310,
+    "osm_key": "railway",
+    "osm_value": "station",
+    "type": "house",
+    "name": "Lugano",
+    "street": "Piazzale della Stazione",
+    "district": "Molino Nuovo",
+    "city": "Lugano",
+    "county": "Bezirk Lugano",
+    "state": "Tessin",
+    "country": "Schweiz",
+    "postcode": "6900",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.9468486,
+     46.0054989
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 3458396961,
+    "osm_key": "railway",
+    "osm_value": "station",
+    "type": "house",
+    "housenumber": "5800",
+    "name": "Lugano",
+    "street": "Delfín Gallo",
+    "district": "Villa Lugano",
+    "city": "Ciudad Autónoma de Buenos Aires",
+    "county": "Distrito del Deporte",
+    "state": "Ciudad Autónoma de Buenos Aires",
+    "country": "Argentinien",
+    "postcode": "1439",
+    "countrycode": "AR"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -58.4770537,
+     -34.677225
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 656810963,
+    "osm_key": "amenity",
+    "osm_value": "bar",
+    "type": "house",
+    "housenumber": "108",
+    "name": "Lugano Bar",
+    "street": "Langstrasse",
+    "locality": "Langstrasse",
+    "district": "Aussersihl",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8004",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5273116,
+     47.378784
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 9433569671,
+    "osm_key": "place",
+    "osm_value": "village",
+    "type": "city",
+    "name": "Lugano",
+    "state": "Bugiri",
+    "country": "Uganda",
+    "countrycode": "UG"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     33.9659934,
+     0.5602213
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 6768406367,
+    "osm_key": "place",
+    "osm_value": "hamlet",
+    "type": "district",
+    "name": "Lugano",
+    "city": "Roboré",
+    "county": "Chiquitos",
+    "state": "Santa Cruz",
+    "country": "Bolivien",
+    "countrycode": "BO"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -59.3840543,
+     -18.5318978
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 1469584444,
+    "osm_key": "landuse",
+    "osm_value": "residential",
+    "type": "locality",
+    "name": "Lugano",
+    "district": "Itatiaia",
+    "city": "Itatiaia",
+    "state": "Rio de Janeiro",
+    "country": "Brasilien",
+    "countrycode": "BR",
+    "extent": [
+     -44.6094018,
+     -22.4911119,
+     -44.6019097,
+     -22.496377
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -44.6073029,
+     -22.4937977
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 4964242698,
+    "osm_key": "place",
+    "osm_value": "neighbourhood",
+    "type": "locality",
+    "name": "Lugano",
+    "city": "Nova Serrana",
+    "state": "Minas Gerais",
+    "country": "Brasilien",
+    "postcode": "35520-110",
+    "countrycode": "BR"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -44.9814606,
+     -19.8865462
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 1497377255,
+    "osm_key": "landuse",
+    "osm_value": "residential",
+    "type": "locality",
+    "name": "Lugano",
+    "district": "Kertapati",
+    "city": "Palembang",
+    "state": "Süd-Sumatra",
+    "country": "Indonesien",
+    "countrycode": "ID",
+    "extent": [
+     104.710739,
+     -3.0325749,
+     104.7143707,
+     -3.0360125
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     104.7123286,
+     -3.0335175
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 1190244912,
+    "osm_key": "landuse",
+    "osm_value": "commercial",
+    "type": "locality",
+    "name": "Lugano",
+    "city": "Gałków Mały",
+    "county": "Landkreis Lodz",
+    "state": "Woiwodschaft Lodz",
+    "country": "Polen",
+    "countrycode": "PL",
+    "extent": [
+     19.7314557,
+     51.7278581,
+     19.7321724,
+     51.7271829
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     19.7318205,
+     51.7275382
+    ]
+   }
+  }
+ ]
+}

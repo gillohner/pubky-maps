@@ -25,6 +25,7 @@ import to.pubky.maps.links.AppLinks
 import to.pubky.maps.links.LinkedPlaceState
 import to.pubky.maps.links.OpenIn
 import to.pubky.maps.map.MapRoute
+import to.pubky.maps.search.SearchServices
 import to.pubky.maps.settings.AddServerScreen
 import to.pubky.maps.settings.LicencesRoute
 import to.pubky.maps.settings.OpenInAppsScreen
@@ -73,7 +74,7 @@ private data object AccountDestination
  * AboutLibraries JSON of the bundled libraries. [updates] is the in-app updater, null in builds that
  * an app store updates. [account] is the Pubky account (sign-in with Pubky Ring), null where there is
  * none. [links] opens map links other apps send and shares places; null where the core is not
- * available.
+ * available. [search] is the place search; null where it is not available.
  */
 @Composable
 fun App(
@@ -83,6 +84,7 @@ fun App(
     updates: UpdateController? = null,
     account: AccountUi? = null,
     links: AppLinks? = null,
+    search: SearchServices? = null,
 ) {
     val loaded by settingsRepository.settings.collectAsStateWithLifecycle()
     val updatesState = updates?.state?.collectAsStateWithLifecycle()?.value
@@ -90,7 +92,7 @@ fun App(
         // The settings file is read in a few milliseconds at start-up; until then the window stays
         // blank instead of loading the default map style and switching to the user's own.
         loaded?.let { settings ->
-            AppNavigation(appInfo, settings, settingsRepository, loadLicences, updates, updatesState, account, links)
+            AppNavigation(appInfo, settings, settingsRepository, loadLicences, updates, updatesState, account, links, search)
         }
         val dialog = updatesState?.dialog
         if (updates != null && dialog != null) {
@@ -117,6 +119,7 @@ private fun AppNavigation(
     updatesState: UpdatesUiState?,
     account: AccountUi?,
     links: AppLinks?,
+    search: SearchServices?,
 ) {
     val update: ((AppSettings) -> AppSettings) -> Unit = remember(settingsRepository) { { settingsRepository.update(it) } }
     val navController = rememberNavController()
@@ -152,6 +155,7 @@ private fun AppNavigation(
         LaunchedEffect(links) {
             links.incoming.collect { text ->
                 navController.popBackStack(MapDestination, inclusive = false)
+                search?.controller?.close()
                 links.linkedPlaces.open(text, pinakes)
             }
         }
@@ -173,9 +177,16 @@ private fun AppNavigation(
                 onClosePlace = { links?.linkedPlaces?.close() },
                 linkMessages = links?.linkedPlaces?.messages ?: emptyFlow(),
                 missing = missing,
+                search = search,
             )
         }
         composable<SettingsDestination> {
+            val recentSearches =
+                search
+                    ?.recents
+                    ?.entries
+                    ?.collectAsStateWithLifecycle()
+                    ?.value
             SettingsScreen(
                 appInfo = appInfo,
                 settings = settings,
@@ -190,6 +201,8 @@ private fun AppNavigation(
                 onAutoCheckUpdatesChange = { updates?.setAutoCheck(it) },
                 account = accountState,
                 onOpenAccount = { navController.open(AccountDestination) },
+                recentSearchCount = recentSearches?.size,
+                onClearRecentSearches = { search?.recents?.clear() },
             )
         }
         if (account != null) {

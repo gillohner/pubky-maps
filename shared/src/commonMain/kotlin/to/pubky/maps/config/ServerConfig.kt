@@ -57,11 +57,18 @@ data class ServerLists(
     fun mapStyles(darkTheme: Boolean): List<ServerEntry> = get(if (darkTheme) Service.MapStyleDark else Service.MapStyleLight)
 
     /**
-     * Every credit of every configured map style, each once, in list order; the OpenStreetMap credit
-     * is always there, also when the user replaced every default style.
+     * Every credit of every configured map style and search server, each once, in list order; the
+     * OpenStreetMap credit is always there, also when the user replaced every default style.
      */
     fun allAttribution(): List<AttributionLink> =
-        ((get(Service.MapStyleLight) + get(Service.MapStyleDark)).flatMap { it.attribution } + ServerDefaults.openStreetMap).distinct()
+        (
+            (get(Service.MapStyleLight) + get(Service.MapStyleDark)).flatMap { it.attribution } +
+                searchAttribution() +
+                ServerDefaults.openStreetMap
+        ).distinct()
+
+    /** The credits of the search servers (Photon's data is OpenStreetMap's), each once. */
+    fun searchAttribution(): List<AttributionLink> = get(Service.Photon).flatMap { it.attribution }.distinct()
 }
 
 /** Update feed addresses per channel, in the order the updater tries them. */

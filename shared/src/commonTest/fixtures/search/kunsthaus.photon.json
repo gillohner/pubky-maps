@@ -1,0 +1,306 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "R",
+    "osm_id": 3768127,
+    "osm_key": "tourism",
+    "osm_value": "museum",
+    "type": "house",
+    "housenumber": "1",
+    "name": "Kunsthaus",
+    "street": "Heimplatz",
+    "locality": "Hochschulen",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8001",
+    "countrycode": "CH",
+    "extent": [
+     8.5473425,
+     47.3708962,
+     8.5487069,
+     47.3695651
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5479797,
+     47.3702241
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 4878436674,
+    "osm_key": "railway",
+    "osm_value": "tram_stop",
+    "type": "house",
+    "name": "Kunsthaus",
+    "street": "Heimplatz",
+    "locality": "Hochschulen",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8024",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5486122,
+     47.3707745
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 1608392108,
+    "osm_key": "highway",
+    "osm_value": "bus_stop",
+    "type": "house",
+    "name": "Kunsthaus",
+    "street": "Heimplatz",
+    "locality": "Hochschulen",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8024",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.548453,
+     47.3705261
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 4878436673,
+    "osm_key": "railway",
+    "osm_value": "tram_stop",
+    "type": "house",
+    "name": "Kunsthaus",
+    "street": "Heimplatz",
+    "locality": "Hochschulen",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8024",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5489599,
+     47.370598
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 5647919899,
+    "osm_key": "amenity",
+    "osm_value": "bicycle_rental",
+    "type": "house",
+    "name": "Kunsthaus",
+    "street": "Heimplatz",
+    "locality": "Hochschulen",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8024",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5480925,
+     47.3708308
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 699203603,
+    "osm_key": "highway",
+    "osm_value": "platform",
+    "type": "house",
+    "name": "Kunsthaus",
+    "street": "Heimplatz",
+    "locality": "Hochschulen",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8024",
+    "countrycode": "CH",
+    "extent": [
+     8.5485267,
+     47.3705594,
+     8.5486986,
+     47.3703546
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5486126,
+     47.370457
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 218931364,
+    "osm_key": "railway",
+    "osm_value": "platform",
+    "type": "house",
+    "name": "Kunsthaus",
+    "street": "Rämistrasse",
+    "locality": "Hochschulen",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8024",
+    "countrycode": "CH",
+    "extent": [
+     8.5489304,
+     47.3704116,
+     8.5491674,
+     47.3701489
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5490332,
+     47.3702949
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 218937798,
+    "osm_key": "railway",
+    "osm_value": "platform",
+    "type": "house",
+    "name": "Kunsthaus",
+    "street": "Heimplatz",
+    "locality": "Hochschulen",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8024",
+    "countrycode": "CH",
+    "extent": [
+     8.5484891,
+     47.3707759,
+     8.5490035,
+     47.3705645
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5487463,
+     47.3706702
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 2281314292,
+    "osm_key": "railway",
+    "osm_value": "tram_stop",
+    "type": "house",
+    "name": "Kunsthaus",
+    "street": "Rämistrasse",
+    "locality": "Hochschulen",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8024",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5488938,
+     47.370202
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 218937800,
+    "osm_key": "railway",
+    "osm_value": "platform",
+    "type": "house",
+    "name": "Kunsthaus",
+    "street": "Heimplatz",
+    "locality": "Hochschulen",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8024",
+    "countrycode": "CH",
+    "extent": [
+     8.5485373,
+     47.3708252,
+     8.5490404,
+     47.3706067
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5487889,
+     47.370716
+    ]
+   }
+  }
+ ]
+}

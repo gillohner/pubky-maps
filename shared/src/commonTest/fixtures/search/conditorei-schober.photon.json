@@ -1,0 +1,32 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 270803095,
+    "osm_key": "amenity",
+    "osm_value": "cafe",
+    "type": "house",
+    "name": "Conditorei schober",
+    "street": "Stegengasse",
+    "locality": "Lindenhof",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8001",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5418241,
+     47.3708689
+    ]
+   }
+  }
+ ]
+}

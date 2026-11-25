@@ -1,0 +1,306 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 2166713933,
+    "osm_key": "highway",
+    "osm_value": "bus_stop",
+    "type": "house",
+    "name": "Zoo",
+    "street": "Orellistrasse",
+    "locality": "Fluntern",
+    "district": "Kreis 7",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8044",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5713863,
+     47.381589
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 309492432,
+    "osm_key": "railway",
+    "osm_value": "tram_stop",
+    "type": "house",
+    "name": "Zoo",
+    "street": "Zürichbergstrasse",
+    "locality": "Fluntern",
+    "district": "Kreis 7",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8044",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.571624,
+     47.3816689
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 501215242,
+    "osm_key": "highway",
+    "osm_value": "platform",
+    "type": "house",
+    "name": "Zoo",
+    "street": "Orellistrasse",
+    "locality": "Fluntern",
+    "district": "Kreis 7",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8044",
+    "countrycode": "CH",
+    "extent": [
+     8.57144,
+     47.3816173,
+     8.57151,
+     47.3815643
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.571475,
+     47.3815908
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 496934562,
+    "osm_key": "railway",
+    "osm_value": "platform",
+    "type": "house",
+    "name": "Zoo",
+    "street": "Zürichbergstrasse",
+    "locality": "Fluntern",
+    "district": "Kreis 7",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8044",
+    "countrycode": "CH",
+    "extent": [
+     8.5715745,
+     47.3818829,
+     8.5717057,
+     47.3816281
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5716419,
+     47.3817546
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 4954962964,
+    "osm_key": "information",
+    "osm_value": "guidepost",
+    "type": "house",
+    "name": "Zoo",
+    "street": "Zürichbergstrasse",
+    "locality": "Fluntern",
+    "district": "Kreis 7",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8044",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5741486,
+     47.3840762
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "R",
+    "osm_id": 9344765,
+    "osm_key": "tourism",
+    "osm_value": "zoo",
+    "type": "house",
+    "name": "Zoo Zürich",
+    "street": "Zürichbergstrasse",
+    "locality": "Fluntern",
+    "district": "Kreis 7",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8044",
+    "countrycode": "CH",
+    "extent": [
+     8.5708656,
+     47.3900845,
+     8.5809888,
+     47.3836389
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5775992,
+     47.3869141
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 1484250407,
+    "osm_key": "water",
+    "osm_value": "pond",
+    "type": "other",
+    "name": "Zoologieweiher E",
+    "locality": "Oberstrass",
+    "district": "Kreis 6",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "countrycode": "CH",
+    "extent": [
+     8.5525206,
+     47.3988214,
+     8.5527565,
+     47.3986941
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5526666,
+     47.3987496
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 1484250408,
+    "osm_key": "water",
+    "osm_value": "pond",
+    "type": "other",
+    "name": "Zoologieweiher W",
+    "locality": "Oberstrass",
+    "district": "Kreis 6",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "countrycode": "CH",
+    "extent": [
+     8.5518634,
+     47.3989419,
+     8.5525383,
+     47.3986873
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5521767,
+     47.398814
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 41704856,
+    "osm_key": "highway",
+    "osm_value": "track",
+    "type": "street",
+    "name": "Zooweg",
+    "locality": "Hirzenbach",
+    "district": "Schwamendingen",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8051",
+    "countrycode": "CH",
+    "extent": [
+     8.5755664,
+     47.3937963,
+     8.5769203,
+     47.3900567
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5762389,
+     47.3918988
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 10804540271,
+    "osm_key": "amenity",
+    "osm_value": "cafe",
+    "type": "house",
+    "name": "Zoocafé",
+    "street": "Zürichbergstrasse",
+    "locality": "Fluntern",
+    "district": "Kreis 7",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8044",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5742046,
+     47.3842582
+    ]
+   }
+  }
+ ]
+}

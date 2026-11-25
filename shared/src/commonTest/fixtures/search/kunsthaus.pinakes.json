@@ -1,0 +1,103 @@
+{
+ "items": [
+  {
+   "id": "49d6eb1c6a69946a41fe45ccd44c4a72",
+   "uri": "https://www.openstreetmap.org/relation/3768127",
+   "status": "ok",
+   "type": "Museum",
+   "type_path": [
+    "Thing",
+    "Place",
+    "CivicStructure",
+    "Museum"
+   ],
+   "name": "Kunsthaus",
+   "description": null,
+   "image": null,
+   "embed": {
+    "provider": "openstreetmap",
+    "kind": "map",
+    "src": "https://www.openstreetmap.org/export/embed.html?bbox=8.54734%2C47.36957%2C8.54871%2C47.37090&layer=mapnik&marker=47.37022%2C8.54798",
+    "height": null,
+    "aspect": 1.7778,
+    "allow": [],
+    "autoplay_param": null
+   },
+   "site": "OpenStreetMap",
+   "point": {
+    "lat": 47.3702241,
+    "lon": 8.5479797
+   },
+   "start": null,
+   "end": null,
+   "group": null,
+   "also_on": [
+    {
+     "uri": "https://www.britannica.com/topic/Kunsthaus-Zurich",
+     "site": "Britannica",
+     "derived": true,
+     "via": "wikidata",
+     "embed": null
+    },
+    {
+     "uri": "http://www.kunsthaus.ch/",
+     "site": "Official website",
+     "derived": true,
+     "via": "wikidata",
+     "embed": null
+    },
+    {
+     "uri": "https://www.wikidata.org/wiki/Q685038",
+     "site": "Wikidata",
+     "derived": true,
+     "via": "wikidata",
+     "embed": null
+    },
+    {
+     "uri": "https://als.wikipedia.org/wiki/Kunsthaus_Z%C3%BCrich",
+     "site": "Wikipedia (als)",
+     "derived": true,
+     "via": "wikidata",
+     "embed": null
+    },
+    {
+     "uri": "https://arz.wikipedia.org/wiki/%D9%83%D9%88%D9%86%D8%B3%D8%AB%D8%A7%D9%88%D8%B3_%D8%B2%D9%8A%D9%88%D8%B1%D8%AE",
+     "site": "Wikipedia (arz)",
+     "derived": true,
+     "via": "wikidata",
+     "embed": null
+    },
+    {
+     "uri": "https://br.wikipedia.org/wiki/Kunsthaus_Z%C3%BCrich",
+     "site": "Wikipedia (br)",
+     "derived": true,
+     "via": "wikidata",
+     "embed": null
+    },
+    {
+     "uri": "https://ca.wikipedia.org/wiki/Kunsthaus_Z%C3%BCrich",
+     "site": "Wikipedia (ca)",
+     "derived": true,
+     "via": "wikidata",
+     "embed": null
+    },
+    {
+     "uri": "https://cs.wikipedia.org/wiki/D%C5%AFm_um%C4%9Bn%C3%AD_Curych",
+     "site": "Wikipedia (cs)",
+     "derived": true,
+     "via": "wikidata",
+     "embed": null
+    }
+   ],
+   "refs": [
+    "https://www.openstreetmap.org/relation/3768127"
+   ],
+   "collections": 2,
+   "open_in": [],
+   "attribution": "© OpenStreetMap contributors (ODbL)",
+   "credits": []
+  }
+ ],
+ "cursor": null,
+ "reach_truncated": false
+}

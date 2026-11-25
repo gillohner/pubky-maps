@@ -1,0 +1,241 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 192151233,
+    "osm_key": "highway",
+    "osm_value": "pedestrian",
+    "type": "street",
+    "name": "Polyterrasse",
+    "locality": "Hochschulen",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8092",
+    "countrycode": "CH",
+    "extent": [
+     8.5463073,
+     47.3765203,
+     8.5472659,
+     47.3758237
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5467083,
+     47.3761722
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 1584068320,
+    "osm_key": "tourism",
+    "osm_value": "viewpoint",
+    "type": "house",
+    "name": "Polyterrasse",
+    "street": "Polyterrasse",
+    "locality": "Hochschulen",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8092",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5465161,
+     47.3760957
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 29542967,
+    "osm_key": "railway",
+    "osm_value": "station",
+    "type": "house",
+    "name": "Polyterrasse ETH",
+    "street": "Leonhardstrasse",
+    "locality": "Hochschulen",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8092",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5463207,
+     47.3768321
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 321364237,
+    "osm_key": "amenity",
+    "osm_value": "restaurant",
+    "type": "house",
+    "housenumber": "34",
+    "name": "SV Mensa Polyterrasse",
+    "street": "Leonhardstrasse",
+    "locality": "Hochschulen",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8092",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5465369,
+     47.3763026
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 1283388269,
+    "osm_key": "leisure",
+    "osm_value": "sports_centre",
+    "type": "house",
+    "housenumber": "36",
+    "name": "ASVZ Sport Center Polyterrasse",
+    "street": "Leonhardstrasse",
+    "locality": "Hochschulen",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8092",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5466874,
+     47.3759987
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 1424076351,
+    "osm_key": "highway",
+    "osm_value": "pedestrian",
+    "type": "street",
+    "name": "Postterrasse",
+    "locality": "Langstrasse",
+    "district": "Aussersihl",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8004",
+    "countrycode": "CH",
+    "extent": [
+     8.5361285,
+     47.3779587,
+     8.536674,
+     47.3774032
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5364887,
+     47.3777937
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 217571661,
+    "osm_key": "highway",
+    "osm_value": "residential",
+    "type": "street",
+    "name": "Polstergasse",
+    "district": "Leofels",
+    "city": "Ilshofen",
+    "county": "Landkreis Schwäbisch Hall",
+    "state": "Baden-Württemberg",
+    "country": "Deutschland",
+    "postcode": "74532",
+    "countrycode": "DE",
+    "extent": [
+     9.9167453,
+     49.2085374,
+     9.917663,
+     49.2069198
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     9.9170661,
+     49.2076464
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 5077670,
+    "osm_key": "highway",
+    "osm_value": "residential",
+    "type": "street",
+    "name": "Polstergasse",
+    "district": "Baad",
+    "city": "Neunkirchen am Brand",
+    "county": "Landkreis Forchheim",
+    "state": "Bayern",
+    "country": "Deutschland",
+    "postcode": "91077",
+    "countrycode": "DE",
+    "extent": [
+     11.1270108,
+     49.6144325,
+     11.1287338,
+     49.6136385
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     11.1278701,
+     49.614031
+    ]
+   }
+  }
+ ]
+}

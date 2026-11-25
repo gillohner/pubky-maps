@@ -20,11 +20,17 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
+import org.maplibre.compose.camera.CameraFit
 import org.maplibre.compose.camera.CameraMoveReason
 import org.maplibre.compose.camera.CameraPosition
 import org.maplibre.compose.camera.CameraUpdate
@@ -43,14 +49,29 @@ import org.maplibre.compose.map.rememberMapState
 import org.maplibre.compose.overlay.DisappearingCompassButton
 import org.maplibre.compose.overlay.DisappearingScaleBar
 import org.maplibre.compose.style.BaseStyle
+import org.maplibre.compose.util.DpPadding
+import org.maplibre.spatialk.geojson.BoundingBox
 import org.maplibre.spatialk.geojson.Position
 import to.pubky.maps.config.ServerLists
+import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.links.LinkedPlaceState
 import to.pubky.maps.place.OpeningLinkCard
 import to.pubky.maps.place.PlaceCard
 import to.pubky.maps.place.PlaceRef
+import to.pubky.maps.search.RecentSearch
+import to.pubky.maps.search.SearchActions
+import to.pubky.maps.search.SearchArea
+import to.pubky.maps.search.SearchMode
+import to.pubky.maps.search.SearchServices
+import to.pubky.maps.search.SearchState
+import to.pubky.maps.search.distanceMeters
+import to.pubky.maps.search.distanceText
 import to.pubky.maps.status.ServicePart
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.hypot
 import kotlin.math.max
+import kotlin.math.pow
 
 /** Where the map opens before it knows anything about the user: the whole world. */
 private val WorldCamera = CameraPosition(center = Position(longitude = 0.0, latitude = 30.0), zoom = 1.0)
@@ -63,8 +84,9 @@ private const val PLACE_ZOOM = 16.0
 
 /**
  * The live map: the first style of the server list for the current theme that loads, the user's
- * location on request, and the [MapScreen] controls, with the [missing] parts of the app named on top
- * and the place a link opened ([linkedPlace]) pinned, centred and shown in a card.
+ * location on request, search ([search], null where it is not available), and the [MapScreen]
+ * controls, with the [missing] parts of the app named on top and the place a link opened
+ * ([linkedPlace]) pinned, centred and shown in a card.
  */
 @Composable
 fun MapRoute(
@@ -75,6 +97,7 @@ fun MapRoute(
     onSharePlace: ((PlaceRef) -> Unit)? = null,
     onClosePlace: () -> Unit = {},
     linkMessages: Flow<String> = emptyFlow(),
+    search: SearchServices? = null,
 ) {
     val sources = servers.mapStyles(isSystemInDarkTheme())
     // Saved, so a trip to Settings does not start again from a style that already failed.
@@ -83,6 +106,21 @@ fun MapRoute(
     val locationState = rememberLocationState(provider = rememberDefaultLocationProvider())
     // Only a place is pinned: a map view or a search near a point only moves the camera.
     val pinnedPoint by rememberUpdatedState(linkedPlace.place?.takeIf { it.pinned }?.point)
+    val searchState =
+        search
+            ?.controller
+            ?.state
+            ?.collectAsStateWithLifecycle()
+            ?.value
+    val recents =
+        search
+            ?.recents
+            ?.entries
+            ?.collectAsStateWithLifecycle()
+            ?.value
+            .orEmpty()
+    // Pins while search is open; the picked result also when its card shows.
+    val searchPins by rememberUpdatedState(searchState?.takeIf { it.mode != SearchMode.Idle })
     val mapState =
         rememberMapState(
             baseStyle = fallback.current?.let { BaseStyle.Uri(it.url) } ?: BaseStyle.Empty,
@@ -90,6 +128,9 @@ fun MapRoute(
         ) {
             LocationIndicatorLayer(id = "user-location", locationState = locationState)
             pinnedPoint?.let { PlacePin(it) }
+            searchPins?.let { pins ->
+                if (search != null) SearchPins(pins.results, pins.selected, onSelect = search.controller::select)
+            }
         }
 
     // A style that fails to load hands over to the next one in the list.
@@ -122,6 +163,15 @@ fun MapRoute(
     }
     LaunchedEffect(linkMessages) { linkMessages.collect { snackbarHostState.showOnly(it) } }
 
+    val mapSearch =
+        if (search != null && searchState != null) {
+            rememberMapSearch(search, searchState, recents, mapState, locationState, onClosePlace)
+                .copy(credits = servers.searchAttribution())
+        } else {
+            null
+        }
+    val selected = searchState?.selected?.takeIf { searchState.mode == SearchMode.Selected }
+
     MapScreen(
         attribution = (fallback.current ?: sources.first()).attribution,
         mapUnavailable = fallback.allFailed,
@@ -130,8 +180,21 @@ fun MapRoute(
         onOpenSettings = onOpenSettings,
         missing = missing,
         snackbarHostState = snackbarHostState,
+        search = mapSearch,
         placeCard =
             when {
+                selected != null -> {
+                    {
+                        PlaceCard(
+                            place = selected.place,
+                            provider = null,
+                            onShare = onSharePlace?.let { share -> { share(selected.place) } },
+                            onClose = search.controller::closeCard,
+                            distance = distanceText(mapSearch?.userLocation, selected.place.point),
+                        )
+                    }
+                }
+
                 linkedPlace.opening -> {
                     { OpeningLinkCard() }
                 }
@@ -162,7 +225,8 @@ fun MapRoute(
                 DisappearingScaleBar(
                     metersPerDp = { mapState.viewport?.metersPerDpAtCenter ?: 0.0 },
                     zoom = { mapState.cameraPosition.zoom },
-                    modifier = Modifier.align(Alignment.TopStart),
+                    // Under the search bar.
+                    modifier = Modifier.align(Alignment.TopStart).padding(top = TopControlSize + MapControlMargin),
                 )
                 DisappearingCompassButton(
                     modifier =
@@ -174,6 +238,120 @@ fun MapRoute(
             }
         }
     }
+}
+
+/**
+ * Search on the live map: asks around the map's centre, moves the map to a picked result and fits
+ * it to the results of a search, and takes the back action while search is open.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun rememberMapSearch(
+    search: SearchServices,
+    state: SearchState,
+    recents: List<RecentSearch>,
+    mapState: MapState,
+    locationState: LocationState,
+    onCloseLinkedPlace: () -> Unit,
+): MapSearch {
+    val controller = search.controller
+
+    BackHandler(enabled = state.mode != SearchMode.Idle) { controller.back() }
+
+    // Search takes the bottom of the screen: a place opened from a link makes way.
+    val searching = state.mode != SearchMode.Idle
+    LaunchedEffect(searching) { if (searching) onCloseLinkedPlace() }
+    // A picked result: the map moves to it.
+    val selected = state.selected?.takeIf { state.mode == SearchMode.Selected }
+    LaunchedEffect(selected) {
+        val place = selected?.place ?: return@LaunchedEffect
+        val point = place.point ?: return@LaunchedEffect
+        mapState.animateCamera(
+            CameraUpdate(center = Position(longitude = point.lon, latitude = point.lat), zoom = place.zoom ?: PLACE_ZOOM),
+        )
+    }
+    // The results of a search: the map shows those near the area searched, once per search (not
+    // again when a slower source adds results, after the user moved the map, or back from a place).
+    var fittedQuery by remember { mutableStateOf<String?>(null) }
+    val shownResults = state.results.takeIf { state.mode == SearchMode.Results && state.resultsAreCurrent }
+    if (state.mode == SearchMode.Idle) fittedQuery = null
+    LaunchedEffect(shownResults) {
+        val points = shownResults?.mapNotNull { it.place.point }.orEmpty()
+        if (points.isEmpty() || fittedQuery == state.resultsQuery.trim()) return@LaunchedEffect
+        fittedQuery = state.resultsQuery.trim()
+        val area = mapState.searchArea()
+        // The results near the area searched; when none is (the map was elsewhere), those near the best one.
+        val near =
+            points.filter { distanceMeters(area.centre, it) <= area.pinakesRadiusMeters }.ifEmpty {
+                points.filter { distanceMeters(points.first(), it) <= area.pinakesRadiusMeters }
+            }
+        // A lone result gets a small box around it, so it too lands clear of the sheet or the panel (the
+        // fit padding is for this move only; camera padding would stay for every later move).
+        val margin = if (near.size == 1) LONE_RESULT_MARGIN_DEGREES else 0.0
+        mapState.animateCameraToBounds(
+            BoundingBox(
+                west = near.minOf { it.lon } - margin,
+                south = near.minOf { it.lat } - margin,
+                east = near.maxOf { it.lon } + margin,
+                north = near.maxOf { it.lat } + margin,
+            ),
+            CameraFit(fitPadding = resultsFitPadding(mapState.viewport?.size)),
+        )
+    }
+
+    val userLocation = locationState.lastLocation?.position?.let { GeoPoint(it.latitude, it.longitude) }
+    val actions =
+        remember(controller, mapState) {
+            SearchActions(
+                onStartEditing = controller::startEditing,
+                onQueryChange = { controller.onQueryChange(it, mapState.searchArea()) },
+                onSubmit = { controller.submit(mapState.searchArea()) },
+                onSelect = controller::select,
+                onSelectRecent = { controller.selectRecent(it, mapState.searchArea()) },
+                onClearQuery = controller::clearQuery,
+                onBack = { controller.back() },
+            )
+        }
+    return MapSearch(state = state, recents = recents, userLocation = userLocation, actions = actions)
+}
+
+/** Under the search bar, plus a pin's height: pins stand above their points. */
+private val RESULTS_FIT_TOP = 136.dp
+
+/** About 100 m: the box a lone result is shown in, a street's worth around it. */
+private const val LONE_RESULT_MARGIN_DEGREES = 0.001
+
+/**
+ * The room around fitted results: beside the panel on a wide screen, above the half-open results
+ * sheet on a phone, and under the search bar on both.
+ */
+private fun resultsFitPadding(size: DpSize?): DpPadding =
+    if (size != null && size.width >= SidePanelMinWidth) {
+        DpPadding(left = SidePanelWidth + 48.dp, top = RESULTS_FIT_TOP, right = 48.dp, bottom = 120.dp)
+    } else {
+        // Half the screen for the sheet, plus my location and the credits riding on its edge.
+        DpPadding(left = 48.dp, top = RESULTS_FIT_TOP, right = 48.dp, bottom = (size?.height ?: 800.dp) / 2 + 120.dp)
+    }
+
+/** A phone screen's half diagonal in dp, for a map whose size is not known yet. */
+private const val FALLBACK_HALF_DIAGONAL_DP = 500.0
+
+/** The equator's length in metres over a 512 px tile: metres per dp at zoom 0 and latitude 0. */
+private const val METERS_PER_DP_AT_ZOOM_0 = 40_075_016.686 / 512
+
+/** The area of the map on screen, for search. */
+internal fun MapState.searchArea(): SearchArea {
+    val camera = cameraPosition
+    val centre = GeoPoint(camera.center.latitude.coerceIn(-90.0, 90.0), camera.center.longitude.coerceIn(-180.0, 180.0))
+    val viewport = viewport
+    val halfDiagonal =
+        if (viewport != null && viewport.metersPerDpAtCenter > 0) {
+            val size = viewport.size
+            viewport.metersPerDpAtCenter * hypot(size.width.value.toDouble(), size.height.value.toDouble()) / 2
+        } else {
+            METERS_PER_DP_AT_ZOOM_0 * cos(centre.lat * PI / 180) / 2.0.pow(camera.zoom) * FALLBACK_HALF_DIAGONAL_DP
+        }
+    return SearchArea(centre = centre, zoom = camera.zoom, halfDiagonalMeters = halfDiagonal)
 }
 
 /** Shows [message], replacing the snackbar on screen instead of queueing behind it. */

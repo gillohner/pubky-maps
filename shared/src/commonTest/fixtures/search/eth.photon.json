@@ -1,0 +1,313 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "R",
+    "osm_id": 9379177,
+    "osm_key": "amenity",
+    "osm_value": "university",
+    "type": "house",
+    "name": "ETH Zürich, Zentrum",
+    "street": "Friedrich-Glauser-Gasse",
+    "locality": "Rathaus",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8092",
+    "countrycode": "CH",
+    "extent": [
+     8.5442486,
+     47.3805961,
+     8.5542064,
+     47.3754385
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5473208,
+     47.3765035
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 243156615,
+    "osm_key": "leisure",
+    "osm_value": "pitch",
+    "type": "house",
+    "name": "ETH",
+    "street": "Zielackerstrasse",
+    "city": "Schwerzenbach",
+    "county": "Bezirk Uster",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8603",
+    "countrycode": "CH",
+    "extent": [
+     8.6539098,
+     47.3854468,
+     8.6549209,
+     47.3845094
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.6544171,
+     47.3849823
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 28367342,
+    "osm_key": "amenity",
+    "osm_value": "university",
+    "type": "house",
+    "name": "ETH Zürich, Hönggerberg",
+    "street": "Gsteigstrasse",
+    "locality": "Höngg",
+    "district": "Kreis 10",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8093",
+    "countrycode": "CH",
+    "extent": [
+     8.5035095,
+     47.4116236,
+     8.5133024,
+     47.4049981
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.507564,
+     47.4083275
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 2609792667,
+    "osm_key": "amenity",
+    "osm_value": "library",
+    "type": "house",
+    "housenumber": "101",
+    "name": "ETH-Bibliothek",
+    "street": "Rämistrasse",
+    "locality": "Hochschulen",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8092",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5481666,
+     47.3764545
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 5098455794,
+    "osm_key": "highway",
+    "osm_value": "bus_stop",
+    "type": "house",
+    "name": "ETH Zentrum",
+    "street": "Polyterrasse",
+    "locality": "Hochschulen",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8092",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5470041,
+     47.3762232
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 13952883,
+    "osm_key": "building",
+    "osm_value": "university",
+    "type": "house",
+    "housenumber": "34",
+    "name": "ETH MM",
+    "street": "Leonhardstrasse",
+    "locality": "Hochschulen",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8092",
+    "countrycode": "CH",
+    "extent": [
+     8.5460452,
+     47.3767876,
+     8.5472659,
+     47.3756251
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5467367,
+     47.3762048
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 316182986,
+    "osm_key": "building",
+    "osm_value": "apartments",
+    "type": "house",
+    "name": "ETH STB",
+    "street": "Walchestrasse",
+    "locality": "Unterstrass",
+    "district": "Kreis 6",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8006",
+    "countrycode": "CH",
+    "extent": [
+     8.5414599,
+     47.3816553,
+     8.5418798,
+     47.38139
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5416698,
+     47.381525
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 640240185,
+    "osm_key": "building",
+    "osm_value": "university",
+    "type": "house",
+    "housenumber": "37",
+    "name": "ETH GLC",
+    "street": "Gloriastrasse",
+    "locality": "Fluntern",
+    "district": "Kreis 7",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8006",
+    "countrycode": "CH",
+    "extent": [
+     8.5526465,
+     47.3782223,
+     8.5539043,
+     47.3771948
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5534732,
+     47.3777075
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 6595702378,
+    "osm_key": "office",
+    "osm_value": "company",
+    "type": "house",
+    "housenumber": "130",
+    "name": "ETH Zürich",
+    "street": "Binzmühlestrasse",
+    "locality": "Oerlikon",
+    "district": "Kreis 11",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8050",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5374914,
+     47.413218
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 561175866,
+    "osm_key": "highway",
+    "osm_value": "bus_stop",
+    "type": "house",
+    "name": "ETH Hönggerberg",
+    "street": "Wolfgang-Pauli-Strasse",
+    "locality": "Höngg",
+    "district": "Kreis 10",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8093",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5077072,
+     47.4089176
+    ]
+   }
+  }
+ ]
+}

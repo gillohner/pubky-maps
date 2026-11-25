@@ -1,0 +1,301 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "R",
+    "osm_id": 1693094,
+    "osm_key": "place",
+    "osm_value": "suburb",
+    "type": "locality",
+    "name": "Lindenhof",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8001",
+    "countrycode": "CH",
+    "extra": {
+     "admin_level": "10"
+    },
+    "extent": [
+     8.5380878,
+     47.3769071,
+     8.5424157,
+     47.3659439
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5401756,
+     47.3729161
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 496852163,
+    "osm_key": "highway",
+    "osm_value": "footway",
+    "type": "street",
+    "name": "Lindenhof",
+    "locality": "Lindenhof",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8001",
+    "countrycode": "CH",
+    "extent": [
+     8.5402163,
+     47.3733123,
+     8.5413562,
+     47.3726656
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5407916,
+     47.3729817
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 321594075,
+    "osm_key": "highway",
+    "osm_value": "pedestrian",
+    "type": "street",
+    "name": "Lindenhof",
+    "locality": "Lindenhof",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8001",
+    "countrycode": "CH",
+    "extent": [
+     8.5407061,
+     47.3733238,
+     8.5407375,
+     47.3728738
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5407255,
+     47.3730991
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 10594810,
+    "osm_key": "place",
+    "osm_value": "square",
+    "type": "locality",
+    "name": "Lindenhof",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "countrycode": "CH",
+    "extent": [
+     8.5401512,
+     47.3733533,
+     8.5414564,
+     47.3726215
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5407992,
+     47.3729964
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 10594810,
+    "osm_key": "place",
+    "osm_value": "square",
+    "type": "street",
+    "name": "Lindenhof",
+    "locality": "Lindenhof",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8001",
+    "countrycode": "CH",
+    "extent": [
+     8.5401512,
+     47.3733533,
+     8.5414564,
+     47.3726215
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5407992,
+     47.3729964
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 268134047,
+    "osm_key": "tourism",
+    "osm_value": "viewpoint",
+    "type": "house",
+    "name": "Lindenhof",
+    "street": "Endingerplatz",
+    "district": "Rapperswil",
+    "city": "Rapperswil-Jona",
+    "county": "Wahlkreis See-Gaster",
+    "state": "St. Gallen",
+    "country": "Schweiz",
+    "postcode": "8640",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.8141861,
+     47.2270367
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 1031293132,
+    "osm_key": "tourism",
+    "osm_value": "viewpoint",
+    "type": "house",
+    "name": "Lindenhof",
+    "street": "Lindenhof",
+    "locality": "Lindenhof",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8001",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5413876,
+     47.3730646
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 2376930920,
+    "osm_key": "leisure",
+    "osm_value": "playground",
+    "type": "house",
+    "name": "Lindenhof",
+    "street": "Lindenhof",
+    "locality": "Lindenhof",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8001",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5403534,
+     47.3730566
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 12823581871,
+    "osm_key": "place",
+    "osm_value": "farm",
+    "type": "locality",
+    "name": "Lindenhof",
+    "district": "Jonental",
+    "city": "Jonen",
+    "county": "Bezirk Bremgarten",
+    "state": "Aargau",
+    "country": "Schweiz",
+    "postcode": "8916",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.4107126,
+     47.2954356
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 1091778645,
+    "osm_key": "landuse",
+    "osm_value": "farmyard",
+    "type": "locality",
+    "name": "Lindenhof",
+    "district": "Baltenswil",
+    "city": "Bassersdorf",
+    "county": "Bezirk Bülach",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8303",
+    "countrycode": "CH",
+    "extent": [
+     8.6418107,
+     47.4282504,
+     8.6431663,
+     47.4272576
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.6423065,
+     47.4277587
+    ]
+   }
+  }
+ ]
+}

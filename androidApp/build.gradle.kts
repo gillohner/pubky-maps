@@ -225,6 +225,9 @@ kotlin {
 }
 
 tasks.withType<Test>().configureEach {
+    // Robolectric screenshot tests keep each rendered screen in memory; Gradle's 512 MB default runs
+    // out with the full set (every screen on phone and tablet, light and dark).
+    maxHeapSize = "2g"
     javaLauncher.set(
         javaToolchains.launcherFor {
             languageVersion.set(

@@ -1,0 +1,229 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 1121941324,
+    "osm_key": "highway",
+    "osm_value": "service",
+    "type": "street",
+    "name": "Bahnhofstrasse",
+    "locality": "City",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8021",
+    "countrycode": "CH",
+    "extent": [
+     8.5397866,
+     47.3769557,
+     8.5399394,
+     47.3767514
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5398527,
+     47.3768613
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 60505838,
+    "osm_key": "highway",
+    "osm_value": "pedestrian",
+    "type": "street",
+    "name": "Bahnhofstrasse",
+    "locality": "Lindenhof",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8021",
+    "countrycode": "CH",
+    "extent": [
+     8.5385268,
+     47.3769089,
+     8.5398128,
+     47.3746239
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5391726,
+     47.3757655
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 332455374,
+    "osm_key": "highway",
+    "osm_value": "tertiary",
+    "type": "street",
+    "name": "Bahnhofstrasse",
+    "locality": "Lindenhof",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8021",
+    "countrycode": "CH",
+    "extent": [
+     8.5383693,
+     47.3744948,
+     8.5388123,
+     47.3739291
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5385579,
+     47.3742455
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 27405455,
+    "osm_key": "highway",
+    "osm_value": "pedestrian",
+    "type": "street",
+    "name": "Bahnhofstrasse",
+    "locality": "Lindenhof",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8001",
+    "countrycode": "CH",
+    "extent": [
+     8.5382985,
+     47.3744604,
+     8.5393312,
+     47.370082
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5384362,
+     47.3722577
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 248669680,
+    "osm_key": "highway",
+    "osm_value": "residential",
+    "type": "street",
+    "name": "Bahnhofstrasse",
+    "locality": "Lindenhof",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8001",
+    "countrycode": "CH",
+    "extent": [
+     8.5387941,
+     47.3710418,
+     8.5389113,
+     47.3707326
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5388527,
+     47.3708872
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 1121941325,
+    "osm_key": "highway",
+    "osm_value": "service",
+    "type": "street",
+    "name": "Bahnhofstrasse",
+    "locality": "Lindenhof",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8001",
+    "countrycode": "CH",
+    "extent": [
+     8.5389113,
+     47.3707326,
+     8.5390642,
+     47.3703298
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5389878,
+     47.3705312
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 141054357,
+    "osm_key": "highway",
+    "osm_value": "service",
+    "type": "street",
+    "name": "Bahnhofstrasse",
+    "locality": "Lindenhof",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8024",
+    "countrycode": "CH",
+    "extent": [
+     8.5402242,
+     47.3672162,
+     8.5403469,
+     47.3668869
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5402856,
+     47.3670516
+    ]
+   }
+  }
+ ]
+}

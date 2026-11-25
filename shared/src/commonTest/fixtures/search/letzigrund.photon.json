@@ -1,0 +1,307 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 500735211,
+    "osm_key": "railway",
+    "osm_value": "platform",
+    "type": "house",
+    "name": "Letzigrund",
+    "street": "Badenerstrasse",
+    "locality": "Hard",
+    "district": "Aussersihl",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8004",
+    "countrycode": "CH",
+    "extent": [
+     8.5034247,
+     47.3814397,
+     8.5039919,
+     47.3811813
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.503899,
+     47.3813049
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 381709997,
+    "osm_key": "railway",
+    "osm_value": "platform",
+    "type": "house",
+    "name": "Letzigrund",
+    "street": "Badenerstrasse",
+    "locality": "Hard",
+    "district": "Aussersihl",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8004",
+    "countrycode": "CH",
+    "extent": [
+     8.5034292,
+     47.3813008,
+     8.503949,
+     47.3810675
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5035685,
+     47.3811899
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 500735210,
+    "osm_key": "railway",
+    "osm_value": "platform",
+    "type": "house",
+    "name": "Letzigrund",
+    "street": "Badenerstrasse",
+    "locality": "Hard",
+    "district": "Aussersihl",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8004",
+    "countrycode": "CH",
+    "extent": [
+     8.5033464,
+     47.3813312,
+     8.5039052,
+     47.3810065
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5033898,
+     47.3811578
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 381709998,
+    "osm_key": "railway",
+    "osm_value": "platform",
+    "type": "house",
+    "name": "Letzigrund",
+    "street": "Badenerstrasse",
+    "locality": "Hard",
+    "district": "Aussersihl",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8004",
+    "countrycode": "CH",
+    "extent": [
+     8.5034887,
+     47.3813848,
+     8.5039922,
+     47.3811156
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5037986,
+     47.3812411
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 2277081502,
+    "osm_key": "railway",
+    "osm_value": "tram_stop",
+    "type": "house",
+    "name": "Letzigrund",
+    "street": "Badenerstrasse",
+    "locality": "Hard",
+    "district": "Aussersihl",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8004",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5035119,
+     47.381316
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 2277081498,
+    "osm_key": "railway",
+    "osm_value": "tram_stop",
+    "type": "house",
+    "name": "Letzigrund",
+    "street": "Badenerstrasse",
+    "locality": "Hard",
+    "district": "Aussersihl",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8004",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5039155,
+     47.3811043
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 12463174648,
+    "osm_key": "healthcare",
+    "osm_value": "physiotherapist",
+    "type": "house",
+    "name": "Letzigrund",
+    "street": "Enzianweg",
+    "locality": "Altstetten",
+    "district": "Kreis 9",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8010",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.4989381,
+     47.383242
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 28733849,
+    "osm_key": "leisure",
+    "osm_value": "stadium",
+    "type": "house",
+    "name": "Stadion Letzigrund",
+    "street": "Badenerstrasse",
+    "locality": "Altstetten",
+    "district": "Kreis 9",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8010",
+    "countrycode": "CH",
+    "extent": [
+     8.502166,
+     47.3838748,
+     8.5051997,
+     47.3817046
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5037387,
+     47.3828206
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 11389818824,
+    "osm_key": "amenity",
+    "osm_value": "veterinary",
+    "type": "house",
+    "housenumber": "451",
+    "name": "Vet Zentrum Zürich Letzigrund",
+    "street": "Badenerstrasse",
+    "locality": "Hard",
+    "district": "Aussersihl",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8003",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.504668,
+     47.3805942
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 4963884371,
+    "osm_key": "shop",
+    "osm_value": "car",
+    "type": "house",
+    "housenumber": "452",
+    "name": "Bernina-Garage Letzigrund",
+    "street": "Badenerstrasse",
+    "locality": "Hard",
+    "district": "Aussersihl",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8004",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5047188,
+     47.3810094
+    ]
+   }
+  }
+ ]
+}
