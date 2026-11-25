@@ -183,7 +183,7 @@ fun MapRoute(
         search = mapSearch,
         placeCard =
             when {
-                selected != null && search != null -> {
+                selected != null -> {
                     {
                         PlaceCard(
                             place = selected.place,

@@ -155,7 +155,7 @@ fun MapScreen(
                 if (mapUnavailable) MapUnavailableNotice(onRetry = onRetryMap)
                 if (missing.isNotEmpty()) DegradedBanner(missing)
             }
-            if (panelShown && search != null) {
+            if (panelShown) {
                 Surface(
                     modifier =
                         Modifier
@@ -191,7 +191,7 @@ fun MapScreen(
                 }
             }
         }
-        if (sheetShown && search != null) {
+        if (sheetShown) {
             val insets = WindowInsets.safeDrawing.asPaddingValues()
             ResultsSheet(
                 height = screenHeight,

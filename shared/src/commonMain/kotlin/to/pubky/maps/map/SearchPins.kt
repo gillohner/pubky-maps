@@ -76,7 +76,13 @@ internal fun SearchPins(
         }
     val source = rememberGeoJsonSource(GeoJsonData.Features(features))
     val onClick: ClickEvent.(List<Feature<*, JsonObject?>>) -> ClickResult = { clicked ->
-        val index = clicked.firstOrNull()?.properties?.get(INDEX)?.jsonPrimitive?.intOrNull
+        val index =
+            clicked
+                .firstOrNull()
+                ?.properties
+                ?.get(INDEX)
+                ?.jsonPrimitive
+                ?.intOrNull
         val result = index?.let { results.getOrNull(it) }
         if (result != null) {
             onSelect(result)
