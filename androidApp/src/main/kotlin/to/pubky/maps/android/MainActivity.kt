@@ -12,12 +12,10 @@ import kotlinx.coroutines.withContext
 import to.pubky.maps.App
 import to.pubky.maps.AppInfo
 import to.pubky.maps.BuildConfig
-import to.pubky.maps.android.links.mapLinkText
+import to.pubky.maps.android.links.IncomingIntent
+import to.pubky.maps.android.links.incoming
 import to.pubky.maps.android.links.shareText
 import to.pubky.maps.links.AppLinks
-
-/** Pubky Ring's return links: `pubkymaps://auth/{success|error|cancel}?nonce=…`. */
-private const val RING_RETURN_SCHEME = "pubkymaps"
 
 class MainActivity : ComponentActivity() {
     private val app get() = application as PubkyMapsApplication
@@ -69,14 +67,17 @@ class MainActivity : ComponentActivity() {
 
     /** Pubky Ring's return link, or a map link another app sent (a link or shared text). */
     private fun handleIntent(intent: Intent?) {
-        // Reopened from Recents, the task replays the link that started it: that one was handled.
-        if (intent == null || intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
-        val data = intent.data
-        if (data?.scheme == RING_RETURN_SCHEME) {
-            app.account.onRingCallback(data.toString())
-            return
+        when (val incoming = intent?.incoming()) {
+            is IncomingIntent.RingReturn -> {
+                app.account.onRingCallback(incoming.url)
+            }
+
+            is IncomingIntent.MapLink -> {
+                incomingLinks.trySend(incoming.text)
+            }
+
+            null -> {}
         }
-        intent.mapLinkText()?.let { incomingLinks.trySend(it) }
     }
 
     private suspend fun readLicences(): String = withContext(Dispatchers.IO) { readLicenceList(resources) }

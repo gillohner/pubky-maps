@@ -104,9 +104,13 @@ fun MapRoute(
     val snackbarHostState = remember { SnackbarHostState() }
     val myLocation = rememberMyLocationAction(locationState, mapState, snackbarHostState)
 
-    // A place opened from a link: the map moves to it once, when it arrives.
+    // A place opened from a link: the map moves to it once per opening. Saved, so returning from
+    // Settings or recreating the activity keeps where the user has moved the map since.
     val place = linkedPlace.place
-    LaunchedEffect(place) {
+    var centredAt by rememberSaveable { mutableIntStateOf(0) }
+    LaunchedEffect(linkedPlace.placedAt) {
+        if (linkedPlace.placedAt == centredAt) return@LaunchedEffect
+        centredAt = linkedPlace.placedAt
         val point = place?.point ?: return@LaunchedEffect
         mapState.animateCamera(
             CameraUpdate(

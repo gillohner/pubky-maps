@@ -3,13 +3,14 @@ package to.pubky.maps.links
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
 import to.pubky.maps.place.PlaceRef
 
@@ -20,6 +21,13 @@ data class LinkedPlaceState(
     val provider: LinkProvider? = null,
     /** A link is being read (a short link followed, Pinakes asked). */
     val opening: Boolean = false,
+    /** Grows with every [LinkedPlaces.open] and [LinkedPlaces.close]; a result of an older one is dropped. */
+    val generation: Int = 0,
+    /**
+     * The [generation] that set [place]. The map moves to the place once per value, so coming back
+     * from Settings does not move it again, and the same link opened twice does.
+     */
+    val placedAt: Int = 0,
 )
 
 /**
@@ -33,10 +41,11 @@ class LinkedPlaces(
     private val _state = MutableStateFlow(LinkedPlaceState())
     val state: StateFlow<LinkedPlaceState> = _state.asStateFlow()
 
-    private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    // Buffered, so a note sent before the map screen collects (it was behind Settings) still shows.
+    private val _messages = Channel<String>(capacity = 4, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
-    /** One-off notes for the user ("no place in this link"). */
-    val messages: SharedFlow<String> = _messages.asSharedFlow()
+    /** One-off notes for the user ("no place in this link"); for one collector, the map screen. */
+    val messages: Flow<String> = _messages.receiveAsFlow()
 
     private var job: Job? = null
 
@@ -46,26 +55,41 @@ class LinkedPlaces(
         pinakesServers: List<String>,
     ) {
         job?.cancel()
-        _state.value = _state.value.copy(opening = true)
+        val generation = _state.updateAndGet { it.copy(opening = true, generation = it.generation + 1) }.generation
         job =
             scope.launch {
-                when (val result = links.openAsPlace(text, pinakesServers)) {
-                    is LinkOpening.Opened -> {
-                        _state.value = LinkedPlaceState(place = result.place, provider = result.provider)
-                    }
+                val result = links.openAsPlace(text, pinakesServers)
+                // Written only if no newer open or close came meanwhile (a cancel does not stop a job
+                // that already got its result).
+                val current =
+                    _state.updateAndGet {
+                        when {
+                            it.generation != generation -> {
+                                it
+                            }
 
-                    LinkOpening.NotAMapLink -> {
-                        _state.value = _state.value.copy(opening = false)
-                        _messages.tryEmit(NOT_A_MAP_LINK)
+                            result is LinkOpening.Opened -> {
+                                LinkedPlaceState(
+                                    result.place,
+                                    result.provider,
+                                    generation = generation,
+                                    placedAt = generation,
+                                )
+                            }
+
+                            else -> {
+                                it.copy(opening = false)
+                            }
+                        }
                     }
-                }
+                if (current.generation == generation && result == LinkOpening.NotAMapLink) _messages.trySend(NOT_A_MAP_LINK)
             }
     }
 
     /** Closes the place card. */
     fun close() {
         job?.cancel()
-        _state.value = LinkedPlaceState()
+        _state.update { LinkedPlaceState(generation = it.generation + 1, placedAt = it.placedAt) }
     }
 
     companion object {

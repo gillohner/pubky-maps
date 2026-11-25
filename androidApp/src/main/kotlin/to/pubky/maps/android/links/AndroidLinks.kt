@@ -8,6 +8,32 @@ import android.net.Uri
 import to.pubky.maps.links.IncomingLinks
 import to.pubky.maps.links.InstalledApps
 
+/** Pubky Ring's return links: `pubkymaps://auth/{success|error|cancel}?nonce=…`. */
+private const val RING_RETURN_SCHEME = "pubkymaps"
+
+/** What an intent that reached the app is for. */
+sealed interface IncomingIntent {
+    /** Pubky Ring sent the user back from a sign-in. */
+    data class RingReturn(
+        val url: String,
+    ) : IncomingIntent
+
+    /** Another app sent a map link (a link, or text with one). */
+    data class MapLink(
+        val text: String,
+    ) : IncomingIntent
+}
+
+/**
+ * What this intent asks of the app, or null (the launcher, or an intent replayed when the task is
+ * reopened from Recents, which was handled when it first arrived).
+ */
+fun Intent.incoming(): IncomingIntent? {
+    if (flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return null
+    data?.takeIf { it.scheme == RING_RETURN_SCHEME }?.let { return IncomingIntent.RingReturn(it.toString()) }
+    return mapLinkText()?.let(IncomingIntent::MapLink)
+}
+
 /** The map-link text of a `VIEW` or `SEND` intent another app sent, or null. */
 fun Intent.mapLinkText(): String? =
     IncomingLinks.textOf(

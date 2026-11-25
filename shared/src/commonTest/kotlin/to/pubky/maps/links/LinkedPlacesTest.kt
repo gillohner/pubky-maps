@@ -75,6 +75,49 @@ class LinkedPlacesTest {
                     ?.uri,
             )
             assertFalse(places.state.value.opening)
+            // The map does not move again to the place it already showed.
+            assertEquals(1, places.state.value.placedAt)
+        }
+
+    @Test
+    fun aNoteSentBeforeTheMapListensStillArrives() =
+        runTest(StandardTestDispatcher()) {
+            val places = linkedPlaces(FakeMapLinks())
+            places.open("hello", emptyList())
+            runCurrent()
+            assertEquals(LinkedPlaces.NOT_A_MAP_LINK, places.messages.first())
+        }
+
+    @Test
+    fun aResultAfterCloseIsDropped() =
+        runTest(StandardTestDispatcher()) {
+            val links = FakeMapLinks { text -> openedLink(source = text) }
+            links.gate = CompletableDeferred()
+            val places = linkedPlaces(links)
+            places.open("geo:1,1", emptyList())
+            runCurrent()
+            places.close()
+            links.gate!!.complete(Unit)
+            runCurrent()
+            assertNull(places.state.value.place)
+            assertFalse(places.state.value.opening)
+        }
+
+    @Test
+    fun theSameLinkOpenedAgainMovesTheMapAgain() =
+        runTest(StandardTestDispatcher()) {
+            val places = linkedPlaces(FakeMapLinks { text -> openedLink(source = text) })
+            places.open("geo:1,1", emptyList())
+            runCurrent()
+            val first = places.state.value.placedAt
+            places.open("geo:1,1", emptyList())
+            runCurrent()
+            assertEquals(
+                "geo:1,1",
+                places.state.value.place
+                    ?.uri,
+            )
+            assertTrue(places.state.value.placedAt > first)
         }
 
     @Test

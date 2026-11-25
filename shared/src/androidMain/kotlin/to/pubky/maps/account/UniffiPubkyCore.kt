@@ -27,9 +27,6 @@ suspend fun createPubkyMapsCore(servers: CoreServers): PubkyMapsCore {
     return PubkyMapsCore.create(config)
 }
 
-/** Builds the core (its client is built on the core's own thread). Throws [CoreFailure]. */
-suspend fun createUniffiPubkyCore(servers: CoreServers): PubkyCore = createUniffiPubkyCore { createPubkyMapsCore(servers) }
-
 /** [PubkyCore] on the core [core] returns (for example the process's [SharedCore]). Throws [CoreFailure]. */
 suspend fun createUniffiPubkyCore(core: suspend () -> PubkyMapsCore): PubkyCore = UniffiPubkyCore(mapped { core() })
 

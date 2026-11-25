@@ -90,8 +90,16 @@
                 <data android:scheme="http" />
                 <data android:host="www.google.com" />
                 <data android:host="google.com" />
-                <data android:host="maps.google.com" />
                 <data android:pathPrefix="/maps" />
+            </intent-filter>
+            <!-- Google Maps on its own host: every path is the map (maps.google.com/?q=…). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="maps.google.com" />
             </intent-filter>
             <!-- Google Maps short links. -->
             <intent-filter>
