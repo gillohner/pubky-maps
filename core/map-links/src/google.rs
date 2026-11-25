@@ -164,7 +164,9 @@ pub(crate) fn parse_web(url: &Url, host: &str, original: &str) -> Option<MapLink
         link.provider_id = data_feature_cid(&raw);
     }
     place = place.or(query_point).or(path_point);
+    link.point_is_view = place.is_none() && view.is_some();
     link.point = place.or(view);
+    link.query_names_the_place();
     Some(link)
 }
 

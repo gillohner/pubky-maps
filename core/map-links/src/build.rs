@@ -94,7 +94,12 @@ fn name_of(place: &Place) -> Option<&str> {
 
 fn zoom_of(place: &Place) -> u8 {
     // Clamped, so the cast cannot truncate.
-    place.zoom.unwrap_or(DEFAULT_ZOOM).clamp(1.0, 20.0).round() as u8
+    place
+        .zoom
+        .filter(|z| z.is_finite())
+        .unwrap_or(DEFAULT_ZOOM)
+        .clamp(1.0, 20.0)
+        .round() as u8
 }
 
 /// The link that opens `target` in `app`, or `None` when the app has no link for it (for

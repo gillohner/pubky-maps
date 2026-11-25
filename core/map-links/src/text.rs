@@ -6,7 +6,7 @@ use crate::{MAX_NAME_CHARS, MapLink, parse};
 
 /// A name or query as shown: control characters and runs of whitespace become one space,
 /// trimmed, at most [`MAX_NAME_CHARS`] characters. `None` when nothing is left.
-pub(crate) fn clean(s: &str) -> Option<String> {
+pub fn clean(s: &str) -> Option<String> {
     let mut out = String::new();
     let mut count = 0;
     for word in s.split(|c: char| c.is_whitespace() || c.is_control()) {
@@ -49,8 +49,7 @@ pub fn find_in_text(text: &str) -> Option<MapLink> {
         return Some(link);
     }
     for (start, token) in tokens(text) {
-        let token = token.trim_end_matches(['.', ',', ';', ')', '>', '"', '\'']);
-        let token = token.trim_start_matches(['(', '<', '"', '\'']);
+        let token = trim_punctuation(token);
         let Some(mut link) = parse(token) else {
             continue;
         };
@@ -66,6 +65,26 @@ pub fn find_in_text(text: &str) -> Option<MapLink> {
         return Some(link);
     }
     None
+}
+
+/// A token without the punctuation around it in a sentence: quotes, brackets, a full stop. A
+/// closing bracket stays when the link opened it (`geo:…?q=47,8(Café)`).
+fn trim_punctuation(token: &str) -> &str {
+    let mut token = token.trim_start_matches(['(', '<', '"', '\'']);
+    loop {
+        let trimmed = token.trim_end_matches(['.', ',', ';', '>', '"', '\'']);
+        let unbalanced =
+            trimmed.ends_with(')') && trimmed.matches(')').count() > trimmed.matches('(').count();
+        let next = if unbalanced {
+            &trimmed[..trimmed.len() - 1]
+        } else {
+            trimmed
+        };
+        if next == token {
+            return token;
+        }
+        token = next;
+    }
 }
 
 /// Whitespace-separated tokens with their byte offsets.
@@ -105,6 +124,19 @@ mod tests {
 
         let link = find_in_text("(https://omaps.app/B4srhdHVVt/Berlin)").unwrap();
         assert_eq!(link.name.as_deref(), Some("Berlin"));
+
+        // A link ends at the line break; the next line is not part of it.
+        let link = find_in_text("https://maps.app.goo.gl/abc123\nCafé Sprüngli").unwrap();
+        assert_eq!(link.original, "https://maps.app.goo.gl/abc123");
+        let link = find_in_text("https://maps.app.goo.gl/abc123 Café").unwrap();
+        assert_eq!(link.original, "https://maps.app.goo.gl/abc123");
+
+        // A bracket the link opened stays; one around it goes.
+        let link = find_in_text("Look: geo:0,0?q=47,8(Caf%C3%A9).").unwrap();
+        assert_eq!(link.original, "geo:0,0?q=47,8(Caf%C3%A9)");
+        assert_eq!(link.name.as_deref(), Some("Café"));
+        let link = find_in_text("(see geo:47,8)").unwrap();
+        assert_eq!(link.original, "geo:47,8");
 
         assert_eq!(find_in_text("no link here https://example.com"), None);
         assert_eq!(find_in_text(""), None);

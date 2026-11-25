@@ -29,7 +29,7 @@ pub use coord::{format_coordinate, geo_uri};
 pub use redirect::{
     HeaderFetcher, Hop, MAX_REDIRECTS, Method, ResolveError, is_short_link, resolve_redirect,
 };
-pub use text::find_in_text;
+pub use text::{clean as clean_text, find_in_text};
 
 /// The longest link [`parse`] reads, in bytes. Real map links are far shorter.
 pub const MAX_LINK_LEN: usize = 8 * 1024;
@@ -125,8 +125,10 @@ pub struct MapLink {
     /// The place's name, when the link carries one.
     pub name: Option<String>,
     /// The place's point. For a link that shows a map view (`@lat,lon,zoom`, `#map=`), the
-    /// centre of that view.
+    /// centre of that view, and [`MapLink::point_is_view`] is set.
     pub point: Option<Point>,
+    /// The point is only the centre of a map view, not a place.
+    pub point_is_view: bool,
     /// The OpenStreetMap element the link names.
     pub osm: Option<OsmRef>,
     /// The zoom level the link asks for.
@@ -150,6 +152,7 @@ impl MapLink {
             provider,
             name: None,
             point: None,
+            point_is_view: false,
             osm: None,
             zoom: None,
             query: None,
@@ -186,17 +189,30 @@ impl MapLink {
             self.query = text::clean(query);
         }
     }
+
+    /// A link that names the provider's place keeps its text as the place's name, not as a
+    /// search (`?q=<name>&ftid=…`, `?auid=…&q=<name>`).
+    pub(crate) fn query_names_the_place(&mut self) {
+        if self.provider_id.is_some() && self.name.is_none() {
+            self.name = self.query.take();
+        }
+    }
 }
 
 /// Reads a map link. `None` when the input is not a map link this crate knows, or a map link
 /// that says nothing about a place (an app's home page). Never panics and never fetches.
 pub fn parse(input: &str) -> Option<MapLink> {
     let trimmed = input.trim();
-    if trimmed.is_empty() || trimmed.len() > MAX_LINK_LEN {
+    if trimmed.is_empty() || trimmed.len() > MAX_LINK_LEN || trimmed.chars().any(char::is_control) {
         return None;
     }
     let (scheme, _) = trimmed.split_once(':')?;
     let scheme = scheme.to_ascii_lowercase();
+    // URL parsing would quietly encode a space and swallow the text after it; only Android's
+    // geo: links are written with raw spaces (`q=lat,lon (Label)`).
+    if scheme != "geo" && trimmed.contains(' ') {
+        return None;
+    }
     let link = match scheme.as_str() {
         "geo" => geo::parse(trimmed),
         "google.navigation" => google::parse_navigation(trimmed),
@@ -210,7 +226,7 @@ pub fn parse(input: &str) -> Option<MapLink> {
 
 fn parse_web(original: &str) -> Option<MapLink> {
     let url = url::Url::parse(original).ok()?;
-    if !url.username().is_empty() || url.password().is_some() {
+    if !url.username().is_empty() || url.password().is_some() || url.port().is_some() {
         return None;
     }
     let host = url.host_str()?.trim_end_matches('.').to_ascii_lowercase();
@@ -235,10 +251,14 @@ fn parse_web(original: &str) -> Option<MapLink> {
 
 /// The URI a place is known by in Pubky data: the canonical OpenStreetMap URL when the link
 /// names an element, else `geo:<lat>,<lon>` with at most 5 fraction digits. `None` for a link
-/// without either (a search, or a short link not yet followed).
+/// that names no place: a search (also one near a point), a map view, or a short link not yet
+/// followed.
 pub fn canonical_place_uri(link: &MapLink) -> Option<String> {
     if let Some(osm) = link.osm {
         return Some(osm.url());
+    }
+    if link.query.is_some() || link.point_is_view {
+        return None;
     }
     link.point.map(|point| geo_uri(point, 5))
 }
@@ -262,6 +282,9 @@ mod tests {
             "https://user:pw@www.openstreetmap.org/node/1",
             "geo:",
             "ftp://osm.org/node/1",
+            "https://maps.app.goo.gl:8443/abc",
+            "https://maps.app.goo.gl/abc\nnext line",
+            "https://maps.app.goo.gl/abc next",
         ] {
             assert_eq!(parse(input), None, "{input:?}");
         }

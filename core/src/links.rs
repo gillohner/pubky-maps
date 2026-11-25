@@ -110,6 +110,8 @@ pub struct MapLink {
     pub name: Option<String>,
     /// The place's point; for a map-view link, the centre of the view.
     pub point: Option<MapPoint>,
+    /// The point is only the centre of a map view, not a place.
+    pub point_is_view: bool,
     pub osm: Option<OsmElementRef>,
     pub zoom: Option<f64>,
     /// Search text, for a link that searches (an address or name) instead of naming a point.
@@ -128,6 +130,7 @@ impl From<map_links::MapLink> for MapLink {
             provider: l.provider.into(),
             name: l.name,
             point: l.point.map(Into::into),
+            point_is_view: l.point_is_view,
             osm: l.osm.map(Into::into),
             zoom: l.zoom,
             query: l.query,
@@ -218,6 +221,11 @@ pub struct LinkPlace {
 
 impl LinkPlace {
     fn checked(self) -> Result<map_links::Place, CoreError> {
+        if let Some(zoom) = self.zoom
+            && !map_links::ZOOM_RANGE.contains(&zoom)
+        {
+            return Err(CoreError::validation(format!("zoom out of range: {zoom}")));
+        }
         Ok(map_links::Place {
             point: self.point.checked()?,
             name: self.name,
@@ -268,11 +276,14 @@ pub fn build_directions_link(
 }
 
 /// The canonical place URI of a link: its OpenStreetMap element URL, else `geo:lat,lon` with
-/// at most 5 fraction digits; `None` for a search or an unfollowed short link.
+/// at most 5 fraction digits; `None` for a search, a map view or an unfollowed short link.
 #[uniffi::export]
 pub fn map_link_place_uri(link: MapLink) -> Option<String> {
     if let Some(osm) = link.osm {
         return Some(map_links::OsmRef::from(osm).url());
+    }
+    if link.query.is_some() || link.point_is_view {
+        return None;
     }
     let point = map_links::Point::new(link.point?.lat, link.point?.lon)?;
     Some(map_links::geo_uri(point, 5))
@@ -470,7 +481,7 @@ async fn open(
         match lookup(&client, &pinakes, &uri).await {
             Lookup::Found(card) => {
                 place.from_pinakes = true;
-                if let Some(name) = card.name.filter(|n| !n.trim().is_empty()) {
+                if let Some(name) = card.name.as_deref().and_then(map_links::clean_text) {
                     place.name = Some(name);
                 }
                 if let Some(point) = card.point.and_then(|p| map_links::Point::new(p.lat, p.lon)) {
@@ -632,9 +643,21 @@ mod tests {
             ..place
         };
         assert!(matches!(
-            build_place_link(MapApp::Geo, bad),
+            build_place_link(MapApp::Geo, bad.clone()),
             Err(CoreError::Validation { .. })
         ));
+        let nan_zoom = LinkPlace {
+            point: MapPoint { lat: 1.0, lon: 2.0 },
+            zoom: Some(f64::NAN),
+            ..bad
+        };
+        assert!(matches!(
+            build_place_link(MapApp::OrganicMapsWeb, nan_zoom),
+            Err(CoreError::Validation { .. })
+        ));
+        // A search near a point names no place.
+        let search = parse_map_link("geo:47.37,8.54?q=restaurants".into()).unwrap();
+        assert_eq!(map_link_place_uri(search), None);
     }
 
     #[tokio::test]

@@ -146,7 +146,7 @@ fn google() {
             ),
             (
                 "http://maps.google.com/?q=query&ftid=0x3f8dfd04d309f925:0x2867166b05b0bfe6&hl=en&gl=us&shorturl=1",
-                none().query("query").id("2911320333031096294"),
+                none().name("query").id("2911320333031096294"),
             ),
             (
                 "https://maps.google.com/maps?hl=en-US&gl=de&um=1&ie=UTF-8&fb=1&sa=X&ftid=0x479e7415349b0571:0xb7e03dcf1f6347f6",
@@ -503,6 +503,26 @@ fn canonical_place_uris() {
             Some("geo:48.18263,17.09497"),
         ),
         ("geo:47.3,8.50000", Some("geo:47.3,8.5")),
+        // Searches and map views name no place.
+        ("geo:47.37,8.54?q=restaurants", None),
+        (
+            "https://www.google.com/maps/search/pizza/@47.37,8.54,15z",
+            None,
+        ),
+        ("https://www.google.com/maps/@47.37,8.54,15z", None),
+        (
+            "https://maps.apple.com/search?query=pizza&center=47.37,8.54",
+            None,
+        ),
+        ("https://www.openstreetmap.org/#map=12/52.5/13.4", None),
+        (
+            "https://www.here.com/?map=48.23145,16.38454,15,normal",
+            None,
+        ),
+        (
+            "https://www.openstreetmap.org/?mlat=52.5&mlon=13.4#map=12/52.5/13.4",
+            Some("geo:52.5,13.4"),
+        ),
         ("https://maps.app.goo.gl/AbCdEf123", None),
         ("geo:0,0?q=Bahnhofstrasse", None),
     ] {

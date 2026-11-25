@@ -51,6 +51,7 @@ pub(crate) fn parse_osm(url: &Url, original: &str) -> Option<MapLink> {
         link.set_zoom(Some(zoom));
         if link.point.is_none() {
             link.point = Some(centre);
+            link.point_is_view = true;
         }
     }
     Some(link)
@@ -72,6 +73,7 @@ pub(crate) fn parse_osmand(url: &Url, original: &str) -> Option<MapLink> {
                 link.set_zoom(Some(zoom));
                 if link.point.is_none() {
                     link.point = Some(centre);
+                    link.point_is_view = true;
                 }
             }
         }

@@ -67,7 +67,9 @@ pub(crate) fn parse_apple(url: &Url, host: &str, original: &str) -> Option<MapLi
             link.set_query(&address);
         }
     }
+    link.point_is_view = text_point.is_none() && view.is_some();
     link.point = text_point.or(view);
+    link.query_names_the_place();
     Some(link)
 }
 
@@ -172,6 +174,8 @@ pub(crate) fn parse_here(url: &Url, host: &str, original: &str) -> Option<MapLin
     if let Some((_, msg)) = url.query_pairs().find(|(k, _)| k == "msg") {
         link.set_name(&msg);
     }
+    // Without a message it is a map view, not a shared place.
+    link.point_is_view = link.name.is_none();
     Some(link)
 }
 
@@ -219,7 +223,9 @@ mod tests {
         let link = parse("http://maps.apple.com/?lsp=9902&auid=13787349062281695774&sll=40.694576,-73.982992&q=Garden%20Nail%20%26%20Spa&hnear=325%20Gold%20St").unwrap();
         assert_eq!(link.provider_id.as_deref(), Some("13787349062281695774"));
         assert_eq!(link.point, Point::new(40.694_576, -73.982_992));
-        assert_eq!(link.query.as_deref(), Some("Garden Nail & Spa"));
+        // With a place id, q is the place's name, not a search.
+        assert_eq!(link.name.as_deref(), Some("Garden Nail & Spa"));
+        assert_eq!(link.query, None);
         let link = parse("https://maps.apple.com/place?auid=3539789365695356771").unwrap();
         assert_eq!(link.provider_id.as_deref(), Some("3539789365695356771"));
         let link =
