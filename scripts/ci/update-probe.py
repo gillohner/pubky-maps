@@ -170,10 +170,14 @@ def find(pred, timeout, what):
 
 
 def scroll_to(pred, what, swipes=6):
-    """Scrolls the Settings list down until a node matching `pred` shows (About is below the fold
-    on a phone), then waits for it like find."""
+    """Scrolls the Settings list down until a node matching `pred` is well inside the screen (About
+    is below the fold on a phone; a row cut by the bottom edge would be tapped on the gesture bar),
+    then waits for it like find."""
     for _ in range(swipes):
-        if any(pred(n) for n in ui_nodes()):
+        nodes = ui_nodes()
+        bottom = max((int(b) for n in nodes for b in re.findall(r'bounds="\[\d+,\d+\]\[\d+,(\d+)\]"', n)), default=0)
+        hit = next((n for n in nodes if pred(n)), None)
+        if hit is not None and center(hit)[1] < bottom * 0.8:
             break
         adb("shell", "input", "swipe", "540", "1800", "540", "900", "300")
         time.sleep(1)
