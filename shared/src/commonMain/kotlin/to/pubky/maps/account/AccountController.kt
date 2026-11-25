@@ -186,8 +186,16 @@ class AccountController(
             }
 
             is AccountState.SignedIn -> {
-                // Signed in still; only the step that failed ends (a cache that could not be written).
-                mutableState.value = (state.value as AccountState.SignedIn).copy(refreshing = false, signingOut = false)
+                val signedIn = state.value as AccountState.SignedIn
+                mutableState.value =
+                    if (signedIn.signingOut) {
+                        // The session is already forgotten; what is left on the phone goes at the next
+                        // start (it clears the cache when no session is stored).
+                        AccountState.SignedOut(notice = "Signed out, but this phone could not delete everything yet ($what).")
+                    } else {
+                        // Signed in still; only the step that failed ends (a cache that could not be written).
+                        signedIn.copy(refreshing = false)
+                    }
             }
 
             else -> {}

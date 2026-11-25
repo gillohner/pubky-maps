@@ -159,7 +159,11 @@ class MemoryAccountCache : AccountCache {
         stored = account
     }
 
+    /** Thrown by [clear]. */
+    var clearFailure: Exception? = null
+
     override fun clear() {
+        clearFailure?.let { throw it }
         stored = null
     }
 }

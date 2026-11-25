@@ -513,6 +513,34 @@ class AccountControllerTest {
         }
 
     @Test
+    fun aSignOutThatCannotClearTheCacheEndsSignedOutWithANotice() =
+        runTest {
+            secrets.values[SecretStore.SESSION] = "grant-secret"
+            cache.stored = CachedAccount(USER, "Ada", 500, emptyList(), emptyList())
+            core.restore = { AccountSession(USER, "homeserver") }
+            val account = controller()
+            account.start()
+            runCurrent()
+            cache.clearFailure = IllegalStateException("database is locked")
+
+            account.signOut()
+            runCurrent()
+
+            val state = assertIs<AccountState.SignedOut>(account.state.value)
+            assertTrue(state.notice!!.contains("could not delete everything"))
+            assertNull(secrets.values[SecretStore.SESSION], "the session is gone")
+            assertEquals(1, core.forgotten)
+
+            // The next start finishes it: no stored session, so the cache is cleared.
+            cache.clearFailure = null
+            val next = controller()
+            next.start()
+            runCurrent()
+            assertEquals(AccountState.SignedOut(), next.state.value)
+            assertNull(cache.stored)
+        }
+
+    @Test
     fun linksAndSecretsNeverShowInLogs() {
         val link = FakePubkyCore().link(1)
         assertEquals("SignInLink(<redacted>)", link.toString())
