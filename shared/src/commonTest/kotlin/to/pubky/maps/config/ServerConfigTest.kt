@@ -6,52 +6,78 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class ServerConfigTest {
-    @Test
-    fun theDefaultsHaveAFallbackForEachTheme() {
-        val styles = ServerDefaults.mapStyles
+    private val defaults = ServerDefaults.lists
 
-        assertTrue(styles.light.size >= 2)
-        assertTrue(styles.dark.size >= 2)
-        assertEquals(styles.light, styles.forTheme(darkTheme = false))
-        assertEquals(styles.dark, styles.forTheme(darkTheme = true))
+    @Test
+    fun everyServiceHasADefaultList() {
+        for (service in Service.entries) assertTrue(defaults[service].isNotEmpty(), "$service")
     }
 
     @Test
-    fun everyDefaultStyleCreditsOpenStreetMapAndUsesHttps() {
-        for (source in ServerDefaults.mapStyles.light + ServerDefaults.mapStyles.dark) {
-            assertTrue(source.styleUrl.startsWith("https://"), source.styleUrl)
-            assertTrue(source.attribution.any { it.url == "https://www.openstreetmap.org/copyright" }, source.name)
+    fun theMapStylesHaveAFallbackForEachTheme() {
+        assertTrue(defaults.mapStyles(darkTheme = false).size >= 2)
+        assertTrue(defaults.mapStyles(darkTheme = true).size >= 2)
+        assertEquals(defaults[Service.MapStyleLight], defaults.mapStyles(darkTheme = false))
+        assertEquals(defaults[Service.MapStyleDark], defaults.mapStyles(darkTheme = true))
+    }
+
+    @Test
+    fun everyDefaultIsAValidHttpsAddressInItsNormalForm() {
+        for (service in Service.entries) {
+            for (entry in defaults[service]) {
+                val parsed = ServerUrl.parse(entry.url)
+                assertTrue(parsed is ServerUrl.Valid && parsed.url == entry.url, entry.url)
+                assertTrue(entry.url.startsWith("https://"), entry.url)
+            }
         }
     }
 
     @Test
+    fun everyDefaultMapStyleCreditsOpenStreetMap() {
+        for (entry in defaults[Service.MapStyleLight] + defaults[Service.MapStyleDark]) {
+            assertTrue(entry.attribution.any { it.url == "https://www.openstreetmap.org/copyright" }, entry.name)
+        }
+    }
+
+    @Test
+    fun theDefaultMapStylesDoNotDependOnSynonym() {
+        for (entry in defaults[Service.MapStyleLight] + defaults[Service.MapStyleDark]) {
+            assertTrue(!SynonymHosts.isSynonymServer(entry.url), entry.url)
+        }
+    }
+
+    @Test
+    fun theDefaultsFollowThePubkySdk() {
+        assertEquals(listOf("https://pkarr.pubky.app", "https://pkarr.pubky.org"), defaults[Service.PkarrRelay].map { it.url })
+        assertEquals(listOf("https://httprelay.pubky.app/inbox"), defaults[Service.AuthRelay].map { it.url })
+    }
+
+    @Test
     fun allAttributionListsEachCreditOnce() {
-        val credits = ServerDefaults.mapStyles.allAttribution()
+        val credits = defaults.allAttribution()
 
         assertEquals(credits.distinct(), credits)
         assertEquals(1, credits.count { it.url == "https://www.openstreetmap.org/copyright" })
     }
 
     @Test
-    fun aThemeWithoutStylesIsRejected() {
-        val one = listOf(MapStyleSource("One", "https://one.example/style.json", emptyList()))
+    fun aServiceWithoutServersIsRejected() {
+        val lists = Service.entries.associateWith { defaults[it] }
 
-        assertFailsWith<IllegalArgumentException> { MapStyleServers(light = emptyList(), dark = one) }
-        assertFailsWith<IllegalArgumentException> { MapStyleServers(light = one, dark = emptyList()) }
+        assertFailsWith<IllegalArgumentException> { ServerLists(lists - Service.Nexus) }
+        assertFailsWith<IllegalArgumentException> { ServerLists(lists + (Service.Photon to emptyList())) }
     }
 
     @Test
-    fun theRepositoryPublishesEdits() {
-        val repository = InMemoryServerConfigRepository()
-        val own = MapStyleSource("Own", "https://tiles.example/style.json", emptyList())
-
-        repository.update { it.copy(mapStyles = it.mapStyles.copy(light = listOf(own) + it.mapStyles.light)) }
-
+    fun serviceKeysAreStableAndUnique() {
         assertEquals(
-            own,
-            repository.config.value.mapStyles.light
-                .first(),
+            Service.entries.size,
+            Service.entries
+                .map { it.key }
+                .toSet()
+                .size,
         )
-        assertEquals(ServerDefaults.mapStyles.dark, repository.config.value.mapStyles.dark)
+        for (service in Service.entries) assertEquals(service, Service.fromKey(service.key))
+        assertEquals(null, Service.fromKey("not_a_service"))
     }
 }

@@ -1,7 +1,7 @@
 package to.pubky.maps.map
 
-import to.pubky.maps.config.MapStyleSource
 import to.pubky.maps.config.ServerDefaults
+import to.pubky.maps.config.ServerEntry
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -11,9 +11,9 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class StyleFallbackTest {
-    private val first = MapStyleSource("First", "https://first.example/style.json", emptyList())
-    private val second = MapStyleSource("Second", "https://second.example/style.json", emptyList())
-    private val third = MapStyleSource("Third", "https://third.example/style.json", emptyList())
+    private val first = ServerEntry("First", "https://first.example/style.json", emptyList())
+    private val second = ServerEntry("Second", "https://second.example/style.json", emptyList())
+    private val third = ServerEntry("Third", "https://third.example/style.json", emptyList())
 
     @Test
     fun startsWithTheFirstStyle() {
@@ -27,8 +27,8 @@ class StyleFallbackTest {
     fun aFailedStyleHandsOverToTheNextInOrder() {
         val fallback = StyleFallback(listOf(first, second, third))
 
-        val afterFirst = fallback.failed(first.styleUrl)
-        val afterSecond = afterFirst.failed(second.styleUrl)
+        val afterFirst = fallback.failed(first.url)
+        val afterSecond = afterFirst.failed(second.url)
 
         assertEquals(second, afterFirst.current)
         assertEquals(third, afterSecond.current)
@@ -37,7 +37,7 @@ class StyleFallbackTest {
 
     @Test
     fun whenEveryStyleFailedThereIsNoCurrentStyle() {
-        val fallback = StyleFallback(listOf(first, second)).failed(first.styleUrl).failed(second.styleUrl)
+        val fallback = StyleFallback(listOf(first, second)).failed(first.url).failed(second.url)
 
         assertNull(fallback.current)
         assertTrue(fallback.allFailed)
@@ -45,9 +45,9 @@ class StyleFallbackTest {
 
     @Test
     fun aLateFailureOfAnEarlierStyleIsIgnored() {
-        val onSecond = StyleFallback(listOf(first, second, third)).failed(first.styleUrl)
+        val onSecond = StyleFallback(listOf(first, second, third)).failed(first.url)
 
-        assertSame(onSecond, onSecond.failed(first.styleUrl))
+        assertSame(onSecond, onSecond.failed(first.url))
         assertEquals(second, onSecond.current)
     }
 
@@ -60,14 +60,14 @@ class StyleFallbackTest {
 
     @Test
     fun aFailureAfterEveryStyleFailedChangesNothing() {
-        val allFailed = StyleFallback(listOf(first)).failed(first.styleUrl)
+        val allFailed = StyleFallback(listOf(first)).failed(first.url)
 
-        assertSame(allFailed, allFailed.failed(first.styleUrl))
+        assertSame(allFailed, allFailed.failed(first.url))
     }
 
     @Test
     fun retryStartsAgainFromTheFirstStyle() {
-        val retried = StyleFallback(listOf(first, second)).failed(first.styleUrl).failed(second.styleUrl).retry()
+        val retried = StyleFallback(listOf(first, second)).failed(first.url).failed(second.url).retry()
 
         assertEquals(first, retried.current)
         assertFalse(retried.allFailed)
@@ -81,11 +81,11 @@ class StyleFallbackTest {
     @Test
     fun theDefaultsTryOpenFreeMapFirstThenVersaTiles() {
         for (darkTheme in listOf(false, true)) {
-            val fallback = StyleFallback(ServerDefaults.mapStyles.forTheme(darkTheme))
+            val fallback = StyleFallback(ServerDefaults.lists.mapStyles(darkTheme))
 
-            assertTrue(fallback.current!!.styleUrl.startsWith("https://tiles.openfreemap.org/"))
-            val next = fallback.failed(fallback.current!!.styleUrl).current!!
-            assertTrue(next.styleUrl.startsWith("https://tiles.versatiles.org/"))
+            assertTrue(fallback.current!!.url.startsWith("https://tiles.openfreemap.org/"))
+            val next = fallback.failed(fallback.current!!.url).current!!
+            assertTrue(next.url.startsWith("https://tiles.versatiles.org/"))
         }
     }
 }

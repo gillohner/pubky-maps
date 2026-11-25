@@ -12,27 +12,53 @@ data class AttributionLink(
     val url: String,
 )
 
-/** One map style server: the style document's address and the credits for what it draws. */
-data class MapStyleSource(
+/** One server of a [Service]: its address, a name to show, and (for map styles) the credits for what it draws. */
+data class ServerEntry(
     val name: String,
-    val styleUrl: String,
-    val attribution: List<AttributionLink>,
+    val url: String,
+    val attribution: List<AttributionLink> = emptyList(),
 )
 
-/** Map style servers per theme, in the order the map tries them. */
-data class MapStyleServers(
-    val light: List<MapStyleSource>,
-    val dark: List<MapStyleSource>,
+/**
+ * Every kind of server the app talks to. Each one has its own ordered list of servers: the first is
+ * used, the next ones take over when it fails. [key] names the list in the settings file and never
+ * changes.
+ */
+enum class Service(
+    val key: String,
+) {
+    MapStyleLight("map_style_light"),
+    MapStyleDark("map_style_dark"),
+    Photon("photon"),
+    Pinakes("pinakes"),
+    Nexus("nexus"),
+    PkarrRelay("pkarr_relay"),
+    AuthRelay("auth_relay"),
+    ;
+
+    companion object {
+        fun fromKey(key: String): Service? = entries.firstOrNull { it.key == key }
+    }
+}
+
+/** The server list of every [Service], each one non-empty and in the order the app tries them. */
+data class ServerLists(
+    private val lists: Map<Service, List<ServerEntry>>,
 ) {
     init {
-        require(light.isNotEmpty()) { "At least one light map style is needed" }
-        require(dark.isNotEmpty()) { "At least one dark map style is needed" }
+        for (service in Service.entries) {
+            require(!lists[service].isNullOrEmpty()) { "At least one server is needed for $service" }
+        }
     }
 
-    fun forTheme(darkTheme: Boolean): List<MapStyleSource> = if (darkTheme) dark else light
+    operator fun get(service: Service): List<ServerEntry> = lists.getValue(service)
 
-    /** Every credit of every configured style, each once, in list order. */
-    fun allAttribution(): List<AttributionLink> = (light + dark).flatMap { it.attribution }.distinct()
+    /** The map styles for the light or the dark theme. */
+    fun mapStyles(darkTheme: Boolean): List<ServerEntry> = get(if (darkTheme) Service.MapStyleDark else Service.MapStyleLight)
+
+    /** Every credit of every configured map style, each once, in list order. */
+    fun allAttribution(): List<AttributionLink> =
+        (get(Service.MapStyleLight) + get(Service.MapStyleDark)).flatMap { it.attribution }.distinct()
 }
 
 /** Update feed addresses per channel, in the order the updater tries them. */
@@ -60,13 +86,15 @@ data class UpdateFeedServers(
         }
 }
 
-/** Every server address the app uses. Each one is an ordered list with fallbacks. */
+/**
+ * The servers that are fixed per build rather than kept in the user's settings ([AppSettings]): the
+ * signed update feeds. The update probe's build replaces its channel's feed for the process.
+ */
 data class ServerConfig(
-    val mapStyles: MapStyleServers,
     val updateFeeds: UpdateFeedServers,
 )
 
-/** Holds the current [ServerConfig]; settings edit it through [update]. */
+/** Holds the current [ServerConfig] for the life of the process. */
 interface ServerConfigRepository {
     val config: StateFlow<ServerConfig>
 
