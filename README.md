@@ -17,8 +17,8 @@ on request, a compass when the map is rotated, and Settings:
   Open in menu, which does not exist yet).
 - **Follow local rules:** hides features a country forbids (stored; no feature has a rule yet).
 - **About:** version, updates (in the APK from GitHub releases, which updates itself from a signed
-  update feed), licence, source code, the open-source licences of the bundled libraries, and the map
-  data credits.
+  update feed), licence, source code and the open-source licences of the bundled libraries.
+- **Map data:** the credits of every map source.
 
 ## How it is built
 
@@ -108,7 +108,7 @@ and the update probe screenshots each step of an in-app update.
   and Colorful Dark) as the fallback.
 - Icons: [Material icons](https://github.com/google/material-design-icons) (Apache-2.0).
 
-The map always shows the credits of the style it draws; Settings → About lists every source.
+The map always shows the credits of the style it draws; Settings → Map data lists every source.
 
 ## Licence
 
