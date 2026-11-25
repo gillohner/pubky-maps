@@ -1,0 +1,48 @@
+-- The signed-in user's own Pubky data as last read from their homeserver, so it can be shown
+-- without the network. One account at a time; everything is deleted on sign-out.
+
+CREATE TABLE account (
+    public_key TEXT NOT NULL PRIMARY KEY,
+    name TEXT,
+    -- When tags and saved places were last read in full (epoch milliseconds), null before that.
+    refreshed_at INTEGER
+);
+
+CREATE TABLE tag (
+    path TEXT NOT NULL PRIMARY KEY,
+    place TEXT NOT NULL,
+    label TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE bookmark (
+    path TEXT NOT NULL PRIMARY KEY,
+    place TEXT NOT NULL
+);
+
+account:
+SELECT * FROM account LIMIT 1;
+
+putAccount:
+INSERT OR REPLACE INTO account(public_key, name, refreshed_at) VALUES (?, ?, ?);
+
+tags:
+SELECT * FROM tag ORDER BY created_at DESC, path;
+
+putTag:
+INSERT OR REPLACE INTO tag(path, place, label, created_at) VALUES (?, ?, ?, ?);
+
+bookmarks:
+SELECT * FROM bookmark ORDER BY place;
+
+putBookmark:
+INSERT OR REPLACE INTO bookmark(path, place) VALUES (?, ?);
+
+deleteAccounts:
+DELETE FROM account;
+
+deleteTags:
+DELETE FROM tag;
+
+deleteBookmarks:
+DELETE FROM bookmark;
