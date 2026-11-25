@@ -30,7 +30,11 @@ class LinkedPlacesTest {
             runCurrent()
             // Shown from the link text while the core still works on it.
             assertFalse(places.state.value.opening)
-            assertEquals("Test", places.state.value.place?.name)
+            assertEquals(
+                "Test",
+                places.state.value.place
+                    ?.name,
+            )
             links.gate!!.complete(Unit)
             runCurrent()
             val state = places.state.value

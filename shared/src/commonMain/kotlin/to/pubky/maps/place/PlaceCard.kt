@@ -119,8 +119,6 @@ fun OpeningLinkCard(modifier: Modifier = Modifier) {
     }
 }
 
-/** The coordinates, unless the title already is them. */
-
 /** Why the card shows less than it could, when a network step failed. */
 private val PlaceRef.offlineNote: String?
     get() =
