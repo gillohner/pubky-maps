@@ -113,11 +113,12 @@ fun ListPage(
                     }
                 }
             }
-            KeptNote(state.newKept)
             Button(
                 onClick = onCreate,
                 enabled = state.newName.isNotBlank() && state.newName.length <= LIST_NAME_MAX,
             ) { Text("Create list with this place") }
+            // Where the list goes, once more beside the button that sends it.
+            KeptBadge(state.newKept)
         }
         Text(
             "A list holds up to ${OwnList.MAX_LIST_ITEMS} places.",

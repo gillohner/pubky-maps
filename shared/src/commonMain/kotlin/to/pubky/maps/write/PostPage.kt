@@ -57,7 +57,7 @@ fun PostPage(
             modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp),
         )
         Text(
-            "Your post is a reply to this place on Pubky, with your name. You can write a new one at any time.",
+            "Your post is a reply to this place on Pubky.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

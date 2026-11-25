@@ -107,12 +107,6 @@ class WriteScreenshotTest {
         }
     }
 
-    private fun all(
-        name: String,
-        devices: List<Device> = listOf(Device.Phone, Device.Tablet),
-        content: @Composable () -> Unit,
-    ) = devices.forEach { device -> listOf(false, true).forEach { dark -> capture(name, device, dark, content) } }
-
     private val context =
         PlacePageContext(
             now = LocalDateTime(LocalDate.parse("2026-11-25"), LocalTime(12, 0)),
@@ -238,142 +232,260 @@ class WriteScreenshotTest {
         }
     }
 
-    @Test
-    fun placeWithWrites() = all("write-place") { Page(page, ownPlace) }
+    @Composable
+    private fun PlaceWithWritesShot() {
+        Page(page, ownPlace)
+    }
 
     @Test
-    fun placeWithWritesEverySection() = all("write-place-sections", listOf(Device.TallPhone)) { Page(page, ownPlace, SheetStop.Full) }
+    fun placeWithWritesPhoneLight() = capture("write-place", Device.Phone, dark = false) { PlaceWithWritesShot() }
 
     @Test
-    fun placeNothingYet() = all("write-place-empty", listOf(Device.TallPhone)) { Page(emptyPage, OwnPlace.None, SheetStop.Full) }
+    fun placeWithWritesPhoneDark() = capture("write-place", Device.Phone, dark = true) { PlaceWithWritesShot() }
 
     @Test
-    fun tagPage() =
-        all("write-tag") {
-            TagPage(
-                state =
-                    TagPageState(
-                        placeName = "Conditorei Schober",
-                        mine = listOf(OwnTag(osm, "cozy"), OwnTag(osm, "cake", pending = true)),
-                        suggestions = listOf("hot-chocolate", "cafe", "coffee-shop", "cake-shop"),
-                        text = "Café crème",
-                    ),
-                onTextChange = {},
-                onAdd = {},
-                onRemove = {},
-                onClose = {},
-            )
+    fun placeWithWritesTabletLight() = capture("write-place", Device.Tablet, dark = false) { PlaceWithWritesShot() }
+
+    @Test
+    fun placeWithWritesTabletDark() = capture("write-place", Device.Tablet, dark = true) { PlaceWithWritesShot() }
+
+    @Composable
+    private fun PlaceWithWritesEverySectionShot() {
+        Page(page, ownPlace, SheetStop.Full)
+    }
+
+    @Test
+    fun placeWithWritesEverySectionTallPhoneLight() =
+        capture("write-place-sections", Device.TallPhone, dark = false) {
+            PlaceWithWritesEverySectionShot()
         }
 
     @Test
-    fun postPage() =
-        all("write-post") {
-            PostPage(
-                placeName = "Conditorei Schober",
-                text = "Lovely terrace in summer, cosy inside in winter. The hot chocolate is thick and not too sweet.",
-                onTextChange = {},
-                onPost = {},
-                onClose = {},
-            )
+    fun placeWithWritesEverySectionTallPhoneDark() =
+        capture("write-place-sections", Device.TallPhone, dark = true) {
+            PlaceWithWritesEverySectionShot()
         }
 
-    @Test
-    fun photoPageEmpty() =
-        all("write-photo-choose") {
-            PhotoPage(PhotoPageState(placeName = "Conditorei Schober"), {}, {}, {}, {}, {}, {})
-        }
+    @Composable
+    private fun PlaceNothingYetShot() {
+        Page(emptyPage, OwnPlace.None, SheetStop.Full)
+    }
 
     @Test
-    fun photoPageReady() =
-        all("write-photo-ready") {
-            PhotoPage(
-                state =
-                    PhotoPageState(
-                        placeName = "Conditorei Schober",
-                        // No bytes: the preview stays grey, so the screenshot never depends on decoding.
-                        photo = PreparedPhoto(ByteArray(0), "image/jpeg", 4, 3, keptLocation = false, removedLocation = true),
-                        alt = "Two cups of hot chocolate on a marble table",
-                        caption = "Sunday afternoon",
-                    ),
-                onChoose = {},
-                onTake = {},
-                onAltChange = {},
-                onCaptionChange = {},
-                onPost = {},
-                onClose = {},
-            )
-        }
+    fun placeNothingYetTallPhoneLight() = capture("write-place-empty", Device.TallPhone, dark = false) { PlaceNothingYetShot() }
 
     @Test
-    fun listPage() =
-        all("write-lists") {
-            ListPage(
-                state =
-                    ListPageState(
-                        placeName = "Conditorei Schober",
-                        lists =
-                            listOf(
-                                ListChoice(coffee, holds = true),
-                                ListChoice(
-                                    OwnList("pubky://$me/priv/social/v1/posts/L2", Kept.Private, "Date ideas", listOf("geo:1,2")),
-                                    holds = false,
-                                ),
-                                ListChoice(OwnList("phone:1", Kept.Phone, "Sunday walks", emptyList()), holds = false),
-                                ListChoice(
-                                    OwnList("pubky://$me/pub/social/v1/posts/L3", Kept.Public, "Old town", (1..100).map { "geo:$it,1" }),
-                                    holds = false,
-                                ),
+    fun placeNothingYetTallPhoneDark() = capture("write-place-empty", Device.TallPhone, dark = true) { PlaceNothingYetShot() }
+
+    @Composable
+    private fun TagPageShot() {
+        TagPage(
+            state =
+                TagPageState(
+                    placeName = "Conditorei Schober",
+                    mine = listOf(OwnTag(osm, "cozy"), OwnTag(osm, "cake", pending = true)),
+                    suggestions = listOf("hot-chocolate", "cafe", "coffee-shop", "cake-shop"),
+                    text = "Café crème",
+                ),
+            onTextChange = {},
+            onAdd = {},
+            onRemove = {},
+            onClose = {},
+        )
+    }
+
+    @Test
+    fun tagPagePhoneLight() = capture("write-tag", Device.Phone, dark = false) { TagPageShot() }
+
+    @Test
+    fun tagPagePhoneDark() = capture("write-tag", Device.Phone, dark = true) { TagPageShot() }
+
+    @Test
+    fun tagPageTabletLight() = capture("write-tag", Device.Tablet, dark = false) { TagPageShot() }
+
+    @Test
+    fun tagPageTabletDark() = capture("write-tag", Device.Tablet, dark = true) { TagPageShot() }
+
+    @Composable
+    private fun PostPageShot() {
+        PostPage(
+            placeName = "Conditorei Schober",
+            text = "Lovely terrace in summer, cosy inside in winter. The hot chocolate is thick and not too sweet.",
+            onTextChange = {},
+            onPost = {},
+            onClose = {},
+        )
+    }
+
+    @Test
+    fun postPagePhoneLight() = capture("write-post", Device.Phone, dark = false) { PostPageShot() }
+
+    @Test
+    fun postPagePhoneDark() = capture("write-post", Device.Phone, dark = true) { PostPageShot() }
+
+    @Test
+    fun postPageTabletLight() = capture("write-post", Device.Tablet, dark = false) { PostPageShot() }
+
+    @Test
+    fun postPageTabletDark() = capture("write-post", Device.Tablet, dark = true) { PostPageShot() }
+
+    @Composable
+    private fun PhotoPageEmptyShot() {
+        PhotoPage(PhotoPageState(placeName = "Conditorei Schober"), {}, {}, {}, {}, {}, {})
+    }
+
+    @Test
+    fun photoPageEmptyPhoneLight() = capture("write-photo-choose", Device.Phone, dark = false) { PhotoPageEmptyShot() }
+
+    @Test
+    fun photoPageEmptyPhoneDark() = capture("write-photo-choose", Device.Phone, dark = true) { PhotoPageEmptyShot() }
+
+    @Test
+    fun photoPageEmptyTabletLight() = capture("write-photo-choose", Device.Tablet, dark = false) { PhotoPageEmptyShot() }
+
+    @Test
+    fun photoPageEmptyTabletDark() = capture("write-photo-choose", Device.Tablet, dark = true) { PhotoPageEmptyShot() }
+
+    @Composable
+    private fun PhotoPageReadyShot() {
+        PhotoPage(
+            state =
+                PhotoPageState(
+                    placeName = "Conditorei Schober",
+                    // No bytes: the preview stays grey, so the screenshot never depends on decoding.
+                    photo = PreparedPhoto(ByteArray(0), "image/jpeg", 4, 3, keptLocation = false, removedLocation = true),
+                    alt = "Two cups of hot chocolate on a marble table",
+                    caption = "Sunday afternoon",
+                ),
+            onChoose = {},
+            onTake = {},
+            onAltChange = {},
+            onCaptionChange = {},
+            onPost = {},
+            onClose = {},
+        )
+    }
+
+    @Test
+    fun photoPageReadyPhoneLight() = capture("write-photo-ready", Device.Phone, dark = false) { PhotoPageReadyShot() }
+
+    @Test
+    fun photoPageReadyPhoneDark() = capture("write-photo-ready", Device.Phone, dark = true) { PhotoPageReadyShot() }
+
+    @Test
+    fun photoPageReadyTabletLight() = capture("write-photo-ready", Device.Tablet, dark = false) { PhotoPageReadyShot() }
+
+    @Test
+    fun photoPageReadyTabletDark() = capture("write-photo-ready", Device.Tablet, dark = true) { PhotoPageReadyShot() }
+
+    @Composable
+    private fun ListPageShot() {
+        ListPage(
+            state =
+                ListPageState(
+                    placeName = "Conditorei Schober",
+                    lists =
+                        listOf(
+                            ListChoice(coffee, holds = true),
+                            ListChoice(
+                                OwnList("pubky://$me/priv/social/v1/posts/L2", Kept.Private, "Date ideas", listOf("geo:1,2")),
+                                holds = false,
                             ),
-                        newName = "Cake",
-                        newKept = Kept.Public,
-                    ),
-                onToggle = {},
-                onNewNameChange = {},
-                onNewKeptChange = {},
-                onCreate = {},
-                onClose = {},
-            )
-        }
-
-    @Test
-    fun savedScreen() =
-        all("write-saved") {
-            SavedScreen(
-                state =
-                    SavedScreenState(
-                        places =
-                            listOf(
-                                SavedRow(osm, "Conditorei Schober", Kept.Private),
-                                SavedRow("https://maps.app.goo.gl/x1", "Lindenhof", Kept.Private, pending = true),
-                                SavedRow("geo:47.36667,8.55", null, Kept.Phone),
+                            ListChoice(OwnList("phone:1", Kept.Phone, "Sunday walks", emptyList()), holds = false),
+                            ListChoice(
+                                OwnList("pubky://$me/pub/social/v1/posts/L3", Kept.Public, "Old town", (1..100).map { "geo:$it,1" }),
+                                holds = false,
                             ),
-                        lists = listOf(coffee, OwnList("phone:1", Kept.Phone, "Sunday walks", emptyList())),
-                        signedIn = true,
-                    ),
-                onOpen = {},
-                onBack = {},
-            )
-        }
+                        ),
+                    newName = "Cake",
+                    newKept = Kept.Public,
+                ),
+            onToggle = {},
+            onNewNameChange = {},
+            onNewKeptChange = {},
+            onCreate = {},
+            onClose = {},
+        )
+    }
 
     @Test
-    fun savedScreenEmpty() =
-        all("write-saved-empty", listOf(Device.Phone)) {
-            SavedScreen(SavedScreenState(places = emptyList(), lists = emptyList(), signedIn = false), onOpen = {}, onBack = {})
-        }
+    fun listPagePhoneLight() = capture("write-lists", Device.Phone, dark = false) { ListPageShot() }
 
     @Test
-    fun signInFirst() =
-        all("write-sign-in-first") {
-            AccountScreen(
-                state = AccountState.SignedOut(),
-                ringOnThisPhone = true,
-                onSignIn = {},
-                onOpenRing = {},
-                onCancelSignIn = {},
-                onRefresh = {},
-                onSignOut = {},
-                onBack = {},
-                reason = WriteIntent.Tag.signInReason,
-            )
-        }
+    fun listPagePhoneDark() = capture("write-lists", Device.Phone, dark = true) { ListPageShot() }
+
+    @Test
+    fun listPageTabletLight() = capture("write-lists", Device.Tablet, dark = false) { ListPageShot() }
+
+    @Test
+    fun listPageTabletDark() = capture("write-lists", Device.Tablet, dark = true) { ListPageShot() }
+
+    @Composable
+    private fun SavedScreenShot() {
+        SavedScreen(
+            state =
+                SavedScreenState(
+                    places =
+                        listOf(
+                            SavedRow(osm, "Conditorei Schober", Kept.Private),
+                            SavedRow("https://maps.app.goo.gl/x1", "Lindenhof", Kept.Private, pending = true),
+                            SavedRow("geo:47.36667,8.55", null, Kept.Phone),
+                        ),
+                    lists = listOf(coffee, OwnList("phone:1", Kept.Phone, "Sunday walks", emptyList())),
+                    signedIn = true,
+                ),
+            onOpen = {},
+            onBack = {},
+        )
+    }
+
+    @Test
+    fun savedScreenPhoneLight() = capture("write-saved", Device.Phone, dark = false) { SavedScreenShot() }
+
+    @Test
+    fun savedScreenPhoneDark() = capture("write-saved", Device.Phone, dark = true) { SavedScreenShot() }
+
+    @Test
+    fun savedScreenTabletLight() = capture("write-saved", Device.Tablet, dark = false) { SavedScreenShot() }
+
+    @Test
+    fun savedScreenTabletDark() = capture("write-saved", Device.Tablet, dark = true) { SavedScreenShot() }
+
+    @Composable
+    private fun SavedScreenEmptyShot() {
+        SavedScreen(SavedScreenState(places = emptyList(), lists = emptyList(), signedIn = false), onOpen = {}, onBack = {})
+    }
+
+    @Test
+    fun savedScreenEmptyPhoneLight() = capture("write-saved-empty", Device.Phone, dark = false) { SavedScreenEmptyShot() }
+
+    @Test
+    fun savedScreenEmptyPhoneDark() = capture("write-saved-empty", Device.Phone, dark = true) { SavedScreenEmptyShot() }
+
+    @Composable
+    private fun SignInFirstShot() {
+        AccountScreen(
+            state = AccountState.SignedOut(),
+            ringOnThisPhone = true,
+            onSignIn = {},
+            onOpenRing = {},
+            onCancelSignIn = {},
+            onRefresh = {},
+            onSignOut = {},
+            onBack = {},
+            reason = WriteIntent.Tag.signInReason,
+        )
+    }
+
+    @Test
+    fun signInFirstPhoneLight() = capture("write-sign-in-first", Device.Phone, dark = false) { SignInFirstShot() }
+
+    @Test
+    fun signInFirstPhoneDark() = capture("write-sign-in-first", Device.Phone, dark = true) { SignInFirstShot() }
+
+    @Test
+    fun signInFirstTabletLight() = capture("write-sign-in-first", Device.Tablet, dark = false) { SignInFirstShot() }
+
+    @Test
+    fun signInFirstTabletDark() = capture("write-sign-in-first", Device.Tablet, dark = true) { SignInFirstShot() }
 }
