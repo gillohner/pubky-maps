@@ -5,6 +5,8 @@ description = "Reads and builds map links: Google Maps, Apple Maps, Waze, OpenSt
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+repository = "https://github.com/gillohner/pubky-maps"
+homepage = "https://github.com/gillohner/pubky-maps/tree/main/core/map-links"
 publish = false
 
 [dependencies]
