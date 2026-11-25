@@ -24,3 +24,8 @@ xcuserdata/
 # Python
 __pycache__/
 *.pyc
+
+# Rust core (generated)
+/target/
+/core/bindings/
+/core/jniLibs/
