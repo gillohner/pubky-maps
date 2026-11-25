@@ -9,7 +9,11 @@ validation come from the specs crate.
 
 ## API in short
 
-- `PubkyMapsCore(config)`: one per process. `defaultCoreConfig()` gives the defaults:
+- `PubkyMapsCore.create(config)`: a `suspend` factory, one core per process. It builds the
+  HTTP client and the DHT node on the core's own thread. With the DHT on, that resolves the
+  DHT bootstrap host names (a few DNS lookups, which can take seconds on a bad network). The
+  calling thread is never blocked, and no other request is made. `defaultCoreConfig()` gives
+  the defaults:
   Pkarr relays `https://pkarr.pubky.app` and `https://pkarr.pubky.org`, DHT on, auth relays
   `[https://httprelay.pubky.app/inbox]`, 30 s request timeout. Every field can be overridden;
   the auth relays are tried in order.

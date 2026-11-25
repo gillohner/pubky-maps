@@ -5,7 +5,7 @@
 //! relay keeps failing. Its result is *parked* until an `await_sign_in`/`poll_sign_in` hands it
 //! out; only then is the session installed in the core.
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -78,7 +78,9 @@ struct Flow {
     relay_index: usize,
     relay_base: Option<String>,
     started_at: u64,
-    relay_failures: u32,
+    /// Relay failures in a row on this link; a failed probe counts without replacing the
+    /// listener, a healthy probe resets it.
+    relay_failures: AtomicU32,
     unclear_restarts: u32,
     listening_since: Instant,
     /// When the relay last answered a probe like a relay; `None` before the first probe.
@@ -102,7 +104,7 @@ impl Flow {
             relay_index: loaded.relay_index,
             relay_base: loaded.relay_base(),
             started_at: loaded.started_at,
-            relay_failures: 0,
+            relay_failures: AtomicU32::new(0),
             unclear_restarts: 0,
             listening_since: Instant::now(),
             probed_at: Mutex::new(None),
@@ -145,6 +147,14 @@ pub(crate) struct ExchangeGate {
     pub release: tokio::sync::Notify,
 }
 
+/// Holds a relay probe and decides its answer, so tests can act while a probe runs.
+#[cfg(test)]
+pub(crate) struct ProbeHook {
+    pub started: tokio::sync::Notify,
+    pub release: tokio::sync::Notify,
+    pub healthy: bool,
+}
+
 pub(crate) struct SignIns {
     client: PubkyHttpClient,
     /// Plain HTTP client for relay probes.
@@ -155,6 +165,8 @@ pub(crate) struct SignIns {
     finished: Mutex<Option<Finished>>,
     #[cfg(test)]
     gate: Mutex<Option<Arc<ExchangeGate>>>,
+    #[cfg(test)]
+    probe_hook: Mutex<Option<Arc<ProbeHook>>>,
     /// Secrets of results the core revoked, after the revoke finished (tests check them).
     #[cfg(test)]
     revoked: Arc<Mutex<Vec<Arc<SecretValue>>>>,
@@ -239,6 +251,8 @@ impl SignIns {
             #[cfg(test)]
             gate: Mutex::new(None),
             #[cfg(test)]
+            probe_hook: Mutex::new(None),
+            #[cfg(test)]
             revoked: Arc::default(),
         })
     }
@@ -269,6 +283,15 @@ impl SignIns {
     /// Asks the flow's relay whether it works, with a short deadline. Never touches the
     /// flow's own channel (a GET there would take the approval away from the listener).
     async fn relay_healthy(&self, flow: &Flow) -> bool {
+        #[cfg(test)]
+        {
+            let hook = lock(&self.probe_hook).clone();
+            if let Some(hook) = hook {
+                hook.started.notify_one();
+                hook.release.notified().await;
+                return hook.healthy;
+            }
+        }
         let Some(base) = flow.relay_base.as_deref() else {
             return true;
         };
@@ -290,6 +313,7 @@ impl SignIns {
         let healthy = self.relay_healthy(flow).await;
         if healthy {
             *lock(&flow.probed_at) = Some(Instant::now());
+            flow.relay_failures.store(0, Ordering::Relaxed);
         }
         healthy
     }
@@ -297,6 +321,19 @@ impl SignIns {
     #[cfg(test)]
     pub(crate) fn set_gate(&self, gate: Option<Arc<ExchangeGate>>) {
         *lock(&self.gate) = gate;
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_probe_hook(&self, hook: Option<Arc<ProbeHook>>) {
+        *lock(&self.probe_hook) = hook;
+    }
+
+    /// Sets the running flow's count of relay failures in a row.
+    #[cfg(test)]
+    pub(crate) fn set_relay_failures(&self, failures: u32) {
+        if let Some(flow) = lock(&self.pending).as_ref() {
+            flow.relay_failures.store(failures, Ordering::Relaxed);
+        }
     }
 
     fn new_chain(&self) -> u64 {
@@ -430,27 +467,56 @@ impl SignIns {
         let loaded = load_flow(&flow.request.pending_state())?;
         let listener = PubkyGrantAuthFlow::restore(loaded.flow.clone(), self.client.clone())?;
         let mut fresh = Flow::new(flow.chain, listener, Arc::clone(&flow.request), &loaded);
-        fresh.relay_failures = relay_failures;
+        fresh.relay_failures = AtomicU32::new(relay_failures);
         fresh.unclear_restarts = flow.unclear_restarts + u32::from(unclear);
         let fresh = Arc::new(fresh);
         *slot = Some(Arc::clone(&fresh));
         Ok(fresh)
     }
 
-    /// After a relay failure: restart the listener, or move the chain to the next relay, or
-    /// give up when every relay failed.
-    fn relay_failed(&self, flow: &Arc<Flow>) -> Result<Step, CoreError> {
-        let failures = if flow.listening_since.elapsed() >= RELAY_HEALTHY_AFTER {
+    /// After a relay failure: wait and look again, restart a listener that gave up, or move
+    /// the chain to the next relay, or give up when every relay failed.
+    ///
+    /// `listener_alive`: the failure was a probe, the listener itself still runs. It may have
+    /// taken an approval off the relay (the SDK acknowledges it on receipt, so the relay no
+    /// longer has it): such a listener is never dropped without one last look.
+    async fn relay_failed(
+        &self,
+        flow: &Arc<Flow>,
+        listener_alive: bool,
+    ) -> Result<Step, CoreError> {
+        let failures = if !listener_alive && flow.listening_since.elapsed() >= RELAY_HEALTHY_AFTER {
             1
         } else {
-            flow.relay_failures + 1
+            flow.relay_failures.load(Ordering::Relaxed) + 1
         };
         if failures < RELAY_FAILURES_BEFORE_SWITCH {
+            let backoff = Some(backoff(failures));
+            if listener_alive {
+                flow.relay_failures.store(failures, Ordering::Relaxed);
+                return Ok(Step::Waiting {
+                    next: Arc::clone(flow),
+                    backoff,
+                });
+            }
             let next = self.restart(flow, failures, false)?;
-            return Ok(Step::Waiting {
-                next,
-                backoff: Some(backoff(failures)),
-            });
+            return Ok(Step::Waiting { next, backoff });
+        }
+        if listener_alive {
+            match flow.flow.try_poll_once().await {
+                Ok(Some(session)) => return self.conclude(flow, session).await,
+                Ok(None) => {}
+                Err(error) => {
+                    let raw = error.to_string();
+                    let error = CoreError::from(error);
+                    if error_source(&raw, &error, flow.relay_base.as_deref())
+                        == ErrorSource::Exchange
+                    {
+                        self.clear_if_current(flow);
+                        return Err(after_approval(error));
+                    }
+                }
+            }
         }
         let next_index = flow.relay_index + 1;
         if next_index >= self.relays.len() {
@@ -473,6 +539,27 @@ impl SignIns {
         let next = self.build(&flow.spec, next_index, flow.chain)?;
         *slot = Some(Arc::clone(&next));
         Ok(Step::Switched { next })
+    }
+
+    /// The listener delivered an approval: exchange it and park the result.
+    async fn conclude(&self, flow: &Arc<Flow>, session: PubkySession) -> Result<Step, CoreError> {
+        #[cfg(test)]
+        {
+            let gate = lock(&self.gate).clone();
+            if let Some(gate) = gate {
+                gate.reached.notify_one();
+                gate.release.notified().await;
+            }
+        }
+        let result = match signed_in(&session).await {
+            Ok(result) => result,
+            Err(error) => {
+                self.clear_if_current(flow);
+                self.revoke(session, None);
+                return Err(error);
+            }
+        };
+        self.park(flow, session, result)
     }
 
     /// One look at `flow`. Runs in a task that is never aborted (see `poll_detached`): once
@@ -519,38 +606,21 @@ impl SignIns {
                         backoff: None,
                     })
                 } else {
-                    self.relay_failed(flow)
+                    self.relay_failed(flow, true).await
                 }
             }
-            Ok(Some(session)) => {
-                #[cfg(test)]
-                {
-                    let gate = lock(&self.gate).clone();
-                    if let Some(gate) = gate {
-                        gate.reached.notify_one();
-                        gate.release.notified().await;
-                    }
-                }
-                let result = match signed_in(&session).await {
-                    Ok(result) => result,
-                    Err(error) => {
-                        self.clear_if_current(flow);
-                        self.revoke(session, None);
-                        return Err(error);
-                    }
-                };
-                self.park(flow, session, result)
-            }
+            Ok(Some(session)) => self.conclude(flow, session).await,
             Err(error) => {
                 let raw = error.to_string();
                 let error = CoreError::from(error);
                 match error_source(&raw, &error, flow.relay_base.as_deref()) {
-                    ErrorSource::Relay => self.relay_failed(flow),
+                    ErrorSource::Relay => self.relay_failed(flow, false).await,
                     ErrorSource::NoUrl { retryable } => {
                         if !self.relay_healthy(flow).await {
-                            self.relay_failed(flow)
+                            self.relay_failed(flow, false).await
                         } else if retryable && flow.unclear_restarts < MAX_UNCLEAR_RESTARTS {
-                            let next = self.restart(flow, flow.relay_failures, true)?;
+                            let failures = flow.relay_failures.load(Ordering::Relaxed);
+                            let next = self.restart(flow, failures, true)?;
                             Ok(Step::Waiting {
                                 next,
                                 backoff: Some(BACKOFF_BASE),
@@ -784,7 +854,7 @@ mod tests {
         let worn = sign_ins
             .restart(&old, RELAY_FAILURES_BEFORE_SWITCH - 1, false)
             .unwrap();
-        let switched = match sign_ins.relay_failed(&worn) {
+        let switched = match runtime.block_on(sign_ins.relay_failed(&worn, false)) {
             Ok(Step::Switched { next }) => next,
             _ => panic!("the fourth failure moves to the next relay"),
         };

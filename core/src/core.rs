@@ -1,7 +1,6 @@
 //! `PubkyMapsCore`: the one object the app holds.
 
 use std::future::Future;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use pubky::{Pubky, PubkyResource, PubkySession, PublicKey, SessionStorage};
@@ -115,12 +114,33 @@ pub struct SavedPlacePage {
     pub next_cursor: Option<String>,
 }
 
+/// The installed session and a generation number bumped on every change, so a task that
+/// looked at one session never removes or restores another.
+#[derive(Default)]
+struct SessionSlot {
+    current: Option<PubkySession>,
+    generation: u64,
+}
+
 struct Inner {
     pubky: Pubky,
-    session: Mutex<Option<PubkySession>>,
-    /// Bumped by `forget_session`, so a failed sign-out never brings a forgotten session back.
-    forgotten: AtomicU64,
+    session: Mutex<SessionSlot>,
     sign_ins: Arc<SignIns>,
+    /// Holds `revalidate_session` after the homeserver answered (tests).
+    #[cfg(test)]
+    revalidate_gate: Mutex<Option<Arc<crate::signin::ExchangeGate>>>,
+}
+
+/// The core's runtime. Dropped without waiting for its threads, so dropping the core (or a
+/// cancelled `create`) never blocks the caller.
+struct OwnedRuntime(Option<Runtime>);
+
+impl Drop for OwnedRuntime {
+    fn drop(&mut self) {
+        if let Some(runtime) = self.0.take() {
+            runtime.shutdown_background();
+        }
+    }
 }
 
 pub(crate) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -138,30 +158,76 @@ impl Drop for AbortOnDrop {
     }
 }
 
-/// The Pubky Maps core. Build one per process from a [`CoreConfig`] and keep it.
+/// The Pubky Maps core. Build one per process with `create` from a [`CoreConfig`] and keep it.
 ///
 /// All network calls are `suspend` functions in Kotlin. They run on a Tokio runtime owned
 /// by this object, so any coroutine dispatcher can call them; cancelling the coroutine
 /// cancels the work.
 #[derive(uniffi::Object)]
 pub struct PubkyMapsCore {
-    runtime: Option<Runtime>,
     handle: Handle,
     inner: Arc<Inner>,
+    /// Last field: shut down after everything else is dropped.
+    _runtime: OwnedRuntime,
 }
 
 impl Drop for PubkyMapsCore {
     fn drop(&mut self) {
         self.inner.sign_ins.cancel();
-        if let Some(runtime) = self.runtime.take() {
-            runtime.shutdown_background();
-        }
     }
 }
 
 impl Inner {
     fn session(&self) -> Result<PubkySession, CoreError> {
-        lock(&self.session).clone().ok_or(CoreError::NotSignedIn)
+        lock(&self.session)
+            .current
+            .clone()
+            .ok_or(CoreError::NotSignedIn)
+    }
+
+    fn current_session(&self) -> Option<PubkySession> {
+        lock(&self.session).current.clone()
+    }
+
+    /// Installs (or with `None` drops) the session.
+    fn set_session(&self, session: Option<PubkySession>) {
+        let mut slot = lock(&self.session);
+        slot.current = session;
+        slot.generation += 1;
+    }
+
+    /// The session and the generation it was installed in.
+    fn session_with_generation(&self) -> Option<(PubkySession, u64)> {
+        let slot = lock(&self.session);
+        slot.current
+            .clone()
+            .map(|session| (session, slot.generation))
+    }
+
+    /// Takes the session out; returns it with the generation after taking.
+    fn take_session(&self) -> Option<(PubkySession, u64)> {
+        let mut slot = lock(&self.session);
+        let session = slot.current.take()?;
+        slot.generation += 1;
+        Some((session, slot.generation))
+    }
+
+    /// Drops the session if nothing changed since `generation`.
+    fn drop_session_if(&self, generation: u64) {
+        let mut slot = lock(&self.session);
+        if slot.generation == generation {
+            slot.current = None;
+            slot.generation += 1;
+        }
+    }
+
+    /// Puts a session back if nothing changed since `generation`.
+    fn put_back_if(&self, session: PubkySession, generation: u64) {
+        let mut slot = lock(&self.session);
+        if slot.generation == generation {
+            slot.current = Some(session);
+            slot.generation += 1;
+        }
     }
 
     /// Hands a sign-in result out: only now does its session become the core's session.
@@ -171,7 +237,7 @@ impl Inner {
             Outcome::RelayChanged(request) => SignInEvent::RelayChanged { request },
             Outcome::Finished(done) => {
                 let done = *done;
-                *lock(&self.session) = Some(done.session);
+                self.set_session(Some(done.session));
                 SignInEvent::SignedIn {
                     result: done.result,
                 }
@@ -345,9 +411,15 @@ impl PubkyMapsCore {
 #[uniffi::export]
 impl PubkyMapsCore {
     /// Builds the core: its runtime, the HTTP client and the Pkarr resolver (DHT and relays
-    /// as configured). No network call happens here.
+    /// as configured). A `suspend` factory in Kotlin (`PubkyMapsCore.create(config)`).
+    ///
+    /// The client is built on the core's own blocking thread, never on the caller's. With the
+    /// DHT on, building it resolves the DHT bootstrap host names (the Mainline defaults, or
+    /// `dht_bootstrap_nodes`): a few DNS lookups that can take seconds on a bad network, so
+    /// the call can take that long, but it does not block the calling thread. No other
+    /// network request is made.
     #[uniffi::constructor]
-    pub fn new(config: CoreConfig) -> Result<Arc<Self>, CoreError> {
+    pub async fn create(config: CoreConfig) -> Result<Arc<Self>, CoreError> {
         let config = config.validate()?;
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
@@ -356,20 +428,27 @@ impl PubkyMapsCore {
             .build()
             .map_err(|e| CoreError::internal(format!("runtime: {e}")))?;
         let handle = runtime.handle().clone();
-        let client = {
-            let _context = handle.enter();
-            build_client(&config)?
-        };
+        let runtime = OwnedRuntime(Some(runtime));
+        let build_handle = handle.clone();
+        let (client, config) = handle
+            .spawn_blocking(move || {
+                let _context = build_handle.enter();
+                build_client(&config).map(|client| (client, config))
+            })
+            .await
+            .map_err(|_| CoreError::internal("building the core panicked"))??;
+        let sign_ins = SignIns::new(client.clone(), config.auth_relay_urls)?;
         let inner = Arc::new(Inner {
-            pubky: Pubky::with_client(client.clone()),
-            session: Mutex::new(None),
-            forgotten: AtomicU64::new(0),
-            sign_ins: Arc::new(SignIns::new(client, config.auth_relay_urls)?),
+            pubky: Pubky::with_client(client),
+            session: Mutex::new(SessionSlot::default()),
+            sign_ins: Arc::new(sign_ins),
+            #[cfg(test)]
+            revalidate_gate: Mutex::new(None),
         });
         Ok(Arc::new(Self {
-            runtime: Some(runtime),
             handle,
             inner,
+            _runtime: runtime,
         }))
     }
 
@@ -427,8 +506,11 @@ impl PubkyMapsCore {
     ///
     /// Errors: `Cancelled` after `cancel_sign_in` or when another sign-in was started;
     /// `Auth` once the link is 10 minutes old; `Network` "the sign-in relay is unreachable"
-    /// when every configured relay failed. A relay is left after 4 failed listens in a row
-    /// (about 14 s with back-off). Call it from one place at a time.
+    /// when every configured relay failed. A relay is left after 4 failures in a row: a
+    /// listener that gave up, or a failed probe (the core probes the relay when a listener
+    /// starts and every 25 s). That is about 14 s for a refused or blocked relay and about a
+    /// minute for one that never answers (each probe waits up to 10 s). A listener is never
+    /// dropped while it may hold an approval. Call it from one place at a time.
     ///
     /// Cancelling the calling coroutine is safe: an approval that already arrived is still
     /// exchanged, parked, and handed out by the next `await_sign_in`/`poll_sign_in`; the
@@ -489,7 +571,7 @@ impl PubkyMapsCore {
                     other => other,
                 })?;
             let info = session_info(&session).await;
-            *lock(&inner.session) = Some(session);
+            inner.set_session(Some(session));
             Ok(info)
         })
         .await
@@ -497,7 +579,7 @@ impl PubkyMapsCore {
 
     /// The signed-in session, if any. No network call.
     pub async fn current_session(&self) -> Option<SessionInfo> {
-        let session = lock(&self.inner.session).clone()?;
+        let session = self.inner.current_session()?;
         self.run(async move { Ok(session_info(&session).await) })
             .await
             .ok()
@@ -506,7 +588,7 @@ impl PubkyMapsCore {
     /// The secret of the current session, as `SignedIn.secret` gave it: for an app that has a
     /// session but no stored secret (see `await_sign_in`). `None` when not signed in.
     pub async fn current_session_secret(&self) -> Option<Arc<SecretValue>> {
-        let session = lock(&self.inner.session).clone()?;
+        let session = self.inner.current_session()?;
         self.run(async move {
             let secret = match session.as_grant() {
                 Some(grant) => grant.export_local_secret().await,
@@ -519,14 +601,25 @@ impl PubkyMapsCore {
         .flatten()
     }
 
-    /// Asks the homeserver whether the session is still valid. `None` (and the session is
-    /// dropped) when it expired or was revoked.
+    /// Asks the homeserver whether the session is still valid. `None` when it expired or was
+    /// revoked; the session is then dropped, unless another one was installed meanwhile.
     pub async fn revalidate_session(&self) -> Result<Option<SessionInfo>, CoreError> {
         let inner = Arc::clone(&self.inner);
         self.run(async move {
-            let session = inner.session()?;
-            if session.revalidate().await?.is_none() {
-                lock(&inner.session).take();
+            let (session, generation) = inner
+                .session_with_generation()
+                .ok_or(CoreError::NotSignedIn)?;
+            let valid = session.revalidate().await?.is_some();
+            #[cfg(test)]
+            {
+                let gate = lock(&inner.revalidate_gate).clone();
+                if let Some(gate) = gate {
+                    gate.reached.notify_one();
+                    gate.release.notified().await;
+                }
+            }
+            if !valid {
+                inner.drop_session_if(generation);
                 return Ok(None);
             }
             Ok(Some(session_info(&session).await))
@@ -540,19 +633,16 @@ impl PubkyMapsCore {
     pub async fn sign_out(&self) -> Result<(), CoreError> {
         let inner = Arc::clone(&self.inner);
         self.run(async move {
-            let Some(session) = lock(&inner.session).take() else {
+            let Some((session, generation)) = inner.take_session() else {
                 return Ok(());
             };
-            let generation = inner.forgotten.load(Ordering::SeqCst);
             // Not aborted with the caller: a half-done sign-out either revokes the grant or
             // puts the session back.
             tokio::spawn(async move {
                 match session.signout().await {
                     Ok(()) => Ok(()),
                     Err((error, session)) => {
-                        if inner.forgotten.load(Ordering::SeqCst) == generation {
-                            lock(&inner.session).get_or_insert(session);
-                        }
+                        inner.put_back_if(session, generation);
                         Err(error.into())
                     }
                 }
@@ -565,8 +655,7 @@ impl PubkyMapsCore {
 
     /// Drops the session locally without contacting the homeserver.
     pub fn forget_session(&self) {
-        self.inner.forgotten.fetch_add(1, Ordering::SeqCst);
-        lock(&self.inner.session).take();
+        self.inner.set_session(None);
     }
 
     // --- Own storage ------------------------------------------------------------------------
@@ -890,12 +979,26 @@ mod tests {
     const DEAD_RELAY: &str = "http://127.0.0.1:9/inbox";
     const DEAD_RELAY_2: &str = "http://127.0.0.1:7/inbox";
 
-    fn core_with_relays(relays: &[&str]) -> Arc<PubkyMapsCore> {
+    fn offline_config(relays: &[&str]) -> CoreConfig {
         let mut config = default_core_config();
         config.dht_enabled = false;
         config.pkarr_relays = vec!["http://127.0.0.1:9".into()];
         config.auth_relay_urls = relays.iter().map(|r| (*r).to_string()).collect();
-        PubkyMapsCore::new(config).unwrap()
+        config
+    }
+
+    /// `create` driven to completion from a sync test.
+    fn create_blocking(config: CoreConfig) -> Arc<PubkyMapsCore> {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(PubkyMapsCore::create(config))
+            .unwrap()
+    }
+
+    fn core_with_relays(relays: &[&str]) -> Arc<PubkyMapsCore> {
+        create_blocking(offline_config(relays))
     }
 
     fn offline_core() -> Arc<PubkyMapsCore> {
@@ -1095,7 +1198,7 @@ mod tests {
             // The SDK's own relay requests time out and are retried forever: only the probe
             // notices this relay.
             config.request_timeout_ms = 2_000;
-            let core = PubkyMapsCore::new(config).unwrap();
+            let core = PubkyMapsCore::create(config).await.unwrap();
             core.start_sign_in().unwrap();
             let (relay, took) = wait_for_switch(&core).await;
             assert_eq!(relay.as_deref(), Some(DEAD_RELAY_2));
@@ -1108,12 +1211,42 @@ mod tests {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.block_on(async {
             let blocked = forbidden_relay().await;
-            let core = core_with_relays(&[blocked.as_str(), DEAD_RELAY_2]);
+            let core = PubkyMapsCore::create(offline_config(&[blocked.as_str(), DEAD_RELAY_2]))
+                .await
+                .unwrap();
             core.start_sign_in().unwrap();
             let (relay, took) = wait_for_switch(&core).await;
             assert_eq!(relay.as_deref(), Some(DEAD_RELAY_2));
             assert!(took < Duration::from_secs(30), "{took:?}");
         });
+    }
+
+    #[test]
+    fn create_never_blocks_the_caller_on_dns() {
+        // DHT on with a bootstrap host that cannot be resolved: the lookup runs on the core's
+        // own thread, so the first poll of `create` returns at once.
+        let mut config = offline_config(&[DEAD_RELAY]);
+        config.dht_enabled = true;
+        config.dht_bootstrap_nodes = vec!["bootstrap.unresolvable.invalid:6881".into()];
+        let mut create = Box::pin(PubkyMapsCore::create(config));
+        let mut cx = std::task::Context::from_waker(std::task::Waker::noop());
+        let started = std::time::Instant::now();
+        let first = create.as_mut().poll(&mut cx);
+        let took = started.elapsed();
+        assert!(
+            took < Duration::from_millis(500),
+            "first poll took {took:?}"
+        );
+        let core = match first {
+            std::task::Poll::Ready(core) => core.unwrap(),
+            std::task::Poll::Pending => tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(create)
+                .unwrap(),
+        };
+        assert!(core.current_sign_in().is_none());
     }
 
     #[test]
@@ -1226,7 +1359,12 @@ mod tests {
             (testnet, ring)
         }
 
-        fn gated_core(testnet: &EphemeralTestnet) -> (Arc<PubkyMapsCore>, Arc<ExchangeGate>) {
+        fn testnet_relay(testnet: &EphemeralTestnet) -> String {
+            format!("{}inbox", testnet.http_relay().local_url())
+        }
+
+        /// A core on the testnet with these auth relays.
+        async fn core_on(testnet: &EphemeralTestnet, relays: Vec<String>) -> Arc<PubkyMapsCore> {
             let mut config = default_core_config();
             config.pkarr_relays = Vec::new();
             config.dht_bootstrap_nodes = testnet
@@ -1235,9 +1373,13 @@ mod tests {
                 .iter()
                 .map(ToString::to_string)
                 .collect();
-            config.auth_relay_urls = vec![format!("{}inbox", testnet.http_relay().local_url())];
+            config.auth_relay_urls = relays;
             config.request_timeout_ms = 10_000;
-            let core = PubkyMapsCore::new(config).unwrap();
+            PubkyMapsCore::create(config).await.unwrap()
+        }
+
+        async fn gated_core(testnet: &EphemeralTestnet) -> (Arc<PubkyMapsCore>, Arc<ExchangeGate>) {
+            let core = core_on(testnet, vec![testnet_relay(testnet)]).await;
             let gate = Arc::new(ExchangeGate::default());
             core.inner.sign_ins.set_gate(Some(Arc::clone(&gate)));
             (core, gate)
@@ -1255,9 +1397,34 @@ mod tests {
             })
             .await
             .expect("the result is revoked");
-            let other = gated_core(testnet).0;
+            let other = gated_core(testnet).await.0;
             let err = other.restore_session(secret).await.unwrap_err();
             assert!(matches!(err, CoreError::Auth { .. }), "{err:?}");
+        }
+
+        /// A second user on the testnet.
+        async fn another_ring(testnet: &EphemeralTestnet) -> PubkySigner {
+            let ring = testnet.sdk().unwrap().signer(Keypair::random());
+            ring.signup(&testnet.homeserver_app().public_key(), None)
+                .await
+                .unwrap();
+            ring
+        }
+
+        /// A full sign-in through `await_sign_in`.
+        async fn signed_in_as(core: &Arc<PubkyMapsCore>, ring: &PubkySigner) -> SignedIn {
+            let request = core.start_sign_in().unwrap();
+            ring.approve_auth(&request.authorization_url())
+                .await
+                .unwrap();
+            match tokio::time::timeout(Duration::from_secs(60), core.await_sign_in())
+                .await
+                .unwrap()
+                .unwrap()
+            {
+                SignInEvent::SignedIn { result } => result,
+                other => panic!("expected a sign-in, got {other:?}"),
+            }
         }
 
         /// Starts a wait, lets Ring approve, and returns once the exchange is under way.
@@ -1285,7 +1452,7 @@ mod tests {
         #[ignore = "needs Postgres: set TEST_PUBKY_CONNECTION_STRING and run with --include-ignored"]
         async fn cancelled_during_exchange_is_parked_not_installed() {
             let (testnet, ring) = setup().await;
-            let (core, gate) = gated_core(&testnet);
+            let (core, gate) = gated_core(&testnet).await;
             let waiting = approved_and_exchanging(&core, &gate, &ring).await;
 
             // The coroutine goes away and the user taps cancel while the exchange runs.
@@ -1319,7 +1486,7 @@ mod tests {
             // The secret the app got is the one that works, and the core gives it again.
             let again = core.current_session_secret().await.unwrap();
             assert_eq!(again.expose(), result.secret.expose());
-            let other = gated_core(&testnet).0;
+            let other = gated_core(&testnet).await.0;
             let restored = other.restore_session(result.secret).await.unwrap();
             assert_eq!(restored.public_key, result.info.public_key);
         }
@@ -1329,7 +1496,7 @@ mod tests {
         #[ignore = "needs Postgres: set TEST_PUBKY_CONNECTION_STRING and run with --include-ignored"]
         async fn replaced_during_exchange_is_not_installed() {
             let (testnet, ring) = setup().await;
-            let (core, gate) = gated_core(&testnet);
+            let (core, gate) = gated_core(&testnet).await;
             let waiting = approved_and_exchanging(&core, &gate, &ring).await;
 
             // The user starts another sign-in while the first exchange runs.
@@ -1357,7 +1524,7 @@ mod tests {
         #[ignore = "needs Postgres: set TEST_PUBKY_CONNECTION_STRING and run with --include-ignored"]
         async fn a_new_sign_in_revokes_an_uncollected_result() {
             let (testnet, ring) = setup().await;
-            let (core, gate) = gated_core(&testnet);
+            let (core, gate) = gated_core(&testnet).await;
             let waiting = approved_and_exchanging(&core, &gate, &ring).await;
             waiting.abort();
             core.cancel_sign_in();
@@ -1377,6 +1544,86 @@ mod tests {
                 SignInEvent::Waiting
             ));
             assert_revoked(&testnet, &core).await;
+        }
+
+        #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+        #[pubky_testnet::test]
+        #[ignore = "needs Postgres: set TEST_PUBKY_CONNECTION_STRING and run with --include-ignored"]
+        async fn an_approval_taken_during_a_failing_probe_is_not_lost() {
+            use crate::signin::{ProbeHook, RELAY_FAILURES_BEFORE_SWITCH};
+            let (testnet, ring) = setup().await;
+            let core = core_on(
+                &testnet,
+                vec![testnet_relay(&testnet), DEAD_RELAY_2.to_string()],
+            )
+            .await;
+            // Every probe fails, and the next failure is the one that leaves the relay.
+            let hook = Arc::new(ProbeHook {
+                started: tokio::sync::Notify::new(),
+                release: tokio::sync::Notify::new(),
+                healthy: false,
+            });
+            core.inner.sign_ins.set_probe_hook(Some(Arc::clone(&hook)));
+            let request = core.start_sign_in().unwrap();
+            core.inner
+                .sign_ins
+                .set_relay_failures(RELAY_FAILURES_BEFORE_SWITCH - 1);
+            let waiting = {
+                let core = Arc::clone(&core);
+                tokio::spawn(async move { core.await_sign_in().await })
+            };
+            tokio::time::timeout(Duration::from_secs(30), hook.started.notified())
+                .await
+                .expect("a probe starts");
+            // Ring approves while the probe runs; the listener takes the approval off the
+            // relay (and acknowledges it there) before the probe fails.
+            ring.approve_auth(&request.authorization_url())
+                .await
+                .unwrap();
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            hook.release.notify_one();
+            let event = tokio::time::timeout(Duration::from_secs(60), waiting)
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap();
+            let SignInEvent::SignedIn { result } = event else {
+                panic!("the approval must sign in, not move to another relay: {event:?}");
+            };
+            assert_eq!(result.info.public_key, ring.public_key().z32());
+            assert!(core.current_sign_in().is_none());
+        }
+
+        #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+        #[pubky_testnet::test]
+        #[ignore = "needs Postgres: set TEST_PUBKY_CONNECTION_STRING and run with --include-ignored"]
+        async fn revalidate_keeps_a_session_installed_meanwhile() {
+            let (testnet, ring_a) = setup().await;
+            let ring_b = another_ring(&testnet).await;
+            let core = core_on(&testnet, vec![testnet_relay(&testnet)]).await;
+            let a = signed_in_as(&core, &ring_a).await;
+
+            // Another process takes A's grant and revokes it: A is no longer valid here.
+            let other = core_on(&testnet, vec![testnet_relay(&testnet)]).await;
+            other.restore_session(Arc::clone(&a.secret)).await.unwrap();
+            other.sign_out().await.unwrap();
+
+            let gate = Arc::new(ExchangeGate::default());
+            *lock(&core.inner.revalidate_gate) = Some(Arc::clone(&gate));
+            let revalidating = {
+                let core = Arc::clone(&core);
+                tokio::spawn(async move { core.revalidate_session().await })
+            };
+            tokio::time::timeout(Duration::from_secs(30), gate.reached.notified())
+                .await
+                .expect("the homeserver answered");
+            // B signs in while the revalidation of A is still under way.
+            let b = signed_in_as(&core, &ring_b).await;
+            gate.release.notify_one();
+            let outcome = revalidating.await.unwrap().unwrap();
+            assert!(outcome.is_none(), "A was revoked: {outcome:?}");
+            let session = core.current_session().await.expect("B stays signed in");
+            assert_eq!(session.public_key, b.info.public_key);
         }
     }
 }

@@ -24,7 +24,7 @@ async fn testnet() -> EphemeralTestnet {
         .expect("testnet starts (is Postgres reachable?)")
 }
 
-fn core_for(testnet: &EphemeralTestnet) -> Arc<PubkyMapsCore> {
+async fn core_for(testnet: &EphemeralTestnet) -> Arc<PubkyMapsCore> {
     let mut config = default_core_config();
     config.pkarr_relays = Vec::new();
     config.dht_enabled = true;
@@ -36,7 +36,7 @@ fn core_for(testnet: &EphemeralTestnet) -> Arc<PubkyMapsCore> {
         .collect();
     config.auth_relay_urls = vec![format!("{}inbox", testnet.http_relay().local_url())];
     config.request_timeout_ms = 10_000;
-    PubkyMapsCore::new(config).expect("core builds")
+    PubkyMapsCore::create(config).await.expect("core builds")
 }
 
 /// The result of a wait that must end signed in.
@@ -78,7 +78,7 @@ async fn sign_in(core: &Arc<PubkyMapsCore>, ring: &PubkySigner) -> SignedIn {
 async fn ring_sign_in_restore_and_sign_out() {
     let testnet = testnet().await;
     let ring = ring_user(&testnet).await;
-    let core = core_for(&testnet);
+    let core = core_for(&testnet).await;
 
     let signed = sign_in(&core, &ring).await;
     assert_eq!(signed.info.public_key, ring.public_key().z32());
@@ -106,7 +106,7 @@ async fn ring_sign_in_restore_and_sign_out() {
     assert!(matches!(denied, CoreError::Auth { .. }), "{denied:?}");
 
     // A new process restores the session from the stored secret.
-    let restored_core = core_for(&testnet);
+    let restored_core = core_for(&testnet).await;
     let info = restored_core
         .restore_session(signed.secret.clone())
         .await
@@ -122,7 +122,7 @@ async fn ring_sign_in_restore_and_sign_out() {
     // Signing out revokes the grant: the secret no longer restores.
     restored_core.sign_out().await.unwrap();
     assert!(restored_core.current_session().await.is_none());
-    let third = core_for(&testnet);
+    let third = core_for(&testnet).await;
     let err = third.restore_session(signed.secret).await.unwrap_err();
     assert!(matches!(err, CoreError::Auth { .. }), "{err:?}");
 }
@@ -135,14 +135,14 @@ async fn sign_in_resumes_after_process_death_and_cancels() {
     let ring = ring_user(&testnet).await;
 
     // The first process starts a flow and dies; only the pending state survives.
-    let first = core_for(&testnet);
+    let first = core_for(&testnet).await;
     let request = first.start_sign_in().unwrap();
     let url = request.authorization_url();
     let state = request.pending_state();
     drop(request);
     drop(first);
 
-    let second = core_for(&testnet);
+    let second = core_for(&testnet).await;
     let resumed = second.resume_sign_in(state).unwrap();
     assert_eq!(resumed.authorization_url(), url);
     ring.approve_auth(&url).await.unwrap();
@@ -155,7 +155,7 @@ async fn sign_in_resumes_after_process_death_and_cancels() {
     assert_eq!(signed.info.public_key, ring.public_key().z32());
 
     // A waiting sign-in ends with Cancelled when the user cancels.
-    let third = core_for(&testnet);
+    let third = core_for(&testnet).await;
     third.start_sign_in().unwrap();
     let waiting = {
         let third = Arc::clone(&third);
@@ -217,7 +217,7 @@ async fn falls_back_from(first_relay: String) {
     let working = format!("{}inbox", testnet.http_relay().local_url());
     config.auth_relay_urls = vec![first_relay.clone(), working.clone()];
     config.request_timeout_ms = 10_000;
-    let core = PubkyMapsCore::new(config).unwrap();
+    let core = PubkyMapsCore::create(config).await.unwrap();
 
     let first = core.start_sign_in().unwrap();
     let event = tokio::time::timeout(Duration::from_secs(90), core.await_sign_in())
@@ -255,7 +255,7 @@ async fn falls_back_from(first_relay: String) {
 async fn storage_put_get_list_delete_and_public_reads() {
     let testnet = testnet().await;
     let ring = ring_user(&testnet).await;
-    let core = core_for(&testnet);
+    let core = core_for(&testnet).await;
     let signed = sign_in(&core, &ring).await;
     let me = signed.info.public_key;
 
@@ -339,7 +339,7 @@ async fn storage_put_get_list_delete_and_public_reads() {
         )
         .await
         .unwrap();
-    let reader = core_for(&testnet);
+    let reader = core_for(&testnet).await;
     let body = reader.public_get(tag.uri.clone()).await.unwrap();
     assert_eq!(body, tag.json.as_bytes());
     let listed = reader
@@ -365,7 +365,7 @@ async fn storage_put_get_list_delete_and_public_reads() {
 async fn place_objects_round_trip() {
     let testnet = testnet().await;
     let ring = ring_user(&testnet).await;
-    let core = core_for(&testnet);
+    let core = core_for(&testnet).await;
     sign_in(&core, &ring).await;
     let place = "https://www.openstreetmap.org/node/270803095";
 
