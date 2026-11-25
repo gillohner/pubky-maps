@@ -128,8 +128,6 @@ data class PlaceSocial(
     val resourceIds: List<String>,
     val replyCount: Int,
     val embedCount: Int,
-    /** How many people tagged the place (over its links). */
-    val taggerCount: Int = 0,
 )
 
 /** Everything the page showed, as cached for offline reopening. */

@@ -34,6 +34,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -210,20 +211,30 @@ private fun OpenInButton(actions: PlacePageActions) {
     }
 }
 
+/** Draws a remote image (see [LocalRemoteImage]). */
+typealias RemoteImageContent = @Composable (
+    url: String,
+    contentDescription: String?,
+    modifier: Modifier,
+    placeholder: Boolean,
+    onError: () -> Unit,
+) -> Unit
+
 /**
- * Draws a remote image: [onError] when it cannot be loaded (the caller then leaves it out). The app
- * uses Coil; screenshot tests provide a local stand-in, since images load over the network.
+ * Draws a remote image: a grey placeholder while it loads when [placeholder] is set (else nothing, so
+ * what is under it shows), [onError] when it cannot be loaded (the caller then leaves it out). The
+ * app uses Coil; screenshot tests provide a local stand-in, since images load over the network.
  */
 val LocalRemoteImage =
-    staticCompositionLocalOf<@Composable (url: String, contentDescription: String?, modifier: Modifier, onError: () -> Unit) -> Unit> {
-        { url, contentDescription, modifier, onError ->
-            val placeholder = ColorPainter(MaterialTheme.colorScheme.surfaceContainerHighest)
+    staticCompositionLocalOf<RemoteImageContent> {
+        { url, contentDescription, modifier, placeholder, onError ->
+            val grey = if (placeholder) ColorPainter(MaterialTheme.colorScheme.surfaceContainerHighest) else null
             AsyncImage(
                 model = url,
                 contentDescription = contentDescription,
                 modifier = modifier,
-                placeholder = placeholder,
-                error = placeholder,
+                placeholder = grey,
+                error = grey,
                 onError = { onError() },
                 contentScale = ContentScale.Crop,
             )
@@ -236,12 +247,16 @@ private fun RemoteImage(
     url: String,
     contentDescription: String?,
     modifier: Modifier,
+    onFailed: () -> Unit = {},
     overlay: @Composable BoxScope.() -> Unit = {},
 ) {
     var failed by remember(url) { mutableStateOf(false) }
     if (failed) return
     Box(modifier) {
-        LocalRemoteImage.current(url, contentDescription, Modifier.matchParentSize()) { failed = true }
+        LocalRemoteImage.current(url, contentDescription, Modifier.matchParentSize(), true) {
+            failed = true
+            onFailed()
+        }
         overlay()
     }
 }
@@ -269,7 +284,7 @@ fun PlaceSections(
         val osm = page.osm
         osm?.let { OsmDetailsSection(it, context, actions) }
         val tags = page.tags
-        if (tags.isNotEmpty()) TagsSection(tags, page.people, page.viewer, page.taggerCount)
+        if (tags.isNotEmpty()) TagsSection(tags, page.people, page.viewer)
         if (page.photos.isNotEmpty()) PhotosSection(page.photos, actions)
         if (page.posts.isNotEmpty()) {
             SectionTitle("Posts")
@@ -496,7 +511,8 @@ private fun Avatar(
             )
         }
         person?.avatarUrl?.let { url ->
-            LocalRemoteImage.current(url, null, Modifier.size(size.dp)) {}
+            // No placeholder: the initial or icon under it shows while it loads and when it fails.
+            LocalRemoteImage.current(url, null, Modifier.size(size.dp), false) {}
         }
     }
 }
@@ -508,7 +524,6 @@ private fun TagsSection(
     tags: List<PlaceTag>,
     people: Map<String, PlacePerson>,
     viewer: String?,
-    taggerCount: Int,
 ) {
     Column {
         SectionTitle("Tags on Pubky")
@@ -537,7 +552,7 @@ private fun TagsSection(
                 }
             }
         }
-        val line = taggersLine(tags, people, viewer, taggerCount)
+        val line = taggersLine(tags, people, viewer)
         if (line != null) {
             Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 line.shown.forEach { id ->
@@ -562,16 +577,16 @@ internal data class TaggersLine(
 )
 
 /**
- * "Tagged by Anna, Ben and 3 others": the first two named people the user follows first, and the
- * others counted from Nexus' tagger count of the place (people Nexus did not list included); the
- * user's own tags are said apart. The avatars are the people named. Null when nobody but the user
- * tagged.
+ * "Tagged by Anna, Ben and 3 others": the first two people (the ones the user follows first) are
+ * named and shown; the others are the distinct people over all labels, a person who used several
+ * labels counted once, plus the people Nexus counts on a label but does not list (it lists five per
+ * label). The user is said apart ("You tagged it …") and counted nowhere. Null when nobody but the
+ * user tagged.
  */
 internal fun taggersLine(
     tags: List<PlaceTag>,
     people: Map<String, PlacePerson>,
     viewer: String?,
-    taggerCount: Int,
 ): TaggersLine? {
     val listed =
         tags
@@ -581,8 +596,13 @@ internal fun taggersLine(
             .sortedByDescending { people[it]?.followed == true }
     if (listed.isEmpty()) return null
     val named = listed.take(2)
-    val mine = if (tags.any { it.mine }) 1 else 0
-    val others = (maxOf(taggerCount - mine, listed.size) - named.size).coerceAtLeast(0)
+    // Unlisted people per label; the user is one of them on a label they used but Nexus did not list them for.
+    val unlisted =
+        tags.sumOf { tag ->
+            val hidden = (tag.count - tag.taggers.size).coerceAtLeast(0)
+            if (tag.mine && viewer !in tag.taggers) (hidden - 1).coerceAtLeast(0) else hidden
+        }
+    val others = listed.size - named.size + unlisted
     val names = named.map { personName(it, people[it]) }
     val text =
         "Tagged by " +
@@ -599,10 +619,14 @@ private fun PhotosSection(
     photos: List<PlacePhoto>,
     actions: PlacePageActions,
 ) {
+    // Photos that fail to load are left out; with none left, so is the section.
+    val failed = remember(photos) { mutableStateListOf<String>() }
+    val shown = photos.filterNot { it.url in failed }
+    if (shown.isEmpty()) return
     Column {
         SectionTitle("Photos")
         LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(photos, key = { it.url }) { photo ->
+            items(shown, key = { it.url }) { photo ->
                 RemoteImage(
                     photo.thumbnailUrl,
                     contentDescription = "Photo",
@@ -611,6 +635,7 @@ private fun PhotosSection(
                             .size(120.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .clickable { actions.onOpenLink(photo.url) },
+                    onFailed = { failed += photo.url },
                 )
             }
         }

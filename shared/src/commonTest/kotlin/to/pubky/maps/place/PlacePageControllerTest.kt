@@ -301,8 +301,6 @@ class PlacePageControllerTest {
             assertEquals(3, page.listCount)
             val bigger = page.copy(card = page.card!!.copy(collections = 25))
             assertEquals(25, bigger.listCount)
-            // Nexus' tagger count of the Schober's link (6 people over 4 labels).
-            assertEquals(6, page.taggerCount)
         }
 
     @Test

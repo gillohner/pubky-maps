@@ -53,9 +53,6 @@ data class PlacePageState(
             PlacePart.Social !in loading && PlacePart.Posts !in loading && PlacePart.Lists !in loading &&
                 social != null && social.tags.isEmpty() && posts.isEmpty() && photos.isEmpty() && lists.isEmpty()
 
-    /** How many people tagged the place: Nexus' count, at least the people listed. */
-    val taggerCount: Int get() = social?.taggerCount ?: 0
-
     /** How many public lists hold the place: the card's count, at least the lists shown. */
     val listCount: Int get() = maxOf(card?.collections ?: 0, lists.size)
 

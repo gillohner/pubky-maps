@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -79,8 +80,15 @@ fun PlaceSheet(
     val resting = remember { Animatable(stops.height(stop)) }
     var dragged by remember { mutableStateOf<Float?>(null) }
     val target = stops.height(stop)
-    LaunchedEffect(target) { if (dragged == null) resting.animateTo(target) }
-    val height = dragged ?: resting.value
+    // A new stop animates; the same stop growing or shrinking with its content follows it at once.
+    var shownStop by remember { mutableStateOf(stop) }
+    LaunchedEffect(target, stop) {
+        if (dragged != null) return@LaunchedEffect
+        if (stop == shownStop) resting.snapTo(target) else resting.animateTo(target)
+        shownStop = stop
+    }
+    // Never taller than the page itself, also in the frame where the page has just become shorter.
+    val height = (dragged ?: resting.value).coerceAtMost(stops.height(SheetStop.Full))
     val scope = rememberCoroutineScope()
     val currentStop by rememberUpdatedState(stop)
     val currentStops by rememberUpdatedState(stops)
@@ -98,6 +106,7 @@ fun PlaceSheet(
         scope.launch {
             resting.snapTo(from)
             dragged = null
+            shownStop = next
             resting.animateTo(currentStops.height(next))
         }
     }
@@ -170,6 +179,8 @@ fun PlaceSheet(
                     context,
                     actions,
                     Modifier
+                        // The scroll viewport's minimum height is not the page's: measure the page itself.
+                        .wrapContentHeight(Alignment.Top)
                         .onSizeChanged { contentPx = it.height }
                         .padding(bottom = bottomInset),
                 )

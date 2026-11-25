@@ -6,6 +6,7 @@ import kotlinx.datetime.LocalTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class PlaceTextsTest {
     private val wednesdayNoon = LocalDateTime(LocalDate.parse("2026-11-25"), LocalTime(12, 0))
@@ -93,18 +94,45 @@ class PlaceTextsTest {
         ) = PlaceTag(label, count, taggers.toList(), mine)
 
         // One person: no others.
-        assertEquals(TaggersLine(listOf("anna"), "Tagged by Anna"), taggersLine(listOf(tag("art", "anna")), people, null, 1))
-        // Nexus counts 12 people; two are named and shown, the other 10 are "others" (also the unlisted ones).
-        val line = taggersLine(listOf(tag("art", "ben", "anna", "cleo", count = 12)), people, null, taggerCount = 12)!!
-        assertEquals(listOf("anna", "ben"), line.shown)
-        assertEquals("Tagged by Anna, Ben and 10 others", line.text)
-        // The user's own tag is said apart: neither named nor counted among the others.
-        val mine = taggersLine(listOf(tag("rainy", "me", "anna", mine = true), tag("art", "ben")), people, "me", taggerCount = 3)!!
-        assertEquals("Tagged by Anna and Ben", mine.text)
+        assertEquals(TaggersLine(listOf("anna"), "Tagged by Anna"), taggersLine(listOf(tag("art", "anna")), people, null))
+        // People who used several labels count once: 4 distinct people over 3 labels, 2 named.
+        val several =
+            taggersLine(
+                listOf(tag("art", "ben", "anna", "cleo"), tag("museum", "anna", "dora"), tag("rainy", "ben", "cleo")),
+                people,
+                null,
+            )!!
+        assertEquals(listOf("anna", "ben"), several.shown)
+        assertEquals("Tagged by Anna, Ben and 2 others", several.text)
+        // Nexus lists at most 5 per label: people it counts but does not list are added, label by label.
+        val unlisted = taggersLine(listOf(tag("art", "ben", "anna", "cleo", count = 12)), people, null)!!
+        assertEquals("Tagged by Anna, Ben and 10 others", unlisted.text)
+        // The user is said apart and counted nowhere, also with two labels of their own.
+        val mine =
+            taggersLine(
+                listOf(
+                    tag("rainy", "me", "anna", mine = true),
+                    tag("art", "ben", "me", mine = true),
+                    tag("old", "me", "cleo", mine = true),
+                ),
+                people,
+                "me",
+            )!!
+        assertEquals("Tagged by Anna, Ben and 1 other", mine.text)
+        // A label of the user's that Nexus counts but does not list them on: they are not among the unlisted.
+        assertEquals("Tagged by Anna", taggersLine(listOf(tag("rainy", "anna", count = 2, mine = true)), people, "me")!!.text)
         // A key without a profile reads as a short key; nobody else than the user: no line.
-        assertEquals("Tagged by pubkybbbb…bbbb", taggersLine(listOf(tag("art", "bbbbbbbbbbbbbbbb")), emptyMap(), null, 1)!!.text)
-        assertNull(taggersLine(listOf(tag("rainy", "me", mine = true)), people, "me", taggerCount = 1))
-        // Fewer counted than listed (an old cache without the count): the listed people.
-        assertEquals("Tagged by Anna, Ben and 1 other", taggersLine(listOf(tag("art", "anna", "ben", "cleo")), people, null, 0)!!.text)
+        assertEquals("Tagged by pubkybbbb…bbbb", taggersLine(listOf(tag("art", "bbbbbbbbbbbbbbbb")), emptyMap(), null)!!.text)
+        assertNull(taggersLine(listOf(tag("rainy", "me", mine = true)), people, "me"))
+    }
+
+    @Test
+    fun theSchoberFixtureCountsPeopleNotTags() {
+        // Nexus' view of the Conditorei Schober: coffee (3), cake, rtiafter, zurich; w36y… used coffee and zurich.
+        val views = parseNexusResourceViews(PlaceFixtures.read("nexus-by-ids-zurich.json"))
+        val social = mergeResourceViews(views.filter { it.uri == "https://www.openstreetmap.org/node/270803095" })
+        val line = taggersLine(social.tags, emptyMap(), null)!!
+        assertEquals(2, line.shown.size)
+        assertTrue(line.text.endsWith(" and 3 others"), line.text)
     }
 }

@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -53,6 +53,7 @@ import to.pubky.maps.place.PlaceSheet
 import to.pubky.maps.place.PlaceSocial
 import to.pubky.maps.place.PlaceSource
 import to.pubky.maps.place.PlaceTag
+import to.pubky.maps.place.RemoteImageContent
 import to.pubky.maps.place.SheetStop
 import to.pubky.maps.ui.PubkyMapsTheme
 
@@ -173,13 +174,13 @@ class PlaceScreenshotTest {
     private val people =
         listOf(
             PlacePerson(me, "Gil", null, followed = false),
-            PlacePerson(anna, "Anna", null, followed = true),
+            PlacePerson(anna, "Anna", "https://example.invalid/anna.jpg", followed = true),
             PlacePerson(ben, "Ben", null, followed = false),
         ).associateBy { it.id }
 
     private fun photo(n: Int) = PlacePhoto(anna, "https://example.invalid/$n.jpg", "https://example.invalid/$n-feed.jpg")
 
-    private val rich =
+    internal val rich =
         PlacePageState(
             place = kunsthausRef,
             card = kunsthausCard,
@@ -195,7 +196,6 @@ class PlaceScreenshotTest {
                     resourceIds = listOf("49d6eb1c6a69946a41fe45ccd44c4a72"),
                     replyCount = 2,
                     embedCount = 3,
-                    taggerCount = 15,
                 ),
             people = people,
             posts =
@@ -270,7 +270,7 @@ class PlaceScreenshotTest {
         )
 
     @Composable
-    private fun Page(
+    internal fun Page(
         page: PlacePageState,
         stop: SheetStop = SheetStop.Half,
     ) {
@@ -334,6 +334,9 @@ class PlaceScreenshotTest {
     fun sparsePhoneLight() = capture("place-sparse", Device.Phone, dark = false) { Page(sparse) }
 
     @Test
+    fun sparseFullPhoneLight() = capture("place-sparse-full", Device.Phone, dark = false) { Page(sparse, SheetStop.Full) }
+
+    @Test
     fun sparsePhoneDark() = capture("place-sparse", Device.Phone, dark = true) { Page(sparse) }
 
     @Test
@@ -368,11 +371,11 @@ class PlaceScreenshotTest {
 }
 
 /** Images load over the network, which tests do not use: a drawn stand-in (sky over a roof line). */
-private val StandInImage: @Composable (String, String?, Modifier, () -> Unit) -> Unit = { _, _, modifier, _ ->
+private val StandInImage: RemoteImageContent = { _, _, modifier, _, _ ->
     Box(modifier.background(Brush.verticalGradient(listOf(Color(0xFF8DB6D9), Color(0xFFC9DCEB), Color(0xFF7A6A5A)))))
 }
 
 /** An image that cannot be loaded: the page leaves it out. */
-private val FailingImage: @Composable (String, String?, Modifier, () -> Unit) -> Unit = { _, _, _, onError ->
-    LaunchedEffect(Unit) { onError() }
+internal val FailingImage: RemoteImageContent = { _, _, _, _, onError ->
+    SideEffect { onError() }
 }
