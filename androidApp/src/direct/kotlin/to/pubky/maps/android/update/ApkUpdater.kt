@@ -191,8 +191,12 @@ class ApkUpdater(
             return
         }
         mutableState.update { it.copy(dialog = UpdateDialog.Downloading(update, 0)) }
+        // A cancelled download can still be winding down (a blocked read ends only at the read
+        // timeout) and its clean-up deletes the part file, so the new one starts after it ended.
+        val previous = downloadJob
         downloadJob =
             scope.launch {
+                previous?.join()
                 val problem = download(feed, update)
                 if (problem != null) {
                     Log.w(TAG, "updates: not installed: $problem")
