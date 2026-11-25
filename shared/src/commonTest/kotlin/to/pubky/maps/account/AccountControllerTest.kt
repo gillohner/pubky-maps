@@ -394,7 +394,7 @@ class AccountControllerTest {
     @Test
     fun aCoreThatCannotLoadMakesSignInUnavailable() =
         runTest {
-            val account = controller { throw UnsatisfiedLinkError("libpubky_maps_core.so not found") }
+            val account = controller { throw Error("libpubky_maps_core.so not found") }
             account.start()
             runCurrent()
 

@@ -174,7 +174,7 @@ private fun SigningIn(
                     if (state.relayChanged) {
                         "The sign-in moved to another relay. Open Pubky Ring again to approve it."
                     } else {
-                        "Pubky Ring opens to approve the sign-in. Approve it there, then come back to Pubky Maps."
+                        "Approve the sign-in in Pubky Ring, then come back to Pubky Maps."
                     },
                     style = MaterialTheme.typography.bodyLarge,
                 )

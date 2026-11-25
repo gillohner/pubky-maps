@@ -10,7 +10,7 @@ enum class ServicePart(
     /** One short line for the map's banner. */
     val missingText: String,
 ) {
-    Homeserver("Can't reach your homeserver · showing saved data"),
+    Homeserver("Can't reach your homeserver"),
 }
 
 /**
