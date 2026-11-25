@@ -1,0 +1,23 @@
+-- Version 2: the outbox of writes, the user's lists and the names of places they wrote about.
+
+CREATE TABLE outbox (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    op TEXT NOT NULL
+);
+
+CREATE TABLE own_list (
+    uri TEXT NOT NULL PRIMARY KEY,
+    private INTEGER NOT NULL,
+    list TEXT NOT NULL
+);
+
+CREATE TABLE other_post (
+    private INTEGER NOT NULL,
+    id TEXT NOT NULL,
+    PRIMARY KEY (private, id)
+);
+
+CREATE TABLE place_label (
+    place TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL
+);

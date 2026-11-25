@@ -63,9 +63,15 @@ It bundles the `pubky` SDK (0.18), `pubky-social-specs` (1.0.0-rc.2) and the wor
   failed. Link requests give up after 5 s to connect and 10 s in all. `placeFromText(text)` gives
   the same place from the text alone (no network, no core instance), to show at once.
 - Objects: `tagPlace` and `untagPlace`, `postReview`, `postPhoto` (JPEG/PNG/WebP, no HEIC,
-  EXIF stripped by the caller), `createCollection` and `editCollection` (at most 100 places),
-  and `bookmarkPlace`, `removeBookmark` and `listBookmarks`. The pure `build*` functions return
-  the same objects without the network.
+  EXIF stripped by the caller), `createCollection` and `editCollection` (at most 100 places;
+  `private` puts the list under `/priv/social/v1/posts/`), `listCollections(private, skip)` (the
+  user's lists: the newest version of each of their posts, newest posts first, at most 2000;
+  `otherPostIds` are posts that are not lists, to pass as `skip` next time, and `unreadPostIds`
+  folders that could not be read now), and `bookmarkPlace`, `removeBookmark` and `listBookmarks`.
+  The pure `build*` functions (`buildTag`, `buildReview`, `buildPhotoFile`, `buildPhotoPost`,
+  `buildCollection`, `buildList` with `private`, `buildBookmark`) return the same objects without
+  the network, with their ids minted, so the app can queue them and `put` them later to the same
+  path.
 - Errors: one `CoreException` with the cases `Network`, `Auth`, `NotSignedIn`, `NotFound`,
   `Validation`, `RateLimited`, `Server`, `Cancelled` and `Internal`.
 

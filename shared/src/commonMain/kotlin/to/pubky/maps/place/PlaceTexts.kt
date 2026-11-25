@@ -151,6 +151,8 @@ fun alsoOnShown(
 ): List<AlsoOnLink> {
     val (wikipedias, others) =
         links
+            // Only web pages: a link from card data must never open another app's scheme.
+            .mapNotNull { link -> httpLink(link.uri)?.let { link.copy(uri = it) } }
             .filter { it.uri != pageUri && !(hasWebsite && it.site == "Official website") }
             .partition { it.site.startsWith("Wikipedia (") }
     val wikipedia =
@@ -158,6 +160,21 @@ fun alsoOnShown(
             ?: wikipedias.firstOrNull { it.site == "Wikipedia (en)" }
     return (others + listOfNotNull(wikipedia)).distinctBy { it.site }
 }
+
+/**
+ * [value] when it is an `http://` or `https://` address (no spaces), else null. Links that come from
+ * card data (people's references, Wikidata, credits) open only as web pages, never as `intent:`,
+ * `javascript:`, `file:`, `pubkyauth:` or any other scheme another app could take.
+ */
+fun httpLink(value: String?): String? {
+    val trimmed = value?.trim() ?: return null
+    if (trimmed.isEmpty() || trimmed.any { it.isWhitespace() }) return null
+    val scheme = trimmed.substringBefore("://", "").lowercase()
+    return if ((scheme == "https" || scheme == "http") && trimmed.length > scheme.length + 3) trimmed else null
+}
+
+/** Where a credit opens: its licence, else its source, as a web page; null when it has neither. */
+val PlaceCredit.link: String? get() = httpLink(licenseUrl) ?: httpLink(sourceUrl)
 
 /** "CC-BY-SA-4.0" as "CC BY-SA 4.0"; other licence ids as they are. */
 fun licenceText(license: String): String =

@@ -17,6 +17,8 @@ on:
       - "scripts/build-android.sh"
       - "scripts/gen-kotlin-bindings.sh"
       - ".github/workflows/core.yml"
+  # By hand, for a head whose last push changed no core path (the path filter then runs nothing).
+  workflow_dispatch:
 
 concurrency:
   group: core-${{ github.event_name }}-${{ github.ref }}

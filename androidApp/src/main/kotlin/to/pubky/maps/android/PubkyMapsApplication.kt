@@ -1,6 +1,8 @@
 package to.pubky.maps.android
 
 import android.app.Application
+import android.net.ConnectivityManager
+import android.net.Network
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -28,6 +30,8 @@ import to.pubky.maps.search.androidSearchServices
 import to.pubky.maps.status.ServiceHealth
 import to.pubky.maps.status.ServicePart
 import to.pubky.maps.update.UpdateController
+import to.pubky.maps.write.WriteController
+import to.pubky.maps.write.androidWriteController
 
 /** Holds what lives as long as the process, so it survives Activity recreation. */
 class PubkyMapsApplication : Application() {
@@ -107,10 +111,30 @@ class PubkyMapsApplication : Application() {
     lateinit var account: AccountUi
         private set
 
+    /** The user's writes about places (tags, posts, photos, lists, saved places) and their outbox. */
+    lateinit var writes: WriteController
+        private set
+
     override fun onCreate() {
         super.onCreate()
         updates = startUpdater(this, serverConfigRepository)
         // Restores a stored session in the background; the map never waits for it.
-        account = startAccount(this, scope, serviceHealth, core)
+        val (started, cacheDriver) = startAccount(this, scope, serviceHealth, core)
+        account = started
+        writes =
+            androidWriteController(
+                context = this,
+                scope = CoroutineScope(scope.coroutineContext + Dispatchers.Main.immediate),
+                account = account.controller,
+                accountDriver = cacheDriver,
+                core = core,
+                settings = settingsRepository.settings,
+            )
+        // Writes that wait for a connection are sent as soon as the phone has one.
+        getSystemService(ConnectivityManager::class.java)?.registerDefaultNetworkCallback(
+            object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) = writes.flush()
+            },
+        )
     }
 }

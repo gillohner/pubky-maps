@@ -190,7 +190,9 @@ class AccountController(
                 mutableState.value =
                     if (signedIn.signingOut) {
                         // The session is already forgotten; what is left on the phone goes at the next
-                        // start (it clears the cache when no session is stored).
+                        // start (it clears the cache when no session is stored). Nobody is signed in, so
+                        // no homeserver is missing.
+                        health.recovered(ServicePart.Homeserver)
                         AccountState.SignedOut(notice = "Signed out, but this phone could not delete everything yet ($what).")
                     } else {
                         // Signed in still; only the step that failed ends (a cache that could not be written).
@@ -257,6 +259,20 @@ class AccountController(
         enqueue {
             val signedIn = state.value as? AccountState.SignedIn ?: return@enqueue
             if (!signedIn.signingOut) reconnect()
+        }
+
+    /**
+     * Applies [change] to the signed-in user's cached data and stores it: a write the homeserver took
+     * shows at once, before the next refresh reads it back. Nothing happens while signed out.
+     */
+    fun updateCached(change: (CachedAccount) -> CachedAccount) =
+        enqueue {
+            val signedIn = state.value as? AccountState.SignedIn ?: return@enqueue
+            if (signedIn.signingOut) return@enqueue
+            val updated = change(signedIn.cached)
+            if (updated == signedIn.cached) return@enqueue
+            io { cache.replace(updated) }
+            mutableState.value = signedIn.copy(cached = updated)
         }
 
     /** Revokes the session (when the homeserver answers) and deletes the account's data from this phone. */
@@ -606,9 +622,10 @@ class AccountController(
         session++
         core?.forgetSession()
         sessionInstalled = false
+        // Before the steps that can fail: once signed out, no homeserver is missing.
+        health.recovered(ServicePart.Homeserver)
         secrets.delete(SecretStore.SESSION)
         io { cache.clear() }
-        health.recovered(ServicePart.Homeserver)
         mutableState.value = AccountState.SignedOut(notice = notice)
     }
 }

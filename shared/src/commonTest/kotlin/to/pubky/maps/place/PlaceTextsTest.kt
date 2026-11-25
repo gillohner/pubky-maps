@@ -107,6 +107,17 @@ class PlaceTextsTest {
         // Nexus lists at most 5 per label: people it counts but does not list are added, label by label.
         val unlisted = taggersLine(listOf(tag("art", "ben", "anna", "cleo", count = 12)), people, null)!!
         assertEquals("Tagged by Anna, Ben and 10 others", unlisted.text)
+        // Two labels with unlisted people: they may be the same people, so the sure number is said as "at least".
+        val popular =
+            taggersLine(
+                listOf(
+                    tag("art", "ben", "anna", "cleo", "dora", "eve", count = 12),
+                    tag("museum", "anna", "fred", "gus", "hal", "ivy", count = 7),
+                ),
+                people,
+                null,
+            )!!
+        assertEquals("Tagged by Anna, Ben and at least 10 others", popular.text)
         // The user is said apart and counted nowhere, also with two labels of their own.
         val mine =
             taggersLine(
@@ -134,5 +145,50 @@ class PlaceTextsTest {
         val line = taggersLine(social.tags, emptyMap(), null)!!
         assertEquals(2, line.shown.size)
         assertTrue(line.text.endsWith(" and 3 others"), line.text)
+    }
+
+    @Test
+    fun cardLinksOpenOnlyAsWebPages() {
+        assertEquals("https://www.kunsthaus.ch/", httpLink(" https://www.kunsthaus.ch/ "))
+        assertEquals("HTTP://example.org", httpLink("HTTP://example.org"))
+        listOf(
+            "intent://scan/#Intent;scheme=zxing;package=com.example;end",
+            "javascript:alert(1)",
+            "file:///data/data/to.pubky.maps/secrets",
+            "pubkyauth:///?relay=https://evil.example&secret=x",
+            "geo:47.3,8.5",
+            "content://contacts/1",
+            "https://",
+            "https://exa mple.org",
+            "",
+            null,
+        ).forEach { assertNull(httpLink(it), "$it must not open") }
+    }
+
+    @Test
+    fun alsoOnLeavesOutLinksThatAreNotWebPages() {
+        val links =
+            listOf(
+                AlsoOnLink("Google Maps", "intent://maps#Intent;package=com.evil;end", derived = false),
+                AlsoOnLink("Official website", "javascript:alert(1)", derived = true),
+                AlsoOnLink("Wikidata", "https://www.wikidata.org/wiki/Q685038", derived = true),
+            )
+
+        assertEquals(listOf("Wikidata"), alsoOnShown(links, "https://www.openstreetmap.org/node/1", "en").map { it.site })
+    }
+
+    @Test
+    fun aCreditOpensItsLicenceElseItsSourceAndNeverAnotherScheme() {
+        fun credit(
+            license: String?,
+            source: String,
+        ) = PlaceCredit("image", "A", "CC-BY-4.0", license, source, "wikimedia_commons")
+
+        assertEquals(
+            "https://creativecommons.org/licenses/by/4.0/",
+            credit("https://creativecommons.org/licenses/by/4.0/", "https://x.org").link,
+        )
+        assertEquals("https://commons.wikimedia.org/f", credit("javascript:alert(1)", "https://commons.wikimedia.org/f").link)
+        assertNull(credit(null, "file:///etc/hosts").link)
     }
 }

@@ -42,6 +42,16 @@
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
         android:theme="@style/Theme.PubkyMaps">
+        <!-- Lends the camera app a file to write a photo into, for a photo post. -->
+        <provider
+            android:name=".android.photos.PhotoFileProvider"
+            android:authorities="${applicationId}.photos"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/photo_files" />
+        </provider>
         <!--
             singleTask: a link from another app opens the one map (in its own task) instead of a
             second copy inside the other app. Hosts we do not own are never autoVerify.

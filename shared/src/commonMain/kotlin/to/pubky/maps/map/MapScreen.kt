@@ -37,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
@@ -245,20 +246,64 @@ fun MapScreen(
             // The place sheet at the bottom edge, the credits and my location riding on it (hidden while
             // the sheet takes the whole screen), up to under the search bar.
             val insets = WindowInsets.safeDrawing.asPaddingValues()
-            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
-                if (!placePage.full) {
-                    Box(Modifier.padding(horizontal = MapControlMargin).padding(bottom = 8.dp)) {
-                        BottomControls(attribution, onMyLocation, snackbarHostState)
+            val underBar = insets.calculateTopPadding() + MapControlMargin + TopControlSize + 8.dp
+            PlaceSheetWithControls(
+                topSpace = underBar,
+                bottomSpace = insets.calculateBottomPadding() + 8.dp,
+                controls = {
+                    if (!placePage.full) {
+                        Box(Modifier.padding(horizontal = MapControlMargin).padding(bottom = 8.dp)) {
+                            BottomControls(attribution, onMyLocation, snackbarHostState, snackbars = false)
+                        }
                     }
-                }
-                placePage.sheet(
-                    screenHeight - insets.calculateTopPadding() - MapControlMargin - TopControlSize - 8.dp,
-                    insets.calculateBottomPadding(),
-                )
-            }
+                },
+                sheet = { placePage.sheet(screenHeight - underBar, insets.calculateBottomPadding()) },
+                // The sheet's own host, always laid out: a write's Undo or its failure shows at every stop.
+                snackbars = { SnackbarHost(snackbarHostState, Modifier.padding(horizontal = MapControlMargin)) },
+                modifier = Modifier.fillMaxSize(),
+            )
         }
         if (search != null && !wide && mode == SearchMode.Editing) {
             SearchPage(search)
+        }
+    }
+}
+
+/**
+ * The place sheet at the bottom with [controls] (credits, my location) riding on its top edge. As
+ * with search's results sheet, the controls are left out (not drawn, not touchable) whenever they
+ * would reach into [topSpace] under the search bar: at the full stop, and while the sheet is dragged
+ * or animates that far. [snackbars] are always shown: above the controls while they ride on the
+ * sheet, else at the bottom of the screen over the sheet, [bottomSpace] above the edge.
+ */
+@Composable
+internal fun PlaceSheetWithControls(
+    topSpace: Dp,
+    bottomSpace: Dp,
+    controls: @Composable () -> Unit,
+    sheet: @Composable () -> Unit,
+    snackbars: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Layout(contents = listOf(controls, sheet, snackbars), modifier = modifier) {
+        (controlsMeasurables, sheetMeasurables, snackbarMeasurables),
+        constraints,
+        ->
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val placedSheet = sheetMeasurables.first().measure(loose)
+        val placedControls = controlsMeasurables.firstOrNull()?.measure(loose)
+        val placedSnackbar = snackbarMeasurables.firstOrNull()?.measure(loose)
+        layout(constraints.maxWidth, constraints.maxHeight) {
+            val top = topSpace.roundToPx()
+            val sheetTop = constraints.maxHeight - placedSheet.height
+            placedSheet.place(0, sheetTop)
+            val shownControls = placedControls?.takeIf { sheetTop - it.height >= top }
+            shownControls?.place(0, sheetTop - shownControls.height)
+            if (placedSnackbar != null) {
+                val aboveControls = shownControls?.let { sheetTop - it.height - placedSnackbar.height }?.takeIf { it >= top }
+                val y = aboveControls ?: (constraints.maxHeight - bottomSpace.roundToPx() - placedSnackbar.height)
+                placedSnackbar.place((constraints.maxWidth - placedSnackbar.width) / 2, y)
+            }
         }
     }
 }
@@ -273,12 +318,16 @@ private fun BottomControls(
     onMyLocation: () -> Unit,
     snackbarHostState: SnackbarHostState,
     creditsStart: Dp = 0.dp,
+    /** False where the screen shows its snackbars elsewhere (the place sheet has its own host). */
+    snackbars: Boolean = true,
 ) {
     Column(Modifier.fillMaxWidth()) {
-        SnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = MapControlMargin),
-        )
+        if (snackbars) {
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = MapControlMargin),
+            )
+        }
         MapButton(
             icon = AppIcons.MyLocation,
             contentDescription = "Show my location",

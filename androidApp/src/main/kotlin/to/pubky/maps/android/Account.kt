@@ -1,6 +1,7 @@
 package to.pubky.maps.android
 
 import android.content.Context
+import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.driver.android.AndroidSqliteDriver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,7 +31,7 @@ internal fun startAccount(
     scope: CoroutineScope,
     health: ServiceHealth,
     core: SharedCore,
-): AccountUi {
+): Pair<AccountUi, SqlDriver> {
     val key by lazy { androidKeystoreKey(SECRETS_KEY_ALIAS) }
     val secrets = EncryptedFileSecretStore(File(context.noBackupFilesDir, "secrets"), { key }, Dispatchers.IO)
     val driver = AndroidSqliteDriver(CacheDatabase.Schema, context, File(context.noBackupFilesDir, "account-cache.db").path)
@@ -46,5 +47,6 @@ internal fun startAccount(
             now = System::currentTimeMillis,
         )
     controller.start(prepare = { importCiFixture(context, secrets, cache) })
-    return AccountUi(controller, AndroidPubkyRing(context), health)
+    // The outbox of writes shares the cache's database, so sign-out clears both.
+    return AccountUi(controller, AndroidPubkyRing(context), health) to driver
 }

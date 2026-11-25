@@ -17,7 +17,9 @@ import to.pubky.maps.android.links.IncomingIntent
 import to.pubky.maps.android.links.incoming
 import to.pubky.maps.android.links.openInApp
 import to.pubky.maps.android.links.shareText
+import to.pubky.maps.android.photos.AndroidPhotoInput
 import to.pubky.maps.links.AppLinks
+import to.pubky.maps.write.WriteUi
 
 class MainActivity : ComponentActivity() {
     private val app get() = application as PubkyMapsApplication
@@ -50,6 +52,7 @@ class MainActivity : ComponentActivity() {
                 links = links,
                 search = app.search,
                 places = app.places,
+                writes = WriteUi(app.writes, AndroidPhotoInput),
             )
         }
     }
@@ -64,6 +67,8 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         app.account.controller.onForeground()
+        // Writes that waited for a connection are tried again.
+        app.writes.flush()
     }
 
     override fun onStop() {

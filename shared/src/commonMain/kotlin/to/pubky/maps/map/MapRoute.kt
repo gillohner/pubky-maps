@@ -77,12 +77,14 @@ import to.pubky.maps.place.OpeningLinkCard
 import to.pubky.maps.place.PlaceCard
 import to.pubky.maps.place.PlacePageActions
 import to.pubky.maps.place.PlacePageContext
+import to.pubky.maps.place.PlacePageController
 import to.pubky.maps.place.PlacePageState
 import to.pubky.maps.place.PlacePanel
 import to.pubky.maps.place.PlaceRef
 import to.pubky.maps.place.PlaceRefSaver
 import to.pubky.maps.place.PlaceServices
 import to.pubky.maps.place.PlaceSheet
+import to.pubky.maps.place.PlaceWriteActions
 import to.pubky.maps.place.SheetStop
 import to.pubky.maps.search.RecentSearch
 import to.pubky.maps.search.SearchActions
@@ -94,6 +96,11 @@ import to.pubky.maps.search.distanceMeters
 import to.pubky.maps.search.distanceText
 import to.pubky.maps.status.ServicePart
 import to.pubky.maps.ui.rememberSafeLinkOpener
+import to.pubky.maps.write.OwnData
+import to.pubky.maps.write.WriteController
+import to.pubky.maps.write.WriteIntent
+import to.pubky.maps.write.WriteMessages
+import to.pubky.maps.write.WriteTarget
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -128,6 +135,12 @@ fun MapRoute(
     search: SearchServices? = null,
     places: PlaceServices? = null,
     openIn: OpenInApps? = null,
+    /** The user's writes about places; null where there are none. */
+    writes: WriteController? = null,
+    /** Opens a write page (tag, post, photo, lists) for a place, or the sign-in first. */
+    onWrite: (WriteTarget, WriteIntent) -> Unit = { _, _ -> },
+    /** Opens the Saved screen; null where there is none. */
+    onOpenSaved: (() -> Unit)? = null,
 ) {
     val sources = servers.mapStyles(isSystemInDarkTheme())
     // Saved, so a trip to Settings does not start again from a style that already failed.
@@ -214,6 +227,8 @@ fun MapRoute(
         )
     }
     LaunchedEffect(linkMessages) { linkMessages.collect { snackbarHostState.showOnly(it) } }
+    // A write that could not be made, or that waits for a connection, says so.
+    if (writes != null) WriteMessages(writes, snackbarHostState)
     // A place from a link or a search replaces a tapped one.
     LaunchedEffect(linkedPlace.placedAt, linkedPlace.opening) { if (linkedPlace.opening || linkedPlace.place != null) tapped = null }
     LaunchedEffect(clusterTarget) {
@@ -246,7 +261,7 @@ fun MapRoute(
 
     val mapSearch =
         if (search != null && searchState != null) {
-            rememberMapSearch(search, searchState, recents, mapState, locationState, onClosePlace)
+            rememberMapSearch(search, searchState, recents, mapState, locationState, onClosePlace, onOpenSaved)
                 .copy(credits = servers.searchAttribution())
         } else {
             null
@@ -273,7 +288,7 @@ fun MapRoute(
     }
     val held = !layerMayAsk(shown?.place?.source, movedSinceShown)
     SideEffect { layerHeld.value = held }
-    val placePage = places?.let { rememberPlacePage(it, shown, mapSearch?.userLocation, onSharePlace, openIn) }
+    val placePage = places?.let { rememberPlacePage(it, shown, mapSearch?.userLocation, onSharePlace, openIn, writes, onWrite) }
 
     MapScreen(
         attribution = (fallback.current ?: sources.first()).attribution,
@@ -383,6 +398,7 @@ private fun rememberMapSearch(
     mapState: MapState,
     locationState: LocationState,
     onCloseLinkedPlace: () -> Unit,
+    onOpenSaved: (() -> Unit)?,
 ): MapSearch {
     val controller = search.controller
 
@@ -431,8 +447,9 @@ private fun rememberMapSearch(
 
     val userLocation = locationState.lastLocation?.position?.let { GeoPoint(it.latitude, it.longitude) }
     val actions =
-        remember(controller, mapState) {
+        remember(controller, mapState, onOpenSaved) {
             SearchActions(
+                onOpenSaved = onOpenSaved,
                 onStartEditing = controller::startEditing,
                 onQueryChange = { controller.onQueryChange(it, mapState.searchArea()) },
                 onSubmit = { controller.submit(mapState.searchArea()) },
@@ -513,12 +530,16 @@ private fun rememberPlacePage(
     userLocation: GeoPoint?,
     onSharePlace: ((PlaceRef) -> Unit)?,
     openIn: OpenInApps?,
+    writes: WriteController?,
+    onWrite: (WriteTarget, WriteIntent) -> Unit,
 ): PlacePageSlot? {
     LaunchedEffect(shown?.place) {
         val place = shown?.place
         if (place != null) places.pages.open(place) else places.pages.close()
     }
     val pageState by places.pages.state.collectAsStateWithLifecycle()
+    val own = writes?.own?.collectAsStateWithLifecycle()?.value
+    val publicTagsExplained = writes?.publicTagsExplained?.collectAsStateWithLifecycle()?.value ?: true
     var stop by rememberSaveable(shown?.place?.uri) { mutableStateOf(shown?.initialStop ?: SheetStop.Peek) }
     val now by produceState(Clock.System.now()) {
         while (true) {
@@ -551,6 +572,7 @@ private fun rememberPlacePage(
             onOpenIn = { openIn?.open?.invoke(it) },
             onOpenLink = rememberSafeLinkOpener(),
             onLoadMorePosts = places.pages::loadMorePosts,
+            writes = if (writes != null && own != null) placeWriteActions(page, own, writes, onWrite, publicTagsExplained) else null,
         )
     return PlacePageSlot(
         full = stop == SheetStop.Full,
@@ -558,6 +580,55 @@ private fun rememberPlacePage(
             PlaceSheet(page, context, actions, stop, { stop = it }, maxHeight, bottomInset = inset)
         },
         panel = { modifier -> PlacePanel(page, context, actions, modifier) },
+    )
+}
+
+/** The place page's writes: what the user has about [page]'s place (by every link of it) and what they can do. */
+internal fun placeWriteActions(
+    page: PlacePageState,
+    own: OwnData,
+    writes: WriteController,
+    onWrite: (WriteTarget, WriteIntent) -> Unit,
+    publicTagsExplained: Boolean,
+): PlaceWriteActions {
+    val links = PlacePageController.placeLinks(page.place, page.card).map(writes::normalize).toSet()
+    val ownPlace = own.forPlace(links)
+    val target = WriteTarget(page.place.uri, page.card?.name ?: page.place.name)
+
+    fun open(intent: WriteIntent) = if (writes.needsSignIn(intent)) writes.signInFirst(target, intent) else onWrite(target, intent)
+    return PlaceWriteActions(
+        own = ownPlace,
+        viewer = own.viewer,
+        onToggleSave = {
+            when {
+                ownPlace.isSaved -> writes.unsave(target, links)
+                writes.needsSignIn(WriteIntent.Save) -> writes.signInFirst(target, WriteIntent.Save)
+                else -> writes.save(target)
+            }
+        },
+        onTag = { open(WriteIntent.Tag) },
+        onToggleTag = { label ->
+            when {
+                writes.needsSignIn(WriteIntent.Tag) -> {
+                    writes.signInFirst(target, WriteIntent.Tag)
+                }
+
+                ownPlace.labels?.contains(label) == true || (ownPlace.labels == null && page.tags.any { it.label == label && it.mine }) -> {
+                    writes.untag(target, links, label)
+                }
+
+                else -> {
+                    writes.tag(target, label)
+                }
+            }
+        },
+        onPost = { open(WriteIntent.Post) },
+        onPhoto = { open(WriteIntent.Photo) },
+        onAddToList = { open(WriteIntent.AddToList) },
+        publicTagsExplained = publicTagsExplained,
+        onPublicTagsExplained = writes::markPublicTagsExplained,
+        waiting = own.offline,
+        busy = own.busy,
     )
 }
 

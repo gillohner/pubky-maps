@@ -5,9 +5,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use pubky::{Pubky, PubkyResource, PubkySession, PublicKey, SessionStorage};
 use pubky_social_specs::traits::HasIdPath;
-use pubky_social_specs::{
-    PubkySocialBookmark, PubkySocialTag, Root, post_uri_builder, social_path,
-};
+use pubky_social_specs::{PubkySocialBookmark, PubkySocialTag, Root, social_path};
 use tokio::runtime::{Handle, Runtime};
 
 use crate::auth::{AuthRequest, FlowSpec};
@@ -16,7 +14,7 @@ use crate::error::{CoreError, redact};
 use crate::objects::{
     self, BuiltFile, BuiltObject, CollectionEdit, CollectionItem, bookmark_filename_of,
     bookmark_needs_body, bookmark_object, bookmark_target_of, merge_bookmark, merge_tag,
-    post_version_of, post_versions_dir, tag_object,
+    post_folder_id, post_version_of, post_versions_dir, root_of, tag_object,
 };
 use crate::secret::SecretValue;
 use crate::signin::{Outcome, SignInEvent, SignIns};
@@ -99,6 +97,41 @@ pub struct PhotoPost {
     pub file: BuiltFile,
     pub post: BuiltObject,
 }
+
+/// One of the signed-in user's lists, as its newest version on the homeserver says.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct OwnCollection {
+    /// The post id (a timestamp id).
+    pub id: String,
+    /// The newest version's id.
+    pub edit_id: String,
+    /// The versionless reference, `pubky://<me>/{pub|priv}/social/v1/posts/{id}`.
+    pub uri: String,
+    /// True for a list under `/priv` (not public).
+    pub private: bool,
+    pub name: String,
+    pub description: Option<String>,
+    pub items: Vec<CollectionItem>,
+}
+
+/// The lists found among the user's posts in one root.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CollectionScan {
+    /// Newest first.
+    pub collections: Vec<OwnCollection>,
+    /// Posts that were read and are not lists. A post never changes its kind, so passing
+    /// these back as `skip` saves reading them again.
+    pub other_post_ids: Vec<String>,
+    /// Posts whose folder could not be read now (a timeout, a busy homeserver): the app keeps
+    /// what it knew of them, and the next scan reads them again.
+    pub unread_post_ids: Vec<String>,
+}
+
+/// At most this many posts are looked at by one list scan.
+const MAX_SCANNED_POSTS: usize = 2000;
+
+/// Post folders read at the same time by a list scan.
+const PARALLEL_POST_READS: usize = 6;
 
 /// A saved place.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -391,6 +424,91 @@ async fn list_own(
         builder = builder.cursor(cursor);
     }
     Ok(to_page(builder.send().await?))
+}
+
+/// One folder's read: its newest version as `(editId, JSON)`, `None` when it has none.
+type PostRead = Result<Option<(String, String)>, CoreError>;
+
+/// The scan's result from each folder's read: lists, posts known not to be lists, and folders
+/// whose read failed (`unread_post_ids`), so one slow or failing read does not cost the whole
+/// scan and the next scan tries those again. A session that ended fails the scan.
+fn collection_scan(
+    root: Root,
+    author: &str,
+    private: bool,
+    reads: Vec<(String, PostRead)>,
+) -> Result<CollectionScan, CoreError> {
+    let mut collections = Vec::new();
+    let mut other_post_ids = Vec::new();
+    let mut unread_post_ids = Vec::new();
+    for (id, read) in reads {
+        let found = match read {
+            Ok(found) => found,
+            Err(error @ (CoreError::Auth { .. } | CoreError::NotSignedIn)) => return Err(error),
+            Err(_) => {
+                unread_post_ids.push(id);
+                continue;
+            }
+        };
+        let Some((edit_id, json)) = found else {
+            continue;
+        };
+        match objects::collection_of(&json) {
+            Some(content) => collections.push(OwnCollection {
+                uri: objects::post_uri_in(root, author, &id),
+                id,
+                edit_id,
+                private,
+                name: content.name,
+                description: content.description,
+                items: content
+                    .items
+                    .into_iter()
+                    .map(|item| CollectionItem {
+                        uri: item.uri,
+                        note: item.note,
+                    })
+                    .collect(),
+            }),
+            None if objects::post_kind_of(&json).is_some() => other_post_ids.push(id),
+            None => {}
+        }
+    }
+    collections.sort_by(|a, b| b.id.cmp(&a.id));
+    other_post_ids.sort();
+    unread_post_ids.sort();
+    Ok(CollectionScan {
+        collections,
+        other_post_ids,
+        unread_post_ids,
+    })
+}
+
+/// The newest version of post `id` under `root` as `(editId, JSON)`, `None` when the folder
+/// holds no readable version.
+async fn newest_post_version(storage: &SessionStorage, root: Root, id: &str) -> PostRead {
+    let dir = post_versions_dir(root, id)?;
+    let options = ListOptions {
+        reverse: true,
+        limit: 10,
+        ..ListOptions::default()
+    };
+    let page = match list_own(storage, &dir, &options).await {
+        Ok(page) => page,
+        Err(CoreError::NotFound { .. }) => return Ok(None),
+        Err(other) => return Err(other),
+    };
+    let Some((edit_id, path)) = page.entries.iter().find_map(|entry| {
+        post_version_of(&entry.uri)
+            .filter(|(post, _)| post == id)
+            .map(|(_, edit)| (edit, entry.path.clone()))
+    }) else {
+        return Ok(None);
+    };
+    let Some(bytes) = get_optional(storage, &path).await? else {
+        return Ok(None);
+    };
+    Ok(String::from_utf8(bytes).ok().map(|json| (edit_id, json)))
 }
 
 impl PubkyMapsCore {
@@ -831,18 +949,25 @@ impl PubkyMapsCore {
         .await
     }
 
-    /// Creates a public list (at most 100 places).
+    /// Creates a list (at most 100 places): public under `/pub`, or with `private` under
+    /// `/priv` (not public, but readable by the homeserver operator; `/priv` is alpha).
     pub async fn create_collection(
         &self,
         name: String,
         description: Option<String>,
         items: Vec<CollectionItem>,
+        private: bool,
     ) -> Result<BuiltObject, CoreError> {
         let inner = Arc::clone(&self.inner);
         self.run(async move {
             let session = inner.session()?;
-            let built =
-                objects::build_collection(session.public_key().z32(), name, description, items)?;
+            let built = objects::build_collection_in(
+                root_of(private),
+                session.public_key().z32(),
+                name,
+                description,
+                items,
+            )?;
             session
                 .storage()
                 .put(built.path.as_str(), built.json.clone())
@@ -859,13 +984,15 @@ impl PubkyMapsCore {
         &self,
         post_id: String,
         edit: CollectionEdit,
+        private: bool,
     ) -> Result<BuiltObject, CoreError> {
         let inner = Arc::clone(&self.inner);
         self.run(async move {
             let session = inner.session()?;
             let author = session.public_key().z32();
             let storage = session.storage();
-            let dir = post_versions_dir(&post_id)?;
+            let root = root_of(private);
+            let dir = post_versions_dir(root, &post_id)?;
             let options = ListOptions {
                 reverse: true,
                 ..ListOptions::default()
@@ -885,7 +1012,8 @@ impl PubkyMapsCore {
             let head_json =
                 String::from_utf8(read_body(storage.get(head_path.as_str()).await?).await?)
                     .map_err(|_| CoreError::validation("stored list is not UTF-8"))?;
-            match objects::edit_collection(
+            match objects::edit_collection_in(
+                root,
                 author.clone(),
                 post_id.clone(),
                 head_edit.clone(),
@@ -897,13 +1025,79 @@ impl PubkyMapsCore {
                     Ok(built)
                 }
                 None => Ok(BuiltObject {
-                    uri: post_uri_builder(author, post_id.clone()),
+                    uri: objects::post_uri_in(root, &author, &post_id),
                     id: post_id,
                     edit_id: Some(head_edit),
                     path: head_path,
                     json: head_json,
                 }),
             }
+        })
+        .await
+    }
+
+    /// The user's lists in `/pub` (or with `private`, `/priv`): every post folder is read
+    /// (newest version only), newest posts first, except those in `skip`, at most 2000 posts. A folder whose
+    /// newest version cannot be read as a post is left out of both results.
+    pub async fn list_collections(
+        &self,
+        private: bool,
+        skip: Vec<String>,
+    ) -> Result<CollectionScan, CoreError> {
+        let inner = Arc::clone(&self.inner);
+        self.run(async move {
+            let session = inner.session()?;
+            let author = session.public_key().z32();
+            let storage = session.storage();
+            let root = root_of(private);
+            let posts_dir = social_path(root, "posts/");
+            let skip: std::collections::HashSet<String> = skip.into_iter().collect();
+            let mut ids = Vec::new();
+            // Newest posts first, so a capped scan still finds the lists made last.
+            let mut options = ListOptions {
+                shallow: true,
+                reverse: true,
+                ..ListOptions::default()
+            };
+            loop {
+                let page = match list_own(&storage, &posts_dir, &options).await {
+                    Ok(page) => page,
+                    // Nothing was ever posted: the folder does not exist.
+                    Err(CoreError::NotFound { .. }) => break,
+                    Err(other) => return Err(other),
+                };
+                if page.entries.is_empty() {
+                    break;
+                }
+                ids.extend(
+                    page.entries
+                        .iter()
+                        .filter_map(|entry| post_folder_id(root, &entry.path))
+                        .filter(|id| !skip.contains(id)),
+                );
+                if ids.len() >= MAX_SCANNED_POSTS || page.next_cursor.is_none() {
+                    break;
+                }
+                options.cursor = page.next_cursor;
+            }
+            ids.truncate(MAX_SCANNED_POSTS);
+            let mut reads_done = Vec::with_capacity(ids.len());
+            for chunk in ids.chunks(PARALLEL_POST_READS) {
+                let mut reads = tokio::task::JoinSet::new();
+                for id in chunk {
+                    let storage = storage.clone();
+                    let id = id.clone();
+                    reads.spawn(async move {
+                        let found = newest_post_version(&storage, root, &id).await;
+                        (id, found)
+                    });
+                }
+                while let Some(joined) = reads.join_next().await {
+                    reads_done
+                        .push(joined.map_err(|_| CoreError::internal("a list read panicked"))?);
+                }
+            }
+            collection_scan(root, &author, private, reads_done)
         })
         .await
     }
@@ -981,6 +1175,66 @@ mod tests {
     use crate::auth::AuthFlowType;
     use crate::config::default_core_config;
     use std::time::Duration;
+
+    const SCAN_AUTHOR: &str = "8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo";
+
+    #[test]
+    fn a_failed_post_read_is_left_for_the_next_scan() {
+        let list = objects::build_collection(
+            SCAN_AUTHOR.into(),
+            "Coffee".into(),
+            None,
+            vec![CollectionItem {
+                uri: "https://www.openstreetmap.org/node/1".into(),
+                note: None,
+            }],
+        )
+        .unwrap();
+        let review = objects::build_review(
+            SCAN_AUTHOR.into(),
+            "https://www.openstreetmap.org/node/1".into(),
+            "Nice".into(),
+        )
+        .unwrap();
+        let reads = vec![
+            (
+                list.id.clone(),
+                Ok(Some((list.edit_id.clone().unwrap(), list.json.clone()))),
+            ),
+            (
+                review.id.clone(),
+                Ok(Some((review.edit_id.clone().unwrap(), review.json.clone()))),
+            ),
+            (
+                "0034A0000001".to_string(),
+                Err(CoreError::Network {
+                    reason: "timed out".into(),
+                }),
+            ),
+            ("0034A0000002".to_string(), Ok(None)),
+        ];
+
+        let scan = collection_scan(Root::Pub, SCAN_AUTHOR, false, reads).unwrap();
+
+        assert_eq!(scan.collections.len(), 1);
+        assert_eq!(scan.collections[0].name, "Coffee");
+        assert_eq!(scan.other_post_ids, vec![review.id]);
+        assert_eq!(scan.unread_post_ids, vec!["0034A0000001".to_string()]);
+    }
+
+    #[test]
+    fn an_ended_session_fails_the_scan() {
+        let reads = vec![(
+            "0034A0000001".to_string(),
+            Err(CoreError::Auth {
+                reason: "expired".into(),
+            }),
+        )];
+        assert!(matches!(
+            collection_scan(Root::Pub, SCAN_AUTHOR, false, reads),
+            Err(CoreError::Auth { .. })
+        ));
+    }
 
     /// Unreachable local ports: no unit test touches the network.
     const DEAD_RELAY: &str = "http://127.0.0.1:9/inbox";

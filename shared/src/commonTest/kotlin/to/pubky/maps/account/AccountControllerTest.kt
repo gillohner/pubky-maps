@@ -541,6 +541,58 @@ class AccountControllerTest {
         }
 
     @Test
+    fun aSignOutWhileOfflineThatCannotClearTheCacheLeavesNoHomeserverLine() =
+        runTest {
+            secrets.values[SecretStore.SESSION] = "grant-secret"
+            cache.stored = CachedAccount(USER, "Ada", 500, emptyList(), emptyList())
+            // The homeserver does not answer: signed in from the cache, the map names it.
+            val account = controller()
+            account.start()
+            runCurrent()
+            assertEquals(Connection.Offline, assertIs<AccountState.SignedIn>(account.state.value).connection)
+            assertEquals(setOf(ServicePart.Homeserver), health.missing.value)
+            cache.clearFailure = IllegalStateException("database is locked")
+
+            account.signOut()
+            runCurrent()
+
+            assertIs<AccountState.SignedOut>(account.state.value)
+            assertEquals(emptySet(), health.missing.value, "nobody is signed in, so no homeserver is missing")
+        }
+
+    @Test
+    fun aWriteTheHomeserverTookShowsInTheCachedDataAtOnce() =
+        runTest {
+            secrets.values[SecretStore.SESSION] = "grant-secret"
+            cache.stored = CachedAccount(USER, "Ada", 500, emptyList(), emptyList())
+            core.restore = { AccountSession(USER, "homeserver") }
+            val account = controller()
+            account.start()
+            runCurrent()
+            val tag = CachedTag("/pub/social/v1/tags/T.json", "https://www.openstreetmap.org/node/1", "coffee", 7)
+
+            account.updateCached { it.copy(tags = it.tags + tag) }
+            runCurrent()
+
+            assertEquals(listOf(tag), assertIs<AccountState.SignedIn>(account.state.value).cached.tags)
+            assertEquals(listOf(tag), cache.stored!!.tags)
+        }
+
+    @Test
+    fun aCacheUpdateWhileSignedOutChangesNothing() =
+        runTest {
+            val account = controller()
+            account.start()
+            runCurrent()
+
+            account.updateCached { it.copy(name = "Eve") }
+            runCurrent()
+
+            assertEquals(AccountState.SignedOut(), account.state.value)
+            assertNull(cache.stored)
+        }
+
+    @Test
     fun linksAndSecretsNeverShowInLogs() {
         val link = FakePubkyCore().link(1)
         assertEquals("SignInLink(<redacted>)", link.toString())

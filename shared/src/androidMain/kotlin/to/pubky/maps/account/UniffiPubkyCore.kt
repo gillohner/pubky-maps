@@ -124,18 +124,18 @@ private fun AuthRequest.toLink(): SignInLink =
 private fun SessionInfo.toSession() = AccountSession(publicKey = publicKey, homeserver = homeserver)
 
 /** Runs a core call with its errors as [CoreFailure]. */
-private inline fun <T> mapped(call: () -> T): T =
+internal inline fun <T> mapped(call: () -> T): T =
     try {
         call()
     } catch (e: CoreException) {
         throw e.toFailure()
     }
 
-private fun CoreException.toFailure(): CoreFailure =
+internal fun CoreException.toFailure(): CoreFailure =
     when (this) {
         is CoreException.Network -> CoreFailure.Network(reason)
-        is CoreException.RateLimited -> CoreFailure.Network(reason)
-        is CoreException.Server -> if (status.toInt() >= 500) CoreFailure.Network(reason) else CoreFailure.Other(reason)
+        is CoreException.RateLimited -> CoreFailure.Network(reason, busy = true)
+        is CoreException.Server -> if (status.toInt() >= 500) CoreFailure.Network(reason, busy = true) else CoreFailure.Other(reason)
         is CoreException.Auth -> CoreFailure.Auth(reason)
         is CoreException.NotSignedIn -> CoreFailure.Auth("not signed in")
         is CoreException.NotFound -> CoreFailure.NotFound(reason)

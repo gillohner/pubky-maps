@@ -150,11 +150,37 @@ fn built_post(
 }
 
 fn mint_new_post(author: &str, post: &PubkySocialPost) -> Result<BuiltObject, CoreError> {
+    mint_new_post_in(Root::Pub, author, post)
+}
+
+fn mint_new_post_in(
+    root: Root,
+    author: &str,
+    post: &PubkySocialPost,
+) -> Result<BuiltObject, CoreError> {
     let owner = owner_id(author)?;
     let minted = post
-        .create_version(Root::Pub, &owner, None)
+        .create_version(root, &owner, None)
         .map_err(validation)?;
-    built_post(author, post, minted.id, minted.edit_id, minted.path)
+    let mut built = built_post(author, post, minted.id, minted.edit_id, minted.path)?;
+    built.uri = post_uri_in(root, author, &built.id);
+    Ok(built)
+}
+
+/// The versionless reference of a post: `pubky://{author}/{pub|priv}/social/v1/posts/{id}`.
+pub(crate) fn post_uri_in(root: Root, author: &str, post_id: &str) -> String {
+    match root {
+        Root::Pub => post_uri_builder(author.to_string(), post_id.to_string()),
+        Root::Priv => format!(
+            "pubky://{author}{}",
+            social_path(Root::Priv, &format!("posts/{post_id}"))
+        ),
+    }
+}
+
+/// `/priv/...` for a private object, `/pub/...` otherwise.
+pub(crate) fn root_of(private: bool) -> Root {
+    if private { Root::Priv } else { Root::Pub }
 }
 
 /// A review: a public `note` post whose `parent` is the place.
@@ -301,6 +327,32 @@ pub fn build_collection(
     description: Option<String>,
     items: Vec<CollectionItem>,
 ) -> Result<BuiltObject, CoreError> {
+    build_collection_in(Root::Pub, author, name, description, items)
+}
+
+/// A list, public under `/pub` or with `private` under `/priv` (the same object; `/priv` is
+/// alpha and readable by the homeserver operator). Its id is minted now, so the app can queue
+/// it and send it later to the same path.
+#[uniffi::export]
+pub fn build_list(
+    author: String,
+    name: String,
+    description: Option<String>,
+    items: Vec<CollectionItem>,
+    private: bool,
+) -> Result<BuiltObject, CoreError> {
+    build_collection_in(root_of(private), author, name, description, items)
+}
+
+/// A list under `root`: `/pub` (public) or `/priv` (private, the same object; `/priv` is
+/// alpha and readable by the homeserver operator).
+pub(crate) fn build_collection_in(
+    root: Root,
+    author: String,
+    name: String,
+    description: Option<String>,
+    items: Vec<CollectionItem>,
+) -> Result<BuiltObject, CoreError> {
     let items = items
         .into_iter()
         .map(|item| {
@@ -318,13 +370,38 @@ pub fn build_collection(
         layout: None,
         extra: Default::default(),
     };
-    mint_new_post(&author, &collection_post(&content)?)
+    mint_new_post_in(root, &author, &collection_post(&content)?)
 }
 
-/// `/pub/social/v1/posts/{id}/`, the folder holding every version of a post.
-pub(crate) fn post_versions_dir(post_id: &str) -> Result<String, CoreError> {
+/// `/{pub|priv}/social/v1/posts/{id}/`, the folder holding every version of a post.
+pub(crate) fn post_versions_dir(root: Root, post_id: &str) -> Result<String, CoreError> {
     pubky_social_specs::validate_timestamp_id_format(post_id).map_err(validation)?;
-    Ok(social_path(Root::Pub, &format!("posts/{post_id}/")))
+    Ok(social_path(root, &format!("posts/{post_id}/")))
+}
+
+/// The post id of a post folder path (`/{root}/social/v1/posts/{id}/`), if it is one.
+pub(crate) fn post_folder_id(root: Root, path: &str) -> Option<String> {
+    let prefix = social_path(root, "posts/");
+    let id = path.strip_prefix(&prefix)?.strip_suffix('/')?;
+    pubky_social_specs::validate_timestamp_id_format(id).ok()?;
+    Some(id.to_string())
+}
+
+/// A stored list read back: its name, description and items, or `None` when the post is
+/// not a list (or not readable as one).
+pub(crate) fn collection_of(post_json: &str) -> Option<PubkySocialCollectionContent> {
+    let post: PubkySocialPost = serde_json::from_str(post_json).ok()?;
+    if post.kind != PubkySocialPostKind::Collection {
+        return None;
+    }
+    serde_json::from_str(&post.content).ok()
+}
+
+/// The kind of a stored post, `None` when it is not a post.
+pub(crate) fn post_kind_of(post_json: &str) -> Option<PubkySocialPostKind> {
+    serde_json::from_str::<PubkySocialPost>(post_json)
+        .ok()
+        .map(|post| post.kind)
 }
 
 /// The `(id, editId)` of a stored post version URI, if it is one.
@@ -344,6 +421,18 @@ pub(crate) fn post_version_of(uri: &str) -> Option<(String, String)> {
 /// the post, the list and its items are kept.
 #[uniffi::export]
 pub fn edit_collection(
+    author: String,
+    post_id: String,
+    head_edit_id: String,
+    head_json: String,
+    edit: CollectionEdit,
+) -> Result<Option<BuiltObject>, CoreError> {
+    edit_collection_in(Root::Pub, author, post_id, head_edit_id, head_json, edit)
+}
+
+/// [`edit_collection`] for a list under `root`.
+pub(crate) fn edit_collection_in(
+    root: Root,
     author: String,
     post_id: String,
     head_edit_id: String,
@@ -393,9 +482,11 @@ pub fn edit_collection(
         ..head
     };
     let minted = post
-        .edit_version(&post_id, &head_edit_id, Root::Pub, &owner, None)
+        .edit_version(&post_id, &head_edit_id, root, &owner, None)
         .map_err(validation)?;
-    built_post(&author, &post, minted.id, minted.edit_id, minted.path).map(Some)
+    let mut built = built_post(&author, &post, minted.id, minted.edit_id, minted.path)?;
+    built.uri = post_uri_in(root, &author, &built.id);
+    Ok(Some(built))
 }
 
 // --- Bookmarks --------------------------------------------------------------------------
@@ -899,9 +990,108 @@ mod tests {
     fn versions_dir_checks_the_id() {
         let id = PubkySocialPost::default().create_id();
         assert_eq!(
-            post_versions_dir(&id).unwrap(),
+            post_versions_dir(Root::Pub, &id).unwrap(),
             format!("/pub/social/v1/posts/{id}/")
         );
-        assert!(post_versions_dir("../../x").is_err());
+        assert_eq!(
+            post_versions_dir(Root::Priv, &id).unwrap(),
+            format!("/priv/social/v1/posts/{id}/")
+        );
+        assert!(post_versions_dir(Root::Pub, "../../x").is_err());
+    }
+
+    #[test]
+    fn post_folders_name_their_post() {
+        let id = PubkySocialPost::default().create_id();
+        let folder = format!("/pub/social/v1/posts/{id}/");
+        assert_eq!(post_folder_id(Root::Pub, &folder), Some(id.clone()));
+        assert_eq!(post_folder_id(Root::Priv, &folder), None);
+        assert_eq!(
+            post_folder_id(Root::Priv, &format!("/priv/social/v1/posts/{id}/")),
+            Some(id.clone())
+        );
+        assert_eq!(
+            post_folder_id(Root::Pub, &format!("/pub/social/v1/posts/{id}/{id}.json")),
+            None
+        );
+        assert_eq!(post_folder_id(Root::Pub, "/pub/social/v1/posts/x/"), None);
+    }
+
+    #[test]
+    fn a_private_list_is_the_same_object_under_priv() {
+        let public = build_collection(AUTHOR.into(), "Cafés".into(), None, items(2)).unwrap();
+        let private =
+            build_collection_in(Root::Priv, AUTHOR.into(), "Cafés".into(), None, items(2)).unwrap();
+        assert!(
+            private.path.starts_with("/priv/social/v1/posts/"),
+            "{}",
+            private.path
+        );
+        assert_eq!(
+            private.uri,
+            format!("pubky://{AUTHOR}/priv/social/v1/posts/{}", private.id)
+        );
+        assert_eq!(
+            public.uri,
+            format!("pubky://{AUTHOR}/pub/social/v1/posts/{}", public.id)
+        );
+        let content = collection_of(&private.json).expect("a list");
+        assert_eq!(content.name, "Cafés");
+        assert_eq!(content.items.len(), 2);
+        assert_eq!(
+            post_kind_of(&private.json),
+            Some(PubkySocialPostKind::Collection)
+        );
+
+        let edited = edit_collection_in(
+            Root::Priv,
+            AUTHOR.into(),
+            private.id.clone(),
+            private.edit_id.clone().unwrap(),
+            private.json.clone(),
+            CollectionEdit::Remove {
+                place: content.items[0].uri.clone(),
+            },
+        )
+        .unwrap()
+        .expect("changed");
+        assert!(
+            edited
+                .path
+                .starts_with(&format!("/priv/social/v1/posts/{}/", private.id))
+        );
+        assert_eq!(edited.uri, private.uri);
+        assert_eq!(collection_of(&edited.json).unwrap().items.len(), 1);
+    }
+
+    #[test]
+    fn build_list_mints_under_the_chosen_root() {
+        let private = build_list(AUTHOR.into(), "Mine".into(), None, items(1), true).unwrap();
+        assert!(
+            private.path.starts_with("/priv/social/v1/posts/"),
+            "{}",
+            private.path
+        );
+        let public = build_list(AUTHOR.into(), "Ours".into(), None, items(1), false).unwrap();
+        assert!(
+            public.path.starts_with("/pub/social/v1/posts/"),
+            "{}",
+            public.path
+        );
+        assert!(build_list(AUTHOR.into(), "Big".into(), None, items(101), false).is_err());
+    }
+
+    #[test]
+    fn only_lists_read_as_lists() {
+        let review = build_review(
+            AUTHOR.into(),
+            "https://www.openstreetmap.org/node/1".into(),
+            "Nice".into(),
+        )
+        .unwrap();
+        assert!(collection_of(&review.json).is_none());
+        assert_eq!(post_kind_of(&review.json), Some(PubkySocialPostKind::Note));
+        assert!(collection_of("not json").is_none());
+        assert_eq!(post_kind_of("[1]"), None);
     }
 }

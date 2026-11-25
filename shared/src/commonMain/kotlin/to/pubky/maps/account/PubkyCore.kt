@@ -106,9 +106,13 @@ data class SavedPlace(
 sealed class CoreFailure(
     val reason: String,
 ) : Exception(reason) {
-    /** A server could not be reached, or answered with a temporary error: retry later. */
+    /**
+     * A server could not be reached, or answered with a temporary error: retry later. [busy] when it
+     * was reached and is throttling or failing (429, 5xx), so the phone is not offline.
+     */
     class Network(
         reason: String,
+        val busy: Boolean = false,
     ) : CoreFailure(reason)
 
     /** The session or sign-in is no longer valid: sign in again. */

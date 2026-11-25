@@ -34,13 +34,13 @@ interface AccountCache {
     /** What is stored, or null when nothing is. */
     fun read(): CachedAccount?
 
-    /** Starts a cache for [publicKey]: anything stored for another account is deleted. */
+    /** Starts a cache for [publicKey]: anything stored for another account is deleted, its outbox too. */
     fun begin(publicKey: String)
 
-    /** Replaces everything stored with [account]. */
+    /** Replaces the profile, tags and saved places with [account]; the outbox and lists stay. */
     fun replace(account: CachedAccount)
 
-    /** Deletes everything. */
+    /** Deletes everything, the account's outbox and lists ([to.pubky.maps.write.WriteStore]) too. */
     fun clear()
 }
 
@@ -65,6 +65,7 @@ class SqlAccountCache(
         queries.transaction {
             if (queries.account().executeAsOneOrNull()?.public_key != publicKey) {
                 deleteAll()
+                deleteWrites()
                 queries.putAccount(publicKey, null, null)
             }
         }
@@ -80,12 +81,23 @@ class SqlAccountCache(
     }
 
     override fun clear() {
-        queries.transaction { deleteAll() }
+        queries.transaction {
+            deleteAll()
+            deleteWrites()
+        }
     }
 
     private fun deleteAll() {
         queries.deleteAccounts()
         queries.deleteTags()
         queries.deleteBookmarks()
+    }
+
+    /** What [to.pubky.maps.write.SqlWriteStore] keeps for the account. */
+    private fun deleteWrites() {
+        queries.deleteOutbox()
+        queries.deleteOwnLists()
+        queries.deleteOtherPosts()
+        queries.deletePlaceLabels()
     }
 }
