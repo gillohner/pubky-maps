@@ -60,7 +60,7 @@ fun AddServerScreen(
                 },
                 label = { Text("Address") },
                 isError = error != null,
-                supportingText = { Text(error ?: "https:// only. http:// works for localhost.") },
+                supportingText = { Text(error ?: "https:// only. http:// works for localhost and 127.0.0.1.") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),

@@ -37,6 +37,7 @@ class ServerUrlTest {
     fun plainHttpWorksOnlyForLocalhost() {
         assertEquals("http://localhost:8080", valid("http://localhost:8080").url)
         assertEquals("http://127.0.0.1:6287/style.json", valid("http://127.0.0.1:6287/style.json").url)
+        for (host in ServerUrl.cleartextHosts) assertEquals("http://$host:8080", valid("http://$host:8080").url)
         assertTrue(invalid("http://tiles.example").startsWith("Use https://"))
         assertTrue(invalid("http://10.0.2.2:8080").startsWith("Use https://"))
         assertTrue(invalid("http://192.168.1.10").startsWith("Use https://"))

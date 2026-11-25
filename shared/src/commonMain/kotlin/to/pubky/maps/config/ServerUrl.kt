@@ -28,7 +28,11 @@ sealed interface ServerUrl {
         private const val HTTPS_PORT = 443
         private const val HTTP_PORT = 80
 
-        private val loopbackHosts = setOf("localhost", "127.0.0.1")
+        /**
+         * The only hosts plain http:// is accepted for. The app's network security config permits
+         * cleartext for exactly these (androidApp/src/main/res/xml/network_security_config.xml).
+         */
+        val cleartextHosts: Set<String> = setOf("localhost", "127.0.0.1")
         private val schemeAndRest = Regex("^([A-Za-z][A-Za-z0-9+.-]*)://(.*)$")
         private val hostLabel = Regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")
         private val ipv6 = Regex("^\\[[0-9a-f:.]+]$")
@@ -82,7 +86,7 @@ sealed interface ServerUrl {
                     Invalid("\"$authority\" is not a server name.")
                 }
 
-                scheme == "http" && host !in loopbackHosts -> {
+                scheme == "http" && host !in cleartextHosts -> {
                     Invalid("Use https://. Plain http:// works only for localhost and 127.0.0.1.")
                 }
 
