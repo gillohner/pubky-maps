@@ -8,9 +8,13 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.UriHandler
 import com.mikepenz.aboutlibraries.Libs
 import com.mikepenz.aboutlibraries.ui.compose.m3.LibrariesContainer
 import kotlinx.coroutines.Dispatchers
@@ -53,10 +57,25 @@ fun LicencesScreen(
             )
         },
     ) { padding ->
-        LibrariesContainer(
-            libraries = libraries,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = padding,
-        )
+        // The list's website and licence chips open links through LocalUriHandler; without an app
+        // that can open them (no browser) that would throw and crash the app.
+        val uriHandler = LocalUriHandler.current
+        val safeUriHandler = remember(uriHandler) { SafeUriHandler(uriHandler) }
+        CompositionLocalProvider(LocalUriHandler provides safeUriHandler) {
+            LibrariesContainer(
+                libraries = libraries,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = padding,
+            )
+        }
+    }
+}
+
+/** Opens links like [delegate] and does nothing when no app can open them. */
+private class SafeUriHandler(
+    private val delegate: UriHandler,
+) : UriHandler {
+    override fun openUri(uri: String) {
+        runCatching { delegate.openUri(uri) }
     }
 }
