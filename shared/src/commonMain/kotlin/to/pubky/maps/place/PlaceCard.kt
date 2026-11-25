@@ -62,7 +62,7 @@ fun PlaceCard(
                 )
                 IconButton(onClick = onClose) { Icon(AppIcons.Close, contentDescription = "Close") }
             }
-            val details = listOfNotNull(place.detailLine(), provider?.let { "From a ${it.title} link" })
+            val details = listOfNotNull(place.detailLine(), provider?.let { "From ${it.withArticle} link" })
             if (details.isNotEmpty()) {
                 Text(
                     text = details.joinToString(" · "),
@@ -149,3 +149,7 @@ val LinkProvider.title: String
 
             LinkProvider.Here -> "HERE WeGo"
         }
+
+/** "a Google Maps", "an OsmAnd". */
+private val LinkProvider.withArticle: String
+    get() = if (title.first().lowercaseChar() in "aeiou") "an $title" else "a $title"
