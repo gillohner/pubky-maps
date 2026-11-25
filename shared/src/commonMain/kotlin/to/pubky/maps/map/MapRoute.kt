@@ -320,7 +320,8 @@ private fun resultsFitPadding(size: DpSize?): DpPadding =
     if (size != null && size.width >= SidePanelMinWidth) {
         DpPadding(left = SidePanelWidth + 48.dp, top = 96.dp, right = 48.dp, bottom = 120.dp)
     } else {
-        DpPadding(left = 48.dp, top = 96.dp, right = 48.dp, bottom = (size?.height ?: 800.dp) / 2 + 24.dp)
+        // Half the screen for the sheet, plus my location and the credits riding on its edge.
+        DpPadding(left = 48.dp, top = 96.dp, right = 48.dp, bottom = (size?.height ?: 800.dp) / 2 + 120.dp)
     }
 
 /** A phone screen's half diagonal in dp, for a map whose size is not known yet. */

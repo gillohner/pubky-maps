@@ -45,8 +45,8 @@ private const val SELECTED = "s"
 
 /**
  * The search results as pins, one per row of the list, each with its kind's icon; the picked result's
- * pin is larger and on top. A pin stands above its point (anchored at its tip), so the map's own label
- * of the place stays readable under it; the pins carry no text of their own, which also keeps them
+ * pin is larger and on top. A pin stands above its point (anchored at its tip) and never pushes the
+ * map's own labels away, so the place's name stays readable under it; the pins carry no text of their own, which also keeps them
  * independent of the fonts a map style serves. Tapping a pin picks its result.
  */
 @Composable
@@ -103,6 +103,8 @@ internal fun SearchPins(
                 iconImage = image(painter, PinSize),
                 iconAnchor = const(SymbolAnchor.Bottom),
                 iconAllowOverlap = const(true),
+                // The map's own labels (the place's name among them) are placed as if the pins were not there.
+                iconIgnorePlacement = const(true),
                 onClick = onClick,
             )
         }
@@ -119,6 +121,8 @@ internal fun SearchPins(
                 iconSize = const(SELECTED_SCALE),
                 iconAnchor = const(SymbolAnchor.Bottom),
                 iconAllowOverlap = const(true),
+                // The map's own labels (the place's name among them) are placed as if the pins were not there.
+                iconIgnorePlacement = const(true),
                 onClick = onClick,
             )
         }
