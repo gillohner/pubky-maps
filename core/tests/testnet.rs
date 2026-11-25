@@ -452,6 +452,7 @@ async fn place_objects_round_trip() {
                 uri: place.into(),
                 note: None,
             }],
+            false,
         )
         .await
         .unwrap();
@@ -462,6 +463,7 @@ async fn place_objects_round_trip() {
                 place: "https://www.openstreetmap.org/way/4".into(),
                 note: Some("terrace".into()),
             },
+            false,
         )
         .await
         .unwrap();
@@ -472,6 +474,7 @@ async fn place_objects_round_trip() {
             CollectionEdit::Remove {
                 place: place.into(),
             },
+            false,
         )
         .await
         .unwrap();
@@ -482,6 +485,7 @@ async fn place_objects_round_trip() {
             CollectionEdit::Remove {
                 place: "geo:1,1".into(),
             },
+            false,
         )
         .await
         .unwrap();
@@ -509,4 +513,100 @@ async fn place_objects_round_trip() {
     let saved = core.list_bookmarks(ListOptions::default()).await.unwrap();
     assert_eq!(saved.places.len(), 1);
     assert_eq!(saved.places[0].place, place);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[pubky_testnet::test]
+#[ignore = "needs Postgres: set TEST_PUBKY_CONNECTION_STRING and run with --include-ignored"]
+async fn own_lists_public_and_private() {
+    let testnet = testnet().await;
+    let ring = ring_user(&testnet).await;
+    let core = core_for(&testnet).await;
+    sign_in(&core, &ring).await;
+    let place = "https://www.openstreetmap.org/node/270803095";
+
+    // Nothing posted yet: no lists, no error.
+    let empty = core.list_collections(false, vec![]).await.unwrap();
+    assert!(empty.collections.is_empty());
+    assert!(empty.other_post_ids.is_empty());
+
+    let review = core
+        .post_review(place.into(), "Good coffee.".into())
+        .await
+        .unwrap();
+    let public = core
+        .create_collection("Coffee".into(), None, vec![], false)
+        .await
+        .unwrap();
+    let private = core
+        .create_collection(
+            "Secret spots".into(),
+            Some("Only mine".into()),
+            vec![CollectionItem {
+                uri: place.into(),
+                note: None,
+            }],
+            true,
+        )
+        .await
+        .unwrap();
+    assert!(private.path.starts_with("/priv/social/v1/posts/"));
+    assert!(private.uri.contains("/priv/social/v1/posts/"));
+
+    let scan = core.list_collections(false, vec![]).await.unwrap();
+    assert_eq!(scan.collections.len(), 1);
+    assert_eq!(scan.collections[0].id, public.id);
+    assert_eq!(scan.collections[0].name, "Coffee");
+    assert!(!scan.collections[0].private);
+    assert_eq!(scan.other_post_ids, vec![review.id.clone()]);
+
+    // A known non-list is not read again.
+    let skipped = core
+        .list_collections(false, scan.other_post_ids.clone())
+        .await
+        .unwrap();
+    assert_eq!(skipped.collections.len(), 1);
+    assert!(skipped.other_post_ids.is_empty());
+
+    let added = core
+        .edit_collection(
+            public.id.clone(),
+            CollectionEdit::Add {
+                place: place.into(),
+                note: None,
+            },
+            false,
+        )
+        .await
+        .unwrap();
+    let scan = core.list_collections(false, vec![]).await.unwrap();
+    assert_eq!(scan.collections[0].edit_id, added.edit_id.unwrap());
+    assert_eq!(scan.collections[0].items.len(), 1);
+    assert_eq!(scan.collections[0].items[0].uri, place);
+
+    let scan = core.list_collections(true, vec![]).await.unwrap();
+    assert_eq!(scan.collections.len(), 1);
+    assert!(scan.collections[0].private);
+    assert_eq!(scan.collections[0].uri, private.uri);
+    assert_eq!(
+        scan.collections[0].description.as_deref(),
+        Some("Only mine")
+    );
+    let removed = core
+        .edit_collection(
+            private.id.clone(),
+            CollectionEdit::Remove {
+                place: place.into(),
+            },
+            true,
+        )
+        .await
+        .unwrap();
+    assert!(
+        removed
+            .path
+            .starts_with(&format!("/priv/social/v1/posts/{}/", private.id))
+    );
+    let scan = core.list_collections(true, vec![]).await.unwrap();
+    assert!(scan.collections[0].items.is_empty());
 }

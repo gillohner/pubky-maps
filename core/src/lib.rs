@@ -22,8 +22,8 @@ pub use crate::auth::{
 };
 pub use crate::config::{CoreConfig, DEFAULT_REQUEST_TIMEOUT_MS, default_core_config};
 pub use crate::core::{
-    ListEntry, ListOptions, ListPage, PhotoPost, PubkyMapsCore, SavedPlace, SavedPlacePage,
-    SessionInfo, SignedIn,
+    CollectionScan, ListEntry, ListOptions, ListPage, OwnCollection, PhotoPost, PubkyMapsCore,
+    SavedPlace, SavedPlacePage, SessionInfo, SignedIn,
 };
 pub use crate::error::CoreError;
 pub use crate::links::{
