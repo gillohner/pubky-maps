@@ -62,13 +62,17 @@ update-feed key (`UPDATE_FEED_SIGNING_KEY`) only by its `publish` job; Gradle ne
 secrets of the GitHub environment `release`, which only deploys from `main` and `v*` tags; manual runs
 use the environment `dev` with separate dev keys. Only public keys are in the repository
 (`release/update-feed-key.pub`, `release/update-feed-key-dev.pub`, and the release certificate's
-SHA-256 in `release/release-cert.sha256`, which every edge and stable APK must match). Prefer public keyless sources; a source that needs a key
+SHA-256 in `release/release-cert.sha256`, which every edge and stable APK must match, and the dev
+certificate's in `release/release-cert-dev.sha256` for dev APKs). Prefer public keyless sources; a source that needs a key
 stays out until its owner provides one.
 
 ## Releases
 
 - Never push a `v*` tag or touch the `edge` release from a branch; to try a release change, run
   `release.yml` by hand on the branch (it replaces the `dev` pre-release, signed with the dev keys).
+- After publishing, `release.yml` installs the APK it just published on the API 35 emulator (after
+  checking its certificate and checksum) and runs the smoke test on it. A manual run on a branch does
+  this for the `dev` pre-release.
 - Raising `pubkymaps.version` in `gradle.properties` comes with setting `pubkymaps.versionRunOffset` to
   the release workflow's latest run number (`scripts/release/version.py`).
 - The updater exists only in the `direct` flavour (`androidApp/src/direct/`). Code shared by both

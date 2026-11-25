@@ -20,7 +20,8 @@ on request, a compass when the map is rotated, and Settings:
   Open in menu, which does not exist yet).
 - **Follow local rules:** hides features a country forbids (stored; no feature has a rule yet).
 - **About:** version, updates (in the APK from GitHub releases, which updates itself from a signed
-  update feed), licence, source code and the open-source licences of the bundled libraries.
+  update feed), licence, source code and the open-source licences of the bundled libraries and of
+  the Rust crates in the core.
 - **Map data:** the credits of every map source.
 
 ## How it is built
@@ -47,8 +48,9 @@ on request, a compass when the map is rotated, and Settings:
   and the session are stored encrypted with an Android Keystore key, never in a backup; the user's own
   data (profile name, tags, saved places) is cached in SQLite (SQLDelight). When the homeserver cannot
   be reached the app stays signed in, shows the cached data and says so in one line over the map.
-- The open-source licence list is generated at build time by the AboutLibraries Gradle plugin from the
-  app's dependencies.
+- The open-source licence list is generated at build time: the AboutLibraries Gradle plugin lists the
+  app's Gradle dependencies, and `scripts/rust-licences.py` (Gradle task `listRustLicences`) lists the
+  Rust crates linked into the core with their licence files, from `cargo metadata`.
 - Versions of every tool and library are in `gradle/libs.versions.toml`.
 
 ## Build
@@ -97,7 +99,9 @@ Every CI run also uploads the debug APK as an artifact (`pubky-maps-debug-apk`).
 Each has the signed APK, the signed `.aab`, `SHA256SUMS` and the signed update feed of its channel
 (`update-edge.json`, `update.json`, `update-dev.json`). versionCodes only grow: see
 `scripts/release/version.py`. Edge and stable APKs are signed with the release key whose certificate
-SHA-256 is in `release/release-cert.sha256`; compare it with `apksigner verify --print-certs`.
+SHA-256 is in `release/release-cert.sha256` (dev builds: `release/release-cert-dev.sha256`); compare it
+with `apksigner verify --print-certs`. After publishing, the release workflow downloads the APK from the
+release, checks that certificate and `SHA256SUMS`, installs it on an emulator and runs the smoke test.
 
 The APK checks the feed of the channel it was built for when it starts (at most once a day, unless
 turned off in Settings → About) and on "Check for updates". The feed is signed with Ed25519; the app
