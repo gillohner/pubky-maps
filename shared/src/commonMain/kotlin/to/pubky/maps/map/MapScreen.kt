@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import to.pubky.maps.config.AttributionLink
 import to.pubky.maps.ui.AppIcons
+import to.pubky.maps.ui.rememberSafeLinkOpener
 
 /** Space between the screen's safe area and the map controls. */
 internal val MapControlMargin = 12.dp
@@ -135,12 +136,13 @@ internal fun AttributionBar(
     links: List<AttributionLink>,
     modifier: Modifier = Modifier,
 ) {
+    val openLink = rememberSafeLinkOpener()
     val linkStyles = TextLinkStyles(style = SpanStyle(color = MaterialTheme.colorScheme.onSurface))
     val text =
         buildAnnotatedString {
             links.forEachIndexed { i, link ->
                 if (i > 0) append("  ")
-                withLink(LinkAnnotation.Url(link.url, linkStyles)) { append(link.label) }
+                withLink(LinkAnnotation.Url(link.url, linkStyles) { openLink(link.url) }) { append(link.label) }
             }
         }
     Surface(

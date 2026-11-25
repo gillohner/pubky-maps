@@ -11,15 +11,18 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
+import org.maplibre.compose.camera.CameraMoveReason
 import org.maplibre.compose.camera.CameraPosition
 import org.maplibre.compose.camera.CameraUpdate
 import org.maplibre.compose.layers.LocationIndicatorLayer
@@ -57,7 +60,9 @@ fun MapRoute(
     onOpenSettings: () -> Unit,
 ) {
     val sources = serverConfig.mapStyles.forTheme(isSystemInDarkTheme())
-    var fallback by remember(sources) { mutableStateOf(StyleFallback(sources)) }
+    // Saved, so a trip to Settings does not start again from a style that already failed.
+    var fallbackIndex by rememberSaveable(sources) { mutableIntStateOf(0) }
+    val fallback = StyleFallback(sources, fallbackIndex)
     val locationState = rememberLocationState(provider = rememberDefaultLocationProvider())
     val mapState =
         rememberMapState(
@@ -72,7 +77,7 @@ fun MapRoute(
         snapshotFlow { mapState.style.loadState to mapState.style.baseStyle }
             .collect { (loadState, style) ->
                 if (loadState is StyleLoadState.Failed && style is BaseStyle.Uri) {
-                    fallback = fallback.failed(style.uri)
+                    fallbackIndex = StyleFallback(sources, fallbackIndex).failed(style.uri).index
                 }
             }
     }
@@ -83,7 +88,7 @@ fun MapRoute(
     MapScreen(
         attribution = (fallback.current ?: sources.first()).attribution,
         mapUnavailable = fallback.allFailed,
-        onRetryMap = { fallback = fallback.retry() },
+        onRetryMap = { fallbackIndex = fallback.retry().index },
         onMyLocation = myLocation,
         onOpenSettings = onOpenSettings,
         snackbarHostState = snackbarHostState,
@@ -112,9 +117,19 @@ fun MapRoute(
     }
 }
 
+/** Shows [message], replacing the snackbar on screen instead of queueing behind it. */
+private suspend fun SnackbarHostState.showOnly(
+    message: String,
+    actionLabel: String? = null,
+): SnackbarResult {
+    currentSnackbarData?.dismiss()
+    return showSnackbar(message = message, actionLabel = actionLabel, duration = SnackbarDuration.Long)
+}
+
 /**
  * What the my-location button does: ask for the location permission only now, then move the map to
- * the user's position as soon as it is known.
+ * the user's position as soon as it is known. Says what is wrong when the permission is refused for
+ * good or location is turned off. A pending request ends when the user moves the map.
  */
 @Composable
 private fun rememberMyLocationAction(
@@ -133,6 +148,28 @@ private fun rememberMyLocationAction(
         }
     }
 
+    fun explainPermissionOff() {
+        scope.launch {
+            val result =
+                snackbarHostState.showOnly(
+                    message = "Location access is off for Pubky Maps.",
+                    actionLabel = if (settings.canOpenApplicationSettings) "Settings" else null,
+                )
+            if (result == SnackbarResult.ActionPerformed) settings.openApplicationSettings()
+        }
+    }
+
+    fun explainLocationOff() {
+        scope.launch {
+            val result =
+                snackbarHostState.showOnly(
+                    message = "Your location is not available. Is location turned on?",
+                    actionLabel = if (settings.canOpenLocationServicesSettings) "Turn on" else null,
+                )
+            if (result == SnackbarResult.ActionPerformed) settings.openLocationServicesSettings()
+        }
+    }
+
     LaunchedEffect(locationState) {
         snapshotFlow { locationState.lastLocation }
             .filterNotNull()
@@ -145,35 +182,47 @@ private fun rememberMyLocationAction(
     }
     LaunchedEffect(locationState) {
         snapshotFlow { locationState.permission }
-            .collect { if (it is LocationPermission.NotGranted) centerOnNextFix = false }
+            .collect { permission ->
+                if (permission is LocationPermission.NotGranted && centerOnNextFix) {
+                    centerOnNextFix = false
+                    // Android refuses without a dialog once the user has said no for good.
+                    if (permission.canRequest == false) explainPermissionOff()
+                }
+            }
+    }
+    LaunchedEffect(locationState) {
+        snapshotFlow { locationState.status }
+            .collect { status ->
+                if (status is LocationTrackingStatus.Unavailable && centerOnNextFix) {
+                    centerOnNextFix = false
+                    explainLocationOff()
+                }
+            }
+    }
+    LaunchedEffect(mapState) {
+        snapshotFlow { mapState.cameraMoveReason }
+            .collect { if (it == CameraMoveReason.Gesture) centerOnNextFix = false }
     }
 
     return {
         val permission = locationState.permission
         val lastLocation = locationState.lastLocation
         when {
+            permission is LocationPermission.Granted && locationState.status is LocationTrackingStatus.Unavailable -> {
+                locationState.retry()
+                explainLocationOff()
+            }
+
             permission is LocationPermission.Granted && lastLocation != null -> {
                 moveTo(lastLocation)
             }
 
             permission is LocationPermission.Granted -> {
                 centerOnNextFix = true
-                if (locationState.status is LocationTrackingStatus.Unavailable) {
-                    locationState.retry()
-                    scope.launch { snackbarHostState.showSnackbar("Your location is not available. Is location turned on?") }
-                }
             }
 
             permission is LocationPermission.NotGranted && permission.canRequest == false -> {
-                scope.launch {
-                    val result =
-                        snackbarHostState.showSnackbar(
-                            message = "Location access is off for Pubky Maps.",
-                            actionLabel = if (settings.canOpenApplicationSettings) "Settings" else null,
-                            duration = SnackbarDuration.Long,
-                        )
-                    if (result == SnackbarResult.ActionPerformed) settings.openApplicationSettings()
-                }
+                explainPermissionOff()
             }
 
             else -> {

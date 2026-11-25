@@ -2,13 +2,11 @@ package to.pubky.maps
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.serialization.Serializable
-import to.pubky.maps.config.InMemoryServerConfigRepository
 import to.pubky.maps.config.ServerConfigRepository
 import to.pubky.maps.map.MapRoute
 import to.pubky.maps.settings.SettingsScreen
@@ -24,7 +22,7 @@ private data object SettingsDestination
 @Composable
 fun App(
     appInfo: AppInfo,
-    serverConfigRepository: ServerConfigRepository = remember { InMemoryServerConfigRepository() },
+    serverConfigRepository: ServerConfigRepository,
 ) {
     val serverConfig by serverConfigRepository.config.collectAsStateWithLifecycle()
     PubkyMapsTheme {

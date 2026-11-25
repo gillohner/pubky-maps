@@ -13,6 +13,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val appInfo = AppInfo(versionName = BuildConfig.VERSION_NAME, versionCode = BuildConfig.VERSION_CODE.toLong())
-        setContent { App(appInfo) }
+        val serverConfigRepository = (application as PubkyMapsApplication).serverConfigRepository
+        setContent { App(appInfo, serverConfigRepository) }
     }
 }

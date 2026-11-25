@@ -14,11 +14,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import to.pubky.maps.AppInfo
 import to.pubky.maps.config.ServerConfig
 import to.pubky.maps.ui.AppIcons
+import to.pubky.maps.ui.rememberSafeLinkOpener
 
 private const val SOURCE_URL = "https://github.com/gillohner/pubky-maps"
 private const val LICENCE_URL = "$SOURCE_URL/blob/main/LICENSE"
@@ -31,7 +31,7 @@ fun SettingsScreen(
     serverConfig: ServerConfig,
     onBack: () -> Unit,
 ) {
-    val uriHandler = LocalUriHandler.current
+    val openLink = rememberSafeLinkOpener()
     Scaffold(
         topBar = {
             TopAppBar(
@@ -56,14 +56,14 @@ fun SettingsScreen(
                 ListItem(
                     headlineContent = { Text("Licence") },
                     supportingContent = { Text("MIT. The source code is open.") },
-                    modifier = Modifier.clickable { uriHandler.openUri(LICENCE_URL) },
+                    modifier = Modifier.clickable { openLink(LICENCE_URL) },
                 )
             }
             item {
                 ListItem(
                     headlineContent = { Text("Source code") },
                     supportingContent = { Text(SOURCE_URL.removePrefix("https://")) },
-                    modifier = Modifier.clickable { uriHandler.openUri(SOURCE_URL) },
+                    modifier = Modifier.clickable { openLink(SOURCE_URL) },
                 )
             }
             item { SectionHeader("Map data") }
@@ -71,7 +71,7 @@ fun SettingsScreen(
                 ListItem(
                     headlineContent = { Text(link.label) },
                     supportingContent = { Text(link.url.removePrefix("https://").removeSuffix("/")) },
-                    modifier = Modifier.clickable { uriHandler.openUri(link.url) },
+                    modifier = Modifier.clickable { openLink(link.url) },
                 )
             }
         }
