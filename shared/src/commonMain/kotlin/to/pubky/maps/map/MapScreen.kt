@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -45,8 +46,9 @@ internal val TopControlSize = 48.dp
 
 /**
  * The map screen: [map] fills the screen, the controls sit on top of it inside the safe area.
- * Settings top end, my location bottom end, the data credits bottom start. [missing] parts of the app
- * (a service whose every server failed) show in one line at the top.
+ * Settings top end, my location bottom end, the data credits bottom start, and [placeCard] (a place
+ * opened from a link) under them at the bottom. [missing] parts of the app (a service whose every
+ * server failed) show in one line at the top.
  */
 @Composable
 fun MapScreen(
@@ -58,6 +60,7 @@ fun MapScreen(
     modifier: Modifier = Modifier,
     missing: Set<ServicePart> = emptySet(),
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
+    placeCard: (@Composable () -> Unit)? = null,
     map: @Composable () -> Unit,
 ) {
     Box(modifier.fillMaxSize()) {
@@ -87,28 +90,33 @@ fun MapScreen(
                 if (mapUnavailable) MapUnavailableNotice(onRetry = onRetryMap)
                 if (missing.isNotEmpty()) DegradedBanner(missing)
             }
-            MapButton(
-                icon = AppIcons.MyLocation,
-                contentDescription = "Show my location",
-                onClick = onMyLocation,
-                size = 56.dp,
-                tinted = true,
-                modifier = Modifier.align(Alignment.BottomEnd),
-            )
-            AttributionBar(
-                links = attribution,
-                modifier =
-                    Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(end = 56.dp + MapControlMargin),
-            )
-            SnackbarHost(
-                hostState = snackbarHostState,
-                modifier =
-                    Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 56.dp + MapControlMargin),
-            )
+            // Bottom up: the place card, the credits and my-location row above it, then snackbars.
+            Column(
+                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                SnackbarHost(hostState = snackbarHostState, modifier = Modifier.padding(bottom = MapControlMargin))
+                Box(Modifier.fillMaxWidth()) {
+                    MapButton(
+                        icon = AppIcons.MyLocation,
+                        contentDescription = "Show my location",
+                        onClick = onMyLocation,
+                        size = 56.dp,
+                        tinted = true,
+                        modifier = Modifier.align(Alignment.BottomEnd),
+                    )
+                    AttributionBar(
+                        links = attribution,
+                        modifier =
+                            Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(end = 56.dp + MapControlMargin),
+                    )
+                }
+                if (placeCard != null) {
+                    Box(Modifier.padding(top = MapControlMargin)) { placeCard() }
+                }
+            }
         }
     }
 }

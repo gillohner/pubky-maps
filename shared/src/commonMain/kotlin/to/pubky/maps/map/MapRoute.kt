@@ -15,11 +15,14 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import org.maplibre.compose.camera.CameraMoveReason
@@ -43,6 +46,10 @@ import org.maplibre.compose.style.BaseStyle
 import org.maplibre.spatialk.geojson.Position
 import to.pubky.maps.config.ServerLists
 import to.pubky.maps.status.ServicePart
+import to.pubky.maps.links.LinkedPlaceState
+import to.pubky.maps.place.OpeningLinkCard
+import to.pubky.maps.place.PlaceCard
+import to.pubky.maps.place.PlaceRef
 import kotlin.math.max
 
 /** Where the map opens before it knows anything about the user: the whole world. */
@@ -51,27 +58,37 @@ private val WorldCamera = CameraPosition(center = Position(longitude = 0.0, lati
 /** The zoom the map moves to when it shows the user's location. */
 private const val MY_LOCATION_ZOOM = 15.0
 
+/** The zoom a place from a link is shown at when its link has none (a street, its buildings). */
+private const val PLACE_ZOOM = 16.0
+
 /**
  * The live map: the first style of the server list for the current theme that loads, the user's
- * location on request, and the [MapScreen] controls, with the [missing] parts of the app named on top.
+ * location on request, and the [MapScreen] controls, with the [missing] parts of the app named on top
+ * and the place a link opened ([linkedPlace]) pinned, centred and shown in a card.
  */
 @Composable
 fun MapRoute(
     servers: ServerLists,
     onOpenSettings: () -> Unit,
     missing: Set<ServicePart> = emptySet(),
+    linkedPlace: LinkedPlaceState = LinkedPlaceState(),
+    onSharePlace: ((PlaceRef) -> Unit)? = null,
+    onClosePlace: () -> Unit = {},
+    linkMessages: Flow<String> = emptyFlow(),
 ) {
     val sources = servers.mapStyles(isSystemInDarkTheme())
     // Saved, so a trip to Settings does not start again from a style that already failed.
     var fallbackIndex by rememberSaveable(sources) { mutableIntStateOf(0) }
     val fallback = StyleFallback(sources, fallbackIndex)
     val locationState = rememberLocationState(provider = rememberDefaultLocationProvider())
+    val pinnedPoint by rememberUpdatedState(linkedPlace.place?.point)
     val mapState =
         rememberMapState(
             baseStyle = fallback.current?.let { BaseStyle.Uri(it.url) } ?: BaseStyle.Empty,
             initialCameraPosition = WorldCamera,
         ) {
             LocationIndicatorLayer(id = "user-location", locationState = locationState)
+            pinnedPoint?.let { PlacePin(it) }
         }
 
     // A style that fails to load hands over to the next one in the list.
@@ -87,6 +104,19 @@ fun MapRoute(
     val snackbarHostState = remember { SnackbarHostState() }
     val myLocation = rememberMyLocationAction(locationState, mapState, snackbarHostState)
 
+    // A place opened from a link: the map moves to it once, when it arrives.
+    val place = linkedPlace.place
+    LaunchedEffect(place) {
+        val point = place?.point ?: return@LaunchedEffect
+        mapState.animateCamera(
+            CameraUpdate(
+                center = Position(longitude = point.lon, latitude = point.lat),
+                zoom = place.zoom ?: PLACE_ZOOM,
+            ),
+        )
+    }
+    LaunchedEffect(linkMessages) { linkMessages.collect { snackbarHostState.showOnly(it) } }
+
     MapScreen(
         attribution = (fallback.current ?: sources.first()).attribution,
         mapUnavailable = fallback.allFailed,
@@ -95,6 +125,27 @@ fun MapRoute(
         onOpenSettings = onOpenSettings,
         missing = missing,
         snackbarHostState = snackbarHostState,
+        placeCard =
+            when {
+                linkedPlace.opening -> {
+                    { OpeningLinkCard() }
+                }
+
+                place != null -> {
+                    {
+                        PlaceCard(
+                            place = place,
+                            provider = linkedPlace.provider,
+                            onShare = onSharePlace?.let { share -> { share(place) } },
+                            onClose = onClosePlace,
+                        )
+                    }
+                }
+
+                else -> {
+                    null
+                }
+            },
     ) {
         MaplibreMap(state = mapState) {
             Box(

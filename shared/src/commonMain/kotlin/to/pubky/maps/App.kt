@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -12,6 +13,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.serialization.Serializable
 import to.pubky.maps.account.AccountRoute
 import to.pubky.maps.account.AccountState
@@ -19,6 +21,9 @@ import to.pubky.maps.account.AccountUi
 import to.pubky.maps.config.AppSettings
 import to.pubky.maps.config.Service
 import to.pubky.maps.config.SettingsRepository
+import to.pubky.maps.links.AppLinks
+import to.pubky.maps.links.LinkedPlaceState
+import to.pubky.maps.links.OpenIn
 import to.pubky.maps.map.MapRoute
 import to.pubky.maps.settings.AddServerScreen
 import to.pubky.maps.settings.LicencesRoute
@@ -67,7 +72,8 @@ private data object AccountDestination
  * The whole app: the map, and the settings pages on top of it. [loadLicences] returns the
  * AboutLibraries JSON of the bundled libraries. [updates] is the in-app updater, null in builds that
  * an app store updates. [account] is the Pubky account (sign-in with Pubky Ring), null where there is
- * none.
+ * none. [links] opens map links other apps send and shares places; null where the core is not
+ * available.
  */
 @Composable
 fun App(
@@ -76,13 +82,16 @@ fun App(
     loadLicences: suspend () -> String,
     updates: UpdateController? = null,
     account: AccountUi? = null,
+    links: AppLinks? = null,
 ) {
     val loaded by settingsRepository.settings.collectAsStateWithLifecycle()
     val updatesState = updates?.state?.collectAsStateWithLifecycle()?.value
     PubkyMapsTheme {
         // The settings file is read in a few milliseconds at start-up; until then the window stays
         // blank instead of loading the default map style and switching to the user's own.
-        loaded?.let { settings -> AppNavigation(appInfo, settings, settingsRepository, loadLicences, updates, updatesState, account) }
+        loaded?.let { settings ->
+            AppNavigation(appInfo, settings, settingsRepository, loadLicences, updates, updatesState, account, links)
+        }
         val dialog = updatesState?.dialog
         if (updates != null && dialog != null) {
             UpdateDialogHost(
@@ -107,6 +116,7 @@ private fun AppNavigation(
     updates: UpdateController?,
     updatesState: UpdatesUiState?,
     account: AccountUi?,
+    links: AppLinks?,
 ) {
     val update: ((AppSettings) -> AppSettings) -> Unit = remember(settingsRepository) { { settingsRepository.update(it) } }
     val navController = rememberNavController()
@@ -136,9 +146,34 @@ private fun AppNavigation(
         }
     }
 
+    // A link from another app opens on the map, whichever page is showing.
+    if (links != null) {
+        val pinakes by rememberUpdatedState(settings.servers[Service.Pinakes].map { it.url })
+        LaunchedEffect(links) {
+            links.incoming.collect { text ->
+                navController.popBackStack(MapDestination, inclusive = false)
+                links.linkedPlaces.open(text, pinakes)
+            }
+        }
+    }
+
     NavHost(navController = navController, startDestination = MapDestination) {
         composable<MapDestination> {
-            MapRoute(servers = settings.servers, onOpenSettings = { navController.open(SettingsDestination) }, missing = missing)
+            val linkedPlace =
+                links
+                    ?.linkedPlaces
+                    ?.state
+                    ?.collectAsStateWithLifecycle()
+                    ?.value ?: LinkedPlaceState()
+            MapRoute(
+                servers = settings.servers,
+                onOpenSettings = { navController.open(SettingsDestination) },
+                linkedPlace = linkedPlace,
+                onSharePlace = links?.let { l -> { place -> l.share(OpenIn.shareText(place, l.mapLinks)) } },
+                onClosePlace = { links?.linkedPlaces?.close() },
+                linkMessages = links?.linkedPlaces?.messages ?: emptyFlow(),
+                missing = missing,
+            )
         }
         composable<SettingsDestination> {
             SettingsScreen(
