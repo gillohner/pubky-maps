@@ -205,27 +205,42 @@ private fun rememberMyLocationAction(
     }
 
     return {
-        val permission = locationState.permission
-        val lastLocation = locationState.lastLocation
-        when {
-            permission is LocationPermission.Granted && locationState.status is LocationTrackingStatus.Unavailable -> {
-                locationState.retry()
-                explainLocationOff()
+        val step =
+            myLocationStep(
+                permission = locationState.permission,
+                trackingUnavailable = locationState.status is LocationTrackingStatus.Unavailable,
+                hasFix = locationState.lastLocation != null,
+            )
+        when (step) {
+            MyLocationStep.RetryThenCenter -> {
+                centerOnNextFix = true
+                scope.launch {
+                    val recovered =
+                        retryRecovers(
+                            retry = locationState::retry,
+                            unavailable = snapshotFlow { locationState.status is LocationTrackingStatus.Unavailable },
+                        )
+                    // The status collector above may already have explained it and ended the request.
+                    if (!recovered && centerOnNextFix) {
+                        centerOnNextFix = false
+                        explainLocationOff()
+                    }
+                }
             }
 
-            permission is LocationPermission.Granted && lastLocation != null -> {
-                moveTo(lastLocation)
+            MyLocationStep.MoveToLastFix -> {
+                locationState.lastLocation?.let { moveTo(it) }
             }
 
-            permission is LocationPermission.Granted -> {
+            MyLocationStep.CenterOnNextFix -> {
                 centerOnNextFix = true
             }
 
-            permission is LocationPermission.NotGranted && permission.canRequest == false -> {
+            MyLocationStep.ExplainPermissionOff -> {
                 explainPermissionOff()
             }
 
-            else -> {
+            MyLocationStep.RequestPermission -> {
                 centerOnNextFix = true
                 locationState.requestPermission()
             }
