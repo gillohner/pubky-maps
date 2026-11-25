@@ -84,7 +84,8 @@ fun PlaceSheet(
     var shownStop by remember { mutableStateOf(stop) }
     LaunchedEffect(target, stop) {
         if (dragged != null) return@LaunchedEffect
-        if (stop == shownStop) resting.snapTo(target) else resting.animateTo(target)
+        // A release animating to its stop goes on animating (the stop change restarts this effect).
+        if (stop == shownStop && !resting.isRunning) resting.snapTo(target) else resting.animateTo(target)
         shownStop = stop
     }
     // Never taller than the page itself, also in the frame where the page has just become shorter.

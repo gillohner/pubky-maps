@@ -37,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
@@ -245,20 +246,49 @@ fun MapScreen(
             // The place sheet at the bottom edge, the credits and my location riding on it (hidden while
             // the sheet takes the whole screen), up to under the search bar.
             val insets = WindowInsets.safeDrawing.asPaddingValues()
-            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
-                if (!placePage.full) {
-                    Box(Modifier.padding(horizontal = MapControlMargin).padding(bottom = 8.dp)) {
-                        BottomControls(attribution, onMyLocation, snackbarHostState)
+            val underBar = insets.calculateTopPadding() + MapControlMargin + TopControlSize + 8.dp
+            PlaceSheetWithControls(
+                topSpace = underBar,
+                controls = {
+                    if (!placePage.full) {
+                        Box(Modifier.padding(horizontal = MapControlMargin).padding(bottom = 8.dp)) {
+                            BottomControls(attribution, onMyLocation, snackbarHostState)
+                        }
                     }
-                }
-                placePage.sheet(
-                    screenHeight - insets.calculateTopPadding() - MapControlMargin - TopControlSize - 8.dp,
-                    insets.calculateBottomPadding(),
-                )
-            }
+                },
+                sheet = { placePage.sheet(screenHeight - underBar, insets.calculateBottomPadding()) },
+                modifier = Modifier.fillMaxSize(),
+            )
         }
         if (search != null && !wide && mode == SearchMode.Editing) {
             SearchPage(search)
+        }
+    }
+}
+
+/**
+ * The place sheet at the bottom with [controls] (credits, my location) riding on its top edge. As
+ * with search's results sheet, the controls are left out (not drawn, not touchable) whenever they
+ * would reach into [topSpace] under the search bar: at the full stop, and while the sheet is dragged
+ * or animates that far.
+ */
+@Composable
+internal fun PlaceSheetWithControls(
+    topSpace: Dp,
+    controls: @Composable () -> Unit,
+    sheet: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Layout(contents = listOf(controls, sheet), modifier = modifier) { (controlsMeasurables, sheetMeasurables), constraints ->
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val placedSheet = sheetMeasurables.first().measure(loose)
+        val placedControls = controlsMeasurables.firstOrNull()?.measure(loose)
+        layout(constraints.maxWidth, constraints.maxHeight) {
+            val sheetTop = constraints.maxHeight - placedSheet.height
+            placedSheet.place(0, sheetTop)
+            if (placedControls != null && sheetTop - placedControls.height >= topSpace.roundToPx()) {
+                placedControls.place(0, sheetTop - placedControls.height)
+            }
         }
     }
 }
