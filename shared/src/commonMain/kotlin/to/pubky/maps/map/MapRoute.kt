@@ -315,6 +315,9 @@ private fun rememberMapSearch(
     return MapSearch(state = state, recents = recents, userLocation = userLocation, actions = actions)
 }
 
+/** Under the search bar, plus a pin's height: pins stand above their points. */
+private val RESULTS_FIT_TOP = 136.dp
+
 /** About 100 m: the box a lone result is shown in, a street's worth around it. */
 private const val LONE_RESULT_MARGIN_DEGREES = 0.001
 
@@ -324,10 +327,10 @@ private const val LONE_RESULT_MARGIN_DEGREES = 0.001
  */
 private fun resultsFitPadding(size: DpSize?): DpPadding =
     if (size != null && size.width >= SidePanelMinWidth) {
-        DpPadding(left = SidePanelWidth + 48.dp, top = 96.dp, right = 48.dp, bottom = 120.dp)
+        DpPadding(left = SidePanelWidth + 48.dp, top = RESULTS_FIT_TOP, right = 48.dp, bottom = 120.dp)
     } else {
         // Half the screen for the sheet, plus my location and the credits riding on its edge.
-        DpPadding(left = 48.dp, top = 96.dp, right = 48.dp, bottom = (size?.height ?: 800.dp) / 2 + 120.dp)
+        DpPadding(left = 48.dp, top = RESULTS_FIT_TOP, right = 48.dp, bottom = (size?.height ?: 800.dp) / 2 + 120.dp)
     }
 
 /** A phone screen's half diagonal in dp, for a map whose size is not known yet. */
