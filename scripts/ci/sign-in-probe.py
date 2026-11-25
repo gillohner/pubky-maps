@@ -15,12 +15,15 @@ sign-in relay in its settings file) and Ring's return links (opened with `am sta
   stops listening.
 - A return link with another nonce changes nothing.
 
-The link holds the flow's relay secret, so it is never printed or saved; only its parts are checked.
+The link holds the flow's relay secret, so it is never printed or saved (nor a screenshot of its QR
+code); only its parts are checked.
 
 Usage: sign-in-probe.py <apk> <out dir>
 """
 import json
+import subprocess
 import sys
+import tempfile
 import time
 import urllib.parse
 from pathlib import Path
@@ -47,15 +50,36 @@ def link_parts(link):
     return {k: v[0] for k, v in query.items()}
 
 
-def read_qr(dev, name):
+def read_qr(dev):
+    """The QR code's link. The screenshot holds the relay secret, so it is read from a temporary
+    file and deleted, never kept with the test's output."""
     node = dev.wait_for("QR code of the sign-in link", 30)
     if node is None:
         dev.fail("no QR code on the sign-in page")
     time.sleep(1)
-    link = decode_qr(dev.screenshot(name))
+    with tempfile.TemporaryDirectory() as tmp:
+        shot = Path(tmp) / "qr.png"
+        shot.write_bytes(subprocess.run(["adb", "exec-out", "screencap", "-p"], capture_output=True, timeout=60).stdout)
+        link = decode_qr(shot)
     if link is None:
-        dev.fail(f"the QR code on {name}.png does not decode")
+        dev.fail("the QR code on the sign-in page does not decode")
     return link
+
+
+def open_account(dev, row):
+    """The account page after a start: Android may bring back the page the app was on (the account
+    page) or start on the map; from the map it goes through Settings and the row labelled `row`."""
+    deadline = time.time() + 60
+    while time.time() < deadline:
+        nodes = dev.dump("start")
+        if dev.find(nodes, "Account") is not None and dev.find(nodes, "Settings") is None:
+            return
+        if dev.find(nodes, "Show my location") is not None:
+            dev.tap("Settings")
+            dev.tap(row, timeout=20)
+            return
+        time.sleep(2)
+    dev.fail("neither the map nor the account page showed after the start")
 
 
 def main():
@@ -81,7 +105,7 @@ def main():
     dev.tap("Sign in with Pubky Ring")
     if dev.wait_for("Pubky Ring is not on this phone", 20, exact=False) is None:
         dev.fail("no 'Ring is not on this phone' text: the emulator has no Ring, the QR code should show")
-    link = read_qr(dev, "sign-in-qr")
+    link = read_qr(dev)
     parts = link_parts(link)
     log(f"QR link: pubkyauth, relay {parts.get('relay')}, return links {sorted(k for k in parts if k.startswith('x-'))}")
     if parts.get("relay", "").rstrip("/") != relay.url:
@@ -129,9 +153,8 @@ def main():
 
     # A new start continues the same sign-in.
     dev.start_app()
-    dev.tap("Settings", timeout=60)
-    dev.tap("Signing in…", timeout=20)
-    resumed = read_qr(dev, "sign-in-resumed")
+    open_account(dev, "Signing in…")
+    resumed = read_qr(dev)
     if resumed != link:
         dev.fail("after the kill the sign-in shows a different link: it did not continue the stored one")
     log("after the kill the same sign-in continues")
@@ -158,7 +181,7 @@ def main():
     # Nothing of the flow is left: a restart is signed out.
     dev.shell(f"am force-stop {PKG}")
     dev.start_app()
-    dev.tap("Settings", timeout=60)
+    open_account(dev, "Sign in with Pubky Ring")
     if dev.wait_for("Sign in with Pubky Ring", 20) is None:
         dev.fail("after the cancel and a restart the account is not signed out")
     left = dev.shell(f"run-as {PKG} ls no_backup/secrets").split()
