@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
 import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
+import com.github.takahirom.roborazzi.RoborazziOptions
 import com.github.takahirom.roborazzi.captureScreenRoboImage
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -32,6 +33,9 @@ import to.pubky.maps.ui.PubkyMapsTheme
 
 private const val PHONE = "w412dp-h915dp"
 private const val TABLET = "w1280dp-h800dp"
+
+/** Share of pixels that may differ: a text cursor is about 60 of 377,000 pixels on a phone. */
+private const val CURSOR_TOLERANCE = 0.001f
 
 /**
  * Settings pages driven the way a user drives them: adding a server (a refused address, an accepted
@@ -56,8 +60,16 @@ class SettingsInteractionTest {
         }
     }
 
-    private fun capture(name: String) {
-        captureScreenRoboImage("screenshots/$name.png")
+    /** [textCursor]: a text field has focus, and its blinking cursor may differ by a few pixels. */
+    private fun capture(
+        name: String,
+        textCursor: Boolean = false,
+    ) {
+        val tolerance = if (textCursor) CURSOR_TOLERANCE else 0f
+        captureScreenRoboImage(
+            "screenshots/$name.png",
+            RoborazziOptions(compareOptions = RoborazziOptions.CompareOptions(changeThreshold = tolerance)),
+        )
     }
 
     // Add a server: a refused address shows why, under the field.
@@ -79,7 +91,7 @@ class SettingsInteractionTest {
     private fun addServerWithBadAddress(name: String) {
         openAddServerAndType("http://photon.example.org")
         compose.onNodeWithText("Use https://. Plain http:// works only for localhost and 127.0.0.1.").assertExists()
-        capture(name)
+        capture(name, textCursor = true)
     }
 
     @Test
