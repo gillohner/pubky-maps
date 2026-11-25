@@ -130,13 +130,22 @@ private fun PlaceRef.detailLine(): String? {
 val LinkProvider.title: String
     get() =
         when (this) {
-            LinkProvider.Geo -> "geo:"
+            // geo: links come from any map app.
+            LinkProvider.Geo -> "map"
+
             LinkProvider.Google -> "Google Maps"
+
             LinkProvider.Apple -> "Apple Maps"
+
             LinkProvider.Waze -> "Waze"
+
             LinkProvider.OpenStreetMap -> "OpenStreetMap"
+
             LinkProvider.OsmAnd -> "OsmAnd"
+
             LinkProvider.OrganicMaps -> "Organic Maps"
+
             LinkProvider.CoMaps -> "CoMaps"
+
             LinkProvider.Here -> "HERE WeGo"
         }

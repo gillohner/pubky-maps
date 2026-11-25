@@ -10,11 +10,26 @@
         android:name="android.hardware.location.gps"
         android:required="false" />
 
-    <!-- To know whether Pubky Ring is on this phone (it handles pubkyauth:// sign-in links). -->
+    <!-- To know whether Pubky Ring is on this phone (it handles pubkyauth:// sign-in links), and the
+         map apps the place page can hand a place to (package visibility, Android 11+). -->
     <queries>
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="pubkyauth" />
+        </intent>
+        <package android:name="com.google.android.apps.maps" />
+        <package android:name="com.waze" />
+        <package android:name="app.organicmaps" />
+        <package android:name="app.comaps.fdroid" />
+        <package android:name="app.comaps.google" />
+        <package android:name="app.comaps" />
+        <package android:name="net.osmand.plus" />
+        <package android:name="net.osmand" />
+        <package android:name="com.here.app.maps" />
+        <!-- "Other map apps": whether any app opens geo: links. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="geo" />
         </intent>
     </queries>
 
@@ -27,6 +42,10 @@
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
         android:theme="@style/Theme.PubkyMaps">
+        <!--
+            singleTask: a link from another app opens the one map (in its own task) instead of a
+            second copy inside the other app. Hosts we do not own are never autoVerify.
+        -->
         <activity
             android:name=".android.MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density"
@@ -45,6 +64,147 @@
                 <data
                     android:host="auth"
                     android:scheme="pubkymaps" />
+            </intent-filter>
+            <!-- geo: links, the Android standard for a point. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="geo" />
+            </intent-filter>
+            <!-- Organic Maps and CoMaps app links. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="om" />
+                <data android:scheme="cm" />
+                <data android:scheme="ge0" />
+            </intent-filter>
+            <!-- Google Maps. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="www.google.com" />
+                <data android:host="google.com" />
+                <data android:host="maps.google.com" />
+                <data android:pathPrefix="/maps" />
+            </intent-filter>
+            <!-- Google Maps short links. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="maps.app.goo.gl" />
+            </intent-filter>
+            <!-- Google Maps short links (older). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="goo.gl" />
+                <data android:pathPrefix="/maps/" />
+            </intent-filter>
+            <!-- Apple Maps, and its short links (maps.apple/p/). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="maps.apple.com" />
+                <data android:host="maps.apple" />
+            </intent-filter>
+            <!-- Waze. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="waze.com" />
+                <data android:host="www.waze.com" />
+                <data android:pathPrefix="/ul" />
+                <data android:pathPattern="/.*/live-map.*" />
+                <data android:pathPrefix="/live-map" />
+            </intent-filter>
+            <!-- OpenStreetMap elements, short links, marker and map-view links. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="www.openstreetmap.org" />
+                <data android:host="openstreetmap.org" />
+                <data android:host="osm.org" />
+                <data android:host="www.osm.org" />
+                <data android:pathPrefix="/node/" />
+                <data android:pathPrefix="/way/" />
+                <data android:pathPrefix="/relation/" />
+                <data android:pathPrefix="/go/" />
+                <data android:path="/" />
+            </intent-filter>
+            <!-- OsmAnd. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="osmand.net" />
+                <data android:host="www.osmand.net" />
+                <data android:pathPrefix="/map" />
+                <data android:pathPrefix="/go" />
+            </intent-filter>
+            <!-- Organic Maps and CoMaps web links. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="omaps.app" />
+                <data android:host="ge0.me" />
+                <data android:host="comaps.at" />
+            </intent-filter>
+            <!-- HERE WeGo share links. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="share.here.com" />
+                <data android:pathPrefix="/l/" />
+                <data android:pathPrefix="/r/" />
+                <data android:pathPrefix="/p/" />
+            </intent-filter>
+            <!-- HERE WeGo map links. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="www.here.com" />
+                <data android:host="here.com" />
+                <data android:host="wego.here.com" />
+                <data android:pathPrefix="/location" />
+                <data android:path="/" />
+            </intent-filter>
+            <!-- Text shared from another app (a map app's Share), with a map link in it. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
     </application>
