@@ -63,25 +63,38 @@ class LicencesTest {
     @Test
     fun theRustCratesOfTheCoreAreListedWithTheirLicencesNextToTheGradleLibraries() {
         // As MainActivity reads them: both generated lists, merged.
-        val resources = RuntimeEnvironment.getApplication().resources
-        val read = { id: Int -> resources.openRawResource(id).bufferedReader().use { it.readText() } }
-        val libraries =
-            parseLicences(mergeLicenceLists(read(R.raw.aboutlibraries), read(R.raw.rust_licences)))
-                .libraries
-                .associateBy { it.uniqueId }
+        val list = parseLicences(readLicenceList(RuntimeEnvironment.getApplication().resources)).libraries
+        val libraries = list.associateBy { it.uniqueId }
 
+        // The list screen keys its rows by uniqueId: two equal ids crash it.
+        val repeated = list.groupBy { it.uniqueId }.filterValues { it.size > 1 }.keys
+        assertTrue("ids listed more than once: $repeated", repeated.isEmpty())
         assertTrue("MapLibre is still listed", "org.maplibre.compose:maplibre-compose" in libraries)
-        val pubky = libraries.getValue("crates.io:pubky")
-        assertEquals("MIT", pubky.licenses.single().name)
-        val uniffi = libraries.getValue("crates.io:uniffi_core")
+        // A crate linked in two versions is listed once per version.
+        val pubky = list.filter { it.name == "pubky" }
+        assertTrue(pubky.size >= 2)
+        assertEquals(
+            "MIT",
+            libraries
+                .getValue("crates.io:pubky@0.18.0")
+                .licenses
+                .single()
+                .name,
+        )
+        val uniffi = list.single { it.name == "uniffi_core" }
         assertEquals("MPL-2.0", uniffi.licenses.single().name)
         // MPL-2.0: the list points to the crate's source.
         assertTrue(uniffi.website.orEmpty().startsWith("https://"))
         // Licence files with copyright lines are shown as they are (tokio is MIT, with its own file).
-        assertTrue(libraries.getValue("crates.io:tokio").licenses.any { it.licenseContent.orEmpty().contains("Copyright") })
+        assertTrue(list.single { it.name == "tokio" }.licenses.any { it.licenseContent.orEmpty().contains("Copyright") })
+        // Only crates linked into the core: no build tools (uniffi's bindgen CLI) and no proc-macros.
+        val names = list.map { it.name }.toSet()
+        for (tool in listOf("clap", "uniffi_bindgen", "askama", "syn", "proc-macro2")) {
+            assertTrue("$tool is not linked into the core", tool !in names)
+        }
         val rustCrates = libraries.keys.count { it.startsWith("crates.io:") }
         assertTrue("only $rustCrates Rust crates", rustCrates >= 100)
-        val withoutLicence = libraries.values.filter { it.licenses.isEmpty() }.map { it.uniqueId }
+        val withoutLicence = list.filter { it.licenses.isEmpty() }.map { it.uniqueId }
         assertTrue("no licence for $withoutLicence", withoutLicence.isEmpty())
     }
 

@@ -3,11 +3,12 @@
 JSON document (the format of the app's generated aboutlibraries.json), so the app's open-source
 licence screen lists them next to the Gradle libraries.
 
-The crates are the normal (not build, not dev) dependencies of pubky-maps-core for the Android
-targets the app ships, without proc-macros (they run in the compiler and are not linked). Every
-crate gets its licence expression and the text of its own licence files (LICENSE*, COPYING*,
-NOTICE*), which carry its copyright lines. The standard Apache-2.0 text is long and the same in
-every crate, so it is stored once and shared.
+The crates are what `cargo tree -p pubky-maps-core -e normal,no-proc-macro --target <t>` lists for
+the Android targets the app ships: the core's own features, normal dependencies only, and no
+proc-macros or what only they use (they run in the compiler and are not linked). Every crate gets
+its licence expression and the text of its own licence files (LICENSE*, COPYING*, NOTICE*), which
+carry its copyright lines; the standard Apache-2.0 text is long and the same in every crate, so it
+is stored once and shared. A crate linked in two versions is listed once per version.
 
 Usage: rust-licences.py <out file>     (run from anywhere; needs cargo and Cargo.lock)
 """
@@ -25,30 +26,27 @@ LICENCE_FILE = re.compile(r"^(LICEN[CS]E|COPYING|NOTICE|UNLICENSE)", re.I)
 APACHE_KEY = "Apache-2.0"
 
 
-def metadata(target):
+def metadata():
     out = subprocess.run(
-        ["cargo", "metadata", "--format-version", "1", "--locked", "--filter-platform", target],
+        ["cargo", "metadata", "--format-version", "1", "--locked"],
         cwd=ROOT, check=True, capture_output=True, text=True,
     ).stdout
     return json.loads(out)
 
 
-def shipped(meta):
-    packages = {p["id"]: p for p in meta["packages"]}
-    nodes = {n["id"]: n for n in meta["resolve"]["nodes"]}
-    root = next(p["id"] for p in meta["packages"] if p["name"] == CORE)
-    seen, stack = set(), [root]
-    while stack:
-        pid = stack.pop()
-        if pid in seen:
-            continue
-        seen.add(pid)
-        for dep in nodes[pid]["deps"]:
-            if any(kind["kind"] is None for kind in dep["dep_kinds"]):
-                stack.append(dep["pkg"])
-    seen.discard(root)
-    return [packages[pid] for pid in seen
-            if not any("proc-macro" in t["kind"] for t in packages[pid]["targets"])]
+def linked(target):
+    """(name, version) of every crate linked into the core for `target`, the core itself left out."""
+    out = subprocess.run(
+        ["cargo", "tree", "-p", CORE, "-e", "normal,no-proc-macro", "--target", target,
+         "--prefix", "none", "--locked", "--format", "{p}"],
+        cwd=ROOT, check=True, capture_output=True, text=True,
+    ).stdout
+    crates = set()
+    for line in out.splitlines():
+        m = re.match(r"^(\S+) v(\S+)", line.strip())
+        if m and m.group(1) != CORE:
+            crates.add((m.group(1), m.group(2)))
+    return crates
 
 
 def normalised(text):
@@ -68,10 +66,11 @@ def is_standard_apache(text):
 
 def main():
     out = Path(sys.argv[1])
+    packages = {(p["name"], p["version"]): p for p in metadata()["packages"]}
     crates = {}
     for target in TARGETS:
-        for package in shipped(metadata(target)):
-            crates[(package["name"], package["version"])] = package
+        for key in linked(target):
+            crates[key] = packages[key]
 
     licences = {APACHE_KEY: {"name": "Apache License 2.0", "url": "https://www.apache.org/licenses/LICENSE-2.0",
                              "spdxId": "Apache-2.0", "hash": APACHE_KEY}}
@@ -108,7 +107,7 @@ def main():
         website = package.get("homepage") or package.get("repository") or f"https://crates.io/crates/{name}"
         authors = [re.sub(r"\s*<[^>]*>", "", a).strip() for a in package.get("authors") or []]
         libraries.append({
-            "uniqueId": f"crates.io:{name}",
+            "uniqueId": f"crates.io:{name}@{version}",
             "artifactVersion": version,
             "name": name,
             "description": (package.get("description") or "").strip(),

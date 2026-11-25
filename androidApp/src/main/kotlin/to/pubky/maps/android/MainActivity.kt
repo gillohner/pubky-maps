@@ -10,8 +10,6 @@ import kotlinx.coroutines.withContext
 import to.pubky.maps.App
 import to.pubky.maps.AppInfo
 import to.pubky.maps.BuildConfig
-import to.pubky.maps.R
-import to.pubky.maps.settings.mergeLicenceLists
 
 /** Pubky Ring's return links: `pubkymaps://auth/{success|error|cancel}?nonce=…`. */
 private const val RING_RETURN_SCHEME = "pubkymaps"
@@ -60,13 +58,5 @@ class MainActivity : ComponentActivity() {
         if (data.scheme == RING_RETURN_SCHEME) app.account.onRingCallback(data.toString())
     }
 
-    /**
-     * The open-source licence list: the libraries the AboutLibraries plugin found, and the Rust crates
-     * of the core (scripts/rust-licences.py), both generated at build time.
-     */
-    private suspend fun readLicences(): String =
-        withContext(Dispatchers.IO) {
-            val read = { id: Int -> resources.openRawResource(id).bufferedReader().use { it.readText() } }
-            mergeLicenceLists(read(R.raw.aboutlibraries), read(R.raw.rust_licences))
-        }
+    private suspend fun readLicences(): String = withContext(Dispatchers.IO) { readLicenceList(resources) }
 }
