@@ -9,13 +9,18 @@ A change is done when all of these pass on its head commit:
 - `./gradlew check`: unit tests (`:shared` host tests, `:androidApp` Robolectric tests), Android lint,
   ktlint (Kotlin official style; run `./gradlew ktlintFormat` first).
 - `./gradlew verifyRoborazziDirectDebug`: the screens match the reference screenshots.
+- `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test` when
+  `core/` changed (CI: `.github/workflows/core.yml`).
 - CI (`.github/workflows/android.yml`) green, including the emulator smoke test that installs the
-  debug APK, waits for the map to draw, opens Settings and goes back, and, when the updater or the
-  release changed, the update probe (`scripts/ci/update-probe.py`): two signed release builds, a
+  debug APK, waits for the map to draw, opens Settings and goes back, then the sign-in probe
+  (`scripts/ci/sign-in-probe.py`, Pubky Ring sign-in up to the link and back on a fixture relay);
+  when the app, the core or CI changed, the Synonym-blocked test (`scripts/ci/synonym-blocked.py`);
+  and, when the updater or the release changed, the update probe (`scripts/ci/update-probe.py`): two signed release builds, a
   tampered feed and a tampered APK refused, the real update installed from inside the app.
 
-Every behaviour gets a test: logic in JVM unit tests (`shared/src/commonTest`), screens in Roborazzi
-screenshot tests (`androidApp/src/test`).
+Every behaviour gets a test: logic in JVM unit tests (`shared/src/commonTest`), Android-side code
+and real calls into the Rust core in host tests (`shared/src/androidHostTest`, which load a build of
+the core for this machine), screens in Roborazzi screenshot tests (`androidApp/src/test`).
 
 ## Screenshot rule
 
@@ -25,6 +30,8 @@ screenshot tests (`androidApp/src/test`).
   committing. Compare them with how Google Maps, CoMaps and OsmAnd handle the same screen.
 - MapLibre cannot draw on the JVM. Keep screens split into a composable that takes plain state (tested
   with a placeholder map) and a route that wires the live map (checked by the emulator test).
+- A screen with a running progress indicator never goes idle in `ScreenshotTest`'s capture; take it
+  with the Compose clock stopped, as `SignInScreenshotTest` does.
 
 ## Server-list rule
 
@@ -36,7 +43,15 @@ hard-codes a server elsewhere, and a failing server hands over to the next one i
 
 The app must start and show the map with every Synonym host blocked (`*.pubky.app`, `*.synonym.to`,
 Synonym homeservers and our development hosts). Never block the UI on a network call; a missing
-service makes a feature degrade, never the app stop.
+service makes a feature degrade, never the app stop. A part that is missing because every server of
+its list failed goes into `ServiceHealth`, and the map names it in one line. The Synonym-blocked
+emulator test checks this on every change to the app, the core or CI.
+
+## Secrets on the phone
+
+Session credentials and a running sign-in's state are stored only through `SecretStore`
+(Keystore-encrypted files in the no-backup folder). They and the `pubkyauth://` link (it holds the
+relay secret) are never logged; `toString()` of the types that hold them is redacted.
 
 ## No secrets
 

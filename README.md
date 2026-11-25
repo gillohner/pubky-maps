@@ -6,10 +6,13 @@ code also declares iOS targets, which are not built yet.
 The app shows a full-screen online map in light or dark (following the system), the user's location
 on request, a compass when the map is rotated, and Settings:
 
+- **Account:** sign in with [Pubky Ring](https://github.com/pubky/pubky-ring). It shows the user's
+  profile name, tags and saved places, kept on the phone so they stay readable offline, and signs out.
 - **Server lists:** an ordered list of servers per service (map styles, Photon, Pinakes, Nexus,
   Pkarr relays, sign-in relay). Users add, remove, reorder and reset them; servers run by Synonym are
   marked. The map uses its style list in order, the next style taking over when one fails to load;
-  the other lists are stored and editable, and no feature reads them yet.
+  sign-in uses the Pkarr and sign-in relay lists (from the next start after a change); the Photon,
+  Pinakes and Nexus lists are stored and editable, and no feature reads them yet.
 - **What is stored online:** per kind of data (saved places, home and work, lists, check-ins, tracks,
   location history, photo locations) phone only, homeserver private or public. Tags and reviews are
   public by nature. The choices are stored; nothing uploads data yet.
@@ -34,15 +37,28 @@ on request, a compass when the map is rotated, and Settings:
   (`config/SettingsRepository.kt`, `config/SettingsCodec.kt`). Only the user's own changes are
   stored, so new defaults reach everyone who did not change that setting. A file from an older
   version is migrated step by step; one from a newer version is read as far as it is understood.
+- The Rust core (`core/`, see [core/README.md](core/README.md)) does the Pubky work: sign-in, the
+  homeserver, the social objects. Gradle builds it: `:shared:generateCoreBindings` builds it for this
+  machine and generates its Kotlin bindings (UniFFI, called through JNA), which the JVM tests also use
+  for real calls; `:androidApp:buildCoreForAndroid` builds `libpubky_maps_core.so` for arm64-v8a and
+  x86_64 with cargo-ndk and packages it into the APK.
+- Sign-in with Pubky Ring: the app opens Ring's `pubkyauth://` link, or shows it as a QR code when
+  Ring is on another device; Ring sends the user back with `pubkymaps://auth/…`. A running sign-in
+  and the session are stored encrypted with an Android Keystore key, never in a backup; the user's own
+  data (profile name, tags, saved places) is cached in SQLite (SQLDelight). When the homeserver cannot
+  be reached the app stays signed in, shows the cached data and says so in one line over the map.
 - The open-source licence list is generated at build time by the AboutLibraries Gradle plugin from the
   app's dependencies.
 - Versions of every tool and library are in `gradle/libs.versions.toml`.
 
 ## Build
 
-Requirements: JDK 17 or newer to run Gradle, and the Android SDK (`ANDROID_HOME`, or `sdk.dir` in
-`local.properties`). Gradle downloads a Java 21 toolchain for the unit tests if none is installed
-(Robolectric needs it for Android 15 and later).
+Requirements: JDK 17 or newer to run Gradle, the Android SDK (`ANDROID_HOME`, or `sdk.dir` in
+`local.properties`), and Rust (stable, via rustup). Gradle downloads a Java 21 toolchain for the unit
+tests if none is installed (Robolectric needs it for Android 15 and later). Building an APK also needs
+the Android NDK (`ANDROID_NDK_HOME`, r27 or newer), `cargo install cargo-ndk` and
+`rustup target add aarch64-linux-android x86_64-linux-android`. Set `CARGO_TARGET_DIR` to share one
+cargo build directory between checkouts.
 
 ```sh
 ./gradlew check                  # unit tests, screenshot tests, Android lint, ktlint
@@ -98,6 +114,19 @@ every other server (`ServerDefaults.updateFeeds`): any mirror can serve the same
 tablet (1280x800 dp), light and dark. The JVM cannot draw the MapLibre map, so the map screen shows a
 flat placeholder under its controls there; the emulator smoke test in CI screenshots the real map,
 and the update probe screenshots each step of an in-app update.
+
+## Emulator tests in CI
+
+- Smoke test (`scripts/ci/emulator-smoke.sh`): the map draws, Settings opens, back returns.
+- Sign-in probe (`scripts/ci/sign-in-probe.py`): Pubky Ring cannot run in CI, so a fixture relay on
+  the runner stands in for the sign-in relay. The probe opens Settings → Account, starts a sign-in,
+  reads the QR code, checks the link and that the app listens on the relay, then opens Ring's return
+  links, kills the app in the middle and checks the same sign-in continues and Ring's cancel ends it.
+- Synonym blocked (`scripts/ci/synonym-blocked.py`): the emulator gets a DNS server that blocks every
+  host run by Synonym (`*.pubky.app`, `*.pubky.org`, `*.synonym.to`) and our development hosts. With a
+  seeded signed-in account the app must start, draw the map, show the cached profile and tags, and
+  name the missing homeserver in its banner; a second run also blocks the first map style and the map
+  must draw from the next one.
 
 ## Data sources and attribution
 
