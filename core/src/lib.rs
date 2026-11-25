@@ -29,6 +29,7 @@ pub use crate::error::CoreError;
 pub use crate::links::{
     LinkPlace, LinkedPlace, MapApp, MapLink, MapPoint, MapProvider, OsmElementRef, TravelMode,
     build_directions_link, build_place_link, find_map_link, map_link_place_uri, parse_map_link,
+    place_from_text,
 };
 pub use crate::objects::{
     BuiltFile, BuiltObject, CollectionEdit, CollectionItem, build_bookmark, build_collection,

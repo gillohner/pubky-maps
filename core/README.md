@@ -58,7 +58,10 @@ It bundles the `pubky` SDK (0.18), `pubky-social-specs` (1.0.0-rc.2) and the wor
   HTTPS to short-link hosts only; `openMapLink(text, pinakesServers)` does that, then asks
   Pinakes (`/v1/resources/by-uri`, the link as pasted, then its OSM element; the next server
   when one fails) and falls back to the link text. Its `LinkedPlace.sourceUri` is the link
-  as the user had it, the URI tags and posts go on.
+  as the user had it, the URI tags and posts go on; `pointIsView` marks a map-view or search
+  centre (not a place), `shortLinkUnfollowed` and `pinakesUnreachable` say which network step
+  failed. Link requests give up after 5 s to connect and 10 s in all. `placeFromText(text)` gives
+  the same place from the text alone (no network, no core instance), to show at once.
 - Objects: `tagPlace` and `untagPlace`, `postReview`, `postPhoto` (JPEG/PNG/WebP, no HEIC,
   EXIF stripped by the caller), `createCollection` and `editCollection` (at most 100 places),
   and `bookmarkPlace`, `removeBookmark` and `listBookmarks`. The pure `build*` functions return

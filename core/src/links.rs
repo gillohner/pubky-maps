@@ -275,18 +275,44 @@ pub fn build_directions_link(
     ))
 }
 
-/// The canonical place URI of a link: its OpenStreetMap element URL, else `geo:lat,lon` with
-/// at most 5 fraction digits; `None` for a search, a map view or an unfollowed short link.
+/// The canonical place URI of a link (`map_links::canonical_place_uri`): its OpenStreetMap
+/// element URL, else `geo:lat,lon` with at most 5 fraction digits; `None` for a search, a map
+/// view or an unfollowed short link.
 #[uniffi::export]
 pub fn map_link_place_uri(link: MapLink) -> Option<String> {
-    if let Some(osm) = link.osm {
-        return Some(map_links::OsmRef::from(osm).url());
+    map_links::canonical_place_uri(&link.into_crate()?)
+}
+
+impl MapLink {
+    /// The crate's link; `None` when the point is out of range (never for a link the crate read).
+    fn into_crate(self) -> Option<map_links::MapLink> {
+        let point = match self.point {
+            Some(p) => Some(map_links::Point::new(p.lat, p.lon)?),
+            None => None,
+        };
+        Some(map_links::MapLink {
+            provider: match self.provider {
+                MapProvider::Geo => map_links::Provider::Geo,
+                MapProvider::Google => map_links::Provider::Google,
+                MapProvider::Apple => map_links::Provider::Apple,
+                MapProvider::Waze => map_links::Provider::Waze,
+                MapProvider::OpenStreetMap => map_links::Provider::OpenStreetMap,
+                MapProvider::OsmAnd => map_links::Provider::OsmAnd,
+                MapProvider::OrganicMaps => map_links::Provider::OrganicMaps,
+                MapProvider::CoMaps => map_links::Provider::CoMaps,
+                MapProvider::Here => map_links::Provider::Here,
+            },
+            name: self.name,
+            point,
+            point_is_view: self.point_is_view,
+            osm: self.osm.map(Into::into),
+            zoom: self.zoom,
+            query: self.query,
+            provider_id: self.provider_id,
+            needs_redirect: self.needs_redirect,
+            original: self.original,
+        })
     }
-    if link.query.is_some() || link.point_is_view {
-        return None;
-    }
-    let point = map_links::Point::new(link.point?.lat, link.point?.lon)?;
-    Some(map_links::geo_uri(point, 5))
 }
 
 /// A place opened from a link, ready for the map.
@@ -297,6 +323,9 @@ pub struct LinkedPlace {
     pub provider: MapProvider,
     pub name: Option<String>,
     pub point: Option<MapPoint>,
+    /// The point is only the centre of a map view (or of a search), not a place: move the
+    /// camera there, do not pin it.
+    pub point_is_view: bool,
     pub osm: Option<OsmElementRef>,
     pub zoom: Option<f64>,
     /// Search text, when the link searches instead of naming a point.
@@ -305,9 +334,38 @@ pub struct LinkedPlace {
     pub card_uri: Option<String>,
     /// True when name and point come from a Pinakes card, false when from the link text.
     pub from_pinakes: bool,
-    /// True when a network step failed (the short link could not be followed, or no Pinakes
-    /// server answered), so the place may be less complete than it could be.
-    pub offline: bool,
+    /// A short link that could not be followed for a network failure (it may still hold a
+    /// place).
+    pub short_link_unfollowed: bool,
+    /// Pinakes servers were asked and none answered (every one failed or timed out).
+    pub pinakes_unreachable: bool,
+}
+
+impl LinkedPlace {
+    fn from_link(link: &map_links::MapLink) -> Self {
+        Self {
+            source_uri: link.original.clone(),
+            provider: link.provider.into(),
+            name: link.name.clone(),
+            point: link.point.map(Into::into),
+            point_is_view: link.point_is_view,
+            osm: link.osm.map(Into::into),
+            zoom: link.zoom,
+            query: link.query.clone(),
+            card_uri: None,
+            from_pinakes: false,
+            short_link_unfollowed: false,
+            pinakes_unreachable: false,
+        }
+    }
+}
+
+/// The place the map link in `text` names, read from the text alone (no network, no core
+/// instance), to show at once while `openMapLink` follows a short link and asks Pinakes, or
+/// when the core cannot be built. `None` when the text holds no map link.
+#[uniffi::export]
+pub fn place_from_text(text: String) -> Option<LinkedPlace> {
+    map_links::find_in_text(&text).map(|link| LinkedPlace::from_link(&link))
 }
 
 /// A Pinakes card, as far as the map needs it.
@@ -437,7 +495,7 @@ async fn open(
 ) -> Result<LinkedPlace, CoreError> {
     let mut link = map_links::find_in_text(&text)
         .ok_or_else(|| CoreError::validation("no map link in the text"))?;
-    let mut offline = false;
+    let mut short_link_unfollowed = false;
     if link.needs_redirect {
         match resolve(client.clone(), &link.original).await {
             Ok(resolved) => {
@@ -451,22 +509,14 @@ async fn open(
                     };
                 }
             }
-            Err(CoreError::Network { .. }) => offline = true,
+            Err(CoreError::Network { .. }) => short_link_unfollowed = true,
             // A dead or odd short link: keep what the text said.
             Err(_) => {}
         }
     }
     let mut place = LinkedPlace {
-        source_uri: link.original.clone(),
-        provider: link.provider.into(),
-        name: link.name.clone(),
-        point: link.point.map(Into::into),
-        osm: link.osm.map(Into::into),
-        zoom: link.zoom,
-        query: link.query.clone(),
-        card_uri: None,
-        from_pinakes: false,
-        offline,
+        short_link_unfollowed,
+        ..LinkedPlace::from_link(&link)
     };
     if pinakes.is_empty() {
         return Ok(place);
@@ -474,8 +524,10 @@ async fn open(
     // The link as pasted first (Pinakes keeps the links people referenced), then the OSM
     // element it names.
     let mut uris = vec![link.original.clone()];
-    if let Some(osm) = link.osm {
-        uris.push(osm.url());
+    if let Some(osm) = link.osm.map(|osm| osm.url())
+        && osm != link.original
+    {
+        uris.push(osm);
     }
     for uri in uris {
         match lookup(&client, &pinakes, &uri).await {
@@ -485,7 +537,10 @@ async fn open(
                     place.name = Some(name);
                 }
                 if let Some(point) = card.point.and_then(|p| map_links::Point::new(p.lat, p.lon)) {
+                    // A card is a place: its point is pinned, whatever the link showed.
                     place.point = Some(point.into());
+                    place.point_is_view = false;
+                    place.query = None;
                 }
                 if place.osm.is_none() {
                     place.osm = map_links::parse(&card.uri)
@@ -497,7 +552,7 @@ async fn open(
             }
             Lookup::Unknown => {}
             Lookup::Unreachable => {
-                place.offline = true;
+                place.pinakes_unreachable = true;
                 return Ok(place);
             }
         }
@@ -698,7 +753,7 @@ mod tests {
             .await
             .unwrap();
         assert!(place.from_pinakes);
-        assert!(!place.offline);
+        assert!(!place.pinakes_unreachable && !place.short_link_unfollowed);
         assert_eq!(place.source_uri, link);
         assert_eq!(place.name.as_deref(), Some("Berlin"));
         assert_eq!(
@@ -744,7 +799,7 @@ mod tests {
         .await
         .unwrap();
         assert!(!place.from_pinakes);
-        assert!(!place.offline);
+        assert!(!place.pinakes_unreachable && !place.short_link_unfollowed);
         assert_eq!(place.name.as_deref(), Some("Test"));
         assert_eq!(
             place.point,
@@ -775,7 +830,8 @@ mod tests {
         let place = open(client(), "geo:47.37,8.54".into(), servers)
             .await
             .unwrap();
-        assert!(place.offline);
+        assert!(place.pinakes_unreachable);
+        assert!(!place.short_link_unfollowed);
         assert!(!place.from_pinakes);
         assert_eq!(
             place.point,
@@ -784,6 +840,116 @@ mod tests {
                 lon: 8.54
             })
         );
+    }
+
+    /// A host that accepts connections and never answers (dropped packets, a stalled proxy).
+    async fn black_hole() -> String {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let mut held = Vec::new();
+            while let Ok((socket, _)) = listener.accept().await {
+                held.push(socket);
+            }
+        });
+        format!("http://{address}")
+    }
+
+    #[tokio::test]
+    async fn a_silent_pinakes_costs_its_deadline_then_the_next_server_answers() {
+        let link = "https://osmand.net/map?pin=52.51,13.39";
+        let silent = black_hole().await;
+        let (good, _) = server(&[(&by_uri(link), CARD)]).await;
+        let quick = link_client(Duration::from_millis(400)).unwrap();
+        let started = std::time::Instant::now();
+        let place = open(
+            quick.clone(),
+            link.into(),
+            server_urls(&[silent.clone(), good]).unwrap(),
+        )
+        .await
+        .unwrap();
+        assert!(place.from_pinakes);
+        assert!(
+            started.elapsed() < Duration::from_secs(3),
+            "{:?}",
+            started.elapsed()
+        );
+
+        // Only silent servers: the link text, marked as Pinakes unreachable, after the deadline.
+        let started = std::time::Instant::now();
+        let place = open(
+            quick,
+            "geo:47.37,8.54".into(),
+            server_urls(&[silent]).unwrap(),
+        )
+        .await
+        .unwrap();
+        assert!(place.pinakes_unreachable);
+        assert_eq!(
+            place.point,
+            Some(MapPoint {
+                lat: 47.37,
+                lon: 8.54
+            })
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(3),
+            "{:?}",
+            started.elapsed()
+        );
+    }
+
+    #[test]
+    fn place_from_text_needs_no_network() {
+        let place = place_from_text("Zürich HB\nhttps://maps.app.goo.gl/abc".into()).unwrap();
+        assert_eq!(place.source_uri, "https://maps.app.goo.gl/abc");
+        assert_eq!(place.name.as_deref(), Some("Zürich HB"));
+        assert_eq!(place.point, None);
+        assert!(!place.from_pinakes && !place.pinakes_unreachable && !place.short_link_unfollowed);
+        let view = place_from_text("https://www.google.com/maps/@47.37,8.54,15z".into()).unwrap();
+        assert!(view.point_is_view);
+        let search = place_from_text("geo:47.37,8.54?q=restaurants".into()).unwrap();
+        assert_eq!(search.query.as_deref(), Some("restaurants"));
+        assert!(place_from_text("hello".into()).is_none());
+    }
+
+    #[tokio::test]
+    async fn a_card_turns_a_view_into_a_place_and_the_osm_url_is_asked_once() {
+        let pasted = "https://www.openstreetmap.org/node/240109189";
+        let (base, asked) = server(&[]).await;
+        let place = open(client(), pasted.into(), server_urls(&[base]).unwrap())
+            .await
+            .unwrap();
+        assert!(!place.from_pinakes);
+        // The pasted link is the canonical element URL: one request, not two.
+        assert_eq!(asked.lock().unwrap().len(), 1);
+
+        let view = "https://www.google.com/maps/@52.5,13.4,15z";
+        let (base, _) = server(&[(&by_uri(view), CARD)]).await;
+        let place = open(client(), view.into(), server_urls(&[base]).unwrap())
+            .await
+            .unwrap();
+        assert!(place.from_pinakes);
+        assert!(!place.point_is_view);
+        assert_eq!(place.source_uri, view);
+    }
+
+    #[test]
+    fn the_place_uri_is_the_crates_rule() {
+        for link in [
+            "https://osm.org/way/4#map=17/47.1/8.1",
+            "geo:47.3768712,8.5416949",
+            "geo:47.37,8.54?q=restaurants",
+            "https://www.google.com/maps/@47.37,8.54,15z",
+            "https://maps.app.goo.gl/abc",
+        ] {
+            assert_eq!(
+                map_link_place_uri(parse_map_link(link.into()).unwrap()),
+                map_links::canonical_place_uri(&map_links::parse(link).unwrap()),
+                "{link}"
+            );
+        }
     }
 
     #[tokio::test]
