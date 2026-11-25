@@ -8,9 +8,11 @@ A change is done when all of these pass on its head commit:
 
 - `./gradlew check`: unit tests (`:shared` host tests, `:androidApp` Robolectric tests), Android lint,
   ktlint (Kotlin official style; run `./gradlew ktlintFormat` first).
-- `./gradlew verifyRoborazziDebug`: the screens match the reference screenshots.
+- `./gradlew verifyRoborazziDirectDebug`: the screens match the reference screenshots.
 - CI (`.github/workflows/android.yml`) green, including the emulator smoke test that installs the
-  debug APK, waits for the map to draw, opens Settings and goes back.
+  debug APK, waits for the map to draw, opens Settings and goes back, and, when the updater or the
+  release changed, the update probe (`scripts/ci/update-probe.py`): two signed release builds, a
+  tampered feed and a tampered APK refused, the real update installed from inside the app.
 
 Every behaviour gets a test: logic in JVM unit tests (`shared/src/commonTest`), screens in Roborazzi
 screenshot tests (`androidApp/src/test`).
@@ -19,7 +21,7 @@ screenshot tests (`androidApp/src/test`).
 
 - Every screen has Roborazzi screenshots on a phone (412x915 dp) and a tablet (1280x800 dp), light and
   dark, in `androidApp/screenshots/`.
-- After a UI change, run `./gradlew recordRoborazziDebug`, open the new PNGs and look at them before
+- After a UI change, run `./gradlew recordRoborazziDirectDebug`, open the new PNGs and look at them before
   committing. Compare them with how Google Maps, CoMaps and OsmAnd handle the same screen.
 - MapLibre cannot draw on the JVM. Keep screens split into a composable that takes plain state (tested
   with a placeholder map) and a route that wires the live map (checked by the emulator test).
@@ -39,8 +41,19 @@ service makes a feature degrade, never the app stop.
 ## No secrets
 
 No keys, tokens, passwords or keystores in the repository, in logs, in command lines or in CI output.
-CI secrets go through GitHub secrets only. Prefer public keyless sources; a source that needs a key
+CI secrets go through GitHub secrets only. The release keystore (`ANDROID_KEYSTORE_B64`,
+`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`) is read only by the `sign` job of `release.yml` and the
+update-feed key (`UPDATE_FEED_SIGNING_KEY`) only by its `publish` job; Gradle never sees either. Only
+the feed's public key is in the repository (`release/update-feed-key.pub`). Prefer public keyless sources; a source that needs a key
 stays out until its owner provides one.
+
+## Releases
+
+- Never push a `v*` tag or touch the `edge` release from a branch; to try a release change, run
+  `release.yml` by hand on the branch (it replaces the `dev` pre-release).
+- The updater exists only in the `direct` flavour (`androidApp/src/direct/`). Code shared by both
+  flavours must not need it; the `.aab` check (`scripts/release/aab-check.py`) fails a store build
+  that has it.
 
 ## Decisions
 
