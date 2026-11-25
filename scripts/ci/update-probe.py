@@ -169,6 +169,21 @@ def find(pred, timeout, what):
     raise RuntimeError(f"timed out waiting for {what}")
 
 
+def scroll_to(pred, what, swipes=6):
+    """Scrolls the Settings list down until a node matching `pred` is well inside the screen (About
+    is below the fold on a phone; a row cut by the bottom edge would be tapped on the gesture bar),
+    then waits for it like find."""
+    for _ in range(swipes):
+        nodes = ui_nodes()
+        bottom = max((int(b) for n in nodes for b in re.findall(r'bounds="\[\d+,\d+\]\[\d+,(\d+)\]"', n)), default=0)
+        hit = next((n for n in nodes if pred(n)), None)
+        if hit is not None and center(hit)[1] < bottom * 0.8:
+            break
+        adb("shell", "input", "swipe", "540", "1800", "540", "900", "300")
+        time.sleep(1)
+    return find(pred, 60, what)
+
+
 def has(text):
     """A node whose text or content description contains `text` (Compose merges a row's texts)."""
     return lambda n: re.search(r'(text|content-desc)="[^"]*' + re.escape(text), n) is not None
@@ -250,7 +265,7 @@ def main():
         elif any(has("Update available")(n) for n in nodes):
             failures.append("tampered feed: an update was offered")
         tap(find(is_("Settings"), 120, "the Settings button"), "Settings")
-        find(has("not signed with the Pubky Maps key"), 60, "the refused feed's reason in Settings")
+        scroll_to(has("not signed with the Pubky Maps key"), "the refused feed's reason in Settings")
         shot("1-tampered-feed")
 
         # 2. The right feed, a changed APK: the download is refused and N stays.
@@ -325,7 +340,7 @@ def main():
             elif started.group(1) != "off":
                 failures.append("update: the app's data did not survive (automatic checks are on again)")
             tap(find(is_("Settings"), 120, "the Settings button in N+1"), "Settings")
-            tap(find(has("Check for updates"), 30, "Check for updates in N+1"), "Check for updates")
+            tap(scroll_to(has("Check for updates"), "Check for updates in N+1"), "Check for updates")
             find(has("Up to date"), 120, "N+1 finding itself the newest")
             shot("4-up-to-date")
     except Exception as e:  # noqa: BLE001 (reported with the evidence)

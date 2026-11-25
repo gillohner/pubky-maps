@@ -66,9 +66,16 @@ TEST_PUBKY_CONNECTION_STRING=postgres://postgres@localhost:5432/postgres \
   cargo test -- --include-ignored            # plus the local-testnet integration tests
 scripts/gen-kotlin-bindings.sh               # Kotlin bindings into core/bindings/kotlin
 scripts/build-android.sh                     # arm64-v8a and x86_64 .so files into core/jniLibs
+cargo run --example offline_session_fixture -- <file>   # a stored session that cannot be restored
 ```
 
-The Android build needs `ANDROID_NDK_HOME` (NDK r27 or newer), `cargo install cargo-ndk`, and
+`offline_session_fixture` writes a stored grant credential, in the SDK's format and signed like Ring
+signs one, for a made-up user on a made-up homeserver. Restoring it fails with `Network`, as for a
+user whose homeserver is unreachable; the emulator test that blocks every Synonym host seeds the app
+with it.
+
+The app's Gradle build runs both scripts itself (into its build directories). The Android build
+needs `ANDROID_NDK_HOME` (NDK r27 or newer), `cargo install cargo-ndk`, and
 `rustup target add aarch64-linux-android x86_64-linux-android`. The libraries are linked with
 16 KB page alignment. The generated bindings need JNA and `androidx.annotation` on the Kotlin side.
 No TLS setup is needed in Kotlin, because the core uses its own Mozilla root store.

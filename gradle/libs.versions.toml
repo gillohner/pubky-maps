@@ -23,6 +23,13 @@ kotlinx-serialization = "1.11.0"
 bouncycastle = "1.87"
 datastore = "1.3.0"
 okio = "3.18.2"
+# The Rust core's UniFFI bindings call it through JNA and use androidx.annotation.
+jna = "5.19.1"
+androidx-annotation = "1.10.0"
+# The on-device cache of the user's own Pubky data.
+sqldelight = "2.4.1"
+# QR code of the Pubky Ring sign-in link.
+qrose = "1.3.1"
 
 # Tests and checks
 junit = "4.13.2"
@@ -51,6 +58,12 @@ kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutine
 bouncycastle-prov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 datastore-core-okio = { module = "androidx.datastore:datastore-core-okio", version.ref = "datastore" }
 okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
+jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
+androidx-annotation = { module = "androidx.annotation:annotation", version.ref = "androidx-annotation" }
+sqldelight-runtime = { module = "app.cash.sqldelight:runtime", version.ref = "sqldelight" }
+sqldelight-android-driver = { module = "app.cash.sqldelight:android-driver", version.ref = "sqldelight" }
+sqldelight-sqlite-driver = { module = "app.cash.sqldelight:sqlite-driver", version.ref = "sqldelight" }
+qrose = { module = "io.github.alexzhirkevich:qrose", version.ref = "qrose" }
 
 aboutlibraries-core = { module = "com.mikepenz:aboutlibraries-core", version.ref = "aboutlibraries" }
 aboutlibraries-compose-m3 = { module = "com.mikepenz:aboutlibraries-compose-m3", version.ref = "aboutlibraries" }
@@ -73,3 +86,4 @@ android-kmp-library = { id = "com.android.kotlin.multiplatform.library", version
 roborazzi = { id = "io.github.takahirom.roborazzi", version.ref = "roborazzi" }
 aboutlibraries-android = { id = "com.mikepenz.aboutlibraries.plugin.android", version.ref = "aboutlibraries" }
 ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint-gradle" }
+sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }

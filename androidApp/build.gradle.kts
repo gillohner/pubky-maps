@@ -1,6 +1,7 @@
 import com.android.build.api.variant.HasHostTestsBuilder
 import com.android.build.api.variant.HostTestBuilder
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import javax.inject.Inject
 
 plugins {
     alias(libs.plugins.android.application)
@@ -10,7 +11,7 @@ plugins {
     alias(libs.plugins.aboutlibraries.android)
 }
 
-// Release builds get their version and update channel from scripts/release/version.sh; a local
+// Release builds get their version and update channel from scripts/release/version.py; a local
 // build is versionCode 1 and does not update itself.
 val appVersion = providers.gradleProperty("pubkymaps.version").get()
 val appVersionCode = providers.gradleProperty("pubkymaps.versionCode").orNull?.toInt() ?: 1
@@ -50,8 +51,9 @@ android {
                 .toInt()
         versionCode = appVersionCode
         versionName = appVersionName
-        // The ABIs the MapLibre runtime ships native code for.
-        ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64") }
+        // The ABIs the Rust core is built for (scripts/build-android.sh): 64-bit phones, and x86_64
+        // for emulators. MapLibre ships these too.
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
     buildFeatures {
@@ -119,7 +121,86 @@ android {
     }
 }
 
+/**
+ * Builds the Rust core (core/) for the app's ABIs with cargo-ndk (scripts/build-android.sh) into
+ * [outputDir], which every variant packages as jniLibs. Needs ANDROID_NDK_HOME, cargo-ndk and the
+ * Android rustup targets.
+ */
+abstract class BuildCoreForAndroid
+    @Inject
+    constructor(
+        private val exec: ExecOperations,
+    ) : DefaultTask() {
+        @get:InputFiles
+        @get:PathSensitive(PathSensitivity.RELATIVE)
+        abstract val sources: ConfigurableFileCollection
+
+        @get:InputFile
+        @get:PathSensitive(PathSensitivity.RELATIVE)
+        abstract val script: RegularFileProperty
+
+        @get:OutputDirectory
+        abstract val outputDir: DirectoryProperty
+
+        @TaskAction
+        fun build() {
+            exec.exec { commandLine("bash", script.get().asFile.path, outputDir.get().asFile.path) }
+        }
+    }
+
+val buildCoreForAndroid =
+    tasks.register<BuildCoreForAndroid>("buildCoreForAndroid") {
+        val root = rootProject.layout.projectDirectory
+        sources.from(
+            root.file("Cargo.toml"),
+            root.file("Cargo.lock"),
+            root.dir("core/src"),
+            root.file("core/Cargo.toml"),
+        )
+        script.set(root.file("scripts/build-android.sh"))
+        outputDir.set(layout.buildDirectory.dir("generated/coreJniLibs"))
+    }
+
+/**
+ * Writes res/raw/rust_licences.json (scripts/rust-licences.py): the Rust crates linked into the core
+ * with their licences, in the AboutLibraries format, for the app's open-source licence screen.
+ */
+abstract class ListRustLicences
+    @Inject
+    constructor(
+        private val exec: ExecOperations,
+    ) : DefaultTask() {
+        @get:InputFiles
+        @get:PathSensitive(PathSensitivity.RELATIVE)
+        abstract val sources: ConfigurableFileCollection
+
+        @get:InputFile
+        @get:PathSensitive(PathSensitivity.RELATIVE)
+        abstract val script: RegularFileProperty
+
+        @get:OutputDirectory
+        abstract val outputDir: DirectoryProperty
+
+        @TaskAction
+        fun list() {
+            val out = outputDir.get().file("raw/rust_licences.json").asFile
+            exec.exec { commandLine("python3", "-I", script.get().asFile.path, out.path) }
+        }
+    }
+
+val listRustLicences =
+    tasks.register<ListRustLicences>("listRustLicences") {
+        val root = rootProject.layout.projectDirectory
+        sources.from(root.file("Cargo.toml"), root.file("Cargo.lock"), root.file("core/Cargo.toml"))
+        script.set(root.file("scripts/rust-licences.py"))
+        outputDir.set(layout.buildDirectory.dir("generated/rustLicences"))
+    }
+
 androidComponents {
+    onVariants { variant ->
+        variant.sources.jniLibs?.addGeneratedSourceDirectory(buildCoreForAndroid, BuildCoreForAndroid::outputDir)
+        variant.sources.res?.addGeneratedSourceDirectory(listRustLicences, ListRustLicences::outputDir)
+    }
     beforeVariants { variant ->
         // Store builds are only ever release bundles, and the unit and screenshot tests run once,
         // on the direct debug build.
@@ -166,6 +247,7 @@ dependencies {
     implementation(libs.compose.runtime)
     implementation(libs.compose.ui)
     implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.sqldelight.android.driver)
     runtimeOnly(libs.maplibre.compose.runtime.opengl.android)
     "directImplementation"(libs.bouncycastle.prov)
     "directImplementation"(libs.kotlinx.coroutines.android)

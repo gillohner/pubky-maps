@@ -9,13 +9,18 @@ A change is done when all of these pass on its head commit:
 - `./gradlew check`: unit tests (`:shared` host tests, `:androidApp` Robolectric tests), Android lint,
   ktlint (Kotlin official style; run `./gradlew ktlintFormat` first).
 - `./gradlew verifyRoborazziDirectDebug`: the screens match the reference screenshots.
+- `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test` when
+  `core/` changed (CI: `.github/workflows/core.yml`).
 - CI (`.github/workflows/android.yml`) green, including the emulator smoke test that installs the
-  debug APK, waits for the map to draw, opens Settings and goes back, and, when the updater or the
-  release changed, the update probe (`scripts/ci/update-probe.py`): two signed release builds, a
+  debug APK, waits for the map to draw, opens Settings and goes back, then the sign-in probe
+  (`scripts/ci/sign-in-probe.py`, Pubky Ring sign-in up to the link and back on a fixture relay);
+  when the app, the core or CI changed, the Synonym-blocked test (`scripts/ci/synonym-blocked.py`);
+  and, when the updater or the release changed, the update probe (`scripts/ci/update-probe.py`): two signed release builds, a
   tampered feed and a tampered APK refused, the real update installed from inside the app.
 
-Every behaviour gets a test: logic in JVM unit tests (`shared/src/commonTest`), screens in Roborazzi
-screenshot tests (`androidApp/src/test`).
+Every behaviour gets a test: logic in JVM unit tests (`shared/src/commonTest`), Android-side code
+and real calls into the Rust core in host tests (`shared/src/androidHostTest`, which load a build of
+the core for this machine), screens in Roborazzi screenshot tests (`androidApp/src/test`).
 
 ## Screenshot rule
 
@@ -25,6 +30,8 @@ screenshot tests (`androidApp/src/test`).
   committing. Compare them with how Google Maps, CoMaps and OsmAnd handle the same screen.
 - MapLibre cannot draw on the JVM. Keep screens split into a composable that takes plain state (tested
   with a placeholder map) and a route that wires the live map (checked by the emulator test).
+- A screen with a running progress indicator never goes idle in `ScreenshotTest`'s capture; take it
+  with the Compose clock stopped, as `SignInScreenshotTest` does.
 
 ## Server-list rule
 
@@ -36,7 +43,15 @@ hard-codes a server elsewhere, and a failing server hands over to the next one i
 
 The app must start and show the map with every Synonym host blocked (`*.pubky.app`, `*.synonym.to`,
 Synonym homeservers and our development hosts). Never block the UI on a network call; a missing
-service makes a feature degrade, never the app stop.
+service makes a feature degrade, never the app stop. A part that is missing because every server of
+its list failed goes into `ServiceHealth`, and the map names it in one line. The Synonym-blocked
+emulator test checks this on every change to the app, the core or CI.
+
+## Secrets on the phone
+
+Session credentials and a running sign-in's state are stored only through `SecretStore`
+(Keystore-encrypted files in the no-backup folder). They and the `pubkyauth://` link (it holds the
+relay secret) are never logged; `toString()` of the types that hold them is redacted.
 
 ## No secrets
 
@@ -47,13 +62,17 @@ update-feed key (`UPDATE_FEED_SIGNING_KEY`) only by its `publish` job; Gradle ne
 secrets of the GitHub environment `release`, which only deploys from `main` and `v*` tags; manual runs
 use the environment `dev` with separate dev keys. Only public keys are in the repository
 (`release/update-feed-key.pub`, `release/update-feed-key-dev.pub`, and the release certificate's
-SHA-256 in `release/release-cert.sha256`, which every edge and stable APK must match). Prefer public keyless sources; a source that needs a key
+SHA-256 in `release/release-cert.sha256`, which every edge and stable APK must match, and the dev
+certificate's in `release/release-cert-dev.sha256` for dev APKs). Prefer public keyless sources; a source that needs a key
 stays out until its owner provides one.
 
 ## Releases
 
 - Never push a `v*` tag or touch the `edge` release from a branch; to try a release change, run
   `release.yml` by hand on the branch (it replaces the `dev` pre-release, signed with the dev keys).
+- After publishing, `release.yml` installs the APK it just published on the API 35 emulator (after
+  checking its certificate and checksum) and runs the smoke test on it. A manual run on a branch does
+  this for the `dev` pre-release.
 - Raising `pubkymaps.version` in `gradle.properties` comes with setting `pubkymaps.versionRunOffset` to
   the release workflow's latest run number (`scripts/release/version.py`).
 - The updater exists only in the `direct` flavour (`androidApp/src/direct/`). Code shared by both

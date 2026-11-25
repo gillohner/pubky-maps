@@ -22,6 +22,13 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import to.pubky.maps.AppInfo
+import to.pubky.maps.account.AccountScreen
+import to.pubky.maps.account.AccountState
+import to.pubky.maps.account.AccountUser
+import to.pubky.maps.account.Connection
+import to.pubky.maps.cache.CachedAccount
+import to.pubky.maps.cache.CachedBookmark
+import to.pubky.maps.cache.CachedTag
 import to.pubky.maps.config.AppSettings
 import to.pubky.maps.config.DataKind
 import to.pubky.maps.config.OpenInApp
@@ -36,6 +43,7 @@ import to.pubky.maps.settings.ServersScreen
 import to.pubky.maps.settings.SettingsScreen
 import to.pubky.maps.settings.StoredOnlineScreen
 import to.pubky.maps.settings.parseLicences
+import to.pubky.maps.status.ServicePart
 import to.pubky.maps.ui.PubkyMapsTheme
 import to.pubky.maps.update.AvailableUpdate
 import to.pubky.maps.update.UpdateChannel
@@ -96,7 +104,10 @@ class ScreenshotTest {
     }
 
     @Composable
-    private fun Map(mapUnavailable: Boolean = false) {
+    private fun Map(
+        mapUnavailable: Boolean = false,
+        missing: Set<ServicePart> = emptySet(),
+    ) {
         MapScreen(
             attribution =
                 ServerDefaults.lists
@@ -107,6 +118,7 @@ class ScreenshotTest {
             onRetryMap = {},
             onMyLocation = {},
             onOpenSettings = {},
+            missing = missing,
         ) { MapPlaceholder() }
     }
 
@@ -121,7 +133,7 @@ class ScreenshotTest {
             .withStorage(DataKind.Lists, StorageChoice.Public)
 
     @Composable
-    private fun Settings() {
+    private fun Settings(account: AccountState = AccountState.SignedOut()) {
         SettingsScreen(
             appInfo = AppInfo(versionName = "0.1.0-edge.11", versionCode = 1_000_011),
             settings = AppSettings(),
@@ -138,8 +150,98 @@ class ScreenshotTest {
                     status = UpdateStatus.UpToDate("0.1.0-edge.11"),
                     dialog = null,
                 ),
+            account = account,
         )
     }
+
+    private val user = AccountUser("8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo", "Ada Lovelace")
+    private val cached =
+        CachedAccount(
+            publicKey = user.publicKey,
+            name = user.name,
+            refreshedAt = 1,
+            tags =
+                listOf(
+                    CachedTag("/pub/social/v1/tags/1.json", "https://www.openstreetmap.org/node/2405123", "great coffee", 3),
+                    CachedTag("/pub/social/v1/tags/2.json", "https://www.openstreetmap.org/way/48210334", "quiet", 2),
+                    CachedTag("/pub/social/v1/tags/3.json", "geo:47.37689,8.54169", "bench with a view", 1),
+                ),
+            bookmarks =
+                listOf(
+                    CachedBookmark("/priv/social/v1/bookmarks/a.json", "https://www.openstreetmap.org/node/2405123"),
+                    CachedBookmark("/priv/social/v1/bookmarks/b.json", "https://www.openstreetmap.org/relation/1682248"),
+                ),
+        )
+
+    @Composable
+    private fun Account(state: AccountState) {
+        AccountScreen(
+            state = state,
+            ringOnThisPhone = false,
+            onSignIn = {},
+            onOpenRing = {},
+            onCancelSignIn = {},
+            onRefresh = {},
+            onSignOut = {},
+            onBack = {},
+        )
+    }
+
+    private val signedOut = AccountState.SignedOut()
+    private val signedIn = AccountState.SignedIn(user, cached, Connection.Online)
+    private val offline = AccountState.SignedIn(user, cached, Connection.Offline)
+    private val homeserverMissing = setOf(ServicePart.Homeserver)
+
+    @Test
+    fun accountPhoneLight() = capture("account", Device.Phone, dark = false) { Account(signedOut) }
+
+    @Test
+    fun accountPhoneDark() = capture("account", Device.Phone, dark = true) { Account(signedOut) }
+
+    @Test
+    fun accountTabletLight() = capture("account", Device.Tablet, dark = false) { Account(signedOut) }
+
+    @Test
+    fun accountTabletDark() = capture("account", Device.Tablet, dark = true) { Account(signedOut) }
+
+    @Test
+    fun accountNoticePhoneLight() =
+        capture("account-notice", Device.Phone, dark = false) {
+            Account(AccountState.SignedOut("The sign-in was cancelled in Pubky Ring."))
+        }
+
+    @Test
+    fun signedInPhoneLight() = capture("signed-in", Device.Phone, dark = false) { Account(signedIn) }
+
+    @Test
+    fun signedInPhoneDark() = capture("signed-in", Device.Phone, dark = true) { Account(signedIn) }
+
+    @Test
+    fun signedInTabletLight() = capture("signed-in", Device.Tablet, dark = false) { Account(signedIn) }
+
+    @Test
+    fun signedInTabletDark() = capture("signed-in", Device.Tablet, dark = true) { Account(signedIn) }
+
+    @Test
+    fun signedInOfflinePhoneLight() = capture("signed-in-offline", Device.Phone, dark = false) { Account(offline) }
+
+    @Test
+    fun signedInOfflinePhoneDark() = capture("signed-in-offline", Device.Phone, dark = true) { Account(offline) }
+
+    @Test
+    fun mapDegradedPhoneLight() = capture("map-degraded", Device.Phone, dark = false) { Map(missing = homeserverMissing) }
+
+    @Test
+    fun mapDegradedPhoneDark() = capture("map-degraded", Device.Phone, dark = true) { Map(missing = homeserverMissing) }
+
+    @Test
+    fun mapDegradedTabletLight() = capture("map-degraded", Device.Tablet, dark = false) { Map(missing = homeserverMissing) }
+
+    @Test
+    fun mapDegradedTabletDark() = capture("map-degraded", Device.Tablet, dark = true) { Map(missing = homeserverMissing) }
+
+    @Test
+    fun settingsSignedInPhoneLight() = capture("settings-signed-in", Device.Phone, dark = false) { Settings(offline) }
 
     @Composable
     private fun Licences() {

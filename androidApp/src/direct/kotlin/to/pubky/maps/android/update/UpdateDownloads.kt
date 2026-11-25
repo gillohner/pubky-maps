@@ -6,21 +6,35 @@ import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
+import java.util.Timer
+import kotlin.concurrent.timerTask
 
 private const val TIMEOUT_MS = 30_000
 private const val MAX_FEED_BYTES = 64 * 1024
 private const val FEED_DEADLINE_MS = 60_000L
 
 /**
- * GETs a small document (an update feed), giving up after [FEED_DEADLINE_MS] in all, so a server that
- * answers one byte at a time cannot hold the check. Blocking: call it off the main thread.
+ * GETs a small document (an update feed), giving up after [FEED_DEADLINE_MS] in all: connecting,
+ * waiting for the answer and reading it. A watchdog closes the connection at the deadline, so neither
+ * a server that never answers nor one that sends one byte at a time can hold the check longer.
+ * Blocking: call it off the main thread.
  */
 fun fetchFeed(url: String): ByteArray {
     val deadline = System.nanoTime() + FEED_DEADLINE_MS * 1_000_000
-    return openGet(url).useBody { input ->
-        val bytes = input.readNBytesCompat(MAX_FEED_BYTES + 1, deadline)
-        if (bytes.size > MAX_FEED_BYTES) throw IOException("the update feed is larger than $MAX_FEED_BYTES bytes")
-        bytes
+    val connection = openGet(url)
+    val watchdog = Timer("update-feed-deadline", true)
+    watchdog.schedule(timerTask { connection.disconnect() }, FEED_DEADLINE_MS)
+    try {
+        return connection.useBody { input ->
+            val bytes = input.readNBytesCompat(MAX_FEED_BYTES + 1, deadline)
+            if (bytes.size > MAX_FEED_BYTES) throw IOException("the update feed is larger than $MAX_FEED_BYTES bytes")
+            bytes
+        }
+    } catch (e: IOException) {
+        if (System.nanoTime() > deadline) throw IOException("the update server is too slow", e)
+        throw e
+    } finally {
+        watchdog.cancel()
     }
 }
 

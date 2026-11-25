@@ -1,0 +1,25 @@
+name: Rust for the Android build
+description: >-
+  Rust with the Android targets, cargo-ndk and the runner's NDK, so Gradle can build the Rust core
+  (Kotlin bindings from a host build, jniLibs with cargo-ndk). The cargo build is cached.
+inputs:
+  cache-key:
+    description: Name of the cargo cache (jobs that build the same things share one)
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+      with:
+        toolchain: stable
+        targets: aarch64-linux-android, x86_64-linux-android
+    - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      with:
+        shared-key: ${{ inputs.cache-key }}
+        cache-bin: true
+    - name: cargo-ndk and the NDK
+      shell: bash
+      run: |
+        command -v cargo-ndk > /dev/null || cargo install cargo-ndk --locked --version ^4
+        echo "ANDROID_NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+        echo "NDK: $ANDROID_NDK_LATEST_HOME"

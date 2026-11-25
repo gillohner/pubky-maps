@@ -43,8 +43,8 @@ fun StoredOnlineScreen(
     SettingsPage(title = "What is stored online", onBack = onBack) {
         item {
             PageIntro(
-                "Choose where each kind of data is kept. Choices that use your homeserver apply once you " +
-                    "sign in with Pubky Ring; until then everything stays on this phone.",
+                "Choose where each kind of data will be kept. Pubky Maps does not save any of it yet, so " +
+                    "for now nothing is uploaded, signed in or not.",
             )
         }
         item { SectionHeader("You choose") }

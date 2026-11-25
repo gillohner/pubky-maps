@@ -10,6 +10,14 @@
         android:name="android.hardware.location.gps"
         android:required="false" />
 
+    <!-- To know whether Pubky Ring is on this phone (it handles pubkyauth:// sign-in links). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="pubkyauth" />
+        </intent>
+    </queries>
+
     <application
         android:name=".android.PubkyMapsApplication"
         android:allowBackup="true"
@@ -22,10 +30,21 @@
         <activity
             android:name=".android.MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density"
-            android:exported="true">
+            android:exported="true"
+            android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Pubky Ring sends the user back with pubkymaps://auth/{success|error|cancel}?nonce=...
+                 The nonce is checked against the running sign-in; any other link is ignored. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="auth"
+                    android:scheme="pubkymaps" />
             </intent-filter>
         </activity>
     </application>

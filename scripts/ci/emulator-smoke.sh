@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Smoke test on a running emulator: install the APK, start the app, wait until the map has drawn,
 # open Settings and each settings page, switch "Follow local rules" off and check it stays off
-# after a restart, then go back with the system back button. Fails on a crash or when the app is
+# after a restart, open the open-source licences and swipe to their end, then go back with the
+# system back button. Fails on a crash or when the app is
 # not in front. Screenshots, the UI dumps and the log go to <out dir>.
 # Usage: emulator-smoke.sh <apk> <out dir>
 set -euo pipefail
@@ -158,6 +159,21 @@ visit() {
     wait_for "$4" 15 > /dev/null || fail "back from \"$1\" did not return (no \"$4\")"
 }
 
+# Swipes the page up until a node labelled $1 is on screen and clear of the bottom edge (the gesture
+# bar); prints its centre.
+scroll_to() {
+    local xy
+    for _ in $(seq 1 8); do
+        if xy=$(centre_of "$(dump_ui scroll)" "$1") && [ "${xy#* }" -lt 1900 ]; then
+            echo "$xy"
+            return 0
+        fi
+        adb shell input swipe 540 1800 540 1000 300
+        sleep 1
+    done
+    return 1
+}
+
 open_settings
 screenshot settings
 check_alive "settings"
@@ -203,6 +219,21 @@ xy=$(wait_for "Follow local rules" 10) || fail "no Follow local rules switch aft
 [ "$(checked_of "$(dump_ui rules-after)" "Follow local rules")" = "false" ] || fail "Follow local rules was not kept across the restart"
 adb shell input tap $xy
 check_alive "settings after the restart"
+
+# The open-source licences: the Gradle libraries and the Rust crates of the core in one list. Swipe
+# through all of it: every item is composed once, so a broken entry crashes here.
+xy=$(scroll_to "Open-source licences") || fail "no Open-source licences row"
+adb shell input tap $xy
+wait_for "aead" 20 > /dev/null || fail "the licence list has no Rust crates (no aead)"
+screenshot licences
+check_alive "licences"
+for _ in $(seq 1 90); do adb shell input swipe 540 2000 540 400 150; done
+sleep 2
+check_alive "licences, scrolled to the end"
+wait_for "zeroize" 10 > /dev/null || fail "the end of the licence list did not show (no zeroize)"
+screenshot licences-end
+adb shell input keyevent KEYCODE_BACK
+wait_for "Open-source licences" 15 > /dev/null || fail "back from the licences did not return to Settings"
 
 adb shell input keyevent KEYCODE_BACK
 wait_for "Show my location" 15 > /dev/null || fail "back from Settings did not return to the map"

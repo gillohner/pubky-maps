@@ -1,6 +1,7 @@
 package to.pubky.maps
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.lifecycle.Lifecycle
@@ -10,7 +11,11 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import kotlinx.coroutines.flow.filter
 import kotlinx.serialization.Serializable
+import to.pubky.maps.account.AccountRoute
+import to.pubky.maps.account.AccountState
+import to.pubky.maps.account.AccountUi
 import to.pubky.maps.config.AppSettings
 import to.pubky.maps.config.Service
 import to.pubky.maps.config.SettingsRepository
@@ -55,10 +60,14 @@ private data object OpenInAppsDestination
 @Serializable
 private data object LicencesDestination
 
+@Serializable
+private data object AccountDestination
+
 /**
  * The whole app: the map, and the settings pages on top of it. [loadLicences] returns the
  * AboutLibraries JSON of the bundled libraries. [updates] is the in-app updater, null in builds that
- * an app store updates.
+ * an app store updates. [account] is the Pubky account (sign-in with Pubky Ring), null where there is
+ * none.
  */
 @Composable
 fun App(
@@ -66,13 +75,14 @@ fun App(
     settingsRepository: SettingsRepository,
     loadLicences: suspend () -> String,
     updates: UpdateController? = null,
+    account: AccountUi? = null,
 ) {
     val loaded by settingsRepository.settings.collectAsStateWithLifecycle()
     val updatesState = updates?.state?.collectAsStateWithLifecycle()?.value
     PubkyMapsTheme {
         // The settings file is read in a few milliseconds at start-up; until then the window stays
         // blank instead of loading the default map style and switching to the user's own.
-        loaded?.let { settings -> AppNavigation(appInfo, settings, settingsRepository, loadLicences, updates, updatesState) }
+        loaded?.let { settings -> AppNavigation(appInfo, settings, settingsRepository, loadLicences, updates, updatesState, account) }
         val dialog = updatesState?.dialog
         if (updates != null && dialog != null) {
             UpdateDialogHost(
@@ -96,6 +106,7 @@ private fun AppNavigation(
     loadLicences: suspend () -> String,
     updates: UpdateController?,
     updatesState: UpdatesUiState?,
+    account: AccountUi?,
 ) {
     val update: ((AppSettings) -> AppSettings) -> Unit = remember(settingsRepository) { { settingsRepository.update(it) } }
     val navController = rememberNavController()
@@ -103,10 +114,31 @@ private fun AppNavigation(
         // Only from a page that is fully shown: a second quick tap would also leave the page below.
         if (navController.currentBackStackEntry?.lifecycle?.currentState == Lifecycle.State.RESUMED) navController.navigateUp()
     }
+    val accountState: AccountState? =
+        account
+            ?.controller
+            ?.state
+            ?.collectAsStateWithLifecycle()
+            ?.value
+    val missing =
+        account
+            ?.health
+            ?.missing
+            ?.collectAsStateWithLifecycle()
+            ?.value ?: emptySet()
+    if (account != null) {
+        // Pubky Ring sent the user back: show the sign-in, also when the app was started by that.
+        LaunchedEffect(account) {
+            account.showAccount.filter { it }.collect {
+                navController.open(AccountDestination)
+                account.accountShown()
+            }
+        }
+    }
 
     NavHost(navController = navController, startDestination = MapDestination) {
         composable<MapDestination> {
-            MapRoute(servers = settings.servers, onOpenSettings = { navController.open(SettingsDestination) })
+            MapRoute(servers = settings.servers, onOpenSettings = { navController.open(SettingsDestination) }, missing = missing)
         }
         composable<SettingsDestination> {
             SettingsScreen(
@@ -121,7 +153,14 @@ private fun AppNavigation(
                 updates = updatesState,
                 onCheckForUpdates = { updates?.checkNow() },
                 onAutoCheckUpdatesChange = { updates?.setAutoCheck(it) },
+                account = accountState,
+                onOpenAccount = { navController.open(AccountDestination) },
             )
+        }
+        if (account != null) {
+            composable<AccountDestination> {
+                AccountRoute(account = account, onBack = back)
+            }
         }
         composable<ServersDestination> {
             ServersScreen(

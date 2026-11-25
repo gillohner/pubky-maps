@@ -1,8 +1,14 @@
 name: android
 # One build job checks the app (unit tests, Android lint, ktlint, Roborazzi screenshots, the release
-# tools' self-checks) and builds the debug APK; the emulator job installs that APK, starts the app,
-# waits for the map to draw, opens Settings and each settings page, checks that a setting survives a
-# restart, goes back, and fails on a crash.
+# tools' self-checks) and builds the debug APK, with the Rust core built by Gradle (bindings from a
+# host build, jniLibs with cargo-ndk). The emulator job installs that APK, starts the app, waits for
+# the map to draw, opens Settings and each settings page, checks that a setting survives a restart,
+# goes back, fails on a crash, then runs the sign-in probe (scripts/ci/sign-in-probe.py): Settings >
+# Account, the QR code's pubkyauth:// link on a fixture relay, Ring's return links, a process kill in
+# the middle.
+# When the app, the core or CI changed, synonym-blocked runs the app with every Synonym host
+# unreachable (scripts/ci/synonym-blocked.py): the map, the cached account and the degraded banner,
+# and a second time with the first map style blocked too.
 # When the updater or the release changed (and on every push to main), update-apks builds two signed
 # release APKs N and N+1 with a throwaway key and checks that the .aab has no updater, and
 # update-probe has the emulator update N to N+1 from inside the app and refuse tampered ones
@@ -40,6 +46,9 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+      - uses: ./.github/actions/rust-android
+        with:
+          cache-key: android-app
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -96,11 +105,12 @@ jobs:
         with:
           name: pubky-maps-debug-apk
           path: apk
-      - name: enable KVM
+      - name: enable KVM, zbar for reading the QR code
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+          sudo apt-get update -q && sudo apt-get install -y -q zbar-tools
       - id: month
         run: echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
       # The AVD and its boot snapshot, made once and reused by later runs.
@@ -136,12 +146,121 @@ jobs:
           ram-size: 4096M
           emulator-options: -no-snapshot-save ${{ env.EMULATOR_OPTIONS }}
           disable-animations: true
-          script: bash scripts/ci/emulator-smoke.sh apk/androidApp-direct-debug.apk /tmp/smoke
+          script: |
+            bash scripts/ci/emulator-smoke.sh apk/androidApp-direct-debug.apk /tmp/smoke/smoke
+            python3 -I scripts/ci/sign-in-probe.py apk/androidApp-direct-debug.apk /tmp/smoke/sign-in
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: emulator-smoke-api${{ env.API_LEVEL }}
           path: /tmp/smoke/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Every Synonym-run host unreachable for the phone: a DNS server on the runner (dnsmasq) answers
+  # NXDOMAIN for them and the emulator uses it. Two boots: Synonym blocked, then also the first map
+  # style (tiles.openfreemap.org), so the style fallback runs on a real device image.
+  synonym-blocked:
+    needs: [build, changes]
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      API_LEVEL: 35
+      TARGET: google_apis
+      PROFILE: pixel_6
+      EMULATOR_OPTIONS: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none -no-audio
+      SYNONYM_DOMAINS: pubky.app pubky.org synonym.to coder.riginode.xyz
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: pubky-maps-debug-apk
+          path: apk
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: android-app
+          save-if: false
+      # A stored session for a made-up user on a made-up homeserver (core/examples), made here and
+      # never uploaded.
+      - name: session fixture
+        run: cargo run --locked -q -p pubky-maps-core --example offline_session_fixture -- "$RUNNER_TEMP/session.json"
+      - name: enable KVM, dnsmasq
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo apt-get update -q && sudo apt-get install -y -q dnsmasq-base
+      - id: month
+        run: echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
+      # The same AVD and boot snapshot as the smoke test.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-${{ env.API_LEVEL }}-${{ env.TARGET }}-${{ env.PROFILE }}-x86_64-${{ steps.month.outputs.month }}
+      - name: create the AVD and its snapshot
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: ${{ env.API_LEVEL }}
+          target: ${{ env.TARGET }}
+          arch: x86_64
+          profile: ${{ env.PROFILE }}
+          force-avd-creation: false
+          ram-size: 4096M
+          emulator-options: ${{ env.EMULATOR_OPTIONS }}
+          disable-animations: false
+          script: echo "AVD snapshot created"
+      - name: block Synonym hosts
+        run: bash scripts/ci/block-hosts.sh start "$RUNNER_TEMP/dns" $SYNONYM_DOMAINS
+      - name: Synonym blocked
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: ${{ env.API_LEVEL }}
+          target: ${{ env.TARGET }}
+          arch: x86_64
+          profile: ${{ env.PROFILE }}
+          force-avd-creation: false
+          ram-size: 4096M
+          emulator-options: -no-snapshot-save -dns-server 127.0.0.2 ${{ env.EMULATOR_OPTIONS }}
+          disable-animations: true
+          script: python3 -I scripts/ci/synonym-blocked.py apk/androidApp-direct-debug.apk "$RUNNER_TEMP/session.json" synonym /tmp/blocked/synonym
+      - name: block Synonym hosts and the first map style
+        if: always()
+        run: |
+          bash scripts/ci/block-hosts.sh stop "$RUNNER_TEMP/dns"
+          bash scripts/ci/block-hosts.sh start "$RUNNER_TEMP/dns" $SYNONYM_DOMAINS tiles.openfreemap.org
+      - name: Synonym and OpenFreeMap blocked
+        if: always()
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: ${{ env.API_LEVEL }}
+          target: ${{ env.TARGET }}
+          arch: x86_64
+          profile: ${{ env.PROFILE }}
+          force-avd-creation: false
+          ram-size: 4096M
+          emulator-options: -no-snapshot-save -dns-server 127.0.0.2 ${{ env.EMULATOR_OPTIONS }}
+          disable-animations: true
+          script: python3 -I scripts/ci/synonym-blocked.py apk/androidApp-direct-debug.apk "$RUNNER_TEMP/session.json" openfreemap /tmp/blocked/openfreemap
+      - if: always()
+        run: |
+          bash scripts/ci/block-hosts.sh stop "$RUNNER_TEMP/dns"
+          cp "$RUNNER_TEMP"/dns/*.log /tmp/blocked/ 2> /dev/null || true
+          rm -f "$RUNNER_TEMP/session.json"
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: synonym-blocked-api${{ env.API_LEVEL }}
+          path: /tmp/blocked/
           if-no-files-found: ignore
           retention-days: 14
 
@@ -153,6 +272,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       update: ${{ steps.pick.outputs.update }}
+      app: ${{ steps.pick.outputs.app }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -172,13 +292,19 @@ jobs:
           if [ -z "$base" ] && [ "$REF" != refs/heads/main ]; then
             base=$(git merge-base origin/main "$GITHUB_SHA" 2> /dev/null || true)
           fi
+          # The app, the core or CI: what the Synonym-blocked test covers.
+          app_paths='^(androidApp/|shared/|core/|Cargo\.(toml|lock)$|scripts/(ci/|build-android\.sh$|gen-kotlin-bindings\.sh$)'
+          app_paths+='|gradle/|gradle\.properties$|[^/]*\.gradle\.kts$|\.github/(workflows/android\.yml$|actions/))'
           if [ "$EVENT" = workflow_dispatch ] || [ "$REF" = refs/heads/main ] || [ -z "$base" ]; then
             update=true
+            app=true
           else
             files=$(git diff --name-only "$base" "$GITHUB_SHA")
             if grep -Eq "$paths" <<< "$files"; then update=true; else update=false; fi
+            if grep -Eq "$app_paths" <<< "$files"; then app=true; else app=false; fi
           fi
           echo "update=$update" | tee -a "$GITHUB_OUTPUT"
+          echo "app=$app" | tee -a "$GITHUB_OUTPUT"
 
   update-apks:
     needs: changes
@@ -193,6 +319,9 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+      - uses: ./.github/actions/rust-android
+        with:
+          cache-key: android-app
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |

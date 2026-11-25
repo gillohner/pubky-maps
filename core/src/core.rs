@@ -509,8 +509,11 @@ impl PubkyMapsCore {
     /// when every configured relay failed. A relay is left after 4 failures in a row: a
     /// listener that gave up, or a failed probe (the core probes the relay when a listener
     /// starts and every 25 s). That is about 14 s for a refused or blocked relay and about a
-    /// minute for one that never answers (each probe waits up to 10 s). A listener is never
-    /// dropped while it may hold an approval. Call it from one place at a time.
+    /// minute for one that never answers (each probe waits up to 10 s). Before a relay is
+    /// left, its listener is checked once more, so an approval it already received is
+    /// exchanged, not dropped. An approval that is still being acknowledged on the failing
+    /// relay at that moment is lost, and the user approves the new link. Call it from one
+    /// place at a time.
     ///
     /// Cancelling the calling coroutine is safe: an approval that already arrived is still
     /// exchanged, parked, and handed out by the next `await_sign_in`/`poll_sign_in`; the
@@ -1237,15 +1240,18 @@ mod tests {
             took < Duration::from_millis(500),
             "first poll took {took:?}"
         );
-        let core = match first {
-            std::task::Poll::Ready(core) => core.unwrap(),
-            std::task::Poll::Pending => tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .unwrap()
-                .block_on(create)
-                .unwrap(),
-        };
+        // Pending: the client (and its DNS lookups) is built on another thread. A client built
+        // inline, before the first await, would make the first poll Ready.
+        assert!(
+            first.is_pending(),
+            "create built the client on the caller's thread"
+        );
+        let core = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(create)
+            .unwrap();
         assert!(core.current_sign_in().is_none());
     }
 
