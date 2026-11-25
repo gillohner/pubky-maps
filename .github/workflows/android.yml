@@ -10,7 +10,7 @@ on:
   pull_request:
   workflow_dispatch:
 concurrency:
-  group: android-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.head_ref || github.sha }}
+  group: android-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 permissions:
   contents: read
@@ -89,6 +89,8 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+      - id: month
+        run: echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
       # The AVD and its boot snapshot, made once and reused by later runs.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: avd-cache
@@ -96,7 +98,8 @@ jobs:
           path: |
             ~/.android/avd/*
             ~/.android/adb*
-          key: avd-${{ env.API_LEVEL }}-${{ env.TARGET }}-x86_64
+          # The month in the key renews the snapshot as the runner's emulator and image move on.
+          key: avd-${{ env.API_LEVEL }}-${{ env.TARGET }}-x86_64-${{ steps.month.outputs.month }}
       - name: create the AVD and its snapshot
         if: steps.avd-cache.outputs.cache-hit != 'true'
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0

@@ -21,8 +21,9 @@ screenshot() { adb exec-out screencap -p > "$out/$1.png"; }
 
 # The UI as uiautomator sees it; prints the dump file.
 dump_ui() {
+    adb shell rm -f /sdcard/ui.xml || true
     adb shell uiautomator dump /sdcard/ui.xml > /dev/null 2>&1 || true
-    adb shell cat /sdcard/ui.xml > "$out/$1.xml" 2>/dev/null || true
+    adb exec-out cat /sdcard/ui.xml > "$out/$1.xml" 2>/dev/null || true
     echo "$out/$1.xml"
 }
 
@@ -55,8 +56,9 @@ wait_for() {
 }
 
 check_alive() {
-    if adb logcat -d -b crash | grep -q "Process: $pkg"; then
-        adb logcat -d -b crash > "$out/crash.txt"
+    adb logcat -d -b crash > "$out/crash.txt" || true
+    # A Java crash names the process; a native one (MapLibre) shows it in the tombstone header.
+    if grep -qE "Process: $pkg|>>> $pkg <<<" "$out/crash.txt"; then
         fail "the app crashed ($1); see crash.txt"
     fi
     adb shell dumpsys activity activities | grep -E "topResumedActivity|mResumedActivity" > "$out/resumed.txt" || true
@@ -64,9 +66,11 @@ check_alive() {
 }
 
 adb install -r "$apk"
-adb logcat -c
+adb logcat -c || true
 adb logcat -b crash -c || true
-adb shell am start -W -n "$pkg/.android.MainActivity"
+started=$(adb shell am start -W -n "$pkg/.android.MainActivity" 2>&1) || true
+echo "$started"
+if grep -q "Error" <<< "$started"; then fail "the app did not start: $started"; fi
 
 wait_for "Show my location" 60 > /dev/null || fail "the map screen did not appear"
 check_alive "map screen"
@@ -76,8 +80,9 @@ check_alive "map screen"
 # so give it time.
 drawn=false
 for _ in $(seq 1 30); do
-    screenshot map
-    read -r colours dominant < <(python3 -I "$here/png_stats.py" "$out/map.png" 0.1 0.2 0.9 0.8)
+    screenshot map || { sleep 3; continue; }
+    stats=$(python3 -I "$here/png_stats.py" "$out/map.png" 0.1 0.2 0.9 0.8) || stats="0 1.000"
+    read -r colours dominant <<< "$stats"
     echo "map: $colours colours, most common $dominant"
     if ((colours >= 40)) && python3 -I -c "import sys; sys.exit(float(sys.argv[1]) >= 0.9)" "$dominant"; then
         drawn=true
@@ -86,6 +91,8 @@ for _ in $(seq 1 30); do
     sleep 3
 done
 check_alive "map drawn"
+# The could-not-load notice means every style failed, even if the screen looks busy.
+if centre_of "$(dump_ui map)" "Retry" > /dev/null; then fail "the map could not load any style (Retry notice shown)"; fi
 $drawn || fail "the map did not draw ($colours colours, most common $dominant in the middle of the screen)"
 
 xy=$(wait_for "Settings" 10) || fail "no Settings button"
