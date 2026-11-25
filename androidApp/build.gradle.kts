@@ -25,6 +25,8 @@ android {
                 .toInt()
         versionCode = 1
         versionName = "0.1.0"
+        // The ABIs the MapLibre runtime ships native code for.
+        ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64") }
     }
 
     buildFeatures {
