@@ -21,11 +21,10 @@ import to.pubky.maps.config.androidSettingsRepository
 import to.pubky.maps.links.CoreMapLinks
 import to.pubky.maps.links.LinkedPlaces
 import to.pubky.maps.links.MapLinks
-import to.pubky.maps.status.ServiceHealth
-import to.pubky.maps.status.ServicePart
 import to.pubky.maps.search.SearchServices
 import to.pubky.maps.search.androidSearchServices
 import to.pubky.maps.status.ServiceHealth
+import to.pubky.maps.status.ServicePart
 import to.pubky.maps.update.UpdateController
 
 /** Holds what lives as long as the process, so it survives Activity recreation. */
