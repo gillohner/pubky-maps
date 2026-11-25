@@ -32,7 +32,8 @@ Settings:
   places use the Pinakes and Nexus lists the same way.
 - **What is stored online:** per kind of data (saved places, home and work, lists, check-ins, tracks,
   location history, photo locations) phone only, homeserver private or public. Tags and reviews are
-  public by nature. The choices are stored; nothing uploads data yet.
+  public by nature. Saved places, lists and photo locations follow the choices; the other kinds are
+  not saved by the app yet.
 - **Open in other apps:** a switch per app a place can be opened in from the place page's Open in
   menu (`links/OpenIn.kt` builds the list).
 - **Follow local rules:** hides features a country forbids (stored; no feature has a rule yet).
@@ -54,6 +55,23 @@ its own and is hidden while it has nothing. What a page showed is kept on the ph
 reopens offline with a note saying when it was saved; the user's own tags and lists in it are shown
 only to the account that saw them. Typed coordinates open a page without any request, and the
 map's Pubky places wait until the user moves the map away from the typed point.
+
+**Writing about a place** (signed in; a write that needs the homeserver opens the sign-in first and
+continues after it). The page's action row has Save, Tag, Post and Add to list; its sections have
+"Add tag", "Add photo", "Write a post" and "Add to list". Every object is built by the core's spec
+builders. Tags go on the link the user had (the OpenStreetMap element when picked on the map, a
+pasted Google or Apple link as pasted): one tap on a label people used, or on a suggestion (the
+place's top tags, its OpenStreetMap category and cuisine, folded to ASCII by the spec's label
+rules), tags it; a tap on the user's own tag removes it. A post is a public `note` replying to the
+place (up to 2000 characters). A photo is picked or taken, re-encoded on the phone as JPEG (HEIC
+too), which drops camera and phone details and, unless Photo locations is Public, its GPS spot,
+then uploaded and posted as an `image` post embedding the place, with alt text. Lists are the
+user's collections (read from their homeserver, public or private, or kept on the phone), 100
+places each. Save keeps the place privately on the homeserver or on the phone only, per the
+setting; the **Saved** screen (from the search page) lists saved places and lists. Public writes
+show a Public badge first. A write shows at once and goes into an outbox on the phone, sent in
+order; one without a connection waits and is retried, one the homeserver refuses is taken back
+with a message.
 
 The map also shows the places people referenced on Pubky (from zoom 12, from Pinakes, clustered).
 When no Pinakes server answers, the map's status line says so.
@@ -104,7 +122,9 @@ the link text. The link the user had stays the place's URI.
 - Sign-in with Pubky Ring: the app opens Ring's `pubkyauth://` link, or shows it as a QR code when
   Ring is on another device; Ring sends the user back with `pubkymaps://auth/…`. A running sign-in
   and the session are stored encrypted with an Android Keystore key, never in a backup; the user's own
-  data (profile name, tags, saved places) is cached in SQLite (SQLDelight). When the homeserver cannot
+  data (profile name, tags, saved places, lists) and the outbox of writes are cached in SQLite
+  (SQLDelight), deleted at sign-out; what is kept on the phone only has its own database, which
+  sign-out keeps. When the homeserver cannot
   be reached the app stays signed in, shows the cached data and says so in one line over the map.
 - The open-source licence list is generated at build time: the AboutLibraries Gradle plugin lists the
   app's Gradle dependencies, and `scripts/rust-licences.py` (Gradle task `listRustLicences`) lists the

@@ -20,6 +20,32 @@ CREATE TABLE bookmark (
     place TEXT NOT NULL
 );
 
+-- Writes waiting to be sent to the homeserver, in order (see WriteOp).
+CREATE TABLE outbox (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    op TEXT NOT NULL
+);
+
+-- The user's lists (collection posts) as last read or written, one JSON OwnList each.
+CREATE TABLE own_list (
+    uri TEXT NOT NULL PRIMARY KEY,
+    private INTEGER NOT NULL,
+    list TEXT NOT NULL
+);
+
+-- The user's posts that were read and are not lists: a post never changes its kind.
+CREATE TABLE other_post (
+    private INTEGER NOT NULL,
+    id TEXT NOT NULL,
+    PRIMARY KEY (private, id)
+);
+
+-- Names of places the user wrote about, for their saved places and lists.
+CREATE TABLE place_label (
+    place TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL
+);
+
 account:
 SELECT * FROM account LIMIT 1;
 
@@ -46,3 +72,48 @@ DELETE FROM tag;
 
 deleteBookmarks:
 DELETE FROM bookmark;
+
+outbox:
+SELECT * FROM outbox ORDER BY seq;
+
+putOutbox:
+INSERT INTO outbox(op) VALUES (?);
+
+lastSeq:
+SELECT last_insert_rowid();
+
+deleteOutboxItem:
+DELETE FROM outbox WHERE seq = ?;
+
+deleteOutbox:
+DELETE FROM outbox;
+
+ownLists:
+SELECT list FROM own_list;
+
+putOwnList:
+INSERT OR REPLACE INTO own_list(uri, private, list) VALUES (?, ?, ?);
+
+deleteOwnListsIn:
+DELETE FROM own_list WHERE private = ?;
+
+deleteOwnLists:
+DELETE FROM own_list;
+
+otherPosts:
+SELECT id FROM other_post WHERE private = ?;
+
+putOtherPost:
+INSERT OR REPLACE INTO other_post(private, id) VALUES (?, ?);
+
+deleteOtherPosts:
+DELETE FROM other_post;
+
+placeLabels:
+SELECT * FROM place_label;
+
+putPlaceLabel:
+INSERT OR REPLACE INTO place_label(place, name) VALUES (?, ?);
+
+deletePlaceLabels:
+DELETE FROM place_label;

@@ -55,6 +55,8 @@ class AccountUi(
 fun AccountRoute(
     account: AccountUi,
     onBack: () -> Unit,
+    /** Why the app asks to sign in now, when a write waits for it. */
+    reason: String? = null,
 ) {
     val state by account.controller.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -76,5 +78,6 @@ fun AccountRoute(
         onRefresh = account.controller::refresh,
         onSignOut = account.controller::signOut,
         onBack = onBack,
+        reason = reason,
     )
 }

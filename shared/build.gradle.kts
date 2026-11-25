@@ -140,6 +140,12 @@ sqldelight {
             packageName.set("to.pubky.maps.place.db")
             srcDirs.setFrom("src/commonMain/sqldelight-place")
         }
+        // What the user keeps on this phone only (saved places, lists): not tied to an account, so
+        // sign-out keeps it, in its own file.
+        create("PhoneDataDatabase") {
+            packageName.set("to.pubky.maps.write.db")
+            srcDirs.setFrom("src/commonMain/sqldelight-phone")
+        }
     }
 }
 

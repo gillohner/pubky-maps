@@ -64,15 +64,41 @@ internal val DataKind.title: String
 internal val DataKind.description: String
     get() =
         when (this) {
-            DataKind.SavedPlaces -> "Places you save for later."
-            DataKind.HomeAndWork -> "Your home and work addresses."
-            DataKind.Lists -> "New lists of places you make."
-            DataKind.CheckIns -> "Places you say you were at."
-            DataKind.RecordedTracks -> "Routes you record on the move."
-            DataKind.LocationHistory -> "Where your phone has been, over time."
-            DataKind.PhotoLocations -> "The spot saved inside a photo. Phone only removes it before a photo is posted."
-            DataKind.Tags -> "Tags you put on places."
-            DataKind.ReviewsAndPosts -> "What you write about places."
+            DataKind.SavedPlaces -> {
+                "Places you save for later."
+            }
+
+            DataKind.HomeAndWork -> {
+                "Your home and work addresses."
+            }
+
+            DataKind.Lists -> {
+                "New lists of places you make (you can pick another place for each list)."
+            }
+
+            DataKind.CheckIns -> {
+                "Places you say you were at."
+            }
+
+            DataKind.RecordedTracks -> {
+                "Routes you record on the move."
+            }
+
+            DataKind.LocationHistory -> {
+                "Where your phone has been, over time."
+            }
+
+            DataKind.PhotoLocations -> {
+                "The spot saved inside a photo. Phone only removes it before a photo is posted; camera and phone details are always removed."
+            }
+
+            DataKind.Tags -> {
+                "Tags you put on places."
+            }
+
+            DataKind.ReviewsAndPosts -> {
+                "What you write about places."
+            }
         }
 
 /** Why a kind that is public by nature has no choice. */

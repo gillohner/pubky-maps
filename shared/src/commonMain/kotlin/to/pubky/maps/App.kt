@@ -1,6 +1,7 @@
 package to.pubky.maps
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -44,6 +45,15 @@ import to.pubky.maps.ui.PubkyMapsTheme
 import to.pubky.maps.update.UpdateController
 import to.pubky.maps.update.UpdateDialogHost
 import to.pubky.maps.update.UpdatesUiState
+import to.pubky.maps.write.ListRoute
+import to.pubky.maps.write.PhotoRoute
+import to.pubky.maps.write.PostRoute
+import to.pubky.maps.write.SavedRoute
+import to.pubky.maps.write.TagRoute
+import to.pubky.maps.write.WriteIntent
+import to.pubky.maps.write.WriteTarget
+import to.pubky.maps.write.WriteUi
+import to.pubky.maps.write.signInReason
 
 @Serializable
 private data object MapDestination
@@ -76,6 +86,17 @@ private data object LicencesDestination
 @Serializable
 private data object AccountDestination
 
+@Serializable
+private data object SavedDestination
+
+/** A write page about the place [uri] (named [name]): which page is [intent]'s name. */
+@Serializable
+private data class WriteDestination(
+    val intent: String,
+    val uri: String,
+    val name: String? = null,
+)
+
 /**
  * The whole app: the map, and the settings pages on top of it. [loadLicences] returns the
  * AboutLibraries JSON of the bundled libraries. [updates] is the in-app updater, null in builds that
@@ -94,6 +115,7 @@ fun App(
     links: AppLinks? = null,
     search: SearchServices? = null,
     places: PlaceServices? = null,
+    writes: WriteUi? = null,
 ) {
     val loaded by settingsRepository.settings.collectAsStateWithLifecycle()
     // Place photos and profile pictures, with the app's User-Agent like every other request. Coil
@@ -110,7 +132,19 @@ fun App(
         // The settings file is read in a few milliseconds at start-up; until then the window stays
         // blank instead of loading the default map style and switching to the user's own.
         loaded?.let { settings ->
-            AppNavigation(appInfo, settings, settingsRepository, loadLicences, updates, updatesState, account, links, search, places)
+            AppNavigation(
+                appInfo,
+                settings,
+                settingsRepository,
+                loadLicences,
+                updates,
+                updatesState,
+                account,
+                links,
+                search,
+                places,
+                writes,
+            )
         }
         val dialog = updatesState?.dialog
         if (updates != null && dialog != null) {
@@ -139,6 +173,7 @@ private fun AppNavigation(
     links: AppLinks?,
     search: SearchServices?,
     places: PlaceServices?,
+    writes: WriteUi?,
 ) {
     val update: ((AppSettings) -> AppSettings) -> Unit = remember(settingsRepository) { { settingsRepository.update(it) } }
     val navController = rememberNavController()
@@ -164,6 +199,25 @@ private fun AppNavigation(
             account.showAccount.filter { it }.collect {
                 navController.open(AccountDestination)
                 account.accountShown()
+            }
+        }
+    }
+
+    if (writes != null) {
+        val controller = writes.controller
+        val signInFirst by controller.signInFirst.collectAsStateWithLifecycle()
+        // A write that needs the user's homeserver asks them to sign in first...
+        LaunchedEffect(signInFirst) { if (signInFirst != null) navController.open(AccountDestination) }
+        // ...and continues once they are signed in: back on the place's page, then its write page.
+        val signedIn = (accountState as? AccountState.SignedIn)?.takeUnless { it.signingOut } != null
+        LaunchedEffect(signedIn) {
+            if (!signedIn) return@LaunchedEffect
+            val waiting = controller.takeSignInFirst() ?: return@LaunchedEffect
+            navController.popBackStack(MapDestination, inclusive = false)
+            if (waiting.intent == WriteIntent.Save) {
+                controller.save(waiting.target)
+            } else {
+                navController.open(WriteDestination(waiting.intent.name, waiting.target.uri, waiting.target.name))
             }
         }
     }
@@ -215,6 +269,11 @@ private fun AppNavigation(
                             open = l.openApp,
                         )
                     },
+                writes = writes?.controller,
+                onWrite = { target, intent ->
+                    navController.open(WriteDestination(intent.name, target.uri, target.name))
+                },
+                onOpenSaved = writes?.let { { navController.open(SavedDestination) } },
             )
         }
         composable<SettingsDestination> {
@@ -244,7 +303,65 @@ private fun AppNavigation(
         }
         if (account != null) {
             composable<AccountDestination> {
-                AccountRoute(account = account, onBack = back)
+                val waiting =
+                    writes
+                        ?.controller
+                        ?.signInFirst
+                        ?.collectAsStateWithLifecycle()
+                        ?.value
+                // Leaving the sign-in without signing in drops the write that waited for it.
+                DisposableEffect(Unit) {
+                    onDispose { if (account.controller.state.value !is AccountState.SignedIn) writes?.controller?.takeSignInFirst() }
+                }
+                AccountRoute(account = account, onBack = back, reason = waiting?.intent?.signInReason)
+            }
+        }
+        if (writes != null) {
+            composable<WriteDestination> { entry ->
+                val route = entry.toRoute<WriteDestination>()
+                val target = WriteTarget(route.uri, route.name)
+                val page =
+                    places
+                        ?.pages
+                        ?.state
+                        ?.collectAsStateWithLifecycle()
+                        ?.value
+                val signedIn = (accountState as? AccountState.SignedIn)?.takeUnless { it.signingOut } != null
+                when (WriteIntent.entries.firstOrNull { it.name == route.intent }) {
+                    WriteIntent.Tag -> {
+                        TagRoute(writes.controller, target, page, onClose = back)
+                    }
+
+                    WriteIntent.Post -> {
+                        PostRoute(writes.controller, target, onClose = back)
+                    }
+
+                    WriteIntent.Photo -> {
+                        writes.photos?.let { PhotoRoute(writes.controller, it, settings, target, onClose = back) }
+                    }
+
+                    WriteIntent.AddToList -> {
+                        ListRoute(writes.controller, settings, target, page, signedIn, onClose = back)
+                    }
+
+                    WriteIntent.Save, null -> {}
+                }
+            }
+            composable<SavedDestination> {
+                val signedIn = accountState as? AccountState.SignedIn
+                val pinakes = settings.servers[Service.Pinakes].map { it.url }
+                SavedRoute(
+                    writes = writes.controller,
+                    signedIn = signedIn != null && !signedIn.signingOut,
+                    refreshing = signedIn?.refreshing == true,
+                    onRefresh = { account?.controller?.refresh() },
+                    onOpen = { place ->
+                        navController.popBackStack(MapDestination, inclusive = false)
+                        search?.controller?.close()
+                        links?.linkedPlaces?.open(place, pinakes)
+                    },
+                    onBack = back,
+                )
             }
         }
         composable<ServersDestination> {

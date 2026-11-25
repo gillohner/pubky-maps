@@ -1,7 +1,9 @@
 package to.pubky.maps.place
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -20,6 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
@@ -32,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -59,6 +64,12 @@ import to.pubky.maps.account.shortPubkyId
 import to.pubky.maps.links.LinkProvider
 import to.pubky.maps.links.OpenInAction
 import to.pubky.maps.ui.AppIcons
+import to.pubky.maps.write.KeptBadge
+import to.pubky.maps.write.OwnList
+import to.pubky.maps.write.OwnPlace
+import to.pubky.maps.write.WriteIcons
+import to.pubky.maps.write.mergeOwnTags
+import to.pubky.maps.write.ownPostRows
 import kotlin.time.Instant
 
 /** What the place page can do, wired by the map. */
@@ -72,6 +83,24 @@ data class PlacePageActions(
     /** Opens a web, `tel:` or `mailto:` link in another app. */
     val onOpenLink: (String) -> Unit,
     val onLoadMorePosts: () -> Unit,
+    /** The user's writes about the place (Save, Tag, Post, Photo, Add to list); null where there are none. */
+    val writes: PlaceWriteActions? = null,
+)
+
+/** What the user can do on the place page, and what they have about it. */
+data class PlaceWriteActions(
+    val own: OwnPlace,
+    /** The signed-in user, null when signed out. */
+    val viewer: String?,
+    /** Saves the place, or removes it when it is saved. */
+    val onToggleSave: () -> Unit,
+    /** Opens the tag page. */
+    val onTag: () -> Unit,
+    /** Tags the place with a label people used, or removes the user's own tag. */
+    val onToggleTag: (String) -> Unit,
+    val onPost: () -> Unit,
+    val onPhoto: () -> Unit,
+    val onAddToList: () -> Unit,
 )
 
 /** The place page's clock and language, passed in so screenshots and tests are fixed. */
@@ -131,19 +160,54 @@ fun PlaceHeader(
                 ?.let { line -> OpeningText(line) }
             OfflineNote(page, context)
         }
+        // Google Maps' order: the place's own actions first, then Share and Open in; the row scrolls
+        // sideways when it is wider than the page.
         Row(
-            modifier = Modifier.padding(top = 12.dp, end = 8.dp),
+            modifier = Modifier.padding(top = 12.dp).horizontalScroll(rememberScrollState()).padding(end = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            actions.onShare?.let { share ->
-                FilledTonalButton(onClick = share) {
-                    Icon(AppIcons.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+            val writes = actions.writes
+            if (writes != null) {
+                val saved = writes.own.isSaved
+                FilledTonalButton(onClick = writes.onToggleSave) {
+                    Icon(
+                        if (saved) WriteIcons.Bookmark else WriteIcons.BookmarkBorder,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
                     Spacer(Modifier.width(8.dp))
-                    Text("Share")
+                    Text(if (saved) "Saved" else "Save")
+                }
+                ActionButton(WriteIcons.Tag, "Tag", writes.onTag)
+                ActionButton(WriteIcons.Post, "Post", writes.onPost)
+                ActionButton(WriteIcons.AddToList, "Add to list", writes.onAddToList)
+            }
+            actions.onShare?.let { share ->
+                if (writes != null) {
+                    ActionButton(AppIcons.Share, "Share", share)
+                } else {
+                    FilledTonalButton(onClick = share) {
+                        Icon(AppIcons.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Share")
+                    }
                 }
             }
             if (actions.openIn.isNotEmpty()) OpenInButton(actions)
         }
+    }
+}
+
+@Composable
+private fun ActionButton(
+    icon: ImageVector,
+    text: String,
+    onClick: () -> Unit,
+) {
+    OutlinedButton(onClick = onClick) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(text)
     }
 }
 
@@ -283,16 +347,44 @@ fun PlaceSections(
         card?.description?.let { Description(it) }
         val osm = page.osm
         osm?.let { OsmDetailsSection(it, context, actions) }
-        val tags = page.tags
-        if (tags.isNotEmpty()) TagsSection(tags, page.people, page.viewer)
-        if (page.photos.isNotEmpty()) PhotosSection(page.photos, actions)
-        if (page.posts.isNotEmpty()) {
-            SectionTitle("Posts")
-            page.posts.forEach { post -> PostRow(post, page.people[post.author], context) }
+        val writes = actions.writes
+        val viewer = writes?.viewer ?: page.viewer
+        val tags = mergeOwnTags(page.tags, writes?.own?.labels, viewer)
+        val pendingTags =
+            writes
+                ?.own
+                ?.tags
+                .orEmpty()
+                .filter { it.pending }
+                .map { it.label }
+                .toSet()
+        if (tags.isNotEmpty() || writes != null) TagsSection(tags, page.people, viewer, pendingTags, writes)
+        val ownRows =
+            if (writes != null &&
+                viewer != null
+            ) {
+                ownPostRows(writes.own.posts + writes.own.photos, page.posts, viewer)
+            } else {
+                emptyList()
+            }
+        val photos = (ownRows.flatMap { it.images } + page.photos).distinctBy { it.url }
+        if (photos.isNotEmpty() || writes != null) PhotosSection(photos, actions)
+        val posts = ownRows.filter { it.images.isEmpty() || it.content.isNotEmpty() } + page.posts
+        if (posts.isNotEmpty() || writes != null) {
+            SectionTitle("Posts", action = writes?.let { w -> { SectionAction(WriteIcons.Post, "Write a post", w.onPost) } })
+            posts.forEach { post -> PostRow(post, page.people[post.author], context) }
             if (page.morePosts) MorePostsRow(page.loadingMorePosts, actions.onLoadMorePosts)
         }
-        if (page.lists.isNotEmpty()) ListsSection(page.lists, page.listCount, page.people)
-        if (page.nothingOnPubky) NothingOnPubky()
+        val ownLists = writes?.own?.lists.orEmpty()
+        // The user's own lists are known from their homeserver: one that no longer holds the place is left out.
+        val lists = page.lists.filterNot { it.uri in writes?.own?.allLists.orEmpty() && ownLists.none { own -> own.uri == it.uri } }
+        if (lists.isNotEmpty() || ownLists.isNotEmpty() ||
+            writes != null
+        ) {
+            ListsSection(lists, page.listCount, ownLists, page.people, writes)
+        }
+        // With writes, each empty section says so beside its add button.
+        if (page.nothingOnPubky && writes == null) NothingOnPubky()
         val alsoOn = card?.let { alsoOnShown(it.alsoOn, page.place.uri, context.language, hasWebsite = osm?.website != null) }.orEmpty()
         if (alsoOn.isNotEmpty()) AlsoOnSection(alsoOn, actions)
         DataCredits(page, actions)
@@ -300,18 +392,39 @@ fun PlaceSections(
 }
 
 @Composable
-private fun SectionTitle(text: String) {
+private fun SectionTitle(
+    text: String,
+    action: (@Composable () -> Unit)? = null,
+) {
     Column {
         HorizontalDivider(Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
-        Text(
-            text,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = SectionTitleWeight,
-            modifier =
-                Modifier
-                    .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)
-                    .semantics { heading() },
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = SectionTitleWeight,
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)
+                        .semantics { heading() },
+            )
+            action?.let { Box(Modifier.padding(end = 8.dp, top = 8.dp)) { it() } }
+        }
+    }
+}
+
+/** A section's add button beside its title ("Write a post", "Add to list"). */
+@Composable
+private fun SectionAction(
+    icon: ImageVector,
+    text: String,
+    onClick: () -> Unit,
+) {
+    TextButton(onClick = onClick, modifier = Modifier.heightIn(min = 48.dp)) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(text)
     }
 }
 
@@ -524,6 +637,8 @@ private fun TagsSection(
     tags: List<PlaceTag>,
     people: Map<String, PlacePerson>,
     viewer: String?,
+    pending: Set<String>,
+    writes: PlaceWriteActions?,
 ) {
     Column {
         SectionTitle("Tags on Pubky")
@@ -533,7 +648,23 @@ private fun TagsSection(
         ) {
             tags.forEach { tag ->
                 // 48 dp tall like a touch target: s2c makes the chips toggle the user's own tag.
-                Box(Modifier.heightIn(min = 48.dp), contentAlignment = Alignment.Center) {
+                // With writes, a tap adds the same label (one-tap tag) or removes the user's own.
+                val toggle = writes?.let { w -> { w.onToggleTag(tag.label) } }
+                Box(
+                    Modifier
+                        .heightIn(min = 48.dp)
+                        .then(
+                            if (toggle != null) {
+                                Modifier.clickable(
+                                    onClickLabel = if (tag.mine) "Remove your tag" else "Tag it ${tag.label} too",
+                                    onClick = toggle,
+                                )
+                            } else {
+                                Modifier
+                            },
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
                     val colors = MaterialTheme.colorScheme
                     Surface(
                         shape = RoundedCornerShape(8.dp),
@@ -544,6 +675,10 @@ private fun TagsSection(
                             Modifier.heightIn(min = 36.dp).padding(horizontal = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            if (tag.label in pending) {
+                                Icon(WriteIcons.Pending, contentDescription = "Not sent yet", modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(4.dp))
+                            }
                             Text(tag.label, style = MaterialTheme.typography.labelLarge)
                             Spacer(Modifier.width(6.dp))
                             Text(tag.count.toString(), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
@@ -551,6 +686,24 @@ private fun TagsSection(
                     }
                 }
             }
+        }
+        if (writes != null) {
+            Box(Modifier.heightIn(min = 48.dp).padding(start = 16.dp), contentAlignment = Alignment.CenterStart) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.primary,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = writes.onTag),
+                ) {
+                    Row(Modifier.heightIn(min = 36.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(AppIcons.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Add tag", style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+            }
+            if (tags.isEmpty()) SmallText("Nobody tagged it yet. Tags are public.", Modifier.padding(horizontal = 16.dp))
         }
         val line = taggersLine(tags, people, viewer)
         if (line != null) {
@@ -622,10 +775,30 @@ private fun PhotosSection(
     // Photos that fail to load are left out; with none left, so is the section.
     val failed = remember(photos) { mutableStateListOf<String>() }
     val shown = photos.filterNot { it.url in failed }
-    if (shown.isEmpty()) return
+    if (shown.isEmpty() && actions.writes == null) return
     Column {
         SectionTitle("Photos")
         LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            actions.writes?.let { writes ->
+                item(key = "add-photo") {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        contentColor = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(120.dp).clip(RoundedCornerShape(8.dp)).clickable(onClick = writes.onPhoto),
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                        ) {
+                            Icon(WriteIcons.AddPhoto, contentDescription = null)
+                            Spacer(Modifier.height(8.dp))
+                            Text("Add photo", style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                }
+            }
             items(shown, key = { it.url }) { photo ->
                 RemoteImage(
                     photo.thumbnailUrl,
@@ -634,7 +807,8 @@ private fun PhotosSection(
                         Modifier
                             .size(120.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .clickable { actions.onOpenLink(photo.url) },
+                            // A photo not sent yet is a file on this phone: nothing to open.
+                            .then(if (!photo.url.startsWith("file://")) Modifier.clickable { actions.onOpenLink(photo.url) } else Modifier),
                     onFailed = { failed += photo.url },
                 )
             }
@@ -653,8 +827,9 @@ private fun PostRow(
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             val then = Instant.fromEpochMilliseconds(post.indexedAt).toLocalDateTime(context.timeZone)
+            val age = if (post.pending) "not sent yet" else ageText(context.nowMillis, post.indexedAt, then.date)
             Text(
-                "${personName(post.author, author)} · ${ageText(context.nowMillis, post.indexedAt, then.date)}",
+                "${personName(post.author, author)} · $age",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -696,12 +871,37 @@ private fun MorePostsRow(
 @Composable
 private fun ListsSection(
     lists: List<PlaceList>,
-    count: Int,
+    listCount: Int,
+    ownLists: List<OwnList>,
     people: Map<String, PlacePerson>,
+    writes: PlaceWriteActions?,
 ) {
+    // The user's own lists come from their homeserver (Pinakes lags, and private ones are not public).
+    val others = lists.filterNot { list -> ownLists.any { it.uri == list.uri } }
+    val ownPublicCounted = lists.size - others.size
+    val count = maxOf(listCount - ownPublicCounted, others.size) + ownLists.size
     Column {
-        SectionTitle(if (count == 1) "In 1 list" else "In $count lists")
-        lists.forEach { list ->
+        SectionTitle(
+            when (count) {
+                0 -> "Lists"
+                1 -> "In 1 list"
+                else -> "In $count lists"
+            },
+            action = writes?.let { w -> { SectionAction(WriteIcons.AddToList, "Add to list", w.onAddToList) } },
+        )
+        ownLists.forEach { list ->
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Text(list.name, style = MaterialTheme.typography.bodyLarge)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    KeptBadge(list.kept)
+                    Spacer(Modifier.width(8.dp))
+                    val places = if (list.items.size == 1) "1 place" else "${list.items.size} places"
+                    SmallText("Your list · $places" + if (list.pending) " · not sent yet" else "")
+                }
+            }
+        }
+        if (count == 0) SmallText("Not in any list yet.", Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+        others.forEach { list ->
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text(list.name ?: "A list", style = MaterialTheme.typography.bodyLarge)
                 val by = if (list.mine) "Your list" else "By ${personName(list.author, people[list.author])}"
@@ -709,7 +909,9 @@ private fun ListsSection(
                 SmallText(listOfNotNull(by, places).joinToString(" · "))
             }
         }
-        if (count > lists.size) SmallText("Showing ${lists.size} of $count.", Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+        if (count > others.size + ownLists.size) {
+            SmallText("Showing ${others.size + ownLists.size} of $count.", Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+        }
     }
 }
 

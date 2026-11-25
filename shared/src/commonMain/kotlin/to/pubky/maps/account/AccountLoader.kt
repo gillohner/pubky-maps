@@ -33,15 +33,17 @@ internal class AccountLoader(
     private val core: PubkyCore,
     private val now: () -> Long,
 ) {
+    /** The user's data; its `refreshedAt` is when reading began, so a write made after that is known to be newer. */
     suspend fun load(publicKey: String): CachedAccount =
         coroutineScope {
+            val startedAt = now()
             val name = async { profileName(publicKey) }
             val tags = async { tags() }
             val bookmarks = async { bookmarks() }
             CachedAccount(
                 publicKey = publicKey,
                 name = name.await(),
-                refreshedAt = now(),
+                refreshedAt = startedAt,
                 tags = tags.await(),
                 bookmarks = bookmarks.await(),
             )

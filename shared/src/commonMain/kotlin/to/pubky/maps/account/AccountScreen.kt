@@ -74,6 +74,8 @@ fun AccountScreen(
     onRefresh: () -> Unit,
     onSignOut: () -> Unit,
     onBack: () -> Unit,
+    /** Why the app asks to sign in now ("Sign in to tag this place."), shown above the sign-in. */
+    reason: String? = null,
 ) {
     Scaffold(
         topBar = {
@@ -108,7 +110,7 @@ fun AccountScreen(
             ) {
                 when (state) {
                     AccountState.Loading -> Loading()
-                    is AccountState.SignedOut -> SignedOut(state, onSignIn)
+                    is AccountState.SignedOut -> SignedOut(state, onSignIn, reason)
                     is AccountState.SigningIn -> SigningIn(state, ringOnThisPhone, onOpenRing, onCancelSignIn)
                     is AccountState.SignedIn -> SignedIn(state, onSignOut)
                     is AccountState.Unavailable -> Paragraph(state.reason)
@@ -134,8 +136,10 @@ private fun Loading() {
 private fun SignedOut(
     state: AccountState.SignedOut,
     onSignIn: () -> Unit,
+    reason: String?,
 ) {
     Column(Modifier.padding(horizontal = 24.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        reason?.let { Text(it, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary) }
         Text("Sign in with Pubky", style = MaterialTheme.typography.headlineSmall)
         Text(
             "Sign in to tag places and save them with your Pubky identity. Pubky Ring holds your keys and " +

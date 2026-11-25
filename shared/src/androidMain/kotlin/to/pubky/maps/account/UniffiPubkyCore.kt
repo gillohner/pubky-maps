@@ -124,14 +124,14 @@ private fun AuthRequest.toLink(): SignInLink =
 private fun SessionInfo.toSession() = AccountSession(publicKey = publicKey, homeserver = homeserver)
 
 /** Runs a core call with its errors as [CoreFailure]. */
-private inline fun <T> mapped(call: () -> T): T =
+internal inline fun <T> mapped(call: () -> T): T =
     try {
         call()
     } catch (e: CoreException) {
         throw e.toFailure()
     }
 
-private fun CoreException.toFailure(): CoreFailure =
+internal fun CoreException.toFailure(): CoreFailure =
     when (this) {
         is CoreException.Network -> CoreFailure.Network(reason)
         is CoreException.RateLimited -> CoreFailure.Network(reason)

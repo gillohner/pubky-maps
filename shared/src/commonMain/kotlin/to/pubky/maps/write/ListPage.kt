@@ -1,0 +1,164 @@
+package to.pubky.maps.write
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.dp
+
+/** The spec's limit for a list's name. */
+const val LIST_NAME_MAX = 100
+
+/** One of the user's lists on the list page. */
+data class ListChoice(
+    val list: OwnList,
+    /** It holds the place. */
+    val holds: Boolean,
+)
+
+/** What the list page shows. */
+data class ListPageState(
+    val placeName: String?,
+    val lists: List<ListChoice>,
+    /** The lists are being read from the homeserver. */
+    val loading: Boolean = false,
+    /** They could not be read now: the ones shown are as last read. */
+    val stale: Boolean = false,
+    /** The new list's name as typed. */
+    val newName: String = "",
+    /** Where a new list goes: the user's Lists choice until they pick another for it. */
+    val newKept: Kept = Kept.Private,
+    /** Where a new list may go (signed out: this phone only). */
+    val keptChoices: List<Kept> = Kept.entries.toList(),
+)
+
+/**
+ * Add a place to one of the user's lists, or take it out (each tick is sent at once), or make a new
+ * list with the place in it. Where each list is kept is shown beside it; a full list says so.
+ */
+@Composable
+fun ListPage(
+    state: ListPageState,
+    onToggle: (ListChoice) -> Unit,
+    onNewNameChange: (String) -> Unit,
+    onNewKeptChange: (Kept) -> Unit,
+    onCreate: () -> Unit,
+    onClose: () -> Unit,
+) {
+    WritePage(title = "Add to a list", place = state.placeName, onClose = onClose, action = {
+        TextButton(onClick = onClose) { Text("Done") }
+    }) {
+        if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (state.stale) {
+            Text(
+                "Your lists could not be read now; these are as they were last time.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (state.lists.isNotEmpty()) {
+            WriteSection("Your lists") {
+                Column {
+                    state.lists.forEach { choice -> ListRow(choice, onToggle) }
+                }
+            }
+        } else if (!state.loading) {
+            Text("You have no lists yet. Make one below.", style = MaterialTheme.typography.bodyMedium)
+        }
+        WriteSection("New list") {
+            OutlinedTextField(
+                value = state.newName,
+                onValueChange = onNewNameChange,
+                label = { Text("Name") },
+                singleLine = true,
+                isError = state.newName.length > LIST_NAME_MAX,
+                supportingText = { Text("${state.newName.length} / $LIST_NAME_MAX") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Column(Modifier.selectableGroup()) {
+                state.keptChoices.forEach { kept ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .selectable(selected = kept == state.newKept, onClick = { onNewKeptChange(kept) }, role = Role.RadioButton)
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = kept == state.newKept, onClick = null)
+                        Column(Modifier.padding(start = 12.dp)) {
+                            Text(kept.badgeText, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                kept.explanation,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+            KeptNote(state.newKept)
+            Button(
+                onClick = onCreate,
+                enabled = state.newName.isNotBlank() && state.newName.length <= LIST_NAME_MAX,
+            ) { Text("Create list with this place") }
+        }
+        Text(
+            "A list holds up to ${OwnList.MAX_LIST_ITEMS} places.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun ListRow(
+    choice: ListChoice,
+    onToggle: (ListChoice) -> Unit,
+) {
+    val list = choice.list
+    val sending = list.uri.startsWith(OwnList.PENDING_PREFIX)
+    // A full list can still lose the place; a list not created yet cannot change.
+    val enabled = !sending && (choice.holds || !list.full)
+    val count = list.items.size
+    val detail =
+        when {
+            sending -> "Not sent yet"
+            list.full && !choice.holds -> "Full: $count of ${OwnList.MAX_LIST_ITEMS} places"
+            count == 1 -> "1 place"
+            else -> "$count places"
+        }
+    ListItem(
+        headlineContent = { Text(list.name) },
+        supportingContent = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                KeptBadge(list.kept)
+                Text(detail + if (list.pending && !sending) " · changes not sent yet" else "")
+            }
+        },
+        leadingContent = { Checkbox(checked = choice.holds, onCheckedChange = null, enabled = enabled) },
+        modifier =
+            Modifier.toggleable(
+                value = choice.holds,
+                enabled = enabled,
+                role = Role.Checkbox,
+                onValueChange = { onToggle(choice) },
+            ),
+    )
+}

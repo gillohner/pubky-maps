@@ -97,6 +97,8 @@ data class PlacePost(
     val indexedAt: Long,
     /** The image files it carries, as Nexus serves them. */
     val images: List<PlacePhoto>,
+    /** Written on this phone and not sent yet (no connection). */
+    val pending: Boolean = false,
 )
 
 /** A photo of the place, as Nexus serves the author's file. */

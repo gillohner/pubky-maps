@@ -1,0 +1,30 @@
+-- What the user keeps on this phone only ("What is stored online": Phone only). Not tied to an
+-- account: it stays when the user signs out, and it is never uploaded.
+
+CREATE TABLE saved_place (
+    place TEXT NOT NULL PRIMARY KEY,
+    name TEXT,
+    -- epoch milliseconds
+    saved_at INTEGER NOT NULL
+);
+
+-- One JSON OwnList per list.
+CREATE TABLE phone_list (
+    uri TEXT NOT NULL PRIMARY KEY,
+    list TEXT NOT NULL
+);
+
+savedPlaces:
+SELECT * FROM saved_place ORDER BY saved_at DESC;
+
+putSavedPlace:
+INSERT OR REPLACE INTO saved_place(place, name, saved_at) VALUES (?, ?, ?);
+
+deleteSavedPlace:
+DELETE FROM saved_place WHERE place = ?;
+
+lists:
+SELECT list FROM phone_list;
+
+putList:
+INSERT OR REPLACE INTO phone_list(uri, list) VALUES (?, ?);

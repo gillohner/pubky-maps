@@ -57,6 +57,7 @@ import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.place.PlaceSource
 import to.pubky.maps.ui.AppIcons
 import to.pubky.maps.ui.rememberSafeLinkOpener
+import to.pubky.maps.write.WriteIcons
 
 /** Height of the search bar, as Google Maps and CoMaps draw theirs. */
 internal val SearchBarHeight = 48.dp
@@ -73,6 +74,8 @@ data class SearchActions(
     val onSelectRecent: (RecentSearch) -> Unit = {},
     val onClearQuery: () -> Unit = {},
     val onBack: () -> Unit = {},
+    /** Opens the user's saved places and lists; null where there are none. */
+    val onOpenSaved: (() -> Unit)? = null,
 )
 
 /**
@@ -172,6 +175,17 @@ fun SearchList(
         }
         statusLine(state)?.let { line -> item(key = "status") { StatusLine(line, offline = state.offline) } }
         if (shownRecents != null) {
+            val openSaved = actions.onOpenSaved
+            if (openSaved != null && state.query.isBlank()) {
+                item(key = "saved") {
+                    ListItem(
+                        headlineContent = { Text("Saved") },
+                        supportingContent = { Text("Your saved places and lists") },
+                        leadingContent = { Icon(WriteIcons.Bookmark, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                        modifier = Modifier.clickable(onClick = openSaved),
+                    )
+                }
+            }
             if (shownRecents.isNotEmpty() && state.query.isBlank()) {
                 item(key = "recent-title") {
                     Text(
