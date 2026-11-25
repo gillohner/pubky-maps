@@ -10,15 +10,18 @@ name: release
 # update-edge.json, update.json (stable, also at releases/latest/download/update.json) or update-dev.json.
 #
 # The release keystore is only in the sign job and the update-feed key only in the publish job;
-# the Gradle build has no secrets.
+# the Gradle build has no secrets. Both are secrets of the GitHub environment `release`, which only
+# deploys from main and v* tags; manual runs use the environment `dev`, with separate dev keys (dev
+# APKs embed release/update-feed-key-dev.pub and cannot update edge or stable installs).
 on:
   push:
     branches: [main]
     tags: ["v*"]
   workflow_dispatch:
 concurrency:
-  # One release per ref at a time; a newer push waits for the running one to publish.
-  group: release-${{ github.ref }}
+  # One run per target release at a time (every manual run writes `dev`); a newer one waits for the
+  # running one to publish.
+  group: release-${{ github.event_name == 'workflow_dispatch' && 'dev' || github.ref }}
   cancel-in-progress: false
 permissions:
   contents: read
@@ -45,6 +48,7 @@ jobs:
           persist-credentials: false
       - id: v
         name: channel and version
+        shell: bash
         run: |
           python3 -I scripts/release/version.py gradle.properties "$GITHUB_REF" "$GITHUB_EVENT_NAME" "$GITHUB_RUN_NUMBER" | tee -a "$GITHUB_OUTPUT"
 
@@ -99,6 +103,7 @@ jobs:
     needs: [meta, build]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    environment: ${{ needs.meta.outputs.channel == 'dev' && 'dev' || 'release' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -113,8 +118,11 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           VERSION_NAME: ${{ needs.meta.outputs.version_name }}
+          CHANNEL: ${{ needs.meta.outputs.channel }}
         run: |
           mkdir -p dist
+          # Edge and stable APKs must carry the release certificate the installed apps have.
+          if [ "$CHANNEL" != dev ]; then export EXPECTED_CERT_SHA256; EXPECTED_CERT_SHA256=$(cat release/release-cert.sha256); fi
           bash scripts/release/sign.sh unsigned/app.apk "dist/pubky-maps-$VERSION_NAME.apk" \
             unsigned/app.aab "dist/pubky-maps-$VERSION_NAME.aab"
       - name: the APK is the build it should be
@@ -138,6 +146,7 @@ jobs:
     needs: [meta, sign]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    environment: ${{ needs.meta.outputs.channel == 'dev' && 'dev' || 'release' }}
     permissions:
       contents: write
     env:
@@ -163,14 +172,17 @@ jobs:
           key="$RUNNER_TEMP/feed-key.pem"
           trap 'rm -f "$key"' EXIT
           (umask 077 && printf '%s\n' "$UPDATE_FEED_SIGNING_KEY" > "$key")
+          public=release/update-feed-key.pub
+          [ "$CHANNEL" != dev ] || public=release/update-feed-key-dev.pub
           python3 -I scripts/release/update-feed.py --apk "$apk" --channel "$CHANNEL" \
             --url "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/pubky-maps-$VERSION_NAME.apk" \
             --package "$apk_package" --version-code "$apk_version_code" --version-name "$apk_version_name" \
-            --min-sdk "$apk_min_sdk" --signing-key "$key" --public-key release/update-feed-key.pub \
+            --min-sdk "$apk_min_sdk" --signing-key "$key" --public-key "$public" \
             --out "dist/$FEED"
           cat "dist/$FEED"
       - name: checksums
         working-directory: dist
+        shell: bash
         run: sha256sum -- * > SHA256SUMS && cat SHA256SUMS
       - name: notes
         run: |

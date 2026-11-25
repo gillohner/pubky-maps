@@ -20,11 +20,15 @@ val appVersionName = providers.gradleProperty("pubkymaps.versionName").orNull ?:
 val updateChannel = providers.gradleProperty("pubkymaps.updateChannel").orNull ?: ""
 require(updateChannel in setOf("", "edge", "stable", "dev")) { "unknown update channel '$updateChannel'" }
 
-// The update probe (scripts/ci/update-probe.py) builds with its own feed address and a throwaway key.
+// The feed's public key: dev builds (manual release runs) are signed with separate dev keys. The
+// update probe (scripts/ci/update-probe.py) builds with its own feed address and a throwaway key.
 val updateFeedOverride = providers.gradleProperty("pubkymaps.updateFeedUrl").orNull ?: ""
 val updatePublicKey =
     providers.gradleProperty("pubkymaps.updatePublicKey").orNull
-        ?: rootProject.file("release/update-feed-key.pub").readText().trim()
+        ?: rootProject
+            .file(if (updateChannel == "dev") "release/update-feed-key-dev.pub" else "release/update-feed-key.pub")
+            .readText()
+            .trim()
 val updateProbe = providers.gradleProperty("pubkymaps.updateProbe").orNull == "true"
 
 android {

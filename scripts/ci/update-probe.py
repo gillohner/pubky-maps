@@ -242,8 +242,12 @@ def main():
         report["steps"]["tampered_feed_refused"] = bool(refused)
         if not refused:
             failures.append("tampered feed: the start-up check did not refuse it")
+        find(is_("Settings"), 120, "the map screen")
         time.sleep(3)
-        if any(has("Update available")(n) for n in ui_nodes()):
+        nodes = ui_nodes()
+        if not any(is_("Settings")(n) for n in nodes):
+            failures.append("tampered feed: the screen could not be read to check that nothing was offered")
+        elif any(has("Update available")(n) for n in nodes):
             failures.append("tampered feed: an update was offered")
         tap(find(is_("Settings"), 120, "the Settings button"), "Settings")
         find(has("not signed with the Pubky Maps key"), 60, "the refused feed's reason in Settings")

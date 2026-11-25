@@ -58,11 +58,13 @@ Every CI run also uploads the debug APK as an artifact (`pubky-maps-debug-apk`).
 - `edge`: a pre-release that every push to `main` replaces (versionName `<x.y.z>-edge.<run>`);
 - `v<x.y.z>`: a release, made by pushing that tag; the tag must match `pubkymaps.version` in
   `gradle.properties`;
-- `dev`: a pre-release from a manual run of the workflow on any branch, to try release changes.
+- `dev`: a pre-release from a manual run of the workflow on any branch, to try release changes. It is
+  signed with separate dev keys, so it cannot update an edge or stable install.
 
 Each has the signed APK, the signed `.aab`, `SHA256SUMS` and the signed update feed of its channel
 (`update-edge.json`, `update.json`, `update-dev.json`). versionCodes only grow: see
-`scripts/release/version.py`.
+`scripts/release/version.py`. Edge and stable APKs are signed with the release key whose certificate
+SHA-256 is in `release/release-cert.sha256`; compare it with `apksigner verify --print-certs`.
 
 The APK checks the feed of the channel it was built for when it starts (at most once a day, unless
 turned off in Settings → About) and on "Check for updates". The feed is signed with Ed25519; the app

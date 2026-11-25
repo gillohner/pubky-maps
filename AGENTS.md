@@ -43,14 +43,19 @@ service makes a feature degrade, never the app stop.
 No keys, tokens, passwords or keystores in the repository, in logs, in command lines or in CI output.
 CI secrets go through GitHub secrets only. The release keystore (`ANDROID_KEYSTORE_B64`,
 `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`) is read only by the `sign` job of `release.yml` and the
-update-feed key (`UPDATE_FEED_SIGNING_KEY`) only by its `publish` job; Gradle never sees either. Only
-the feed's public key is in the repository (`release/update-feed-key.pub`). Prefer public keyless sources; a source that needs a key
+update-feed key (`UPDATE_FEED_SIGNING_KEY`) only by its `publish` job; Gradle never sees either. They are
+secrets of the GitHub environment `release`, which only deploys from `main` and `v*` tags; manual runs
+use the environment `dev` with separate dev keys. Only public keys are in the repository
+(`release/update-feed-key.pub`, `release/update-feed-key-dev.pub`, and the release certificate's
+SHA-256 in `release/release-cert.sha256`, which every edge and stable APK must match). Prefer public keyless sources; a source that needs a key
 stays out until its owner provides one.
 
 ## Releases
 
 - Never push a `v*` tag or touch the `edge` release from a branch; to try a release change, run
-  `release.yml` by hand on the branch (it replaces the `dev` pre-release).
+  `release.yml` by hand on the branch (it replaces the `dev` pre-release, signed with the dev keys).
+- Raising `pubkymaps.version` in `gradle.properties` comes with setting `pubkymaps.versionRunOffset` to
+  the release workflow's latest run number (`scripts/release/version.py`).
 - The updater exists only in the `direct` flavour (`androidApp/src/direct/`). Code shared by both
   flavours must not need it; the `.aab` check (`scripts/release/aab-check.py`) fails a store build
   that has it.

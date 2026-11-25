@@ -48,6 +48,12 @@ expect(codes == sorted(codes) and len(set(codes)) == len(codes), f"versionCodes 
 expect(int(compute("20.99.99", "refs/tags/v20.99.99", "push", 1)["version_code"]) <= 2100000000,
        "the largest versionCode is past Android's limit")
 
+# Raising the version restarts the run count at the offset; versionCodes keep growing.
+before = int(compute("0.1.0", "refs/heads/main", "push", 9000)["version_code"])
+after = compute("0.2.0", "refs/heads/main", "push", 9001, offset=9000)
+expect(after["version_name"] == "0.2.0-edge.1" and int(after["version_code"]) > before, f"after an offset: {after}")
+expect(refused("0.2.0", "refs/heads/main", "push", 9000, 9000), "a run at the offset itself was accepted")
+expect(refused("0.2.0", "refs/heads/main", "push", 19000, 9001), "a run 9999 past the offset was accepted")
 expect(refused("0.1.0", "refs/tags/v0.2.0", "push", 1), "a tag that does not match the version was accepted")
 expect(refused("0.1.0", "refs/heads/feature", "push", 1), "a push to a branch made a release")
 expect(refused("0.1.0", "refs/heads/main", "pull_request", 1), "a pull request made a release")

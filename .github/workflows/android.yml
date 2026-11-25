@@ -144,7 +144,8 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-  # Whether the updater or the release changed since the last push (or the pull request's base).
+  # Whether the updater or the release changed against main (a pull request: against its base), so
+  # the probe also runs on later pushes of a branch whose earlier pushes changed the updater.
   changes:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-24.04
@@ -157,17 +158,24 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       - id: pick
+        shell: bash
         env:
           EVENT: ${{ github.event_name }}
           REF: ${{ github.ref }}
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
         run: |
-          update=false
-          if [ "$EVENT" = workflow_dispatch ] || [ "$REF" = refs/heads/main ] \
-            || [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+          paths='^(androidApp/(build\.gradle\.kts|proguard-rules\.pro)$|androidApp/src/(direct|store|updateProbe|main)/'
+          paths+='|shared/build\.gradle\.kts$|shared/src/commonMain/kotlin/to/pubky/maps/(update/|config/|settings/SettingsScreen\.kt$|App\.kt$)'
+          paths+='|scripts/release/|scripts/ci/update-probe\.py$|release/|gradle/|gradle\.properties$|\.github/workflows/(android|release)\.yml$)'
+          base=$PR_BASE
+          if [ -z "$base" ] && [ "$REF" != refs/heads/main ]; then
+            base=$(git merge-base origin/main "$GITHUB_SHA" 2> /dev/null || true)
+          fi
+          if [ "$EVENT" = workflow_dispatch ] || [ "$REF" = refs/heads/main ] || [ -z "$base" ]; then
             update=true
-          elif git diff --name-only "$BASE" "$GITHUB_SHA" | grep -Eq '^(androidApp/src/(direct|store|updateProbe)/|androidApp/src/main/AndroidManifest\.xml$|androidApp/(build\.gradle\.kts|proguard-rules\.pro)$|shared/src/commonMain/kotlin/to/pubky/maps/(update/|App\.kt$)|scripts/release/|scripts/ci/update-probe\.py$|release/|gradle/libs\.versions\.toml$|\.github/workflows/(android|release)\.yml$)'; then
-            update=true
+          else
+            files=$(git diff --name-only "$base" "$GITHUB_SHA")
+            if grep -Eq "$paths" <<< "$files"; then update=true; else update=false; fi
           fi
           echo "update=$update" | tee -a "$GITHUB_OUTPUT"
 
@@ -191,31 +199,27 @@ jobs:
             ~/.gradle/wrapper/dists
           key: gradle-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', '**/*.gradle.kts') }}
           restore-keys: gradle-
-      # A release key and an update-feed key for this run only.
-      - name: throwaway keys
+      # N and N+1, each signed with a release key made for this run only; the feed key is throwaway
+      # too. Gradle never sees either key.
+      - name: N and N+1 (release, R8, signed with a throwaway key)
+        shell: bash
         run: |
           d="$RUNNER_TEMP/keys"; mkdir -p "$d" out
           pass=$(openssl rand -hex 16)
           echo "::add-mask::$pass"
-          echo "ANDROID_KEYSTORE_PASSWORD=$pass" >> "$GITHUB_ENV"
           ANDROID_KEYSTORE_PASSWORD=$pass keytool -genkeypair -keystore "$d/probe.p12" -storetype PKCS12 \
             -alias probe -keyalg RSA -keysize 2048 -validity 2 -dname CN=update-probe \
             -storepass:env ANDROID_KEYSTORE_PASSWORD -keypass:env ANDROID_KEYSTORE_PASSWORD
-          echo "PROBE_KEYSTORE=$d/probe.p12" >> "$GITHUB_ENV"
           openssl genpkey -algorithm ed25519 -out out/feed.pem
           openssl pkey -in out/feed.pem -pubout -outform DER | tail -c 32 | base64 -w0 > out/feed.pub
-      - name: N and N+1 (release, R8, signed with the throwaway key)
-        env:
-          ANDROID_KEY_ALIAS: probe
-        run: |
-          export ANDROID_KEYSTORE_B64; ANDROID_KEYSTORE_B64=$(base64 -w0 "$PROBE_KEYSTORE")
           for build in "1000 0.0.1-probe.1 old" "1001 0.0.1-probe.2 new"; do
             read -r code name file <<< "$build"
             ./gradlew :androidApp:assembleDirectRelease -Ppubkymaps.versionCode="$code" \
               -Ppubkymaps.versionName="$name" -Ppubkymaps.updateChannel=edge \
               -Ppubkymaps.updateFeedUrl=http://127.0.0.1:18480/update-edge.json \
               -Ppubkymaps.updatePublicKey="$(cat out/feed.pub)" -Ppubkymaps.updateProbe=true
-            bash scripts/release/sign.sh androidApp/build/outputs/apk/direct/release/androidApp-direct-release-unsigned.apk \
+            ANDROID_KEYSTORE_B64=$(base64 -w0 "$d/probe.p12") ANDROID_KEYSTORE_PASSWORD=$pass ANDROID_KEY_ALIAS=probe \
+              bash scripts/release/sign.sh androidApp/build/outputs/apk/direct/release/androidApp-direct-release-unsigned.apk \
               "out/$file.apk"
             bash scripts/release/apk-facts.sh "out/$file.apk"
           done
