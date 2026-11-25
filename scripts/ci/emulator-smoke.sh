@@ -44,11 +44,26 @@ sys.exit(1)
 PY
 }
 
+# A system "<app> isn't responding" dialog: fails when it is about this app; for another app (the
+# emulator's launcher or System UI often stall right after boot) it taps "Wait" and carries on.
+handle_anr_dialog() {
+    local title xy
+    title=$(python3 -I -c "
+import re, sys
+m = re.search(r'text=\"([^\"]*) isn.t responding\"', open(sys.argv[1], errors='replace').read())
+print(m.group(1) if m else '')" "$1")
+    [ -n "$title" ] || return 0
+    if [ "$title" = "Pubky Maps" ]; then fail "Pubky Maps is not responding (ANR)"; fi
+    echo "dismissing an ANR dialog of $title"
+    if xy=$(centre_of "$1" "Wait"); then adb shell input tap $xy; fi
+}
+
 # Waits up to $2 seconds for a node labelled $1; prints its centre.
 wait_for() {
     local deadline=$((SECONDS + $2)) dump
     while ((SECONDS < deadline)); do
         dump=$(dump_ui "wait")
+        handle_anr_dialog "$dump" >&2
         if centre_of "$dump" "$1"; then return 0; fi
         sleep 2
     done
@@ -80,6 +95,7 @@ check_alive "map screen"
 # so give it time.
 drawn=false
 for _ in $(seq 1 30); do
+    handle_anr_dialog "$(dump_ui map-wait)"
     screenshot map || { sleep 3; continue; }
     stats=$(python3 -I "$here/png_stats.py" "$out/map.png" 0.1 0.2 0.9 0.8) || stats="0 1.000"
     read -r colours dominant <<< "$stats"

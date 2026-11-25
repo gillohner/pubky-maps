@@ -75,6 +75,7 @@ jobs:
     env:
       API_LEVEL: 35
       TARGET: google_apis
+      PROFILE: pixel_6
       EMULATOR_OPTIONS: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none -no-audio
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -99,7 +100,7 @@ jobs:
             ~/.android/avd/*
             ~/.android/adb*
           # The month in the key renews the snapshot as the runner's emulator and image move on.
-          key: avd-${{ env.API_LEVEL }}-${{ env.TARGET }}-x86_64-${{ steps.month.outputs.month }}
+          key: avd-${{ env.API_LEVEL }}-${{ env.TARGET }}-${{ env.PROFILE }}-x86_64-${{ steps.month.outputs.month }}
       - name: create the AVD and its snapshot
         if: steps.avd-cache.outputs.cache-hit != 'true'
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
@@ -107,6 +108,7 @@ jobs:
           api-level: ${{ env.API_LEVEL }}
           target: ${{ env.TARGET }}
           arch: x86_64
+          profile: ${{ env.PROFILE }}
           force-avd-creation: false
           ram-size: 4096M
           emulator-options: ${{ env.EMULATOR_OPTIONS }}
@@ -118,6 +120,7 @@ jobs:
           api-level: ${{ env.API_LEVEL }}
           target: ${{ env.TARGET }}
           arch: x86_64
+          profile: ${{ env.PROFILE }}
           force-avd-creation: false
           ram-size: 4096M
           emulator-options: -no-snapshot-save ${{ env.EMULATOR_OPTIONS }}
