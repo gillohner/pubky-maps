@@ -20,7 +20,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
@@ -43,7 +42,9 @@ private val PeekHeight = 120.dp
  * handle drags between its first row ([SheetHeight.Peek]), half the screen ([SheetHeight.Half], where
  * it opens) and the whole height below the search bar ([SheetHeight.Full]); tapping the handle steps
  * up, and back down from full. [above] (the credits and my-location button) rides on the sheet's top
- * edge and hides when the sheet is full. [topSpace] is left free for the search bar.
+ * edge while there is room for it under [topSpace]; at full height, or while the sheet is dragged
+ * that far, it is not there at all (not drawn, not touchable, not read by TalkBack), so it never
+ * covers the search bar or Settings. [topSpace] is left free for the search bar.
  */
 @Composable
 internal fun ResultsSheet(
@@ -77,7 +78,7 @@ internal fun ResultsSheet(
     Layout(
         contents =
             listOf(
-                { Box(Modifier.alpha(if (state.currentValue == SheetHeight.Full) 0f else 1f)) { above() } },
+                { if (state.currentValue != SheetHeight.Full) above() },
                 {
                     Surface(
                         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
@@ -119,9 +120,11 @@ internal fun ResultsSheet(
         val offset = state.offset.takeUnless { it.isNaN() }?.roundToInt() ?: (constraints.maxHeight / 2)
         val sheetHeight = (constraints.maxHeight - offset).coerceAtLeast(0)
         val sheet = sheetMeasurables.first().measure(Constraints.fixed(constraints.maxWidth, sheetHeight))
-        val aboveSheet = aboveMeasurables.first().measure(constraints.copy(minHeight = 0, minWidth = 0))
+        val aboveSheet = aboveMeasurables.firstOrNull()?.measure(constraints.copy(minHeight = 0, minWidth = 0))
+        val topLimit = topSpace.roundToPx()
         layout(constraints.maxWidth, constraints.maxHeight) {
-            aboveSheet.place(0, offset - aboveSheet.height)
+            // Left unplaced (so neither drawn nor touchable) when it would reach under the search bar.
+            if (aboveSheet != null && offset - aboveSheet.height >= topLimit) aboveSheet.place(0, offset - aboveSheet.height)
             sheet.place(0, offset)
         }
     }

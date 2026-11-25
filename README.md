@@ -11,7 +11,7 @@ from [Photon](https://github.com/komoot/photon) (OpenStreetMap data, biased to t
 Pinakes (places people referenced on Pubky, near the map). The same
 OpenStreetMap place from both is one result, and a stop's platforms are one stop. Results show in a
 list (on a phone a sheet that drags between its first row, half and full height) and as pins with an
-icon of their kind, the best ones named; picking one centres the map and opens a small place card
+icon of their kind; picking one centres the map and opens a small place card
 (name, what it is, distance, address). Signed in, places the people you follow referenced on Pubky
 rank higher. Coordinates
 (`47.37, 8.54`, `47°22'N 8°32'E`), `geo:` URIs and plus codes open a pin without any request. Recent

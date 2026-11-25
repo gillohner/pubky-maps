@@ -15,16 +15,13 @@ import to.pubky.maps.links.GeoPoint
 /** The red of the pin on an opened place (Google Maps' and CoMaps' place pins are red too). */
 private val PinColor = Color(0xFFD93025)
 
-/** A pin on a place: the one a link opened ([id] "linked-place") or the one picked in search. */
+/** A pin on the place a link opened. */
 @Composable
-internal fun PlacePin(
-    point: GeoPoint,
-    id: String = "linked-place",
-) {
+internal fun PlacePin(point: GeoPoint) {
     key(point) {
         val source = rememberGeoJsonSource(GeoJsonData.Features(Point(Position(longitude = point.lon, latitude = point.lat))))
         CircleLayer(
-            id = id,
+            id = "linked-place",
             source = source,
             radius = const(9.dp),
             color = const(PinColor),

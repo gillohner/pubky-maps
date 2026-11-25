@@ -245,7 +245,7 @@ class SearchController(
             SearchMode.Editing -> {
                 when {
                     s.selected != null -> _state.update { it.copy(mode = SearchMode.Selected) }
-                    s.results.isNotEmpty() && s.resultsQuery == s.query -> _state.update { it.copy(mode = SearchMode.Results) }
+                    s.results.isNotEmpty() && s.resultsAreCurrent -> _state.update { it.copy(mode = SearchMode.Results) }
                     else -> close()
                 }
             }

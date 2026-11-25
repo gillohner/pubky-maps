@@ -253,6 +253,11 @@ class SearchControllerTest {
             advanceUntilIdle()
             assertTrue(c.back())
             assertEquals(SearchMode.Results, c.state.value.mode)
+            // A space typed after the text (a keyboard adds one after a suggestion) keeps the results.
+            c.startEditing()
+            c.onQueryChange("kunsthaus ", area)
+            assertTrue(c.back())
+            assertEquals(SearchMode.Results, c.state.value.mode)
             c.startEditing()
             c.onQueryChange("k", area)
             assertTrue(c.back())
