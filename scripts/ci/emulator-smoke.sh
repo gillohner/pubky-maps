@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+# Smoke test on a running emulator: install the APK, start the app, wait until the map has drawn,
+# open Settings and go back with the system back button. Fails on a crash or when the app is not
+# in front. Screenshots, the UI dumps and the log go to <out dir>.
+# Usage: emulator-smoke.sh <apk> <out dir>
+set -euo pipefail
+
+apk=$1
+out=$2
+pkg=to.pubky.maps
+here=$(cd "$(dirname "$0")" && pwd)
+mkdir -p "$out"
+
+fail() {
+    echo "::error::$*"
+    adb logcat -d > "$out/logcat.txt" || true
+    exit 1
+}
+
+screenshot() { adb exec-out screencap -p > "$out/$1.png"; }
+
+# The UI as uiautomator sees it; prints the dump file.
+dump_ui() {
+    adb shell uiautomator dump /sdcard/ui.xml > /dev/null 2>&1 || true
+    adb shell cat /sdcard/ui.xml > "$out/$1.xml" 2>/dev/null || true
+    echo "$out/$1.xml"
+}
+
+# Centre of the first node whose content-desc or text is $2 in dump $1, as "x y".
+centre_of() {
+    python3 -I - "$1" "$2" <<'PY'
+import re, sys, xml.etree.ElementTree as ET
+try:
+    root = ET.parse(sys.argv[1]).getroot()
+except ET.ParseError:
+    sys.exit(1)
+for node in root.iter("node"):
+    if sys.argv[2] in (node.get("content-desc"), node.get("text")):
+        x1, y1, x2, y2 = map(int, re.findall(r"\d+", node.get("bounds")))
+        print((x1 + x2) // 2, (y1 + y2) // 2)
+        sys.exit(0)
+sys.exit(1)
+PY
+}
+
+# Waits up to $2 seconds for a node labelled $1; prints its centre.
+wait_for() {
+    local deadline=$((SECONDS + $2)) dump
+    while ((SECONDS < deadline)); do
+        dump=$(dump_ui "wait")
+        if centre_of "$dump" "$1"; then return 0; fi
+        sleep 2
+    done
+    return 1
+}
+
+check_alive() {
+    if adb logcat -d -b crash | grep -q "Process: $pkg"; then
+        adb logcat -d -b crash > "$out/crash.txt"
+        fail "the app crashed ($1); see crash.txt"
+    fi
+    adb shell dumpsys activity activities | grep -E "topResumedActivity|mResumedActivity" > "$out/resumed.txt" || true
+    grep -q "$pkg/" "$out/resumed.txt" || fail "the app is not the resumed activity ($1): $(cat "$out/resumed.txt")"
+}
+
+adb install -r "$apk"
+adb logcat -c
+adb logcat -b crash -c || true
+adb shell am start -W -n "$pkg/.android.MainActivity"
+
+wait_for "Show my location" 60 > /dev/null || fail "the map screen did not appear"
+check_alive "map screen"
+
+# The map has drawn once the middle of the screen holds many colours and no single colour covers
+# almost all of it (land, water and labels, not one flat background). Tiles come over the network,
+# so give it time.
+drawn=false
+for _ in $(seq 1 30); do
+    screenshot map
+    read -r colours dominant < <(python3 -I "$here/png_stats.py" "$out/map.png" 0.1 0.2 0.9 0.8)
+    echo "map: $colours colours, most common $dominant"
+    if ((colours >= 40)) && python3 -I -c "import sys; sys.exit(float(sys.argv[1]) >= 0.9)" "$dominant"; then
+        drawn=true
+        break
+    fi
+    sleep 3
+done
+check_alive "map drawn"
+$drawn || fail "the map did not draw ($colours colours, most common $dominant in the middle of the screen)"
+
+xy=$(wait_for "Settings" 10) || fail "no Settings button"
+adb shell input tap $xy
+wait_for "About" 15 > /dev/null || fail "Settings did not open"
+screenshot settings
+check_alive "settings"
+
+adb shell input keyevent KEYCODE_BACK
+wait_for "Show my location" 15 > /dev/null || fail "back from Settings did not return to the map"
+sleep 3
+screenshot map-after-back
+check_alive "back to the map"
+
+adb logcat -d > "$out/logcat.txt"
+echo "smoke test passed"
