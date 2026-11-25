@@ -251,7 +251,9 @@ class WriteScreenshotTest {
 
     @Composable
     private fun PlaceWithWritesEverySectionShot() {
-        Page(page, ownPlace, SheetStop.Full)
+        // The page alone: the sheet's full stop sizes itself to the content after the first frame, so
+        // on a tall phone where it was captured varied between runs.
+        PlacePanel(page, context, actions(ownPlace), Modifier.fillMaxSize())
     }
 
     @Test
@@ -268,7 +270,7 @@ class WriteScreenshotTest {
 
     @Composable
     private fun PlaceNothingYetShot() {
-        Page(emptyPage, OwnPlace.None, SheetStop.Full)
+        PlacePanel(emptyPage, context, actions(OwnPlace.None), Modifier.fillMaxSize())
     }
 
     @Test
