@@ -491,7 +491,7 @@ private fun CardImage(
                         .align(Alignment.BottomStart)
                         .fillMaxWidth()
                         .background(Color.Black.copy(alpha = 0.6f))
-                        .clickable { actions.onOpenLink(it.licenseUrl ?: it.sourceUrl) }
+                        .then(it.link?.let { link -> Modifier.clickable { actions.onOpenLink(link) } } ?: Modifier)
                         .padding(horizontal = 8.dp, vertical = 4.dp),
             )
         }
@@ -1011,7 +1011,7 @@ private fun DataCredits(
         textCredit?.let { credit ->
             SmallText(
                 creditText("Text", credit),
-                Modifier.clickable { actions.onOpenLink(credit.licenseUrl ?: credit.sourceUrl) },
+                credit.link?.let { link -> Modifier.clickable { actions.onOpenLink(link) } } ?: Modifier,
             )
         }
         lines.forEach { SmallText(it) }
