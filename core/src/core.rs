@@ -486,11 +486,7 @@ fn collection_scan(
 
 /// The newest version of post `id` under `root` as `(editId, JSON)`, `None` when the folder
 /// holds no readable version.
-async fn newest_post_version(
-    storage: &SessionStorage,
-    root: Root,
-    id: &str,
-) -> Result<Option<(String, String)>, CoreError> {
+async fn newest_post_version(storage: &SessionStorage, root: Root, id: &str) -> PostRead {
     let dir = post_versions_dir(root, id)?;
     let options = ListOptions {
         reverse: true,
