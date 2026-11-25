@@ -2,6 +2,7 @@ package to.pubky.maps.map
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -32,6 +33,7 @@ import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import to.pubky.maps.config.AttributionLink
+import to.pubky.maps.status.ServicePart
 import to.pubky.maps.ui.AppIcons
 import to.pubky.maps.ui.rememberSafeLinkOpener
 
@@ -43,7 +45,8 @@ internal val TopControlSize = 48.dp
 
 /**
  * The map screen: [map] fills the screen, the controls sit on top of it inside the safe area.
- * Settings top end, my location bottom end, the data credits bottom start.
+ * Settings top end, my location bottom end, the data credits bottom start. [missing] parts of the app
+ * (a service whose every server failed) show in one line at the top.
  */
 @Composable
 fun MapScreen(
@@ -53,6 +56,7 @@ fun MapScreen(
     onMyLocation: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
+    missing: Set<ServicePart> = emptySet(),
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
     map: @Composable () -> Unit,
 ) {
@@ -71,15 +75,17 @@ fun MapScreen(
                 size = TopControlSize,
                 modifier = Modifier.align(Alignment.TopEnd),
             )
-            if (mapUnavailable) {
-                MapUnavailableNotice(
-                    onRetry = onRetryMap,
-                    modifier =
-                        Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(horizontal = TopControlSize + MapControlMargin)
-                            .widthIn(max = 480.dp),
-                )
+            Column(
+                modifier =
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(horizontal = TopControlSize + MapControlMargin)
+                        .widthIn(max = 480.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (mapUnavailable) MapUnavailableNotice(onRetry = onRetryMap)
+                if (missing.isNotEmpty()) DegradedBanner(missing)
             }
             MapButton(
                 icon = AppIcons.MyLocation,

@@ -13,17 +13,17 @@ import to.pubky.maps.core.defaultCoreConfig
 import to.pubky.maps.core.parseAuthCallback
 import to.pubky.maps.core.use
 
-/** Which servers the core uses. Empty lists keep the Pubky SDK's defaults. */
+/** Which servers the core uses, each list in the order to try (the user's server lists). */
 data class CoreServers(
-    val pkarrRelays: List<String> = emptyList(),
-    val authRelays: List<String> = emptyList(),
+    val pkarrRelays: List<String>,
+    val authRelays: List<String>,
 )
 
 /** Builds the core (its client is built on the core's own thread). Throws [CoreFailure]. */
 suspend fun createUniffiPubkyCore(servers: CoreServers): PubkyCore {
     val config: CoreConfig = defaultCoreConfig()
-    if (servers.pkarrRelays.isNotEmpty()) config.pkarrRelays = servers.pkarrRelays
-    if (servers.authRelays.isNotEmpty()) config.authRelayUrls = servers.authRelays
+    config.pkarrRelays = servers.pkarrRelays
+    config.authRelayUrls = servers.authRelays
     return UniffiPubkyCore(mapped { PubkyMapsCore.create(config) })
 }
 

@@ -42,6 +42,7 @@ import org.maplibre.compose.overlay.DisappearingScaleBar
 import org.maplibre.compose.style.BaseStyle
 import org.maplibre.spatialk.geojson.Position
 import to.pubky.maps.config.ServerLists
+import to.pubky.maps.status.ServicePart
 import kotlin.math.max
 
 /** Where the map opens before it knows anything about the user: the whole world. */
@@ -52,12 +53,13 @@ private const val MY_LOCATION_ZOOM = 15.0
 
 /**
  * The live map: the first style of the server list for the current theme that loads, the user's
- * location on request, and the [MapScreen] controls.
+ * location on request, and the [MapScreen] controls, with the [missing] parts of the app named on top.
  */
 @Composable
 fun MapRoute(
     servers: ServerLists,
     onOpenSettings: () -> Unit,
+    missing: Set<ServicePart> = emptySet(),
 ) {
     val sources = servers.mapStyles(isSystemInDarkTheme())
     // Saved, so a trip to Settings does not start again from a style that already failed.
@@ -91,6 +93,7 @@ fun MapRoute(
         onRetryMap = { fallbackIndex = fallback.retry().index },
         onMyLocation = myLocation,
         onOpenSettings = onOpenSettings,
+        missing = missing,
         snackbarHostState = snackbarHostState,
     ) {
         MaplibreMap(state = mapState) {
