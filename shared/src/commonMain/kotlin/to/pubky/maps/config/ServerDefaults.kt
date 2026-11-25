@@ -41,5 +41,16 @@ object ServerDefaults {
                 ),
         )
 
-    val config = ServerConfig(mapStyles = mapStyles)
+    // The signed update feeds are release assets on GitHub (scripts/release/update-feed.py). Any
+    // mirror can serve the same files: the app checks the signature, not the server.
+    private const val RELEASES = "https://github.com/gillohner/pubky-maps/releases"
+
+    val updateFeeds =
+        UpdateFeedServers(
+            edge = listOf("$RELEASES/download/edge/update-edge.json"),
+            stable = listOf("$RELEASES/latest/download/update.json"),
+            dev = listOf("$RELEASES/download/dev/update-dev.json"),
+        )
+
+    val config = ServerConfig(mapStyles = mapStyles, updateFeeds = updateFeeds)
 }

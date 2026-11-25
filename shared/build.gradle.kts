@@ -47,6 +47,7 @@ kotlin {
             implementation(libs.lifecycle.runtime.compose)
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serialization.core)
+            implementation(libs.kotlinx.serialization.json)
             implementation(libs.maplibre.compose)
             implementation(libs.maplibre.compose.location)
             // LicencesScreen takes a Libs.

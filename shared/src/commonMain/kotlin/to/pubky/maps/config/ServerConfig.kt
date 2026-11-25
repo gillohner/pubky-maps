@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import to.pubky.maps.update.UpdateChannel
 
 /** A credit the map must show for the data or tiles it draws. */
 data class AttributionLink(
@@ -34,9 +35,35 @@ data class MapStyleServers(
     fun allAttribution(): List<AttributionLink> = (light + dark).flatMap { it.attribution }.distinct()
 }
 
+/** Update feed addresses per channel, in the order the updater tries them. */
+data class UpdateFeedServers(
+    val edge: List<String>,
+    val stable: List<String>,
+    val dev: List<String>,
+) {
+    fun forChannel(channel: UpdateChannel): List<String> =
+        when (channel) {
+            UpdateChannel.Edge -> edge
+            UpdateChannel.Stable -> stable
+            UpdateChannel.Dev -> dev
+        }
+
+    /** The same servers with [channel]'s list replaced by [urls]. */
+    fun withChannel(
+        channel: UpdateChannel,
+        urls: List<String>,
+    ): UpdateFeedServers =
+        when (channel) {
+            UpdateChannel.Edge -> copy(edge = urls)
+            UpdateChannel.Stable -> copy(stable = urls)
+            UpdateChannel.Dev -> copy(dev = urls)
+        }
+}
+
 /** Every server address the app uses. Each one is an ordered list with fallbacks. */
 data class ServerConfig(
     val mapStyles: MapStyleServers,
+    val updateFeeds: UpdateFeedServers,
 )
 
 /** Holds the current [ServerConfig]; settings edit it through [update]. */
