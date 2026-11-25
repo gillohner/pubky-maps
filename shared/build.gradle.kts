@@ -48,6 +48,8 @@ kotlin {
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serialization.core)
             implementation(libs.kotlinx.serialization.json)
+            implementation(libs.datastore.core.okio)
+            api(libs.okio)
             implementation(libs.maplibre.compose)
             implementation(libs.maplibre.compose.location)
             // LicencesScreen takes a Libs.
@@ -57,6 +59,7 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
+            implementation(libs.okio.fakefilesystem)
         }
     }
 }

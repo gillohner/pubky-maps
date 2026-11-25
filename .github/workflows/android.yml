@@ -1,7 +1,8 @@
 name: android
 # One build job checks the app (unit tests, Android lint, ktlint, Roborazzi screenshots, the release
 # tools' self-checks) and builds the debug APK; the emulator job installs that APK, starts the app,
-# waits for the map to draw, opens Settings, goes back, and fails on a crash.
+# waits for the map to draw, opens Settings and each settings page, checks that a setting survives a
+# restart, goes back, and fails on a crash.
 # When the updater or the release changed (and on every push to main), update-apks builds two signed
 # release APKs N and N+1 with a throwaway key and checks that the .aab has no updater, and
 # update-probe has the emulator update N to N+1 from inside the app and refuse tampered ones

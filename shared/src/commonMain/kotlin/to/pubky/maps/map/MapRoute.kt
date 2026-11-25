@@ -41,7 +41,7 @@ import org.maplibre.compose.overlay.DisappearingCompassButton
 import org.maplibre.compose.overlay.DisappearingScaleBar
 import org.maplibre.compose.style.BaseStyle
 import org.maplibre.spatialk.geojson.Position
-import to.pubky.maps.config.ServerConfig
+import to.pubky.maps.config.ServerLists
 import kotlin.math.max
 
 /** Where the map opens before it knows anything about the user: the whole world. */
@@ -56,17 +56,17 @@ private const val MY_LOCATION_ZOOM = 15.0
  */
 @Composable
 fun MapRoute(
-    serverConfig: ServerConfig,
+    servers: ServerLists,
     onOpenSettings: () -> Unit,
 ) {
-    val sources = serverConfig.mapStyles.forTheme(isSystemInDarkTheme())
+    val sources = servers.mapStyles(isSystemInDarkTheme())
     // Saved, so a trip to Settings does not start again from a style that already failed.
     var fallbackIndex by rememberSaveable(sources) { mutableIntStateOf(0) }
     val fallback = StyleFallback(sources, fallbackIndex)
     val locationState = rememberLocationState(provider = rememberDefaultLocationProvider())
     val mapState =
         rememberMapState(
-            baseStyle = fallback.current?.let { BaseStyle.Uri(it.styleUrl) } ?: BaseStyle.Empty,
+            baseStyle = fallback.current?.let { BaseStyle.Uri(it.url) } ?: BaseStyle.Empty,
             initialCameraPosition = WorldCamera,
         ) {
             LocationIndicatorLayer(id = "user-location", locationState = locationState)

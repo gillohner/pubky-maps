@@ -2,18 +2,30 @@ package to.pubky.maps
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import kotlinx.serialization.Serializable
-import to.pubky.maps.config.ServerConfigRepository
+import to.pubky.maps.config.AppSettings
+import to.pubky.maps.config.Service
+import to.pubky.maps.config.SettingsRepository
 import to.pubky.maps.map.MapRoute
+import to.pubky.maps.settings.AddServerScreen
 import to.pubky.maps.settings.LicencesRoute
+import to.pubky.maps.settings.OpenInAppsScreen
+import to.pubky.maps.settings.ServerListScreen
+import to.pubky.maps.settings.ServersScreen
 import to.pubky.maps.settings.SettingsScreen
+import to.pubky.maps.settings.StoredOnlineScreen
 import to.pubky.maps.ui.PubkyMapsTheme
 import to.pubky.maps.update.UpdateController
 import to.pubky.maps.update.UpdateDialogHost
+import to.pubky.maps.update.UpdatesUiState
 
 @Serializable
 private data object MapDestination
@@ -22,46 +34,45 @@ private data object MapDestination
 private data object SettingsDestination
 
 @Serializable
+private data object ServersDestination
+
+@Serializable
+private data class ServerListDestination(
+    val serviceKey: String,
+)
+
+@Serializable
+private data class AddServerDestination(
+    val serviceKey: String,
+)
+
+@Serializable
+private data object StoredOnlineDestination
+
+@Serializable
+private data object OpenInAppsDestination
+
+@Serializable
 private data object LicencesDestination
 
 /**
- * The whole app: the map, and the settings on top of it. [loadLicences] returns the AboutLibraries
- * JSON of the bundled libraries. [updates] is the in-app updater, null in builds that an app store
- * updates.
+ * The whole app: the map, and the settings pages on top of it. [loadLicences] returns the
+ * AboutLibraries JSON of the bundled libraries. [updates] is the in-app updater, null in builds that
+ * an app store updates.
  */
 @Composable
 fun App(
     appInfo: AppInfo,
-    serverConfigRepository: ServerConfigRepository,
+    settingsRepository: SettingsRepository,
     loadLicences: suspend () -> String,
     updates: UpdateController? = null,
 ) {
-    val serverConfig by serverConfigRepository.config.collectAsStateWithLifecycle()
+    val loaded by settingsRepository.settings.collectAsStateWithLifecycle()
     val updatesState = updates?.state?.collectAsStateWithLifecycle()?.value
     PubkyMapsTheme {
-        val navController = rememberNavController()
-        NavHost(navController = navController, startDestination = MapDestination) {
-            composable<MapDestination> {
-                MapRoute(
-                    serverConfig = serverConfig,
-                    onOpenSettings = { navController.navigate(SettingsDestination) { launchSingleTop = true } },
-                )
-            }
-            composable<SettingsDestination> {
-                SettingsScreen(
-                    appInfo = appInfo,
-                    serverConfig = serverConfig,
-                    onOpenLicences = { navController.navigate(LicencesDestination) { launchSingleTop = true } },
-                    onBack = { navController.navigateUp() },
-                    updates = updatesState,
-                    onCheckForUpdates = { updates?.checkNow() },
-                    onAutoCheckUpdatesChange = { updates?.setAutoCheck(it) },
-                )
-            }
-            composable<LicencesDestination> {
-                LicencesRoute(loadLicences = loadLicences, onBack = { navController.navigateUp() })
-            }
-        }
+        // The settings file is read in a few milliseconds at start-up; until then the window stays
+        // blank instead of loading the default map style and switching to the user's own.
+        loaded?.let { settings -> AppNavigation(appInfo, settings, settingsRepository, loadLicences, updates, updatesState) }
         val dialog = updatesState?.dialog
         if (updates != null && dialog != null) {
             UpdateDialogHost(
@@ -71,6 +82,80 @@ fun App(
                 onCancelDownload = updates::cancelDownload,
                 onDismiss = updates::dismissDialog,
             )
+        }
+    }
+}
+
+private fun NavController.open(destination: Any) = navigate(destination) { launchSingleTop = true }
+
+@Composable
+private fun AppNavigation(
+    appInfo: AppInfo,
+    settings: AppSettings,
+    settingsRepository: SettingsRepository,
+    loadLicences: suspend () -> String,
+    updates: UpdateController?,
+    updatesState: UpdatesUiState?,
+) {
+    val update: ((AppSettings) -> AppSettings) -> Unit = remember(settingsRepository) { { settingsRepository.update(it) } }
+    val navController = rememberNavController()
+    val back: () -> Unit = {
+        // Only from a page that is fully shown: a second quick tap would also leave the page below.
+        if (navController.currentBackStackEntry?.lifecycle?.currentState == Lifecycle.State.RESUMED) navController.navigateUp()
+    }
+
+    NavHost(navController = navController, startDestination = MapDestination) {
+        composable<MapDestination> {
+            MapRoute(servers = settings.servers, onOpenSettings = { navController.open(SettingsDestination) })
+        }
+        composable<SettingsDestination> {
+            SettingsScreen(
+                appInfo = appInfo,
+                settings = settings,
+                onOpenServers = { navController.open(ServersDestination) },
+                onOpenStoredOnline = { navController.open(StoredOnlineDestination) },
+                onOpenOpenIn = { navController.open(OpenInAppsDestination) },
+                onFollowLocalRulesChange = { on -> update { it.copy(followLocalRules = on) } },
+                onOpenLicences = { navController.open(LicencesDestination) },
+                onBack = back,
+                updates = updatesState,
+                onCheckForUpdates = { updates?.checkNow() },
+                onAutoCheckUpdatesChange = { updates?.setAutoCheck(it) },
+            )
+        }
+        composable<ServersDestination> {
+            ServersScreen(
+                settings = settings,
+                onOpenService = { navController.open(ServerListDestination(it.key)) },
+                onBack = back,
+            )
+        }
+        composable<ServerListDestination> { entry ->
+            val service = Service.fromKey(entry.toRoute<ServerListDestination>().serviceKey)
+            if (service != null) {
+                ServerListScreen(
+                    service = service,
+                    settings = settings,
+                    onUpdate = update,
+                    onAddServer = { navController.open(AddServerDestination(service.key)) },
+                    onBack = back,
+                )
+            }
+        }
+        composable<AddServerDestination> { entry ->
+            val service = Service.fromKey(entry.toRoute<AddServerDestination>().serviceKey)
+            if (service != null) {
+                AddServerScreen(service = service, settings = settings, onUpdate = update, onDone = back)
+            }
+        }
+        composable<StoredOnlineDestination> {
+            StoredOnlineScreen(settings = settings, onUpdate = update, onBack = back)
+        }
+        composable<OpenInAppsDestination> {
+            OpenInAppsScreen(settings = settings, onUpdate = update, onBack = back)
+        }
+        composable<LicencesDestination> {
+            LicencesRoute(loadLicences = loadLicences, onBack = back)
         }
     }
 }

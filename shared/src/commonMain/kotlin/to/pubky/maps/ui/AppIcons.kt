@@ -37,6 +37,15 @@ object AppIcons {
             autoMirror = true,
         )
 
+    val MoreVert: ImageVector =
+        icon(
+            "MoreVert",
+            "M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6" +
+                "c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z",
+        )
+
+    val Add: ImageVector = icon("Add", "M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z")
+
     private fun icon(
         name: String,
         pathData: String,

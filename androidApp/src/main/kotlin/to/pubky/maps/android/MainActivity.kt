@@ -20,7 +20,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             App(
                 appInfo = appInfo,
-                serverConfigRepository = app.serverConfigRepository,
+                settingsRepository = app.settingsRepository,
                 loadLicences = ::readLicences,
                 updates = app.updates,
             )

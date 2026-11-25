@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Smoke test on a running emulator: install the APK, start the app, wait until the map has drawn,
-# open Settings and go back with the system back button. Fails on a crash or when the app is not
-# in front. Screenshots, the UI dumps and the log go to <out dir>.
+# open Settings and each settings page, switch "Follow local rules" off and check it stays off
+# after a restart, then go back with the system back button. Fails on a crash or when the app is
+# not in front. Screenshots, the UI dumps and the log go to <out dir>.
 # Usage: emulator-smoke.sh <apk> <out dir>
 set -euo pipefail
 
@@ -56,6 +57,23 @@ print(m.group(1) if m else '')" "$1")
     if [ "$title" = "Pubky Maps" ]; then fail "Pubky Maps is not responding (ANR)"; fi
     echo "dismissing an ANR dialog of $title"
     if xy=$(centre_of "$1" "Wait"); then adb shell input tap $xy; fi
+}
+
+# "true" or "false": the checked state of the switch row holding the text $2 in dump $1.
+checked_of() {
+    python3 -I - "$1" "$2" <<'PY'
+import sys, xml.etree.ElementTree as ET
+root = ET.parse(sys.argv[1]).getroot()
+parents = {child: parent for parent in root.iter() for child in parent}
+for node in root.iter("node"):
+    if node.get("text") == sys.argv[2]:
+        while node is not None and node.get("checkable") != "true":
+            node = parents.get(node)
+        if node is not None:
+            print(node.get("checked"))
+            sys.exit(0)
+sys.exit(1)
+PY
 }
 
 # Waits up to $2 seconds for a node labelled $1; prints its centre.
@@ -120,11 +138,71 @@ for _ in $(seq 1 10); do
 done
 rm -f "$out/map-next.png"
 
-xy=$(wait_for "Settings" 10) || fail "no Settings button"
-adb shell input tap $xy
-wait_for "About" 15 > /dev/null || fail "Settings did not open"
+open_settings() {
+    local xy
+    xy=$(wait_for "Settings" 10) || fail "no Settings button"
+    adb shell input tap $xy
+    wait_for "What is stored online" 15 > /dev/null || fail "Settings did not open"
+}
+
+# Taps the row labelled $1, waits for $2 on the page it opens, screenshots it as $3, goes back and
+# waits for $4 on the page it came from.
+visit() {
+    local xy
+    xy=$(wait_for "$1" 10) || fail "no \"$1\" row"
+    adb shell input tap $xy
+    wait_for "$2" 15 > /dev/null || fail "\"$1\" did not open (no \"$2\")"
+    screenshot "$3"
+    check_alive "$3"
+    adb shell input keyevent KEYCODE_BACK
+    wait_for "$4" 15 > /dev/null || fail "back from \"$1\" did not return (no \"$4\")"
+}
+
+open_settings
 screenshot settings
 check_alive "settings"
+
+# Every settings page: Server lists and one list, What is stored online, Open in other apps.
+xy=$(wait_for "Server lists" 10) || fail "no Server lists row"
+adb shell input tap $xy
+wait_for "Map style, light" 15 > /dev/null || fail "Server lists did not open"
+screenshot servers
+check_alive "servers"
+# One server list, and its Add server page.
+xy=$(wait_for "Map style, light" 10) || fail "no Map style, light row"
+adb shell input tap $xy
+xy=$(wait_for "Add server" 15) || fail "the Map style, light list did not open"
+screenshot server-list
+check_alive "server list"
+adb shell input tap $xy
+wait_for "Added at the end of Map style, light. Move it up to use it first." 15 > /dev/null || fail "the Add server page did not open"
+screenshot add-server
+check_alive "add server page"
+adb shell input keyevent KEYCODE_BACK
+wait_for "OpenFreeMap Liberty" 15 > /dev/null || fail "back from Add server did not return to the list"
+adb shell input keyevent KEYCODE_BACK
+wait_for "Map style, dark" 15 > /dev/null || fail "back from the server list did not return to Server lists"
+adb shell input keyevent KEYCODE_BACK
+wait_for "What is stored online" 15 > /dev/null || fail "back from Server lists did not return to Settings"
+visit "What is stored online" "Saved places" stored-online "Open in other apps"
+visit "Open in other apps" "Organic Maps" open-in "What is stored online"
+
+# A setting survives a restart: switch "Follow local rules" off, restart the app, look again, and
+# switch it back on.
+xy=$(wait_for "Follow local rules" 10) || fail "no Follow local rules switch"
+[ "$(checked_of "$(dump_ui rules-before)" "Follow local rules")" = "true" ] || fail "Follow local rules is not on by default"
+adb shell input tap $xy
+sleep 2
+[ "$(checked_of "$(dump_ui rules-off)" "Follow local rules")" = "false" ] || fail "Follow local rules did not switch off"
+adb shell am force-stop "$pkg"
+started=$(adb shell am start -W -n "$pkg/.android.MainActivity" 2>&1) || true
+if grep -q "Error" <<< "$started"; then fail "the app did not start again: $started"; fi
+wait_for "Show my location" 60 > /dev/null || fail "the map screen did not appear after the restart"
+open_settings
+xy=$(wait_for "Follow local rules" 10) || fail "no Follow local rules switch after the restart"
+[ "$(checked_of "$(dump_ui rules-after)" "Follow local rules")" = "false" ] || fail "Follow local rules was not kept across the restart"
+adb shell input tap $xy
+check_alive "settings after the restart"
 
 adb shell input keyevent KEYCODE_BACK
 wait_for "Show my location" 15 > /dev/null || fail "back from Settings did not return to the map"
