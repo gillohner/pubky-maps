@@ -426,6 +426,9 @@ async fn list_own(
     Ok(to_page(builder.send().await?))
 }
 
+/// One folder's read: its newest version as `(editId, JSON)`, `None` when it has none.
+type PostRead = Result<Option<(String, String)>, CoreError>;
+
 /// The scan's result from each folder's read: lists, posts known not to be lists, and folders
 /// whose read failed (`unread_post_ids`), so one slow or failing read does not cost the whole
 /// scan and the next scan tries those again. A session that ended fails the scan.
@@ -433,7 +436,7 @@ fn collection_scan(
     root: Root,
     author: &str,
     private: bool,
-    reads: Vec<(String, Result<Option<(String, String)>, CoreError>)>,
+    reads: Vec<(String, PostRead)>,
 ) -> Result<CollectionScan, CoreError> {
     let mut collections = Vec::new();
     let mut other_post_ids = Vec::new();

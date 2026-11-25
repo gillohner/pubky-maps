@@ -740,7 +740,7 @@ private fun TagsSection(
             if (tags.isEmpty()) SmallText("Nobody tagged it yet.", Modifier.padding(horizontal = 16.dp))
             if (pending.isNotEmpty()) {
                 SmallText(
-                    "${pendingText(writes.waiting, writes.busy)}: tags with a clock are not on your homeserver yet.",
+                    "Tags with a clock: ${pendingText(writes.waiting, writes.busy).replaceFirstChar { it.lowercase() }}",
                     Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp),
                 )
             }
