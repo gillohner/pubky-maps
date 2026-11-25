@@ -20,3 +20,7 @@ captures/
 # iOS (later)
 xcuserdata/
 *.xcworkspace/
+
+# Python
+__pycache__/
+*.pyc
