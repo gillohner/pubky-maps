@@ -160,6 +160,24 @@ class LinkedPlaceScreenshotTest {
             )
         }
 
+    /** A Google short link that could not be followed (offline): the name from the shared text only. */
+    @Test
+    fun linkedShortLinkOfflinePhoneLight() =
+        capture("map-linked-short-link-offline", Device.Phone, dark = false) {
+            Linked(
+                place =
+                    PlaceRef(
+                        uri = "https://maps.app.goo.gl/AbCdEf123",
+                        name = "Zürich Hauptbahnhof",
+                        point = null,
+                        osm = null,
+                        source = PlaceSource.LinkText,
+                        offline = true,
+                        shortLinkUnfollowed = true,
+                    ),
+            )
+        }
+
     @Test
     fun openingLinkPhoneLight() = capture("map-opening-link", Device.Phone, dark = false) { MapWith { OpeningLinkCard() } }
 }

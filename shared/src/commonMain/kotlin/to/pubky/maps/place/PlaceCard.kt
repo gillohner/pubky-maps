@@ -71,15 +71,15 @@ fun PlaceCard(
                     modifier = Modifier.padding(end = 8.dp),
                 )
             }
-            if (place.offline) {
+            place.offlineNote?.let { note ->
                 Text(
-                    text = "Offline: shown from the link alone.",
+                    text = note,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp, end = 8.dp),
                 )
             }
-            if (place.point == null) {
+            if (place.point == null && !place.shortLinkUnfollowed) {
                 Text(
                     text = "This link names no point on the map.",
                     style = MaterialTheme.typography.bodySmall,
@@ -120,7 +120,19 @@ fun OpeningLinkCard(modifier: Modifier = Modifier) {
 }
 
 /** The coordinates, unless the title already is them. */
+
+/** Why the card shows less than it could, when a network step failed. */
+private val PlaceRef.offlineNote: String?
+    get() =
+        when {
+            shortLinkUnfollowed -> "Offline: the short link could not be followed."
+            offline -> "Offline: shown from the link alone."
+            else -> null
+        }
+
+/** The coordinates of a pinned place, unless the title already is them (a view or a search has none). */
 private fun PlaceRef.detailLine(): String? {
+    if (!pinned) return null
     val point = point ?: return null
     val coordinates = "${formatCoordinate(point.lat)}, ${formatCoordinate(point.lon)}"
     return coordinates.takeIf { it != title }

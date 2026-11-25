@@ -1,11 +1,9 @@
 package to.pubky.maps.links
 
-import kotlinx.coroutines.test.runTest
-import to.pubky.maps.place.PlaceSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class IncomingLinksTest {
     private val view = IncomingLinks.ACTION_VIEW
@@ -37,32 +35,18 @@ class IncomingLinksTest {
     fun otherActionsAndHugeTextAreIgnored() {
         assertNull(IncomingLinks.textOf("android.intent.action.MAIN", "geo:1,2", null, null))
         assertNull(IncomingLinks.textOf(null, "geo:1,2", null, null))
-        val huge = "x".repeat(IncomingLinks.MAX_TEXT_LENGTH + 1)
+        val huge = "x".repeat(IncomingLinks.MAX_TEXT_BYTES + 1)
         assertNull(IncomingLinks.textOf(send, null, huge, null))
     }
 
     @Test
-    fun openingMakesAPlaceRefThatKeepsTheLinkTheUserHad() =
-        runTest {
-            val link = "https://www.google.com/maps/place/Z%C3%BCrich+HB/@47.37,8.53,17z/data=!3d47.3778579!4d8.5403226"
-            val links = FakeMapLinks { openedLink(source = it, name = "Zürich HB", provider = LinkProvider.Google) }
-            val result = links.openAsPlace(link, listOf("https://pinakes.example"))
-            assertIs<LinkOpening.Opened>(result)
-            assertEquals(link, result.place.uri)
-            assertEquals("Zürich HB", result.place.title)
-            assertEquals(PlaceSource.LinkText, result.place.source)
-            assertEquals(LinkProvider.Google, result.provider)
-            assertEquals(listOf(link to listOf("https://pinakes.example")), links.asked)
-        }
-
-    @Test
-    fun openingFromPinakesOrWithoutALink() =
-        runTest {
-            val fromPinakes = FakeMapLinks { openedLink(fromPinakes = true) }.openAsPlace("geo:1,2", emptyList())
-            assertIs<LinkOpening.Opened>(fromPinakes)
-            assertEquals(PlaceSource.Pinakes, fromPinakes.place.source)
-            assertEquals(LinkOpening.NotAMapLink, FakeMapLinks().openAsPlace("hello", emptyList()))
-            val failing = FakeMapLinks { error("core refused it") }
-            assertEquals(LinkOpening.NotAMapLink, failing.openAsPlace("hello", emptyList()))
-        }
+    fun theLimitCountsUtf8BytesLikeTheCore() {
+        // 6000 "ü" are 6000 chars but 12000 bytes: within the limit. 9000 are 18000 bytes: over it,
+        // though under the limit in chars, so the core (which counts bytes) is never handed them.
+        val link = "geo:47.37,8.54"
+        assertEquals("${"ü".repeat(6000)} $link", IncomingLinks.textOf(send, null, "${"ü".repeat(6000)} $link", null))
+        val over = "${"ü".repeat(9000)} $link"
+        assertTrue(over.length < IncomingLinks.MAX_TEXT_BYTES)
+        assertNull(IncomingLinks.textOf(send, null, over, null))
+    }
 }

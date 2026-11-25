@@ -81,7 +81,8 @@ fun MapRoute(
     var fallbackIndex by rememberSaveable(sources) { mutableIntStateOf(0) }
     val fallback = StyleFallback(sources, fallbackIndex)
     val locationState = rememberLocationState(provider = rememberDefaultLocationProvider())
-    val pinnedPoint by rememberUpdatedState(linkedPlace.place?.point)
+    // Only a place is pinned: a map view or a search near a point only moves the camera.
+    val pinnedPoint by rememberUpdatedState(linkedPlace.place?.takeIf { it.pinned }?.point)
     val mapState =
         rememberMapState(
             baseStyle = fallback.current?.let { BaseStyle.Uri(it.url) } ?: BaseStyle.Empty,
@@ -135,7 +136,7 @@ fun MapRoute(
                     { OpeningLinkCard() }
                 }
 
-                place != null -> {
+                place != null && !place.viewOnly -> {
                     {
                         PlaceCard(
                             place = place,

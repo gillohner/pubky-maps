@@ -20,6 +20,7 @@ import to.pubky.maps.links.CoreMapLinks
 import to.pubky.maps.links.LinkedPlaces
 import to.pubky.maps.links.MapLinks
 import to.pubky.maps.status.ServiceHealth
+import to.pubky.maps.status.ServicePart
 import to.pubky.maps.update.UpdateController
 
 /** Holds what lives as long as the process, so it survives Activity recreation. */
@@ -62,7 +63,10 @@ class PubkyMapsApplication : Application() {
     val mapLinks: MapLinks = CoreMapLinks(core::get)
 
     /** The place a link from another app opened; kept for the whole process like the map's other state. */
-    val linkedPlaces = LinkedPlaces(mapLinks, scope)
+    val linkedPlaces =
+        LinkedPlaces(mapLinks, scope) { reachable ->
+            if (reachable) serviceHealth.recovered(ServicePart.Pinakes) else serviceHealth.failed(ServicePart.Pinakes)
+        }
 
     lateinit var account: AccountUi
         private set

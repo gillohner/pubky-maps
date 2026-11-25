@@ -27,9 +27,19 @@ data class PlaceRef(
     val zoom: Double? = null,
     /** Search text, for a link that searches instead of naming a point. */
     val query: String? = null,
-    /** True when the place may be less complete than it could be because a network step failed. */
+    /** True when the place is shown from its link alone because a network step failed. */
     val offline: Boolean = false,
+    /** The link was a short link that could not be followed (the network failed). */
+    val shortLinkUnfollowed: Boolean = false,
+    /** [point] is only the centre of a map view or of a search, not the place itself. */
+    val pointIsView: Boolean = false,
 ) {
+    /** True when [point] is the place, so the map pins it: not a map view, not a search near it. */
+    val pinned: Boolean get() = point != null && !pointIsView && query == null
+
+    /** True when the link only shows part of the map (no name, no search): the map moves, no card. */
+    val viewOnly: Boolean get() = pointIsView && name == null && query == null
+
     /** What the place is called on screen: its name, else the search text, else its coordinates. */
     val title: String
         get() = name ?: query ?: point?.let { "${formatCoordinate(it.lat)}, ${formatCoordinate(it.lon)}" } ?: uri
@@ -45,6 +55,8 @@ fun OpenedLink.toPlaceRef(): PlaceRef =
         zoom = zoom,
         query = query,
         offline = offline,
+        shortLinkUnfollowed = shortLinkUnfollowed && !fromPinakes,
+        pointIsView = pointIsView,
     )
 
 /** At most 5 fraction digits (about 1 m), trailing zeros dropped. */

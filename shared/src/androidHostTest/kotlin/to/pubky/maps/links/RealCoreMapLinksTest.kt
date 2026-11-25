@@ -39,6 +39,8 @@ class RealCoreMapLinksTest {
             assertEquals("Zürich HB", opened.name)
             assertEquals(GeoPoint(47.3778579, 8.5403226), opened.point)
             assertTrue(opened.offline)
+            assertTrue(opened.pinakesUnreachable)
+            assertFalse(opened.shortLinkUnfollowed)
             assertFalse(opened.fromPinakes)
             assertEquals(PlaceSource.LinkText, opened.toPlaceRef().source)
         }
@@ -56,9 +58,30 @@ class RealCoreMapLinksTest {
     @Test
     fun textWithoutAMapLinkOpensNothing() =
         runBlocking {
-            assertFalse(links.containsLink("hello https://example.com"))
+            assertNull(links.read("hello https://example.com"))
             assertNull(links.open("hello https://example.com", noPinakes))
         }
+
+    @Test
+    fun theTextAloneIsReadWithoutTheCoreInstance() {
+        // A core that cannot be built: read never asks for it.
+        val noCore = CoreMapLinks { error("no core") }
+        val view = noCore.read("https://www.google.com/maps/@47.37,8.54,15z")!!
+        assertTrue(view.pointIsView)
+        assertEquals(GeoPoint(47.37, 8.54), view.point)
+        val pin = noCore.read("geo:0,0?q=47.37,8.54(Test)")!!
+        assertEquals("Test", pin.name)
+        assertFalse(pin.pointIsView)
+        assertFalse(pin.offline)
+    }
+
+    @Test
+    fun sharedTextThatKotlinPassesTheCoreReads() {
+        // Just under the byte limit both sides share, with two-byte characters.
+        val text = "${"ü".repeat((IncomingLinks.MAX_TEXT_BYTES - 40) / 2)}\ngeo:47.37,8.54"
+        val passed = IncomingLinks.textOf(IncomingLinks.ACTION_SEND, null, text, null)!!
+        assertEquals(GeoPoint(47.37, 8.54), links.read(passed)?.point)
+    }
 
     @Test
     fun linksAreBuiltByTheCore() {

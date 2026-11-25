@@ -31,14 +31,23 @@ data class OpenedLink(
     val provider: LinkProvider,
     val name: String?,
     val point: GeoPoint?,
+    /** [point] is only the centre of a map view, not a place: the map moves there and pins nothing. */
+    val pointIsView: Boolean,
     val osm: OsmId?,
     val zoom: Double?,
     /** Search text, for a link that searches (an address or a name) instead of naming a point. */
     val query: String?,
     val fromPinakes: Boolean,
-    /** A network step failed: the place may be less complete than it could be. */
-    val offline: Boolean,
-)
+    /** A short link that could not be followed because the network failed. */
+    val shortLinkUnfollowed: Boolean = false,
+    /** Pinakes servers were asked and none answered. */
+    val pinakesUnreachable: Boolean = false,
+    /** The core could not be built, so neither the short link nor Pinakes was tried. */
+    val coreUnavailable: Boolean = false,
+) {
+    /** Shown from the link text alone because a network step failed. */
+    val offline: Boolean get() = !fromPinakes && (shortLinkUnfollowed || pinakesUnreachable || coreUnavailable)
+}
 
 /** A link format of another app (see the core's `map-links` crate for each format). */
 enum class LinkFormat {
@@ -71,12 +80,16 @@ data class LinkTarget(
  * rest is pure and fast.
  */
 interface MapLinks {
-    /** True when [text] holds a map link the core can read. */
-    fun containsLink(text: String): Boolean
+    /**
+     * The place the map link in [text] names, from the text alone: no network and no core instance, so
+     * it can be shown at once. Null when [text] holds no map link.
+     */
+    fun read(text: String): OpenedLink?
 
     /**
      * Opens the map link in [text] (a link, or shared text holding one): follows a short link, asks the
      * [pinakesServers] in order, and falls back to the link text. Null when [text] holds no map link.
+     * Throws when the core cannot be built.
      */
     suspend fun open(
         text: String,

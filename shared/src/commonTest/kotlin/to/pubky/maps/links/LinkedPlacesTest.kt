@@ -10,6 +10,7 @@ import kotlinx.coroutines.test.runTest
 import to.pubky.maps.place.PlaceRef
 import to.pubky.maps.place.PlaceSource
 import to.pubky.maps.place.formatCoordinate
+import to.pubky.maps.place.toPlaceRef
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -27,7 +28,9 @@ class LinkedPlacesTest {
             val places = linkedPlaces(links)
             places.open("geo:47.37,8.54?q=Test", listOf("https://p1", "https://p2"))
             runCurrent()
-            assertTrue(places.state.value.opening)
+            // Shown from the link text while the core still works on it.
+            assertFalse(places.state.value.opening)
+            assertEquals("Test", places.state.value.place?.name)
             links.gate!!.complete(Unit)
             runCurrent()
             val state = places.state.value
@@ -76,7 +79,10 @@ class LinkedPlacesTest {
             )
             assertFalse(places.state.value.opening)
             // The map does not move again to the place it already showed.
-            assertEquals(1, places.state.value.placedAt)
+            val placedAt = places.state.value.placedAt
+            places.open("hello again", emptyList())
+            runCurrent()
+            assertEquals(placedAt, places.state.value.placedAt)
         }
 
     @Test
@@ -119,6 +125,136 @@ class LinkedPlacesTest {
             )
             assertTrue(places.state.value.placedAt > first)
         }
+
+    @Test
+    fun aPointFromTheTextShowsBeforeTheCoreAnswersAndTheCoreRefinesIt() =
+        runTest(StandardTestDispatcher()) {
+            val link = "https://osmand.net/map?pin=52.51,13.39"
+            val links =
+                FakeMapLinks { openedLink(source = it, name = "Brandenburger Tor", point = GeoPoint(52.5163, 13.3777), fromPinakes = true) }
+            links.fromText = { openedLink(source = it, name = null, point = GeoPoint(52.51, 13.39)) }
+            links.gate = CompletableDeferred()
+            val places = linkedPlaces(links)
+            places.open(link, listOf("https://pinakes.example"))
+            runCurrent()
+            // Pinakes has not answered (a silent server can take its whole deadline): the place is
+            // already on the map, from the link text.
+            val early = places.state.value
+            assertFalse(early.opening)
+            assertEquals(GeoPoint(52.51, 13.39), early.place?.point)
+            assertEquals(link, early.place?.uri)
+            assertEquals(PlaceSource.LinkText, early.place?.source)
+            links.gate!!.complete(Unit)
+            runCurrent()
+            val late = places.state.value
+            assertEquals("Brandenburger Tor", late.place?.name)
+            assertEquals(PlaceSource.Pinakes, late.place?.source)
+            assertEquals(link, late.place?.uri, "the link the user had stays the place's URI")
+            // The card's point moved, so the map moves once more.
+            assertTrue(late.placedAt > early.placedAt)
+        }
+
+    @Test
+    fun aShortLinkWaitsForItsRedirectAndAnUnmovedPointDoesNotMoveTheMapAgain() =
+        runTest(StandardTestDispatcher()) {
+            val links = FakeMapLinks { openedLink(source = it, point = GeoPoint(47.37786, 8.54032), provider = LinkProvider.Google) }
+            links.fromText = { openedLink(source = it, name = "Zürich HB", point = null, provider = LinkProvider.Google) }
+            links.gate = CompletableDeferred()
+            val places = linkedPlaces(links)
+            places.open("Zürich HB\nhttps://maps.app.goo.gl/abc", emptyList())
+            runCurrent()
+            assertTrue(places.state.value.opening)
+            assertNull(places.state.value.place)
+            links.gate!!.complete(Unit)
+            runCurrent()
+            assertEquals(
+                GeoPoint(47.37786, 8.54032),
+                places.state.value.place
+                    ?.point,
+            )
+
+            // A geo: link that Pinakes does not know: same point before and after, one move.
+            val same = FakeMapLinks { openedLink(source = it) }
+            same.gate = CompletableDeferred()
+            val other = linkedPlaces(same)
+            other.open("geo:47.37,8.54", emptyList())
+            runCurrent()
+            val first = other.state.value.placedAt
+            same.gate!!.complete(Unit)
+            runCurrent()
+            assertEquals(first, other.state.value.placedAt)
+        }
+
+    @Test
+    fun withoutACoreTheLinkTextStillShowsMarkedOffline() =
+        runTest(StandardTestDispatcher()) {
+            val links = FakeMapLinks { openedLink(source = it, name = "Test") }
+            links.coreFails = true
+            val reported = mutableListOf<Boolean>()
+            val places = LinkedPlaces(links, backgroundScope) { reported += it }
+            places.open("geo:47.37,8.54?q=47.37,8.54(Test)", listOf("https://pinakes.example"))
+            runCurrent()
+            val place = places.state.value.place!!
+            assertEquals("Test", place.name)
+            assertTrue(place.offline)
+            // Nothing was asked, so nothing is said about Pinakes.
+            assertTrue(reported.isEmpty())
+        }
+
+    @Test
+    fun pinakesReachabilityGoesToTheMissingLine() =
+        runTest(StandardTestDispatcher()) {
+            var unreachable = true
+            val links = FakeMapLinks { openedLink(source = it, pinakesUnreachable = unreachable) }
+            val reported = mutableListOf<Boolean>()
+            val places = LinkedPlaces(links, backgroundScope) { reported += it }
+            places.open("geo:1,1", listOf("https://pinakes.example"))
+            runCurrent()
+            assertTrue(
+                places.state.value.place!!
+                    .offline,
+            )
+            unreachable = false
+            places.open("geo:2,2", listOf("https://pinakes.example"))
+            runCurrent()
+            // No servers: Pinakes is not asked, so nothing is reported.
+            places.open("geo:3,3", emptyList())
+            runCurrent()
+            assertEquals(listOf(false, true), reported)
+        }
+
+    @Test
+    fun aPlaceFromPinakesIsNotOfflineEvenWhenTheShortLinkFailed() =
+        runTest(StandardTestDispatcher()) {
+            val links = FakeMapLinks { openedLink(source = it, fromPinakes = true, shortLinkUnfollowed = true) }
+            val places = linkedPlaces(links)
+            places.open("https://maps.app.goo.gl/abc", emptyList())
+            runCurrent()
+            val place = places.state.value.place!!
+            assertFalse(place.offline)
+            assertFalse(place.shortLinkUnfollowed)
+
+            val failed = linkedPlaces(FakeMapLinks { openedLink(source = it, point = null, shortLinkUnfollowed = true) })
+            failed.open("https://maps.app.goo.gl/abc", emptyList())
+            runCurrent()
+            assertTrue(
+                failed.state.value.place!!
+                    .shortLinkUnfollowed,
+            )
+        }
+
+    @Test
+    fun mapViewsAndSearchesAreNotPinned() {
+        val view = openedLink(name = null, pointIsView = true).toPlaceRef()
+        assertFalse(view.pinned)
+        assertTrue(view.viewOnly)
+        val search = openedLink(name = null, query = "restaurants").toPlaceRef()
+        assertFalse(search.pinned)
+        assertFalse(search.viewOnly)
+        val place = openedLink().toPlaceRef()
+        assertTrue(place.pinned)
+        assertFalse(place.viewOnly)
+    }
 
     @Test
     fun placeTitles() {

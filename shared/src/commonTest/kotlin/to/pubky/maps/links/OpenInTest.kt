@@ -107,5 +107,10 @@ class OpenInTest {
             OpenIn.shareText(ref("Zürich HB", GeoPoint(47.37, 8.54), OsmId(OsmType.Way, 4)), links),
         )
         assertEquals("https://maps.app.goo.gl/abc", OpenIn.shareText(ref(null, null), links))
+        // A map view or a search near a point is shared as its link, never turned into a pin.
+        val view = ref(null, GeoPoint(47.37, 8.54)).copy(uri = "https://www.google.com/maps/@47.37,8.54,15z", pointIsView = true)
+        assertEquals("https://www.google.com/maps/@47.37,8.54,15z", OpenIn.shareText(view, links))
+        val search = ref(null, GeoPoint(47.37, 8.54)).copy(uri = "geo:47.37,8.54?q=restaurants", query = "restaurants")
+        assertEquals("geo:47.37,8.54?q=restaurants", OpenIn.shareText(search, links))
     }
 }

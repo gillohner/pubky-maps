@@ -10,7 +10,7 @@ import to.pubky.maps.core.OsmElementRef
 import to.pubky.maps.core.PubkyMapsCore
 import to.pubky.maps.core.buildDirectionsLink
 import to.pubky.maps.core.buildPlaceLink
-import to.pubky.maps.core.findMapLink
+import to.pubky.maps.core.placeFromText
 import to.pubky.maps.core.TravelMode as CoreTravelMode
 
 /**
@@ -20,13 +20,13 @@ import to.pubky.maps.core.TravelMode as CoreTravelMode
 class CoreMapLinks(
     private val core: suspend () -> PubkyMapsCore,
 ) : MapLinks {
-    override fun containsLink(text: String): Boolean = findMapLink(text) != null
+    override fun read(text: String): OpenedLink? = placeFromText(text)?.toOpenedLink()
 
     override suspend fun open(
         text: String,
         pinakesServers: List<String>,
     ): OpenedLink? {
-        if (!containsLink(text)) return null
+        if (placeFromText(text) == null) return null
         return core().openMapLink(text, pinakesServers).toOpenedLink()
     }
 
@@ -48,11 +48,13 @@ internal fun LinkedPlace.toOpenedLink(): OpenedLink =
         provider = provider.toLinkProvider(),
         name = name,
         point = point?.let { GeoPoint(it.lat, it.lon) },
+        pointIsView = pointIsView,
         osm = osm?.toOsmId(),
         zoom = zoom,
         query = query,
         fromPinakes = fromPinakes,
-        offline = offline,
+        shortLinkUnfollowed = shortLinkUnfollowed,
+        pinakesUnreachable = pinakesUnreachable,
     )
 
 private fun MapProvider.toLinkProvider(): LinkProvider =

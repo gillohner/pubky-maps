@@ -92,13 +92,14 @@ object OpenIn {
 
     /**
      * What sharing a place sends: its name and a link anyone can open: the OpenStreetMap element when
-     * the place is one, an openstreetmap.org pin for a point, else the link the place came from.
+     * the place is one, an openstreetmap.org pin for a pinned point, else the link the place came from
+     * (a map view or a search is shared as the link, never turned into a pin).
      */
     fun shareText(
         place: PlaceRef,
         links: MapLinks,
     ): String {
-        val point = place.point
+        val point = place.point?.takeIf { place.pinned }
         val link =
             place.osm?.url
                 ?: point?.let { links.placeLink(LinkFormat.OpenStreetMap, LinkTarget(it, place.name, zoom = place.zoom)) }
