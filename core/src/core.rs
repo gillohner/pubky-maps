@@ -1240,15 +1240,18 @@ mod tests {
             took < Duration::from_millis(500),
             "first poll took {took:?}"
         );
-        let core = match first {
-            std::task::Poll::Ready(core) => core.unwrap(),
-            std::task::Poll::Pending => tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .unwrap()
-                .block_on(create)
-                .unwrap(),
-        };
+        // Pending: the client (and its DNS lookups) is built on another thread. A client built
+        // inline, before the first await, would make the first poll Ready.
+        assert!(
+            first.is_pending(),
+            "create built the client on the caller's thread"
+        );
+        let core = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(create)
+            .unwrap();
         assert!(core.current_sign_in().is_none());
     }
 
