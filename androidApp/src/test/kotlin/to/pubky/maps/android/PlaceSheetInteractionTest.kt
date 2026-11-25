@@ -1,14 +1,19 @@
 package to.pubky.maps.android
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -17,7 +22,9 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.github.takahirom.roborazzi.captureScreenRoboImage
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
@@ -148,5 +155,63 @@ class PlaceSheetInteractionTest {
         compose.waitForIdle()
 
         compose.onNodeWithContentDescription("Show my location").assertIsNotDisplayed()
+    }
+
+    /** The map screen with a place sheet [sheetHeight] tall ([full]: at its full stop) and a write's Undo line showing. */
+    private fun showSheetWithUndo(
+        sheetHeight: Dp,
+        full: Boolean,
+    ) {
+        compose.setContent {
+            PubkyMapsTheme {
+                val host = remember { SnackbarHostState() }
+                LaunchedEffect(Unit) { host.showSnackbar("Tagged “hot-chocolate”. Tags are public.", "Undo") }
+                MapScreen(
+                    attribution =
+                        ServerDefaults.lists
+                            .mapStyles(darkTheme = false)
+                            .first()
+                            .attribution,
+                    mapUnavailable = false,
+                    onRetryMap = {},
+                    onMyLocation = {},
+                    onOpenSettings = {},
+                    snackbarHostState = host,
+                    placePage =
+                        PlacePageSlot(
+                            full = full,
+                            sheet = { _, _ -> Box(Modifier.fillMaxWidth().height(sheetHeight).background(Color.LightGray)) },
+                            panel = {},
+                        ),
+                ) { Box(Modifier.fillMaxSize()) }
+            }
+        }
+    }
+
+    @Test
+    fun aWritesUndoShowsWithTheSheetAtItsFullStop() {
+        showSheetWithUndo(840.dp, full = true)
+
+        compose.onNodeWithText("Undo").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Show my location").assertDoesNotExist()
+        captureScreenRoboImage("screenshots/write-place-full-undo-phone-light.png")
+    }
+
+    @Test
+    fun aWritesUndoShowsWhileTheControlsAreLeftOutMidDrag() {
+        showSheetWithUndo(800.dp, full = false)
+
+        compose.onNodeWithContentDescription("Show my location").assertIsNotDisplayed()
+        compose.onNodeWithText("Undo").assertIsDisplayed()
+    }
+
+    @Test
+    fun aWritesUndoShowsAboveTheControlsAtHalf() {
+        showSheetWithUndo(400.dp, full = false)
+
+        compose.onNodeWithContentDescription("Show my location").assertIsDisplayed()
+        val undo = compose.onNodeWithText("Undo").assertIsDisplayed().getUnclippedBoundsInRoot()
+        val myLocation = compose.onNodeWithContentDescription("Show my location").getUnclippedBoundsInRoot()
+        assertTrue("the line is above my location: $undo, $myLocation", undo.bottom <= myLocation.top)
     }
 }
