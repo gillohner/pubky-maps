@@ -14,8 +14,8 @@ makes it the phone's localhost. Nothing reaches GitHub.
 3. Update: automatic checks are turned off (data that must survive), the right APK is served.
    Install; "Install unknown apps" is off, so the app explains and opens its settings page; the
    setting is allowed (appops), back to the app, which hands the APK to Android; Android's
-   confirmation is accepted. N+1 must be installed, start with automatic checks still off, and
-   find itself the newest version.
+   confirmation is accepted. N+1 must be installed, open from Android's "App installed" dialog, start
+   with automatic checks still off, and find itself the newest version.
 
 Usage: update-probe.py <apk N> <apk N+1> <feed key PEM> <feed public key file> <out dir>
 """
@@ -307,9 +307,18 @@ def main():
         else:
             if "handed to the installer" not in logtext():
                 failures.append("update: no hand-over to the installer in the log")
-            adb("shell", "am", "force-stop", PKG)
-            launch()
-            started = wait_log(rf"updates: {re.escape(NEW_NAME)} \({NEW_CODE}\) on edge; automatic checks (on|off)", 180)
+            # Android's "App installed" dialog: Open, as a user would; else start the app directly.
+            start_line = rf"updates: {re.escape(NEW_NAME)} \({NEW_CODE}\) on edge; automatic checks (on|off)"
+            try:
+                node = find(lambda n: "packageinstaller" in n and re.search(r'text="(Open|OPEN)"', n), 60,
+                            "Android's Open button")
+                shot("3-android-installed")
+                tap(node, "Open")
+            except RuntimeError:
+                log("no Open button after the install; starting the app directly")
+            if not wait_log(start_line, 60):
+                adb("shell", "am", "start", "-W", "-n", f"{PKG}/.android.MainActivity", timeout=120)
+            started = wait_log(start_line, 180)
             report["steps"]["new_build_started"] = started.group(0) if started else None
             if not started:
                 failures.append("update: build N+1 did not start")
