@@ -1,7 +1,11 @@
 name: android
-# One build job checks the app (unit tests, Android lint, ktlint, Roborazzi screenshots) and builds
-# the debug APK; the emulator job installs that APK, starts the app, waits for the map to draw,
-# opens Settings, goes back, and fails on a crash.
+# One build job checks the app (unit tests, Android lint, ktlint, Roborazzi screenshots, the release
+# tools' self-checks) and builds the debug APK; the emulator job installs that APK, starts the app,
+# waits for the map to draw, opens Settings, goes back, and fails on a crash.
+# When the updater or the release changed (and on every push to main), update-apks builds two signed
+# release APKs N and N+1 with a throwaway key and checks that the .aab has no updater, and
+# update-probe has the emulator update N to N+1 from inside the app and refuse tampered ones
+# (scripts/ci/update-probe.py).
 # Every push to a branch of this repository runs it once (the result shows on its pull request);
 # pull requests from forks run it through the pull_request event.
 on:
@@ -51,12 +55,16 @@ jobs:
             [ "$i" = 3 ] && exit 1
             sleep 20
           done
+      - name: release tools
+        run: |
+          python3 -I scripts/release/version-check.py
+          python3 -I scripts/release/update-feed-check.py
       - name: check, screenshots, debug APK
-        run: ./gradlew --continue check verifyRoborazziDebug assembleDebug
+        run: ./gradlew --continue check verifyRoborazziDirectDebug assembleDirectDebug
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pubky-maps-debug-apk
-          path: androidApp/build/outputs/apk/debug/androidApp-debug.apk
+          path: androidApp/build/outputs/apk/direct/debug/androidApp-direct-debug.apk
           if-no-files-found: error
           retention-days: 14
       - if: failure()
@@ -127,11 +135,172 @@ jobs:
           ram-size: 4096M
           emulator-options: -no-snapshot-save ${{ env.EMULATOR_OPTIONS }}
           disable-animations: true
-          script: bash scripts/ci/emulator-smoke.sh apk/androidApp-debug.apk /tmp/smoke
+          script: bash scripts/ci/emulator-smoke.sh apk/androidApp-direct-debug.apk /tmp/smoke
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: emulator-smoke-api${{ env.API_LEVEL }}
           path: /tmp/smoke/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Whether the updater or the release changed since the last push (or the pull request's base).
+  changes:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      update: ${{ steps.pick.outputs.update }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - id: pick
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          update=false
+          if [ "$EVENT" = workflow_dispatch ] || [ "$REF" = refs/heads/main ] \
+            || [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            update=true
+          elif git diff --name-only "$BASE" "$GITHUB_SHA" | grep -Eq '^(androidApp/src/(direct|store|updateProbe)/|androidApp/src/main/AndroidManifest\.xml$|androidApp/(build\.gradle\.kts|proguard-rules\.pro)$|shared/src/commonMain/kotlin/to/pubky/maps/(update/|App\.kt$)|scripts/release/|scripts/ci/update-probe\.py$|release/|gradle/libs\.versions\.toml$|\.github/workflows/(android|release)\.yml$)'; then
+            update=true
+          fi
+          echo "update=$update" | tee -a "$GITHUB_OUTPUT"
+
+  update-apks:
+    needs: changes
+    if: needs.changes.outputs.update == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+            ~/.gradle/wrapper/dists
+          key: gradle-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', '**/*.gradle.kts') }}
+          restore-keys: gradle-
+      # A release key and an update-feed key for this run only.
+      - name: throwaway keys
+        run: |
+          d="$RUNNER_TEMP/keys"; mkdir -p "$d" out
+          pass=$(openssl rand -hex 16)
+          echo "::add-mask::$pass"
+          echo "ANDROID_KEYSTORE_PASSWORD=$pass" >> "$GITHUB_ENV"
+          ANDROID_KEYSTORE_PASSWORD=$pass keytool -genkeypair -keystore "$d/probe.p12" -storetype PKCS12 \
+            -alias probe -keyalg RSA -keysize 2048 -validity 2 -dname CN=update-probe \
+            -storepass:env ANDROID_KEYSTORE_PASSWORD -keypass:env ANDROID_KEYSTORE_PASSWORD
+          echo "PROBE_KEYSTORE=$d/probe.p12" >> "$GITHUB_ENV"
+          openssl genpkey -algorithm ed25519 -out out/feed.pem
+          openssl pkey -in out/feed.pem -pubout -outform DER | tail -c 32 | base64 -w0 > out/feed.pub
+      - name: N and N+1 (release, R8, signed with the throwaway key)
+        env:
+          ANDROID_KEY_ALIAS: probe
+        run: |
+          export ANDROID_KEYSTORE_B64; ANDROID_KEYSTORE_B64=$(base64 -w0 "$PROBE_KEYSTORE")
+          for build in "1000 0.0.1-probe.1 old" "1001 0.0.1-probe.2 new"; do
+            read -r code name file <<< "$build"
+            ./gradlew :androidApp:assembleDirectRelease -Ppubkymaps.versionCode="$code" \
+              -Ppubkymaps.versionName="$name" -Ppubkymaps.updateChannel=edge \
+              -Ppubkymaps.updateFeedUrl=http://127.0.0.1:18480/update-edge.json \
+              -Ppubkymaps.updatePublicKey="$(cat out/feed.pub)" -Ppubkymaps.updateProbe=true
+            bash scripts/release/sign.sh androidApp/build/outputs/apk/direct/release/androidApp-direct-release-unsigned.apk \
+              "out/$file.apk"
+            bash scripts/release/apk-facts.sh "out/$file.apk"
+          done
+      # As release.yml builds it: the bundle for app stores has no updater.
+      - name: the .aab has no updater
+        run: |
+          ./gradlew :androidApp:bundleStoreRelease
+          python3 -I scripts/release/aab-check.py androidApp/build/outputs/bundle/storeRelease/androidApp-store-release.aab out/old.apk
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: update-apks
+          path: out/
+          if-no-files-found: error
+          retention-days: 3
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: update-apks-reports
+          path: |
+            androidApp/build/outputs/mapping/
+            androidApp/build/reports/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  update-probe:
+    needs: update-apks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      API_LEVEL: 35
+      TARGET: google_apis
+      PROFILE: pixel_6
+      EMULATOR_OPTIONS: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none -no-audio
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: update-apks
+          path: update
+      - name: enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - id: month
+        run: echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
+      # The same AVD and boot snapshot as the smoke test.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-${{ env.API_LEVEL }}-${{ env.TARGET }}-${{ env.PROFILE }}-x86_64-${{ steps.month.outputs.month }}
+      - name: create the AVD and its snapshot
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: ${{ env.API_LEVEL }}
+          target: ${{ env.TARGET }}
+          arch: x86_64
+          profile: ${{ env.PROFILE }}
+          force-avd-creation: false
+          ram-size: 4096M
+          emulator-options: ${{ env.EMULATOR_OPTIONS }}
+          disable-animations: false
+          script: echo "AVD snapshot created"
+      - name: the app updates itself
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: ${{ env.API_LEVEL }}
+          target: ${{ env.TARGET }}
+          arch: x86_64
+          profile: ${{ env.PROFILE }}
+          force-avd-creation: false
+          ram-size: 4096M
+          emulator-options: -no-snapshot-save ${{ env.EMULATOR_OPTIONS }}
+          disable-animations: true
+          script: python3 -I scripts/ci/update-probe.py update/old.apk update/new.apk update/feed.pem update/feed.pub /tmp/update-probe
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: update-probe-api${{ env.API_LEVEL }}
+          path: /tmp/update-probe/
           if-no-files-found: ignore
           retention-days: 14
