@@ -15,6 +15,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -61,15 +62,15 @@ fun ListPage(
     onNewKeptChange: (Kept) -> Unit,
     onCreate: () -> Unit,
     onClose: () -> Unit,
+    snackbarHostState: SnackbarHostState? = null,
 ) {
-    WritePage(title = "Add to a list", place = state.placeName, onClose = onClose, action = {
-        TextButton(onClick = onClose) { Text("Done") }
-    }) {
+    // Each tick is sent at once, so there is nothing to confirm: Close (the X) only, and Undo in a snackbar.
+    WritePage(title = "Add to a list", place = state.placeName, onClose = onClose, snackbarHostState = snackbarHostState) {
         if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
         if (state.stale) {
             Text(
                 "Your lists could not be read now; these are as they were last time.",
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -106,7 +107,7 @@ fun ListPage(
                             Text(kept.badgeText, style = MaterialTheme.typography.bodyLarge)
                             Text(
                                 kept.explanation,
-                                style = MaterialTheme.typography.bodySmall,
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
@@ -121,8 +122,8 @@ fun ListPage(
             KeptBadge(state.newKept)
         }
         Text(
-            "A list holds up to ${OwnList.MAX_LIST_ITEMS} places.",
-            style = MaterialTheme.typography.bodySmall,
+            "A list holds up to ${OwnList.MAX_LIST_ITEMS} places. Each tick is sent at once.",
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }

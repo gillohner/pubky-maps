@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.media.ExifInterface
+import android.net.Uri
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -12,11 +13,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
+import java.io.InputStream
 
 /** Photos are re-encoded on the phone: camera and phone details and (unless asked) the GPS spot never leave it. */
 @RunWith(RobolectricTestRunner::class)
@@ -128,5 +133,32 @@ class PhotoPreparerTest {
     fun degreesAreWrittenAsExifRationals() {
         assertEquals("47/1,22/1,123456/10000", PhotoPreparer.rational(47.370096))
         assertEquals("8/1,0/1,0/10000", PhotoPreparer.rational(-8.0))
+    }
+
+    @Test
+    fun aPhotoThatCannotBeOpenedIsRefusedWithAReason() {
+        val resolver = RuntimeEnvironment.getApplication().contentResolver
+        val gone = Uri.fromFile(File("/nonexistent/photo.jpg"))
+
+        val error = assertThrows(PhotoException::class.java) { PhotoPreparer.prepare(resolver, gone, keepLocation = false) }
+
+        assertTrue(error.message, error.message.startsWith("The photo could not be read"))
+    }
+
+    @Test
+    fun aReadThatFailsPartwayIsRefusedWithAReason() {
+        val resolver = RuntimeEnvironment.getApplication().contentResolver
+        val uri = Uri.parse("content://photos.example/1")
+        val failing =
+            object : InputStream() {
+                private var given = 0
+
+                override fun read(): Int = if (given++ < 10) 0xFF else throw IOException("connection reset")
+            }
+        shadowOf(resolver).registerInputStream(uri, failing)
+
+        val error = assertThrows(PhotoException::class.java) { PhotoPreparer.prepare(resolver, uri, keepLocation = false) }
+
+        assertEquals("The photo could not be read (connection reset).", error.message)
     }
 }

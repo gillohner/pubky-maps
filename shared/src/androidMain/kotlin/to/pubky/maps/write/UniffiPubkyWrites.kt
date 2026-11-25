@@ -97,6 +97,7 @@ class UniffiPubkyWrites(
                         )
                     },
                 otherPostIds = scan.otherPostIds,
+                unreadPostIds = scan.unreadPostIds,
             )
         }
 

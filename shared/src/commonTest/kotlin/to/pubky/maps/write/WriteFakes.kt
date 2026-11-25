@@ -193,6 +193,13 @@ class MemoryWriteStore : WriteStore {
 
 class MemoryPhoneStore : PhoneStore {
     var data = PhoneData()
+    val flags = mutableSetOf<String>()
+
+    override fun flag(name: String): Boolean = name in flags
+
+    override fun setFlag(name: String) {
+        flags += name
+    }
 
     override fun read(): PhoneData = data
 

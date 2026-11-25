@@ -99,6 +99,7 @@ import to.pubky.maps.ui.rememberSafeLinkOpener
 import to.pubky.maps.write.OwnData
 import to.pubky.maps.write.WriteController
 import to.pubky.maps.write.WriteIntent
+import to.pubky.maps.write.WriteMessages
 import to.pubky.maps.write.WriteTarget
 import kotlin.math.PI
 import kotlin.math.cos
@@ -227,7 +228,7 @@ fun MapRoute(
     }
     LaunchedEffect(linkMessages) { linkMessages.collect { snackbarHostState.showOnly(it) } }
     // A write that could not be made, or that waits for a connection, says so.
-    if (writes != null) LaunchedEffect(writes) { writes.messages.collect { snackbarHostState.showOnly(it) } }
+    if (writes != null) WriteMessages(writes, snackbarHostState)
     // A place from a link or a search replaces a tapped one.
     LaunchedEffect(linkedPlace.placedAt, linkedPlace.opening) { if (linkedPlace.opening || linkedPlace.place != null) tapped = null }
     LaunchedEffect(clusterTarget) {
@@ -538,6 +539,7 @@ private fun rememberPlacePage(
     }
     val pageState by places.pages.state.collectAsStateWithLifecycle()
     val own = writes?.own?.collectAsStateWithLifecycle()?.value
+    val publicTagsExplained = writes?.publicTagsExplained?.collectAsStateWithLifecycle()?.value ?: true
     var stop by rememberSaveable(shown?.place?.uri) { mutableStateOf(shown?.initialStop ?: SheetStop.Peek) }
     val now by produceState(Clock.System.now()) {
         while (true) {
@@ -570,7 +572,7 @@ private fun rememberPlacePage(
             onOpenIn = { openIn?.open?.invoke(it) },
             onOpenLink = rememberSafeLinkOpener(),
             onLoadMorePosts = places.pages::loadMorePosts,
-            writes = if (writes != null && own != null) placeWriteActions(page, own, writes, onWrite) else null,
+            writes = if (writes != null && own != null) placeWriteActions(page, own, writes, onWrite, publicTagsExplained) else null,
         )
     return PlacePageSlot(
         full = stop == SheetStop.Full,
@@ -587,6 +589,7 @@ internal fun placeWriteActions(
     own: OwnData,
     writes: WriteController,
     onWrite: (WriteTarget, WriteIntent) -> Unit,
+    publicTagsExplained: Boolean,
 ): PlaceWriteActions {
     val links = PlacePageController.placeLinks(page.place, page.card).map(writes::normalize).toSet()
     val ownPlace = own.forPlace(links)
@@ -622,6 +625,10 @@ internal fun placeWriteActions(
         onPost = { open(WriteIntent.Post) },
         onPhoto = { open(WriteIntent.Photo) },
         onAddToList = { open(WriteIntent.AddToList) },
+        publicTagsExplained = publicTagsExplained,
+        onPublicTagsExplained = writes::publicTagsExplained,
+        waiting = own.offline,
+        busy = own.busy,
     )
 }
 

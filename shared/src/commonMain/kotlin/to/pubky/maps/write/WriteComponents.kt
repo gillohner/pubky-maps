@@ -21,6 +21,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -76,22 +78,35 @@ fun KeptBadge(
                 modifier = Modifier.size(14.dp),
             )
             Spacer(Modifier.width(4.dp))
-            Text(kept.badgeText, style = MaterialTheme.typography.labelMedium)
+            Text(kept.badgeText, style = MaterialTheme.typography.labelLarge)
         }
     }
 }
 
-/** The badge and its sentence, shown before a write is sent. */
+/**
+ * The badge and its sentence, shown before a write is sent, at body size in the secondary text
+ * colour (WCAG AA in both themes); [more] adds what else the user should know first.
+ */
 @Composable
 fun KeptNote(
     kept: Kept,
     modifier: Modifier = Modifier,
+    more: String? = null,
 ) {
-    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier, verticalAlignment = Alignment.Top) {
         KeptBadge(kept)
         Spacer(Modifier.width(8.dp))
-        Text(kept.explanation, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        NoteText(listOfNotNull(kept.explanation, more).joinToString(" "))
     }
+}
+
+/** A line of explanation on a write page: 14 sp in the secondary text colour, readable in both themes. */
+@Composable
+fun NoteText(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = modifier)
 }
 
 /**
@@ -105,9 +120,11 @@ fun WritePage(
     place: String?,
     onClose: () -> Unit,
     action: (@Composable RowScope.() -> Unit)? = null,
+    snackbarHostState: SnackbarHostState? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Scaffold(
+        snackbarHost = { snackbarHostState?.let { SnackbarHost(it) } },
         topBar = {
             TopAppBar(
                 title = {

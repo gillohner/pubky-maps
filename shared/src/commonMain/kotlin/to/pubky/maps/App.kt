@@ -1,11 +1,12 @@
 package to.pubky.maps
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -161,6 +162,7 @@ fun App(
 
 private fun NavController.open(destination: Any) = navigate(destination) { launchSingleTop = true }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun AppNavigation(
     appInfo: AppInfo,
@@ -309,11 +311,15 @@ private fun AppNavigation(
                         ?.signInFirst
                         ?.collectAsStateWithLifecycle()
                         ?.value
-                // Leaving the sign-in without signing in drops the write that waited for it.
-                DisposableEffect(Unit) {
-                    onDispose { if (account.controller.state.value !is AccountState.SignedIn) writes?.controller?.takeSignInFirst() }
+                // Going back from the sign-in without signing in drops the write that waited for it; the
+                // page leaving the screen for other reasons (the activity recreated while the user is in
+                // Pubky Ring) keeps it.
+                val leave = {
+                    writes?.controller?.leftSignIn()
+                    back()
                 }
-                AccountRoute(account = account, onBack = back, reason = waiting?.intent?.signInReason)
+                BackHandler(enabled = waiting != null) { leave() }
+                AccountRoute(account = account, onBack = leave, reason = waiting?.intent?.signInReason)
             }
         }
         if (writes != null) {

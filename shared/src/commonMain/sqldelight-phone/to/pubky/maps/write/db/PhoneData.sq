@@ -14,6 +14,11 @@ CREATE TABLE phone_list (
     list TEXT NOT NULL
 );
 
+-- Things the app told the user once on this phone (e.g. that tags are public).
+CREATE TABLE flag (
+    name TEXT NOT NULL PRIMARY KEY
+);
+
 savedPlaces:
 SELECT * FROM saved_place ORDER BY saved_at DESC;
 
@@ -28,3 +33,9 @@ SELECT list FROM phone_list;
 
 putList:
 INSERT OR REPLACE INTO phone_list(uri, list) VALUES (?, ?);
+
+flag:
+SELECT name FROM flag WHERE name = ?;
+
+putFlag:
+INSERT OR REPLACE INTO flag(name) VALUES (?);

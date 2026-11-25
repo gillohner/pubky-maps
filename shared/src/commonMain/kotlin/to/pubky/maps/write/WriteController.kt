@@ -42,6 +42,20 @@ interface OutboxFiles {
 }
 
 internal const val OFFLINE_MESSAGE = "You're offline. Your changes will be sent when you're back online."
+internal const val BUSY_MESSAGE = "Your homeserver is busy. Your changes will be sent a little later."
+
+/** A line for the user, with one action ("Undo", "Try now") when there is one. */
+class WriteMessage(
+    val text: String,
+    val actionLabel: String? = null,
+    val action: (() -> Unit)? = null,
+) {
+    override fun toString(): String = text
+}
+
+/** [PhoneStore] flag: the user was told that tags are public. */
+internal const val PUBLIC_TAGS_EXPLAINED = "public_tags_explained"
+
 internal const val SESSION_ENDED_MESSAGE = "Your sign-in has ended, so the change was not sent. Please sign in again."
 
 /**
@@ -77,10 +91,19 @@ class WriteController(
     /** The user's own data with every write made on this phone. */
     val own: StateFlow<OwnData> = mutableOwn.asStateFlow()
 
-    private val mutableMessages = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    private val mutableMessages = MutableSharedFlow<WriteMessage>(extraBufferCapacity = 8)
 
-    /** One line for the user per write that could not be made, and when writes wait for a connection. */
-    val messages: SharedFlow<String> = mutableMessages.asSharedFlow()
+    /**
+     * One line for the user per write that could not be made, when writes wait for the homeserver,
+     * and after a tag or list change (with Undo).
+     */
+    val messages: SharedFlow<WriteMessage> = mutableMessages.asSharedFlow()
+
+    // Not known until the phone store is read: asking once too often is the safe side.
+    private val mutablePublicTagsExplained = MutableStateFlow(false)
+
+    /** The user was told once on this phone that tags are public (before their first one-tap tag). */
+    val publicTagsExplained: StateFlow<Boolean> = mutablePublicTagsExplained.asStateFlow()
 
     private val mutableSignInFirst = MutableStateFlow<SignInFirst?>(null)
 
@@ -109,6 +132,9 @@ class WriteController(
     private var inFlight: Long? = null
     private var listsLoading = false
     private var offline = false
+
+    /** The last failure was the homeserver throttling or failing (429, 5xx), not the connection. */
+    private var busy = false
     private var toldOffline = false
     private var retries = 0
     private var sendJob: Job? = null
@@ -136,6 +162,7 @@ class WriteController(
         }
         enqueue {
             phoneData = io { phone.read() }
+            mutablePublicTagsExplained.value = io { phone.flag(PUBLIC_TAGS_EXPLAINED) }
             publish()
         }
         // The core spells places for comparing them; it is built once, beside the queue.
@@ -157,7 +184,17 @@ class WriteController(
     private suspend fun <T> io(block: () -> T): T = withContext(io) { block() }
 
     private fun tell(message: String) {
+        mutableMessages.tryEmit(WriteMessage(message))
+    }
+
+    private fun tell(message: WriteMessage) {
         mutableMessages.tryEmit(message)
+    }
+
+    /** The user read that tags are public; the explainer does not come again on this phone. */
+    fun publicTagsExplained() {
+        mutablePublicTagsExplained.value = true
+        enqueue { io { phone.setFlag(PUBLIC_TAGS_EXPLAINED) } }
     }
 
     private val signedIn: AccountState.SignedIn?
@@ -183,14 +220,33 @@ class WriteController(
         mutableSignInFirst.value = SignInFirst(target, intent)
     }
 
-    /** The waiting write, once: the app continues with it after the sign-in, or drops it when the user went back. */
+    /** The waiting write, once: the app continues with it after the sign-in. */
     fun takeSignInFirst(): SignInFirst? = mutableSignInFirst.value.also { mutableSignInFirst.value = null }
 
-    /** Tags the place with [label] (a valid label, see [tagLabel]). */
+    /**
+     * The user left the sign-in themselves (Back or the bar's arrow) without signing in: the write that
+     * waited for it is dropped. The page merely leaving the screen (the activity recreated while the
+     * user approves in Pubky Ring) keeps it.
+     */
+    fun leftSignIn() {
+        if (signedIn == null) mutableSignInFirst.value = null
+    }
+
+    /** Tags the place with [label] (a valid label, see [tagLabel]); says so with Undo. */
     fun tag(
         target: WriteTarget,
         label: String,
-    ) = write(target, WriteOp.Tag(target.uri, label))
+    ) = enqueue {
+        if (!add(target, WriteOp.Tag(target.uri, label))) return@enqueue
+        send()
+        tell(
+            WriteMessage("Tagged “$label”. Tags are public.", "Undo") {
+                enqueue {
+                    if (add(target, WriteOp.Untag(target.uri, label))) send()
+                }
+            },
+        )
+    }
 
     /**
      * Removes the user's tag [label] from the place whose links are [links]: from every link they
@@ -205,8 +261,18 @@ class WriteController(
             own.value.tags
                 .filter { it.label == label && it.place in links }
                 .map { it.place }
-        (tagged.ifEmpty { listOf(target.uri) }).distinct().forEach { place -> add(target, WriteOp.Untag(place, label)) }
+        val places = tagged.ifEmpty { listOf(target.uri) }.distinct()
+        val added = places.map { place -> add(target, WriteOp.Untag(place, label)) }
+        if (added.none { it }) return@enqueue
         send()
+        tell(
+            WriteMessage("Removed your tag “$label”.", "Undo") {
+                enqueue {
+                    places.forEach { place -> add(target, WriteOp.Tag(place, label)) }
+                    send()
+                }
+            },
+        )
     }
 
     /** Posts [text] about the place (a review). */
@@ -288,7 +354,8 @@ class WriteController(
             tell("“${list.name}” already holds ${OwnList.MAX_LIST_ITEMS} places, the most a list can hold.")
             return@enqueue
         }
-        editList(target, list, remove = false)
+        if (!editList(target, list, remove = false)) return@enqueue
+        tell(WriteMessage("Added to “${list.name}”.", "Undo") { removeFromList(target, setOf(normalize(target.uri)), list) })
     }
 
     /** Removes the place whose links are [links] from [list]. */
@@ -298,14 +365,17 @@ class WriteController(
         list: OwnList,
     ) = enqueue {
         val stored = list.items.filter { normalize(it) in links }.ifEmpty { listOf(target.uri) }
-        stored.forEach { editList(target.copy(uri = it), list, remove = true) }
+        val changed = stored.map { editList(target.copy(uri = it), list, remove = true) }
+        if (changed.none { it }) return@enqueue
+        tell(WriteMessage("Removed from “${list.name}”.", "Undo") { addToList(target, list) })
     }
 
+    /** False when the change could not be made (signed out, for a homeserver list). */
     private suspend fun editList(
         target: WriteTarget,
         list: OwnList,
         remove: Boolean,
-    ) {
+    ): Boolean {
         if (list.kept == Kept.Phone) {
             val place = normalize(target.uri)
             val current = phoneData.lists.firstOrNull { it.uri == list.uri } ?: list
@@ -315,10 +385,11 @@ class WriteController(
             io { phone.putList(updated) }
             phoneData = phoneData.copy(lists = phoneData.lists.filterNot { it.uri == list.uri } + updated)
             publish()
-        } else {
-            add(target, WriteOp.EditList(target.uri, list.uri, remove))
-            send()
+            return true
         }
+        if (!add(target, WriteOp.EditList(target.uri, list.uri, remove))) return false
+        send()
+        return true
     }
 
     /**
@@ -393,14 +464,14 @@ class WriteController(
         return result.getOrNull()
     }
 
-    /** Puts [op] in the outbox (and on screen). */
+    /** Puts [op] in the outbox (and on screen); false (with a line saying so) when nobody is signed in. */
     private suspend fun add(
         target: WriteTarget,
         op: WriteOp,
-    ) {
+    ): Boolean {
         if (signedIn == null) {
             tell("Sign in to change this.")
-            return
+            return false
         }
         val queued = io { store.enqueue(op) }
         queue = queue + queued
@@ -410,6 +481,7 @@ class WriteController(
             labels = labels + (target.uri to name)
         }
         publish()
+        return true
     }
 
     // --- The account ------------------------------------------------------------------------
@@ -543,7 +615,9 @@ class WriteController(
 
             failure is CoreFailure.Network -> {
                 offline = true
-                if (!toldOffline) tell(OFFLINE_MESSAGE)
+                busy = failure.busy
+                // Said once per wait, with a way to try again now; a busy homeserver is not "offline".
+                if (!toldOffline) tell(WriteMessage(if (failure.busy) BUSY_MESSAGE else OFFLINE_MESSAGE, "Try now") { flush() })
                 toldOffline = true
                 publish()
                 retryLater()
@@ -663,15 +737,22 @@ class WriteController(
             if (scan == null) return@forEach
             // A list written while the scan ran is newer than what the scan read.
             val written = listsSinceScan.values.filter { (it.kept == Kept.Private) == isPrivate }
-            val merged = scan.lists.filterNot { found -> written.any { it.uri == found.uri } } + written
+            // A list whose folder could not be read now stays as last known.
+            val unread =
+                lists.filter { known ->
+                    (known.kept == Kept.Private) == isPrivate && listAddress(known.uri)?.second in scan.unreadPostIds
+                }
+            val found = scan.lists + unread.filterNot { kept -> scan.lists.any { it.uri == kept.uri } }
+            val merged = found.filterNot { list -> written.any { it.uri == list.uri } } + written
             io {
                 store.replaceLists(isPrivate, merged)
                 store.addOtherPosts(isPrivate, scan.otherPostIds)
             }
             lists = lists.filterNot { (it.kept == Kept.Private) == isPrivate } + merged
         }
-        // A root that could not be read keeps its lists as last read; the page says they may be out of date.
-        listsLoaded = scans.all { it.second != null }
+        // A root that could not be read, or posts that could not be, keep their lists as last read; the
+        // page says they may be out of date.
+        listsLoaded = scans.all { (_, scan) -> scan != null && scan.unreadPostIds.isEmpty() }
         publish()
     }
 
@@ -692,7 +773,13 @@ class WriteController(
                 confirmed = confirmed,
                 labels = labels,
                 normalize = ::normalize,
-            ).copy(listsLoaded = listsLoaded, listsLoading = listsLoading, offline = offline && queue.isNotEmpty())
+            ).copy(
+                listsLoaded = listsLoaded,
+                listsLoading = listsLoading,
+                offline = offline && queue.isNotEmpty(),
+                busy =
+                    busy && offline && queue.isNotEmpty(),
+            )
     }
 
     /** [block] with every failure as a [CoreFailure] (cancellation stays cancellation). */

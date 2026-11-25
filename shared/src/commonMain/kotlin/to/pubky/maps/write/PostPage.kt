@@ -58,7 +58,7 @@ fun PostPage(
         )
         Text(
             "Your post is a reply to this place on Pubky.",
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }

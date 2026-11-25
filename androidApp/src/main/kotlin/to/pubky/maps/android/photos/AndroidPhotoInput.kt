@@ -51,6 +51,11 @@ private fun rememberAndroidPhotoLaunchers(onResult: (PhotoResult) -> Unit): Phot
                         PhotoResult.Failed(e.message)
                     } catch (e: OutOfMemoryError) {
                         PhotoResult.Failed("The photo is too large for this phone (${e.message ?: "out of memory"}).")
+                    } catch (
+                        // Anything else a photo app or a decoder throws must not take the app down.
+                        @Suppress("TooGenericExceptionCaught") e: Exception,
+                    ) {
+                        PhotoResult.Failed("The photo could not be read (${e.message ?: e::class.simpleName}).")
                     }
                 }
             report(result)

@@ -11,6 +11,7 @@ import to.pubky.maps.write.PreparedPhoto
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
 import java.io.InputStream
 import kotlin.math.abs
 import kotlin.math.max
@@ -47,11 +48,29 @@ object PhotoPreparer {
                 resolver.openInputStream(uri)?.use(::readCapped)
             } catch (e: SecurityException) {
                 throw PhotoException("Pubky Maps may not read this photo (${e.message ?: "no permission"}).")
+            } catch (
+                // The file is gone, a cloud photo cannot be fetched, or the read failed partway.
+                e: IOException,
+            ) {
+                throw PhotoException("The photo could not be read (${e.message ?: e::class.simpleName}).")
             } ?: throw PhotoException("The photo could not be read.")
         return prepare(bytes, keepLocation)
     }
 
     fun prepare(
+        bytes: ByteArray,
+        keepLocation: Boolean,
+    ): PreparedPhoto =
+        try {
+            prepareBytes(bytes, keepLocation)
+        } catch (
+            // A bitmap the decoder or the graphics code refuses (bad sizes, an odd colour space).
+            e: IllegalArgumentException,
+        ) {
+            throw PhotoException("The photo could not be converted (${e.message ?: "unreadable"}).")
+        }
+
+    private fun prepareBytes(
         bytes: ByteArray,
         keepLocation: Boolean,
     ): PreparedPhoto {
@@ -81,9 +100,17 @@ object PhotoPreparer {
                 }
                 out.toByteArray()
             }
-        val keep = keepLocation && latLong != null
+        // Writing the spot back can fail (no temporary file): the photo then goes without it, and the
+        // page says the location was removed.
+        val located =
+            if (keepLocation && latLong != null) {
+                runCatching { withLocation(jpeg, latLong[0].toDouble(), latLong[1].toDouble()) }.getOrNull()
+            } else {
+                null
+            }
+        val keep = located != null
         return PreparedPhoto(
-            bytes = if (keep && latLong != null) withLocation(jpeg, latLong[0].toDouble(), latLong[1].toDouble()) else jpeg,
+            bytes = located ?: jpeg,
             mimeType = "image/jpeg",
             width = upright.width,
             height = upright.height,

@@ -111,6 +111,11 @@ interface PhoneStore {
     fun unsave(place: String)
 
     fun putList(list: OwnList)
+
+    /** Whether [name] was set on this phone. */
+    fun flag(name: String): Boolean
+
+    fun setFlag(name: String)
 }
 
 /** [PhoneStore] in its own SQLite database, kept when the user signs out. */
@@ -138,5 +143,11 @@ class SqlPhoneStore(
 
     override fun putList(list: OwnList) {
         queries.putList(list.uri, storeJson.encodeToString(OwnList.serializer(), list))
+    }
+
+    override fun flag(name: String): Boolean = queries.flag(name).executeAsOneOrNull() != null
+
+    override fun setFlag(name: String) {
+        queries.putFlag(name)
     }
 }

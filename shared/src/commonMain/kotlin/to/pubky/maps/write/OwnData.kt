@@ -56,8 +56,10 @@ data class OwnData(
     val posts: List<OwnPost> = emptyList(),
     /** Writes waiting to be sent. */
     val pending: Int = 0,
-    /** The last attempt to send failed for lack of a connection. */
+    /** Writes wait: the last attempt to send failed for lack of a connection (or [busy]). */
     val offline: Boolean = false,
+    /** The homeserver was reached but throttled or failed (429, 5xx); the writes wait all the same. */
+    val busy: Boolean = false,
     /** Names of places the user wrote about, by place as the core spells it. */
     val names: Map<String, String> = emptyMap(),
 ) {

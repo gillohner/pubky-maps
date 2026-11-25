@@ -1,5 +1,8 @@
 package to.pubky.maps.write
 
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -8,6 +11,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import to.pubky.maps.config.AppSettings
 import to.pubky.maps.config.DataKind
 import to.pubky.maps.config.StorageChoice
@@ -19,6 +23,32 @@ class WriteUi(
     val controller: WriteController,
     val photos: PhotoInput?,
 )
+
+/**
+ * Shows [writes]' lines in [host] while the screen is on: a new line replaces the one showing, and its
+ * action (Undo, Try now) runs when tapped.
+ */
+@Composable
+fun WriteMessages(
+    writes: WriteController,
+    host: SnackbarHostState,
+) {
+    LaunchedEffect(writes, host) {
+        writes.messages.collect { message -> launch { host.showWriteMessage(message) } }
+    }
+}
+
+/** Shows [message], replacing the snackbar on screen instead of queueing behind it. */
+suspend fun SnackbarHostState.showWriteMessage(message: WriteMessage) {
+    currentSnackbarData?.dismiss()
+    val result =
+        showSnackbar(
+            message = message.text,
+            actionLabel = message.actionLabel,
+            duration = SnackbarDuration.Long,
+        )
+    if (result == SnackbarResult.ActionPerformed) message.action?.invoke()
+}
 
 /** The line the sign-in shows when a write waits for it. */
 val WriteIntent.signInReason: String
@@ -59,6 +89,8 @@ fun TagRoute(
             .orEmpty()
             .distinctBy { it.label }
     var text by rememberSaveable { mutableStateOf("") }
+    val snackbars = remember { SnackbarHostState() }
+    WriteMessages(writes, snackbars)
     TagPage(
         state =
             TagPageState(
@@ -66,6 +98,8 @@ fun TagRoute(
                 mine = mine,
                 suggestions = tagSuggestions(page?.takeIf { it.place.uri == target.uri }, mine.map { it.label }.toSet()),
                 text = text,
+                waiting = own.offline,
+                busy = own.busy,
             ),
         onTextChange = { text = it },
         onAdd = { label ->
@@ -73,7 +107,9 @@ fun TagRoute(
             text = ""
         },
         onRemove = { label -> writes.untag(target, links, label) },
+        onRetry = writes::flush,
         onClose = onClose,
+        snackbarHostState = snackbars,
     )
 }
 
@@ -157,6 +193,8 @@ fun ListRoute(
     val preferred = Kept.of(settings.storage(DataKind.Lists))
     var newName by rememberSaveable { mutableStateOf("") }
     var newKept by rememberSaveable { mutableStateOf(if (preferred in choices) preferred else Kept.Phone) }
+    val snackbars = remember { SnackbarHostState() }
+    WriteMessages(writes, snackbars)
     ListPage(
         state =
             ListPageState(
@@ -181,6 +219,7 @@ fun ListRoute(
             newName = ""
         },
         onClose = onClose,
+        snackbarHostState = snackbars,
     )
 }
 

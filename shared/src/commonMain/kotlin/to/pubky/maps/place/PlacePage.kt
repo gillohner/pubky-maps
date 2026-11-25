@@ -64,12 +64,15 @@ import to.pubky.maps.account.shortPubkyId
 import to.pubky.maps.links.LinkProvider
 import to.pubky.maps.links.OpenInAction
 import to.pubky.maps.ui.AppIcons
+import to.pubky.maps.write.Kept
 import to.pubky.maps.write.KeptBadge
 import to.pubky.maps.write.OwnList
 import to.pubky.maps.write.OwnPlace
+import to.pubky.maps.write.PublicTagDialog
 import to.pubky.maps.write.WriteIcons
 import to.pubky.maps.write.mergeOwnTags
 import to.pubky.maps.write.ownPostRows
+import to.pubky.maps.write.pendingText
 import kotlin.time.Instant
 
 /** What the place page can do, wired by the map. */
@@ -101,6 +104,12 @@ data class PlaceWriteActions(
     val onPost: () -> Unit,
     val onPhoto: () -> Unit,
     val onAddToList: () -> Unit,
+    /** The user was told on this phone that tags are public; until then a one-tap tag asks first. */
+    val publicTagsExplained: Boolean = true,
+    val onPublicTagsExplained: () -> Unit = {},
+    /** Writes wait for the homeserver (no connection, or [busy]). */
+    val waiting: Boolean = false,
+    val busy: Boolean = false,
 )
 
 /** The place page's clock and language, passed in so screenshots and tests are fixed. */
@@ -640,8 +649,24 @@ private fun TagsSection(
     pending: Set<String>,
     writes: PlaceWriteActions?,
 ) {
+    // A one-tap tag on a label the user has not used asks once per phone whether they know it is public.
+    var asking by remember { mutableStateOf<String?>(null) }
+    asking?.let { label ->
+        if (writes != null) {
+            PublicTagDialog(
+                label = label,
+                onConfirm = {
+                    asking = null
+                    writes.onPublicTagsExplained()
+                    writes.onToggleTag(label)
+                },
+                onDismiss = { asking = null },
+            )
+        }
+    }
     Column {
-        SectionTitle("Tags on Pubky")
+        // Tags are the one write a single tap sends: the section says they are public.
+        SectionTitle("Tags on Pubky", action = writes?.let { { KeptBadge(Kept.Public) } })
         FlowRow(
             modifier = Modifier.padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -649,7 +674,12 @@ private fun TagsSection(
             tags.forEach { tag ->
                 // 48 dp tall like a touch target: s2c makes the chips toggle the user's own tag.
                 // With writes, a tap adds the same label (one-tap tag) or removes the user's own.
-                val toggle = writes?.let { w -> { w.onToggleTag(tag.label) } }
+                val toggle =
+                    writes?.let { w ->
+                        {
+                            if (!tag.mine && !w.publicTagsExplained) asking = tag.label else w.onToggleTag(tag.label)
+                        }
+                    }
                 Box(
                     Modifier
                         .heightIn(min = 48.dp)
@@ -676,7 +706,11 @@ private fun TagsSection(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             if (tag.label in pending) {
-                                Icon(WriteIcons.Pending, contentDescription = "Not sent yet", modifier = Modifier.size(14.dp))
+                                Icon(
+                                    WriteIcons.Pending,
+                                    contentDescription = pendingText(writes?.waiting == true, writes?.busy == true),
+                                    modifier = Modifier.size(14.dp),
+                                )
                                 Spacer(Modifier.width(4.dp))
                             }
                             Text(tag.label, style = MaterialTheme.typography.labelLarge)
@@ -703,7 +737,13 @@ private fun TagsSection(
                     }
                 }
             }
-            if (tags.isEmpty()) SmallText("Nobody tagged it yet. Tags are public.", Modifier.padding(horizontal = 16.dp))
+            if (tags.isEmpty()) SmallText("Nobody tagged it yet.", Modifier.padding(horizontal = 16.dp))
+            if (pending.isNotEmpty()) {
+                SmallText(
+                    "${pendingText(writes.waiting, writes.busy)}: tags with a clock are not on your homeserver yet.",
+                    Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp),
+                )
+            }
         }
         val line = taggersLine(tags, people, viewer)
         if (line != null) {

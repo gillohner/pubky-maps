@@ -286,10 +286,12 @@ class WriteScreenshotTest {
                     mine = listOf(OwnTag(osm, "cozy"), OwnTag(osm, "cake", pending = true)),
                     suggestions = listOf("hot-chocolate", "cafe", "coffee-shop", "cake-shop"),
                     text = "Café crème",
+                    waiting = true,
                 ),
             onTextChange = {},
             onAdd = {},
             onRemove = {},
+            onRetry = {},
             onClose = {},
         )
     }

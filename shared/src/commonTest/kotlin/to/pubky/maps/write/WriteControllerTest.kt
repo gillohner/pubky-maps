@@ -29,6 +29,7 @@ import kotlin.time.Duration.Companion.seconds
 private const val ME = "8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo"
 private const val OSM = "https://www.openstreetmap.org/node/270803095"
 private const val GOOGLE = "https://maps.app.goo.gl/x1"
+private const val TAGGED_COFFEE = "Tagged “coffee”. Tags are public."
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class WriteControllerTest {
@@ -40,6 +41,7 @@ class WriteControllerTest {
     private var settings = AppSettings()
     private var accountRefreshes = 0
     private val messages = mutableListOf<String>()
+    private val actions = mutableListOf<WriteMessage>()
     private val target = WriteTarget(OSM, "Conditorei Schober")
 
     private fun signedIn(
@@ -71,7 +73,12 @@ class WriteControllerTest {
                 io = StandardTestDispatcher(testScheduler),
                 now = { 1_000L },
             )
-        backgroundScope.launch { controller.messages.collect { messages += it } }
+        backgroundScope.launch {
+            controller.messages.collect {
+                messages += it.text
+                actions += it
+            }
+        }
         runCurrent()
         return controller
     }
@@ -97,7 +104,7 @@ class WriteControllerTest {
             assertEquals(emptyList(), store.outbox)
             assertEquals(listOf("coffee"), cached.tags.map { it.label })
             assertEquals(listOf(OwnTag(OSM, "coffee")), writer.own.value.tags)
-            assertEquals(emptyList(), messages)
+            assertEquals(listOf(TAGGED_COFFEE), messages, "said with Undo")
         }
 
     @Test
@@ -147,7 +154,7 @@ class WriteControllerTest {
             assertEquals(1, store.outbox.size)
             assertEquals(listOf(OwnTag(OSM, "coffee", pending = true)), writer.own.value.tags, "it stays on screen")
             assertTrue(writer.own.value.offline)
-            assertEquals(listOf(OFFLINE_MESSAGE), messages)
+            assertEquals(listOf(TAGGED_COFFEE, OFFLINE_MESSAGE), messages)
 
             advanceTimeBy(16.seconds)
             runCurrent()
@@ -155,7 +162,7 @@ class WriteControllerTest {
             assertEquals(emptyList(), store.outbox)
             assertEquals(2, sent.size)
             assertFalse(writer.own.value.offline)
-            assertEquals(listOf(OFFLINE_MESSAGE), messages, "said once")
+            assertEquals(listOf(TAGGED_COFFEE, OFFLINE_MESSAGE), messages, "said once")
         }
 
     @Test
@@ -199,7 +206,7 @@ class WriteControllerTest {
 
             assertEquals(emptyList(), writer.own.value.tags)
             assertEquals(emptyList(), store.outbox)
-            assertEquals(listOf("Couldn't add the tag “coffee”: label: at most 20 characters"), messages)
+            assertEquals(listOf(TAGGED_COFFEE, "Couldn't add the tag “coffee”: label: at most 20 characters"), messages)
         }
 
     @Test
@@ -561,5 +568,134 @@ class WriteControllerTest {
             runCurrent()
 
             assertEquals(listOf(OSM), phone.data.saved.map { it.place })
+        }
+
+    @Test
+    fun undoTakesATagBackAndPutsARemovedOneBack() =
+        runTest {
+            signedIn()
+            val writer = controller()
+
+            writer.tag(target, "coffee")
+            runCurrent()
+            assertEquals("Undo", actions.last().actionLabel)
+            actions.last().action!!.invoke()
+            runCurrent()
+            assertEquals(listOf("tag($OSM, coffee)", "untag($OSM, coffee)"), sent)
+            assertEquals(emptyList(), writer.own.value.tags)
+
+            writer.untag(target, setOf(OSM), "cake")
+            runCurrent()
+            assertEquals("Removed your tag “cake”.", messages.last())
+            actions.last().action!!.invoke()
+            runCurrent()
+            assertEquals(listOf("untag($OSM, cake)", "tag($OSM, cake)"), sent.takeLast(2))
+        }
+
+    @Test
+    fun undoTakesAListChangeBack() =
+        runTest {
+            writes.scans = mapOf(false to ListScan(listOf(coffeeList), emptyList()), true to ListScan(emptyList(), emptyList()))
+            signedIn()
+            val writer = controller()
+
+            writer.addToList(target, coffeeList)
+            runCurrent()
+            assertEquals("Added to “Coffee”.", messages.last())
+            actions.last().action!!.invoke()
+            runCurrent()
+
+            assertEquals(
+                listOf("editList(${coffeeList.uri}, $OSM, remove=false)", "editList(${coffeeList.uri}, $OSM, remove=true)"),
+                sent,
+            )
+            assertEquals(
+                listOf("geo:1,2"),
+                writer.own.value.lists
+                    .single()
+                    .items,
+            )
+        }
+
+    @Test
+    fun aBusyHomeserverIsNotCalledOfflineAndTryNowSendsAgain() =
+        runTest {
+            signedIn()
+            val writer = controller()
+            writes.failures += CoreFailure.Network("429 Too Many Requests", busy = true)
+
+            writer.save(target)
+            runCurrent()
+
+            assertEquals(listOf(BUSY_MESSAGE), messages)
+            assertTrue(writer.own.value.busy)
+            assertEquals("Try now", actions.last().actionLabel)
+            actions.last().action!!.invoke()
+            runCurrent()
+            assertEquals(listOf("save($OSM)", "save($OSM)"), sent, "sent again at once, not after the wait")
+            assertEquals(emptyList(), store.outbox)
+            assertFalse(writer.own.value.busy)
+        }
+
+    @Test
+    fun theWaitingWriteStaysUntilTheUserGoesBackFromTheSignIn() =
+        runTest {
+            account.value = AccountState.SignedOut()
+            val writer = controller()
+            writer.signInFirst(target, WriteIntent.Post)
+
+            // The account page leaving the screen (activity recreated) changes nothing here; only Back does.
+            account.value = AccountState.SigningIn(link = "pubkyauth://x")
+            runCurrent()
+            assertEquals(SignInFirst(target, WriteIntent.Post), writer.signInFirst.value)
+
+            writer.leftSignIn()
+            assertNull(writer.signInFirst.value)
+        }
+
+    @Test
+    fun goingBackAfterSigningInKeepsTheWriteForTheApp() =
+        runTest {
+            account.value = AccountState.SignedOut()
+            val writer = controller()
+            writer.signInFirst(target, WriteIntent.Tag)
+            signedIn()
+            runCurrent()
+
+            writer.leftSignIn()
+
+            assertEquals(SignInFirst(target, WriteIntent.Tag), writer.takeSignInFirst())
+        }
+
+    @Test
+    fun theUserIsToldOnceOnThisPhoneThatTagsArePublic() =
+        runTest {
+            signedIn()
+            val first = controller()
+            assertFalse(first.publicTagsExplained.value)
+
+            first.publicTagsExplained()
+            runCurrent()
+
+            assertTrue(first.publicTagsExplained.value)
+            assertEquals(setOf(PUBLIC_TAGS_EXPLAINED), phone.flags)
+            assertTrue(controller().publicTagsExplained.value, "kept on the phone for the next start")
+        }
+
+    @Test
+    fun aListWhosePostCouldNotBeReadStaysAsLastKnown() =
+        runTest {
+            store.stored = listOf(coffeeList)
+            writes.scans =
+                mapOf(
+                    false to ListScan(emptyList(), emptyList(), unreadPostIds = listOf("L1")),
+                    true to ListScan(emptyList(), emptyList()),
+                )
+            signedIn()
+            val writer = controller()
+
+            assertEquals(listOf(coffeeList), writer.own.value.lists)
+            assertEquals(listOf(coffeeList), store.stored)
+            assertFalse(writer.own.value.listsLoaded, "the page says the lists may be out of date")
         }
 }

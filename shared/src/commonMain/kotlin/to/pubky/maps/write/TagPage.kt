@@ -11,18 +11,23 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.InputChip
+import androidx.compose.material3.InputChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
+import to.pubky.maps.ui.AppIcons
 
 /** What the tag page shows: the user's own tags on the place (some maybe not sent yet) and labels to add with one tap. */
 data class TagPageState(
@@ -31,12 +36,27 @@ data class TagPageState(
     val suggestions: List<String>,
     /** What the user is typing. */
     val text: String = "",
+    /** Writes wait for the homeserver (no connection, or it is busy): pending tags say so. */
+    val waiting: Boolean = false,
+    /** The homeserver was reached but is busy (429, 5xx). */
+    val busy: Boolean = false,
 )
 
+/** How a tag that is not sent yet is described: on screen beside the clock, and to screen readers. */
+internal fun pendingText(
+    waiting: Boolean,
+    busy: Boolean,
+): String =
+    when {
+        waiting && busy -> "Waiting: your homeserver is busy"
+        waiting -> "Waiting for a connection"
+        else -> "Sending…"
+    }
+
 /**
- * Tag a place: one tap on a suggestion tags it, a tap on one of the user's own tags removes it,
- * and the field adds any word as a label (folded to the spec's rules, shown before adding). Tags
- * are public, which the page says first.
+ * Tag a place: one tap on a suggestion tags it, the × on one of the user's own tags removes it, and
+ * the field adds any word as a label (folded to the spec's rules, shown before adding). Every tap is
+ * sent at once, which the Public notice at the top says; a snackbar offers Undo.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -45,12 +65,12 @@ fun TagPage(
     onTextChange: (String) -> Unit,
     onAdd: (String) -> Unit,
     onRemove: (String) -> Unit,
+    onRetry: () -> Unit,
     onClose: () -> Unit,
+    snackbarHostState: SnackbarHostState? = null,
 ) {
-    WritePage(title = "Tag this place", place = state.placeName, onClose = onClose, action = {
-        TextButton(onClick = onClose) { Text("Done") }
-    }) {
-        KeptNote(Kept.Public)
+    WritePage(title = "Tag this place", place = state.placeName, onClose = onClose, snackbarHostState = snackbarHostState) {
+        KeptNote(Kept.Public, more = "Each tap is sent at once.")
         val label = state.text.takeIf { it.isNotBlank() }?.let(::tagLabel)
         val valid = (label as? LabelResult.Valid)?.label
         OutlinedTextField(
@@ -79,20 +99,38 @@ fun TagPage(
             WriteSection("Your tags (tap to remove)") {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     state.mine.forEach { tag ->
-                        FilterChip(
-                            selected = true,
+                        val pending = if (tag.pending) pendingText(state.waiting, state.busy) else null
+                        InputChip(
+                            selected = false,
                             onClick = { onRemove(tag.label) },
                             label = { Text(tag.label) },
-                            leadingIcon = {
+                            leadingIcon =
+                                if (tag.pending) {
+                                    {
+                                        Icon(
+                                            WriteIcons.Pending,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(InputChipDefaults.IconSize),
+                                        )
+                                    }
+                                } else {
+                                    null
+                                },
+                            trailingIcon = {
                                 Icon(
-                                    if (tag.pending) WriteIcons.Pending else WriteIcons.Check,
-                                    contentDescription = if (tag.pending) "Not sent yet" else null,
-                                    modifier = Modifier.size(FilterChipDefaults.IconSize),
+                                    AppIcons.Close,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(InputChipDefaults.IconSize),
                                 )
                             },
+                            modifier =
+                                Modifier.semantics {
+                                    contentDescription = listOfNotNull("Remove your tag ${tag.label}", pending).joinToString(". ")
+                                },
                         )
                     }
                 }
+                if (state.mine.any { it.pending }) PendingLegend(state.waiting, state.busy, onRetry)
             }
         }
         if (state.suggestions.isNotEmpty()) {
@@ -104,19 +142,29 @@ fun TagPage(
                 }
             }
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                WriteIcons.Tag,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(16.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                "Tags help others find places on Pubky. Each tap is sent at once.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        NoteText("Tags help others find places on Pubky.")
+    }
+}
+
+/** What the clock on a tag means, and a way to try again now when the writes wait. */
+@Composable
+private fun PendingLegend(
+    waiting: Boolean,
+    busy: Boolean,
+    onRetry: () -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            WriteIcons.Pending,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.width(8.dp))
+        NoteText(
+            if (waiting) "${pendingText(true, busy)}: sent when it can be." else "Sending…",
+            Modifier.weight(1f),
+        )
+        if (waiting) TextButton(onClick = onRetry) { Text("Try now") }
     }
 }

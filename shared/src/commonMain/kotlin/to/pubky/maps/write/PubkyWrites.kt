@@ -108,4 +108,6 @@ data class BuiltPhoto(
 data class ListScan(
     val lists: List<OwnList>,
     val otherPostIds: List<String>,
+    /** Posts whose folder could not be read now: what was known of them stays, the next scan tries again. */
+    val unreadPostIds: List<String> = emptyList(),
 )

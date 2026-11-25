@@ -122,6 +122,9 @@ pub struct CollectionScan {
     /// Posts that were read and are not lists. A post never changes its kind, so passing
     /// these back as `skip` saves reading them again.
     pub other_post_ids: Vec<String>,
+    /// Posts whose folder could not be read now (a timeout, a busy homeserver): the app keeps
+    /// what it knew of them, and the next scan reads them again.
+    pub unread_post_ids: Vec<String>,
 }
 
 /// At most this many posts are looked at by one list scan.
@@ -421,6 +424,61 @@ async fn list_own(
         builder = builder.cursor(cursor);
     }
     Ok(to_page(builder.send().await?))
+}
+
+/// The scan's result from each folder's read: lists, posts known not to be lists, and folders
+/// whose read failed (`unread_post_ids`), so one slow or failing read does not cost the whole
+/// scan and the next scan tries those again. A session that ended fails the scan.
+fn collection_scan(
+    root: Root,
+    author: &str,
+    private: bool,
+    reads: Vec<(String, Result<Option<(String, String)>, CoreError>)>,
+) -> Result<CollectionScan, CoreError> {
+    let mut collections = Vec::new();
+    let mut other_post_ids = Vec::new();
+    let mut unread_post_ids = Vec::new();
+    for (id, read) in reads {
+        let found = match read {
+            Ok(found) => found,
+            Err(error @ (CoreError::Auth { .. } | CoreError::NotSignedIn)) => return Err(error),
+            Err(_) => {
+                unread_post_ids.push(id);
+                continue;
+            }
+        };
+        let Some((edit_id, json)) = found else {
+            continue;
+        };
+        match objects::collection_of(&json) {
+            Some(content) => collections.push(OwnCollection {
+                uri: objects::post_uri_in(root, author, &id),
+                id,
+                edit_id,
+                private,
+                name: content.name,
+                description: content.description,
+                items: content
+                    .items
+                    .into_iter()
+                    .map(|item| CollectionItem {
+                        uri: item.uri,
+                        note: item.note,
+                    })
+                    .collect(),
+            }),
+            None if objects::post_kind_of(&json).is_some() => other_post_ids.push(id),
+            None => {}
+        }
+    }
+    collections.sort_by(|a, b| b.id.cmp(&a.id));
+    other_post_ids.sort();
+    unread_post_ids.sort();
+    Ok(CollectionScan {
+        collections,
+        other_post_ids,
+        unread_post_ids,
+    })
 }
 
 /// The newest version of post `id` under `root` as `(editId, JSON)`, `None` when the folder
@@ -1024,55 +1082,23 @@ impl PubkyMapsCore {
                 options.cursor = page.next_cursor;
             }
             ids.truncate(MAX_SCANNED_POSTS);
-            let mut collections = Vec::new();
-            let mut other_post_ids = Vec::new();
+            let mut reads_done = Vec::with_capacity(ids.len());
             for chunk in ids.chunks(PARALLEL_POST_READS) {
                 let mut reads = tokio::task::JoinSet::new();
                 for id in chunk {
                     let storage = storage.clone();
                     let id = id.clone();
                     reads.spawn(async move {
-                        newest_post_version(&storage, root, &id)
-                            .await
-                            .map(|found| (id, found))
+                        let found = newest_post_version(&storage, root, &id).await;
+                        (id, found)
                     });
                 }
                 while let Some(joined) = reads.join_next().await {
-                    let (id, found) =
-                        joined.map_err(|_| CoreError::internal("a list read panicked"))??;
-                    let Some((edit_id, json)) = found else {
-                        continue;
-                    };
-                    match objects::collection_of(&json) {
-                        Some(content) => collections.push(OwnCollection {
-                            uri: objects::post_uri_in(root, &author, &id),
-                            id,
-                            edit_id,
-                            private,
-                            name: content.name,
-                            description: content.description,
-                            items: content
-                                .items
-                                .into_iter()
-                                .map(|item| CollectionItem {
-                                    uri: item.uri,
-                                    note: item.note,
-                                })
-                                .collect(),
-                        }),
-                        None if objects::post_kind_of(&json).is_some() => {
-                            other_post_ids.push(id);
-                        }
-                        None => {}
-                    }
+                    reads_done
+                        .push(joined.map_err(|_| CoreError::internal("a list read panicked"))?);
                 }
             }
-            collections.sort_by(|a, b| b.id.cmp(&a.id));
-            other_post_ids.sort();
-            Ok(CollectionScan {
-                collections,
-                other_post_ids,
-            })
+            collection_scan(root, &author, private, reads_done)
         })
         .await
     }
@@ -1150,6 +1176,66 @@ mod tests {
     use crate::auth::AuthFlowType;
     use crate::config::default_core_config;
     use std::time::Duration;
+
+    const SCAN_AUTHOR: &str = "8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo";
+
+    #[test]
+    fn a_failed_post_read_is_left_for_the_next_scan() {
+        let list = objects::build_collection(
+            SCAN_AUTHOR.into(),
+            "Coffee".into(),
+            None,
+            vec![CollectionItem {
+                uri: "https://www.openstreetmap.org/node/1".into(),
+                note: None,
+            }],
+        )
+        .unwrap();
+        let review = objects::build_review(
+            SCAN_AUTHOR.into(),
+            "https://www.openstreetmap.org/node/1".into(),
+            "Nice".into(),
+        )
+        .unwrap();
+        let reads = vec![
+            (
+                list.id.clone(),
+                Ok(Some((list.edit_id.clone().unwrap(), list.json.clone()))),
+            ),
+            (
+                review.id.clone(),
+                Ok(Some((review.edit_id.clone().unwrap(), review.json.clone()))),
+            ),
+            (
+                "0034A0000001".to_string(),
+                Err(CoreError::Network {
+                    reason: "timed out".into(),
+                }),
+            ),
+            ("0034A0000002".to_string(), Ok(None)),
+        ];
+
+        let scan = collection_scan(Root::Pub, SCAN_AUTHOR, false, reads).unwrap();
+
+        assert_eq!(scan.collections.len(), 1);
+        assert_eq!(scan.collections[0].name, "Coffee");
+        assert_eq!(scan.other_post_ids, vec![review.id]);
+        assert_eq!(scan.unread_post_ids, vec!["0034A0000001".to_string()]);
+    }
+
+    #[test]
+    fn an_ended_session_fails_the_scan() {
+        let reads = vec![(
+            "0034A0000001".to_string(),
+            Err(CoreError::Auth {
+                reason: "expired".into(),
+            }),
+        )];
+        assert!(matches!(
+            collection_scan(Root::Pub, SCAN_AUTHOR, false, reads),
+            Err(CoreError::Auth { .. })
+        ));
+    }
 
     /// Unreachable local ports: no unit test touches the network.
     const DEAD_RELAY: &str = "http://127.0.0.1:9/inbox";
