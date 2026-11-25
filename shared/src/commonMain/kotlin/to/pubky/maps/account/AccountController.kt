@@ -3,6 +3,7 @@ package to.pubky.maps.account
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
@@ -142,6 +143,12 @@ class AccountController(
         actions.trySend(action)
     }
 
+    /** Jobs beside the queue hand an unexpected exception to the queue instead of crashing the app. */
+    private val guard =
+        CoroutineExceptionHandler { _, e ->
+            if (e is Exception) enqueue { failed(e) } else throw e
+        }
+
     private suspend fun <T> io(block: () -> T): T = withContext(io) { block() }
 
     /** Runs a core call beside the queue; any failure becomes a [CoreFailure]. */
@@ -176,6 +183,11 @@ class AccountController(
                 core?.cancelSignIn()
                 mutableState.value =
                     AccountState.SignedOut(notice = "The sign-in could not be stored on this phone ($what). Please try again.")
+            }
+
+            is AccountState.SignedIn -> {
+                // Signed in still; only the step that failed ends (a cache that could not be written).
+                mutableState.value = (state.value as AccountState.SignedIn).copy(refreshing = false, signingOut = false)
             }
 
             else -> {}
@@ -250,7 +262,7 @@ class AccountController(
             val signingOut = ++session
             mutableState.value = signedIn.copy(signingOut = true, refreshing = false)
             val installed = sessionInstalled
-            scope.launch {
+            scope.launch(guard) {
                 val revoked =
                     try {
                         installed && call { core.signOut() }
@@ -355,7 +367,7 @@ class AccountController(
         val core = core ?: return
         val flow = link ?: return
         waitJob =
-            scope.launch {
+            scope.launch(guard) {
                 val wait = coroutineContext[Job]
                 // A result handed out while the last wait was being cancelled installed its session
                 // without reaching us: take it from the core.
@@ -402,7 +414,7 @@ class AccountController(
     private fun revokeStale(core: PubkyCore) {
         if (state.value is AccountState.SignedIn) return
         revokeJob =
-            scope.launch {
+            scope.launch(guard) {
                 try {
                     call { core.signOut() }
                 } catch (_: CoreFailure) {
@@ -478,9 +490,11 @@ class AccountController(
         val core = core ?: return
         val current = session
         restoreJob =
-            scope.launch {
-                val secret = secrets.read(SecretStore.SESSION) ?: return@launch
+            scope.launch(guard) {
                 try {
+                    // A secret store that fails now (Keystore busy, disk error) is retried like a
+                    // homeserver that does not answer.
+                    val secret = call { secrets.read(SecretStore.SESSION) } ?: return@launch
                     val restoredSession = call { core.restoreSession(secret) }
                     enqueue { if (session == current) restored(restoredSession) }
                 } catch (_: CoreFailure.Auth) {
@@ -523,7 +537,7 @@ class AccountController(
         retries++
         retryJob?.cancel()
         retryJob =
-            scope.launch {
+            scope.launch(guard) {
                 delay(wait)
                 enqueue { reconnect() }
             }
@@ -543,7 +557,7 @@ class AccountController(
         val publicKey = signedIn.user.publicKey
         val current = session
         refreshJob =
-            scope.launch {
+            scope.launch(guard) {
                 try {
                     val loaded = call { AccountLoader(core, now).load(publicKey) }
                     enqueue { if (session == current) refreshed(loaded) }

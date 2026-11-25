@@ -121,7 +121,13 @@ class MemorySecretStore : SecretStore {
     /** Thrown by [write], as by a broken Keystore. */
     var writeFailure: Exception? = null
 
-    override suspend fun read(name: String): String? = values[name]
+    /** Thrown by [read], as by a Keystore that does not answer. */
+    var readFailure: Exception? = null
+
+    override suspend fun read(name: String): String? {
+        readFailure?.let { throw it }
+        return values[name]
+    }
 
     override suspend fun write(
         name: String,
@@ -145,7 +151,11 @@ class MemoryAccountCache : AccountCache {
         if (stored?.publicKey != publicKey) stored = CachedAccount(publicKey, null, null, emptyList(), emptyList())
     }
 
+    /** Thrown by [replace], as by a full or locked database. */
+    var replaceFailure: Exception? = null
+
     override fun replace(account: CachedAccount) {
+        replaceFailure?.let { throw it }
         stored = account
     }
 

@@ -463,6 +463,56 @@ class AccountControllerTest {
         }
 
     @Test
+    fun aSecretStoreThatFailsDuringARestoreRetryIsRetriedInsteadOfCrashing() =
+        runTest {
+            secrets.values[SecretStore.SESSION] = "grant-secret"
+            cache.stored = CachedAccount(USER, "Ada", 500, emptyList(), emptyList())
+            val account = controller()
+            account.start()
+            account.onForeground()
+            runCurrent()
+            assertEquals(Connection.Offline, (account.state.value as AccountState.SignedIn).connection)
+
+            // The retry's read of the stored session fails (the Keystore does not answer).
+            secrets.readFailure = IllegalStateException("keystore busy")
+            advanceTimeBy(16.seconds)
+            runCurrent()
+            assertEquals(Connection.Offline, (account.state.value as AccountState.SignedIn).connection)
+            assertEquals(setOf(ServicePart.Homeserver), health.missing.value)
+            assertEquals("grant-secret", secrets.values[SecretStore.SESSION], "the session is kept")
+
+            // The next retry reads it and the homeserver answers.
+            secrets.readFailure = null
+            core.restore = { AccountSession(USER, "homeserver") }
+            advanceTimeBy(31.seconds)
+            runCurrent()
+            assertEquals(Connection.Online, (account.state.value as AccountState.SignedIn).connection)
+        }
+
+    @Test
+    fun aCacheThatCannotBeWrittenAfterARefreshEndsTheRefresh() =
+        runTest {
+            secrets.values[SecretStore.SESSION] = "grant-secret"
+            cache.stored = CachedAccount(USER, "Ada", 500, emptyList(), emptyList())
+            core.restore = { AccountSession(USER, "homeserver") }
+            profile(USER, "Ada L.")
+            cache.replaceFailure = IllegalStateException("database is locked")
+            val account = controller()
+
+            account.start()
+            runCurrent()
+
+            val state = assertIs<AccountState.SignedIn>(account.state.value)
+            assertEquals(false, state.refreshing, "Refresh works again")
+            assertEquals("Ada", state.user.name, "what the phone has is shown")
+            // And a later refresh that can write goes through.
+            cache.replaceFailure = null
+            account.refresh()
+            runCurrent()
+            assertEquals("Ada L.", (account.state.value as AccountState.SignedIn).user.name)
+        }
+
+    @Test
     fun linksAndSecretsNeverShowInLogs() {
         val link = FakePubkyCore().link(1)
         assertEquals("SignInLink(<redacted>)", link.toString())
