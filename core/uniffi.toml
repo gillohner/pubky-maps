@@ -1,0 +1,5 @@
+[bindings.kotlin]
+package_name = "to.pubky.maps.core"
+cdylib_name = "pubky_maps_core"
+# Uses Android's SystemCleaner on API 34+ and JNA's cleaner below that; needs androidx.annotation.
+android = true

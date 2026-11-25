@@ -1,0 +1,11 @@
+[package]
+name = "uniffi-bindgen"
+version = "0.1.0"
+description = "UniFFI bindings generator for the Pubky Maps core"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+uniffi = { version = "0.32.2", features = ["cli"] }
