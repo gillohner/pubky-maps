@@ -32,7 +32,7 @@ fun LicencesRoute(
 }
 
 /** The AboutLibraries list in [json]; an empty list when it cannot be read. */
-internal fun parseLicences(json: String): Libs = Libs.Builder().withJson(json).build()
+fun parseLicences(json: String): Libs = Libs.Builder().withJson(json).build()
 
 /** Every library bundled in the app, with its licence; a tap shows the licence text. */
 @OptIn(ExperimentalMaterial3Api::class)
