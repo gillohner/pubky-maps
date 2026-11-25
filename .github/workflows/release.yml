@@ -5,6 +5,10 @@ name: release
 # - a manual run builds any branch and replaces the `dev` pre-release, which is how changes to the
 #   release are tried before they merge. It never touches `edge` or a version.
 #
+# After publishing, install-published downloads the APK from the release it just published, checks
+# its signing certificate (release/release-cert.sha256; dev: release-cert-dev.sha256) and the
+# release's SHA256SUMS, installs it on the API 35 emulator and runs the smoke test on it.
+#
 # Each release has the signed APK (`direct`, with the in-app updater), the signed .aab for app stores
 # (`store`, no updater), SHA256SUMS, and the signed update feed the APK reads:
 # update-edge.json, update.json (stable, also at releases/latest/download/update.json) or update-dev.json.
@@ -125,8 +129,11 @@ jobs:
           CHANNEL: ${{ needs.meta.outputs.channel }}
         run: |
           mkdir -p dist
-          # Edge and stable APKs must carry the release certificate the installed apps have.
-          if [ "$CHANNEL" != dev ]; then export EXPECTED_CERT_SHA256; EXPECTED_CERT_SHA256=$(cat release/release-cert.sha256); fi
+          # Edge and stable APKs must carry the release certificate the installed apps have; dev APKs
+          # the dev certificate.
+          cert_file=release/release-cert.sha256
+          [ "$CHANNEL" != dev ] || cert_file=release/release-cert-dev.sha256
+          export EXPECTED_CERT_SHA256; EXPECTED_CERT_SHA256=$(cat "$cert_file")
           bash scripts/release/sign.sh unsigned/app.apk "dist/pubky-maps-$VERSION_NAME.apk" \
             unsigned/app.aab "dist/pubky-maps-$VERSION_NAME.aab"
       - name: the APK is the build it should be
@@ -216,3 +223,87 @@ jobs:
             stable) title="Pubky Maps $VERSION_NAME" ;;
           esac
           bash scripts/release/publish.sh "$TAG" "$title" "$RUNNER_TEMP/notes.md" dist "$FEED"
+
+  # The APK people download: from the release just published, not from the build artefacts.
+  install-published:
+    needs: [meta, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CHANNEL: ${{ needs.meta.outputs.channel }}
+      TAG: ${{ needs.meta.outputs.release_tag }}
+      VERSION_NAME: ${{ needs.meta.outputs.version_name }}
+      API_LEVEL: 35
+      TARGET: google_apis
+      PROFILE: pixel_6
+      EMULATOR_OPTIONS: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none -no-audio
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: the published APK, its checksum and its certificate
+        shell: bash
+        run: |
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
+          apk="pubky-maps-$VERSION_NAME.apk"
+          mkdir -p published
+          curl -fsSL --retry 5 --retry-all-errors -o "published/$apk" "$base/$apk"
+          curl -fsSL --retry 5 --retry-all-errors -o published/SHA256SUMS "$base/SHA256SUMS"
+          (cd published && grep -F " $apk" SHA256SUMS | sha256sum -c -)
+          expected=$(cat release/release-cert.sha256)
+          [ "$CHANNEL" != dev ] || expected=$(cat release/release-cert-dev.sha256)
+          bt=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          cert=$("$bt/apksigner" verify --print-certs "published/$apk" | sed -nE 's/^.*[Ss]igner.*certificate SHA-256 digest: ([0-9a-f]{64})$/\1/p' | head -1)
+          echo "certificate SHA-256: $cert"
+          if [ "$cert" != "$expected" ]; then
+            echo "::error::the published APK is signed with '$cert', not the $CHANNEL certificate $expected"
+            exit 1
+          fi
+          mv "published/$apk" published/app.apk
+      - name: enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - id: month
+        run: echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
+      # The same AVD and boot snapshot as android.yml's emulator jobs.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-${{ env.API_LEVEL }}-${{ env.TARGET }}-${{ env.PROFILE }}-x86_64-${{ steps.month.outputs.month }}
+      - name: create the AVD and its snapshot
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: ${{ env.API_LEVEL }}
+          target: ${{ env.TARGET }}
+          arch: x86_64
+          profile: ${{ env.PROFILE }}
+          force-avd-creation: false
+          ram-size: 4096M
+          emulator-options: ${{ env.EMULATOR_OPTIONS }}
+          disable-animations: false
+          script: echo "AVD snapshot created"
+      - name: install and smoke-test the published APK
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: ${{ env.API_LEVEL }}
+          target: ${{ env.TARGET }}
+          arch: x86_64
+          profile: ${{ env.PROFILE }}
+          force-avd-creation: false
+          ram-size: 4096M
+          emulator-options: -no-snapshot-save ${{ env.EMULATOR_OPTIONS }}
+          disable-animations: true
+          script: bash scripts/ci/emulator-smoke.sh published/app.apk /tmp/published
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: install-published-api${{ env.API_LEVEL }}
+          path: /tmp/published/
+          if-no-files-found: ignore
+          retention-days: 14
