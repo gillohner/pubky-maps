@@ -27,6 +27,12 @@ import to.pubky.maps.settings.LicencesScreen
 import to.pubky.maps.settings.SettingsScreen
 import to.pubky.maps.settings.parseLicences
 import to.pubky.maps.ui.PubkyMapsTheme
+import to.pubky.maps.update.AvailableUpdate
+import to.pubky.maps.update.UpdateChannel
+import to.pubky.maps.update.UpdateDialog
+import to.pubky.maps.update.UpdateDialogHost
+import to.pubky.maps.update.UpdateStatus
+import to.pubky.maps.update.UpdatesUiState
 
 /**
  * Screenshots of every screen on a phone (412x915 dp) and a tablet (1280x800 dp), light and dark.
@@ -92,16 +98,32 @@ class ScreenshotTest {
     @Composable
     private fun Settings() {
         SettingsScreen(
-            appInfo = AppInfo(versionName = "0.1.0", versionCode = 1),
+            appInfo = AppInfo(versionName = "0.1.0-edge.11", versionCode = 1_000_011),
             serverConfig = ServerDefaults.config,
             onOpenLicences = {},
             onBack = {},
+            updates =
+                UpdatesUiState(
+                    channel = UpdateChannel.Edge,
+                    autoCheck = true,
+                    status = UpdateStatus.UpToDate("0.1.0-edge.11"),
+                    dialog = null,
+                ),
         )
     }
 
     @Composable
     private fun Licences() {
         LicencesScreen(libraries = parseLicences(SAMPLE_LICENCES_JSON), onBack = {})
+    }
+
+    private val update = AvailableUpdate(versionCode = 1_000_012, versionName = "0.1.0-edge.12", sizeBytes = 14_236_512)
+
+    /** The update dialog over the map, as it shows after the start-up check. */
+    @Composable
+    private fun Update(dialog: UpdateDialog = UpdateDialog.Offer(update, installedVersionName = "0.1.0-edge.11")) {
+        Map()
+        UpdateDialogHost(dialog = dialog, onInstall = {}, onOpenSettings = {}, onCancelDownload = {}, onDismiss = {})
     }
 
     @Test
@@ -142,4 +164,60 @@ class ScreenshotTest {
 
     @Test
     fun licencesTabletDark() = capture("licences", Device.Tablet, dark = true) { Licences() }
+
+    @Test
+    fun updatePhoneLight() = capture("update", Device.Phone, dark = false) { Update() }
+
+    @Test
+    fun updatePhoneDark() = capture("update", Device.Phone, dark = true) { Update() }
+
+    @Test
+    fun updateTabletLight() = capture("update", Device.Tablet, dark = false) { Update() }
+
+    @Test
+    fun updateTabletDark() = capture("update", Device.Tablet, dark = true) { Update() }
+
+    private val downloading = UpdateDialog.Downloading(update, downloadedBytes = 6_100_000)
+    private val permission = UpdateDialog.NeedsPermission(update)
+    private val refused =
+        UpdateDialog.NotInstalled(
+            "The downloaded file is not the one the signed update information names (its SHA-256 differs). " +
+                "Nothing was installed.",
+        )
+
+    @Test
+    fun updateDownloadingPhoneLight() = capture("update-downloading", Device.Phone, dark = false) { Update(downloading) }
+
+    @Test
+    fun updateDownloadingPhoneDark() = capture("update-downloading", Device.Phone, dark = true) { Update(downloading) }
+
+    @Test
+    fun updateDownloadingTabletLight() = capture("update-downloading", Device.Tablet, dark = false) { Update(downloading) }
+
+    @Test
+    fun updateDownloadingTabletDark() = capture("update-downloading", Device.Tablet, dark = true) { Update(downloading) }
+
+    @Test
+    fun updatePermissionPhoneLight() = capture("update-permission", Device.Phone, dark = false) { Update(permission) }
+
+    @Test
+    fun updatePermissionPhoneDark() = capture("update-permission", Device.Phone, dark = true) { Update(permission) }
+
+    @Test
+    fun updatePermissionTabletLight() = capture("update-permission", Device.Tablet, dark = false) { Update(permission) }
+
+    @Test
+    fun updatePermissionTabletDark() = capture("update-permission", Device.Tablet, dark = true) { Update(permission) }
+
+    @Test
+    fun updateRefusedPhoneLight() = capture("update-refused", Device.Phone, dark = false) { Update(refused) }
+
+    @Test
+    fun updateRefusedPhoneDark() = capture("update-refused", Device.Phone, dark = true) { Update(refused) }
+
+    @Test
+    fun updateRefusedTabletLight() = capture("update-refused", Device.Tablet, dark = false) { Update(refused) }
+
+    @Test
+    fun updateRefusedTabletDark() = capture("update-refused", Device.Tablet, dark = true) { Update(refused) }
 }

@@ -5,7 +5,8 @@ code also declares iOS targets, which are not built yet.
 
 The app shows a full-screen online map in light or dark (following the system), the user's location
 on request, a compass when the map is rotated, and a Settings screen with an About section (version,
-licence, map data credits and the open-source licences of the bundled libraries).
+updates, licence, map data credits and the open-source licences of the bundled libraries). The APK
+from GitHub releases updates itself from a signed update feed.
 
 ## How it is built
 
@@ -28,11 +29,15 @@ Requirements: JDK 17 or newer to run Gradle, and the Android SDK (`ANDROID_HOME`
 
 ```sh
 ./gradlew check                  # unit tests, screenshot tests, Android lint, ktlint
-./gradlew verifyRoborazziDebug   # compare the screens with the reference screenshots
-./gradlew recordRoborazziDebug   # write new reference screenshots after a UI change
-./gradlew assembleDebug          # androidApp/build/outputs/apk/debug/androidApp-debug.apk
-./gradlew ktlintFormat           # fix formatting
+./gradlew verifyRoborazziDirectDebug   # compare the screens with the reference screenshots
+./gradlew recordRoborazziDirectDebug   # write new reference screenshots after a UI change
+./gradlew assembleDirectDebug          # androidApp/build/outputs/apk/direct/debug/androidApp-direct-debug.apk
+./gradlew ktlintFormat                 # fix formatting
 ```
+
+The app has two flavours: `direct`, the APK published on GitHub, with the in-app updater; and
+`store`, the bundle for app stores, which update the app themselves (no updater, no
+`REQUEST_INSTALL_PACKAGES`). Release builds are shrunk with R8 and signed outside Gradle.
 
 The iOS targets compile only on macOS; on Linux Gradle skips them.
 
@@ -41,16 +46,41 @@ The iOS targets compile only on macOS; on Linux Gradle skips them.
 Install the debug APK on a phone or emulator (Android 8.0, API 26, or newer):
 
 ```sh
-./gradlew installDebug
+./gradlew installDirectDebug
 ```
 
 Every CI run also uploads the debug APK as an artifact (`pubky-maps-debug-apk`).
+
+## Releases and updates
+
+[GitHub releases](https://github.com/gillohner/pubky-maps/releases) (`.github/workflows/release.yml`):
+
+- `edge`: a pre-release that every push to `main` replaces (versionName `<x.y.z>-edge.<run>`);
+- `v<x.y.z>`: a release, made by pushing that tag; the tag must match `pubkymaps.version` in
+  `gradle.properties`;
+- `dev`: a pre-release from a manual run of the workflow on any branch, to try release changes. It is
+  signed with separate dev keys, so it cannot update an edge or stable install.
+
+Each has the signed APK, the signed `.aab`, `SHA256SUMS` and the signed update feed of its channel
+(`update-edge.json`, `update.json`, `update-dev.json`). versionCodes only grow: see
+`scripts/release/version.py`. Edge and stable APKs are signed with the release key whose certificate
+SHA-256 is in `release/release-cert.sha256`; compare it with `apksigner verify --print-certs`.
+
+The APK checks the feed of the channel it was built for when it starts (at most once a day, unless
+turned off in Settings → About) and on "Check for updates". The feed is signed with Ed25519; the app
+accepts it only with a valid signature from the key in `release/update-feed-key.pub`, for its own
+package and channel, and only for a newer versionCode. It then downloads the APK, checks its size and
+SHA-256 against the feed and its package and versionCode, checks it again, and hands it to Android's
+installer, which installs it only when it is signed with the same release key. A feed or file that
+fails a check is never installed, and the app says why. The feed addresses are a server list like
+every other server (`ServerDefaults.updateFeeds`): any mirror can serve the same signed files.
 
 ## Screenshots
 
 `androidApp/screenshots/` holds the reference screenshots of every screen: phone (412x915 dp) and
 tablet (1280x800 dp), light and dark. The JVM cannot draw the MapLibre map, so the map screen shows a
-flat placeholder under its controls there; the emulator smoke test in CI screenshots the real map.
+flat placeholder under its controls there; the emulator smoke test in CI screenshots the real map,
+and the update probe screenshots each step of an in-app update.
 
 ## Data sources and attribution
 

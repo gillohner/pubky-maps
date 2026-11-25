@@ -12,6 +12,8 @@ import to.pubky.maps.map.MapRoute
 import to.pubky.maps.settings.LicencesRoute
 import to.pubky.maps.settings.SettingsScreen
 import to.pubky.maps.ui.PubkyMapsTheme
+import to.pubky.maps.update.UpdateController
+import to.pubky.maps.update.UpdateDialogHost
 
 @Serializable
 private data object MapDestination
@@ -24,15 +26,18 @@ private data object LicencesDestination
 
 /**
  * The whole app: the map, and the settings on top of it. [loadLicences] returns the AboutLibraries
- * JSON of the bundled libraries.
+ * JSON of the bundled libraries. [updates] is the in-app updater, null in builds that an app store
+ * updates.
  */
 @Composable
 fun App(
     appInfo: AppInfo,
     serverConfigRepository: ServerConfigRepository,
     loadLicences: suspend () -> String,
+    updates: UpdateController? = null,
 ) {
     val serverConfig by serverConfigRepository.config.collectAsStateWithLifecycle()
+    val updatesState = updates?.state?.collectAsStateWithLifecycle()?.value
     PubkyMapsTheme {
         val navController = rememberNavController()
         NavHost(navController = navController, startDestination = MapDestination) {
@@ -48,11 +53,24 @@ fun App(
                     serverConfig = serverConfig,
                     onOpenLicences = { navController.navigate(LicencesDestination) { launchSingleTop = true } },
                     onBack = { navController.navigateUp() },
+                    updates = updatesState,
+                    onCheckForUpdates = { updates?.checkNow() },
+                    onAutoCheckUpdatesChange = { updates?.setAutoCheck(it) },
                 )
             }
             composable<LicencesDestination> {
                 LicencesRoute(loadLicences = loadLicences, onBack = { navController.navigateUp() })
             }
+        }
+        val dialog = updatesState?.dialog
+        if (updates != null && dialog != null) {
+            UpdateDialogHost(
+                dialog = dialog,
+                onInstall = updates::install,
+                onOpenSettings = updates::openInstallPermissionSettings,
+                onCancelDownload = updates::cancelDownload,
+                onDismiss = updates::dismissDialog,
+            )
         }
     }
 }

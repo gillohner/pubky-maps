@@ -1,0 +1,4 @@
+{
+  "feed": "{\"format\":1,\"app\":\"to.pubky.maps\",\"channel\":\"edge\",\"versionCode\":1000012,\"versionName\":\"0.1.0-edge.12\",\"minSdk\":26,\"published\":\"2026-11-25T03:53:25Z\",\"apk\":{\"url\":\"https://github.com/gillohner/pubky-maps/releases/download/edge/pubky-maps.apk\",\"size\":43,\"sha256\":\"569fcc89cf865b14eabfa6e52c955ebb641f9a0da1d623d939299664e09ac7aa\"}}",
+  "signature": "BlXW3YauJ+70A+RuFOa/cw/j3rsJIuuKf9G9/NCXIpNUwPNVqUIFjKU4IRVLsVQ0Y/m9UT1WOiX8ri/KyabyDA=="
+}

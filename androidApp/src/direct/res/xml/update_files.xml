@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Downloaded updates live in the app's cache, in updates/ (ApkUpdater). -->
+<paths>
+    <cache-path
+        name="updates"
+        path="updates/" />
+</paths>
