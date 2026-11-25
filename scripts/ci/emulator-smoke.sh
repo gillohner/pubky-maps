@@ -168,20 +168,18 @@ adb shell input tap $xy
 wait_for "Map style, light" 15 > /dev/null || fail "Server lists did not open"
 screenshot servers
 check_alive "servers"
-# One server list, and its Add server dialog (closed again with back).
+# One server list, and its Add server page.
 xy=$(wait_for "Map style, light" 10) || fail "no Map style, light row"
 adb shell input tap $xy
 xy=$(wait_for "Add server" 15) || fail "the Map style, light list did not open"
 screenshot server-list
 check_alive "server list"
 adb shell input tap $xy
-wait_for "Add a server" 15 > /dev/null || fail "the Add server dialog did not open"
+wait_for "Added at the end of Map style, light. Move it up to use it first." 15 > /dev/null || fail "the Add server page did not open"
 screenshot add-server
-check_alive "add server dialog"
+check_alive "add server page"
 adb shell input keyevent KEYCODE_BACK
-sleep 1
-if centre_of "$(dump_ui add-server-closed)" "Add a server" > /dev/null; then adb shell input keyevent KEYCODE_BACK; fi
-wait_for "Add server" 15 > /dev/null || fail "the Add server dialog did not close"
+wait_for "OpenFreeMap Liberty" 15 > /dev/null || fail "back from Add server did not return to the list"
 adb shell input keyevent KEYCODE_BACK
 wait_for "Map style, dark" 15 > /dev/null || fail "back from the server list did not return to Server lists"
 adb shell input keyevent KEYCODE_BACK

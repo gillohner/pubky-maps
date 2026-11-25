@@ -5,12 +5,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -19,7 +15,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -32,8 +27,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import to.pubky.maps.config.AppSettings
 import to.pubky.maps.config.ServerEntry
@@ -42,18 +35,18 @@ import to.pubky.maps.config.SynonymHosts
 import to.pubky.maps.ui.AppIcons
 
 /**
- * One service's servers in the order the app tries them: move, remove, add, and reset to the
- * defaults. [onUpdate] applies a change to the stored settings.
+ * One service's servers in the order the app tries them: move, remove, and reset to the defaults;
+ * [onAddServer] opens the page that adds one. [onUpdate] applies a change to the stored settings.
  */
 @Composable
 fun ServerListScreen(
     service: Service,
     settings: AppSettings,
     onUpdate: ((AppSettings) -> AppSettings) -> Unit,
+    onAddServer: () -> Unit,
     onBack: () -> Unit,
 ) {
     val list = settings.servers[service]
-    var adding by rememberSaveable { mutableStateOf(false) }
     var confirmingReset by rememberSaveable { mutableStateOf(false) }
     SettingsPage(title = service.title, onBack = onBack) {
         item { PageIntro("${service.description} The app tries them from the top.") }
@@ -77,7 +70,7 @@ fun ServerListScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.padding(16.dp),
             ) {
-                FilledTonalButton(onClick = { adding = true }) {
+                FilledTonalButton(onClick = onAddServer) {
                     Icon(AppIcons.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.size(8.dp))
                     Text("Add server")
@@ -88,19 +81,6 @@ fun ServerListScreen(
             }
         }
         item { PageIntro(SYNONYM_EXPLANATION) }
-    }
-    if (adding) {
-        AddServerDialog(
-            service = service,
-            check = { url, name -> settings.withServerAdded(service, url, name) },
-            onAdd = { url, name ->
-                adding = false
-                onUpdate { current ->
-                    (current.withServerAdded(service, url, name) as? AppSettings.AddServerResult.Added)?.settings ?: current
-                }
-            },
-            onDismiss = { adding = false },
-        )
     }
     if (confirmingReset) {
         AlertDialog(
@@ -194,60 +174,4 @@ private fun accessibilityAction(
 ) = CustomAccessibilityAction(label) {
     run()
     true
-}
-
-/**
- * Asks for a new server's address and an optional name. [check] says whether the address would be
- * accepted; the dialog shows its reason when not, and calls [onAdd] when it is.
- */
-@Composable
-fun AddServerDialog(
-    service: Service,
-    check: (url: String, name: String) -> AppSettings.AddServerResult,
-    onAdd: (url: String, name: String) -> Unit,
-    onDismiss: () -> Unit,
-    initialUrl: String = "https://",
-    initialError: String? = null,
-) {
-    var url by rememberSaveable { mutableStateOf(initialUrl) }
-    var name by rememberSaveable { mutableStateOf("") }
-    var error by rememberSaveable { mutableStateOf(initialError) }
-    val submit: () -> Unit = {
-        when (val result = check(url, name)) {
-            is AppSettings.AddServerResult.Added -> onAdd(url, name)
-            is AppSettings.AddServerResult.Refused -> error = result.reason
-        }
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Add a server") },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text("Added at the end of ${service.title}. Move it up to use it first.")
-                OutlinedTextField(
-                    value = url,
-                    onValueChange = {
-                        url = it
-                        error = null
-                    },
-                    label = { Text("Address") },
-                    isError = error != null,
-                    supportingText = { Text(error ?: "https:// only. http:// works for localhost.") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
-                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-                )
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Name (optional)") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        },
-        confirmButton = { TextButton(onClick = submit) { Text("Add") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
 }

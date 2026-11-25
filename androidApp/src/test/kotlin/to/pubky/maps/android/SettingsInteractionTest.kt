@@ -3,6 +3,7 @@ package to.pubky.maps.android
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -24,23 +25,24 @@ import to.pubky.maps.config.AppSettings
 import to.pubky.maps.config.DataKind
 import to.pubky.maps.config.Service
 import to.pubky.maps.config.StorageChoice
+import to.pubky.maps.settings.AddServerScreen
 import to.pubky.maps.settings.ServerListScreen
 import to.pubky.maps.settings.StoredOnlineScreen
 import to.pubky.maps.ui.PubkyMapsTheme
 
 private const val PHONE = "w412dp-h915dp"
 private const val TABLET = "w1280dp-h800dp"
-private const val SETTLE_MS = 1_000L
 
 /**
- * The settings dialogs, opened the way a user opens them, on top of their page. Dialogs are windows
- * of their own, so these capture the whole screen. Also checks that the dialogs change the settings.
+ * Settings pages driven the way a user drives them: adding a server (a refused address, an accepted
+ * one) and choosing where a kind of data is kept (a dialog over its page). Dialogs are windows of
+ * their own, so these capture the whole screen.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [36])
 @OptIn(ExperimentalRoborazziApi::class)
-class DialogScreenshotTest {
+class SettingsInteractionTest {
     @get:Rule
     val compose = createComposeRule()
 
@@ -58,22 +60,20 @@ class DialogScreenshotTest {
         captureScreenRoboImage("screenshots/$name.png")
     }
 
-    // Add a server: a refused address shows why, below the field.
+    // Add a server: a refused address shows why, under the field.
 
-    /**
-     * Opens the Add server dialog and types [address]. The test clock is driven by hand here: under
-     * Robolectric, the dialog's text field never lets a phone-sized screen report idle on its own.
-     */
     private fun openAddServerAndType(address: String) {
-        compose.mainClock.autoAdvance = false
-        show { onUpdate -> ServerListScreen(Service.Photon, settings, onUpdate, onBack = {}) }
-        compose.mainClock.advanceTimeBy(SETTLE_MS)
+        show { onUpdate ->
+            var adding by remember { mutableStateOf(false) }
+            if (adding) {
+                AddServerScreen(Service.Photon, settings, onUpdate, onDone = { adding = false })
+            } else {
+                ServerListScreen(Service.Photon, settings, onUpdate, onAddServer = { adding = true }, onBack = {})
+            }
+        }
         compose.onNodeWithText("Add server").performClick()
-        compose.mainClock.advanceTimeBy(SETTLE_MS)
         compose.onNode(hasSetTextAction() and hasText("https://")).performTextReplacement(address)
-        compose.mainClock.advanceTimeBy(SETTLE_MS)
         compose.onNodeWithText("Add").performClick()
-        compose.mainClock.advanceTimeBy(SETTLE_MS)
     }
 
     private fun addServerWithBadAddress(name: String) {
@@ -84,19 +84,19 @@ class DialogScreenshotTest {
 
     @Test
     @Config(qualifiers = "$PHONE-notnight-mdpi")
-    fun addServerPhoneLight() = addServerWithBadAddress("add-server-phone-light")
+    fun addServerPhoneLight() = addServerWithBadAddress("add-server-error-phone-light")
 
     @Test
     @Config(qualifiers = "$PHONE-night-mdpi")
-    fun addServerPhoneDark() = addServerWithBadAddress("add-server-phone-dark")
+    fun addServerPhoneDark() = addServerWithBadAddress("add-server-error-phone-dark")
 
     @Test
     @Config(qualifiers = "$TABLET-notnight-mdpi")
-    fun addServerTabletLight() = addServerWithBadAddress("add-server-tablet-light")
+    fun addServerTabletLight() = addServerWithBadAddress("add-server-error-tablet-light")
 
     @Test
     @Config(qualifiers = "$TABLET-night-mdpi")
-    fun addServerTabletDark() = addServerWithBadAddress("add-server-tablet-dark")
+    fun addServerTabletDark() = addServerWithBadAddress("add-server-error-tablet-dark")
 
     @Test
     @Config(qualifiers = "$PHONE-notnight-mdpi")
