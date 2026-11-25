@@ -1,0 +1,133 @@
+name: core
+
+on:
+  push:
+    paths:
+      - "core/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "scripts/build-android.sh"
+      - "scripts/gen-kotlin-bindings.sh"
+      - ".github/workflows/core.yml"
+  pull_request:
+    paths:
+      - "core/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "scripts/build-android.sh"
+      - "scripts/gen-kotlin-bindings.sh"
+      - ".github/workflows/core.yml"
+
+concurrency:
+  group: core-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  test:
+    name: fmt, clippy, tests, Kotlin bindings
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          # Throwaway test database on the runner: no password at all.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      TEST_PUBKY_CONNECTION_STRING: postgres://postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core-host
+      - name: cargo fmt
+        run: cargo fmt --all --check
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: cargo test (unit + testnet integration)
+        run: cargo test --workspace --locked -- --include-ignored
+      - name: Kotlin bindings (uniffi-bindgen)
+        run: scripts/gen-kotlin-bindings.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kotlin-bindings
+          path: core/bindings/kotlin
+          if-no-files-found: error
+
+  android:
+    name: Android libraries (arm64-v8a, x86_64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core-android
+          cache-bin: true
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked --version ^4
+      - name: Build with the runner's NDK
+        env:
+          ANDROID_API_LEVEL: "26"
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          echo "NDK: $ANDROID_NDK_HOME"
+          scripts/build-android.sh core/jniLibs
+      - name: Check 16 KB page alignment and record sizes
+        run: |
+          readelf="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          {
+            echo "### libpubky_maps_core.so"
+            echo
+            echo "| ABI | bytes | MiB |"
+            echo "| --- | ---: | ---: |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for so in core/jniLibs/*/*.so; do
+            abi="$(basename "$(dirname "$so")")"
+            name="$(basename "$so")"
+            if [ "$name" != "libpubky_maps_core.so" ]; then
+              echo "::error::unexpected library in jniLibs: $abi/$name"
+              exit 1
+            fi
+            bytes="$(stat -c %s "$so")"
+            mib="$(awk "BEGIN { printf \"%.2f\", $bytes / 1048576 }")"
+            echo "$abi $name $bytes bytes ($mib MiB)"
+            echo "| $abi | $bytes | $mib |" >> "$GITHUB_STEP_SUMMARY"
+            aligns="$("$readelf" -lW "$so" | awk '$1 == "LOAD" { print $NF }' | sort -u)"
+            echo "$abi $name LOAD alignments: $aligns"
+            for a in $aligns; do
+              if [ "$((a))" -lt 16384 ]; then
+                echo "::error::$abi/$name is not 16 KB page aligned ($a)"
+                exit 1
+              fi
+            done
+          done
+          for abi in arm64-v8a x86_64; do
+            test -f "core/jniLibs/$abi/libpubky_maps_core.so" || { echo "::error::missing $abi library"; exit 1; }
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-jniLibs
+          path: core/jniLibs
+          if-no-files-found: error
