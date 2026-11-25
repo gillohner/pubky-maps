@@ -1,10 +1,11 @@
 # Pubky Maps
 
-A maps app on OpenStreetMap with Pubky social data on top. Android first; iOS later from the same
-Kotlin code.
+A maps app on OpenStreetMap with Pubky social data on top. It runs on Android; the shared Kotlin
+code also declares iOS targets, which are not built yet.
 
-Today the app shows a full-screen online map in light or dark (following the system), the user's
-location on request, a compass when the map is rotated, and a Settings screen with an About section.
+The app shows a full-screen online map in light or dark (following the system), the user's location
+on request, a compass when the map is rotated, and a Settings screen with an About section (version,
+licence, map data credits and the open-source licences of the bundled libraries).
 
 ## How it is built
 
@@ -13,8 +14,10 @@ location on request, a compass when the map is rotated, and a Settings screen wi
 - The map is drawn by MapLibre Native through [maplibre-compose](https://github.com/maplibre/maplibre-compose)
   (OpenGL runtime).
 - Every server the app talks to is an ordered list with fallbacks. The defaults live in
-  `shared/src/commonMain/kotlin/to/pubky/maps/config/ServerDefaults.kt`; settings will let users edit
-  them. When a map style fails to load, the map tries the next one in the list.
+  `shared/src/commonMain/kotlin/to/pubky/maps/config/ServerDefaults.kt`, and the lists in use are held
+  in `ServerConfigRepository`. When a map style fails to load, the map tries the next one in the list.
+- The open-source licence list is generated at build time by the AboutLibraries Gradle plugin from the
+  app's dependencies.
 - Versions of every tool and library are in `gradle/libs.versions.toml`.
 
 ## Build
