@@ -393,4 +393,5 @@ internal fun coordinateResult(geo: GeoInput.Point): SearchResult =
                 zoom = geo.zoom ?: SearchController.COORDINATE_ZOOM,
                 category = "Coordinates",
             ),
+        kind = PlaceKind.Point,
     )

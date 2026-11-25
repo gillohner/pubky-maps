@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.Flow
@@ -165,6 +166,7 @@ fun MapRoute(
     val mapSearch =
         if (search != null && searchState != null) {
             rememberMapSearch(search, searchState, recents, mapState, locationState, onClosePlace)
+                .copy(credits = servers.searchAttribution())
         } else {
             null
         }
@@ -289,7 +291,7 @@ private fun rememberMapSearch(
                     east = near.maxOf { it.lon },
                     north = near.maxOf { it.lat },
                 ),
-                CameraFit(fitPadding = DpPadding(left = 48.dp, top = 96.dp, right = 48.dp, bottom = RESULTS_FIT_BOTTOM)),
+                CameraFit(fitPadding = resultsFitPadding(mapState.viewport?.size)),
             )
         }
     }
@@ -310,8 +312,16 @@ private fun rememberMapSearch(
     return MapSearch(state = state, recents = recents, userLocation = userLocation, actions = actions)
 }
 
-/** Room under fitted results for the list sheet on a phone. */
-private val RESULTS_FIT_BOTTOM = 320.dp
+/**
+ * The room around fitted results: beside the panel on a wide screen, above the half-open results
+ * sheet on a phone, and under the search bar on both.
+ */
+private fun resultsFitPadding(size: DpSize?): DpPadding =
+    if (size != null && size.width >= SidePanelMinWidth) {
+        DpPadding(left = SidePanelWidth + 48.dp, top = 96.dp, right = 48.dp, bottom = 120.dp)
+    } else {
+        DpPadding(left = 48.dp, top = 96.dp, right = 48.dp, bottom = (size?.height ?: 800.dp) / 2 + 24.dp)
+    }
 
 /** A phone screen's half diagonal in dp, for a map whose size is not known yet. */
 private const val FALLBACK_HALF_DIAGONAL_DP = 500.0

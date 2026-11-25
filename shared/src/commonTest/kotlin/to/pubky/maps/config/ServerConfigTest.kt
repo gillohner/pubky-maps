@@ -57,6 +57,9 @@ class ServerConfigTest {
         val credits = defaults.allAttribution()
 
         assertTrue(ServerDefaults.openStreetMap in credits)
+        // Search's data source is credited too.
+        assertTrue(ServerDefaults.photon in credits)
+        assertEquals(listOf(ServerDefaults.photon, ServerDefaults.openStreetMap), defaults.searchAttribution())
 
         assertEquals(credits.distinct(), credits)
         assertEquals(1, credits.count { it.url == "https://www.openstreetmap.org/copyright" })

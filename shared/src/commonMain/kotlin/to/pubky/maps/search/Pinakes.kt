@@ -26,6 +26,8 @@ data class PinakesPlace(
     /** How many public Pubky collections hold the place. */
     val collections: Int,
     val rank: Int,
+    /** The type and its ancestors, root first (`Thing`, `Place`, `CivicStructure`, `Museum`). */
+    val typePath: List<String> = emptyList(),
 )
 
 /** Shared by the search parsers: unknown fields are expected, both APIs grow. */
@@ -72,6 +74,7 @@ fun parsePinakes(json: String): List<PinakesPlace> =
                 osm = card.osmId(),
                 collections = card.collections,
                 rank = index,
+                typePath = card.typePath,
             )
         }
 
@@ -108,6 +111,7 @@ private data class PinakesResponse(
 private data class PinakesCard(
     val uri: String,
     val type: String? = null,
+    @SerialName("type_path") val typePath: List<String> = emptyList(),
     val name: String? = null,
     val point: PinakesPoint? = null,
     val refs: List<String> = emptyList(),

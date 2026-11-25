@@ -33,6 +33,8 @@ data class SearchResult(
     val collections: Int = 0,
     /** How prominent this kind of place is, see [Prominence]. */
     val prominence: Prominence = Prominence.Ordinary,
+    /** What kind of place it is, for its icon. */
+    val kind: PlaceKind = PlaceKind.Other,
     val score: Double = 0.0,
 ) {
     /** True when people referenced the place on Pubky (Pinakes knows it). */
@@ -81,6 +83,7 @@ object SearchRanking {
         return merge(photon, pinakes)
             .map { it.copy(score = score(q, area, it)) }
             .sortedWith(compareByDescending<SearchResult> { it.score }.thenBy { it.place.title })
+            .withoutRepeatedStops()
             .take(MAX_RESULTS)
     }
 
@@ -143,6 +146,7 @@ object SearchRanking {
                 ),
             photonRank = place.rank,
             prominence = prominenceOf(place.osmKey, place.osmValue),
+            kind = placeKindOf(place.osmKey, place.osmValue, place.type),
         )
 
     private fun fromPinakes(card: PinakesPlace) =
@@ -160,6 +164,7 @@ object SearchRanking {
             pinakesRank = card.rank,
             collections = card.collections,
             prominence = prominenceOf(card.type),
+            kind = placeKindOf(card.typePath),
         )
 
     private fun merged(
@@ -182,6 +187,7 @@ object SearchRanking {
         pinakesRank = card.rank,
         collections = card.collections,
         prominence = prominenceOf(place.osmKey, place.osmValue),
+        kind = placeKindOf(place.osmKey, place.osmValue, place.type).takeIf { it != PlaceKind.Other } ?: placeKindOf(card.typePath),
     )
 
     internal fun score(
@@ -234,6 +240,33 @@ object SearchRanking {
             else -> 0.2
         }
     }
+}
+
+/** Stops of one name and kind closer than this are one stop (its platforms and poles). */
+private const val SAME_STOP_METERS = 150.0
+
+/**
+ * Drops a transit stop, platform or signpost that repeats a better ranked one of the same name and
+ * category within [SAME_STOP_METERS] (OSM maps one stop as several platforms and poles; map apps show
+ * the stop once). Places people use on Pubky are always kept.
+ */
+internal fun List<SearchResult>.withoutRepeatedStops(): List<SearchResult> {
+    val kept = ArrayList<SearchResult>(size)
+    for (row in this) {
+        val point = row.place.point
+        val repeat =
+            row.prominence == Prominence.Minor &&
+                !row.onPubky &&
+                point != null &&
+                kept.any { k ->
+                    k.prominence == Prominence.Minor &&
+                        k.place.category == row.place.category &&
+                        normalizeForMatch(k.place.title) == normalizeForMatch(row.place.title) &&
+                        k.place.point?.let { distanceMeters(it, point) <= SAME_STOP_METERS } == true
+                }
+        if (!repeat) kept += row
+    }
+    return kept
 }
 
 /** The zoom a place is shown at, from Photon's kind: a country whole, a street, a building close. */

@@ -61,6 +61,28 @@ class SearchRankingTest {
     }
 
     @Test
+    fun aStopListedAsSeveralPlatformsIsOneRow() {
+        val rows = rank("kunsthaus", "kunsthaus")
+        assertEquals(1, rows.count { it.place.title == "Kunsthaus" && it.place.category == "Tram stop" })
+        assertEquals(1, rows.count { it.place.title == "Kunsthaus" && it.place.category == "Bus stop" })
+        assertEquals(1, rank("letzigrund", "letzigrund").count { it.place.category == "Platform" })
+        // Same-name shops are distinct places and stay.
+        assertTrue(rank("spruengli", "sprüngli").count { it.place.title == "Sprüngli" } >= 5)
+    }
+
+    @Test
+    fun everyRowHasAKindForItsIcon() {
+        assertEquals(PlaceKind.Culture, rank("kunsthaus", "kunsthaus").first().kind)
+        assertEquals(PlaceKind.Transit, rank("hauptbahnhof", "hauptbahnhof").first().kind)
+        assertEquals(PlaceKind.Area, rank("zuerich", "zürich").first().kind)
+        assertEquals(PlaceKind.Street, rank("bahnhofstrasse", "bahnhofstrasse").first().kind)
+        assertEquals(PlaceKind.Food, rank("conditorei-schober", "conditorei schober").first().kind)
+        assertEquals(PlaceKind.Nature, rank("uetliberg", "uetliberg").first().kind)
+        assertEquals(PlaceKind.Education, rank("eth", "eth").first().kind)
+        assertEquals(PlaceKind.Food, rank("spruengli", "sprüngli").first().kind)
+    }
+
+    @Test
     fun textMatchLevels() {
         fun t(
             query: String,

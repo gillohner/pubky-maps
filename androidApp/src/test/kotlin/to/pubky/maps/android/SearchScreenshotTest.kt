@@ -30,6 +30,7 @@ import to.pubky.maps.map.MapSearch
 import to.pubky.maps.place.PlaceCard
 import to.pubky.maps.place.PlaceRef
 import to.pubky.maps.place.PlaceSource
+import to.pubky.maps.search.PlaceKind
 import to.pubky.maps.search.Prominence
 import to.pubky.maps.search.RecentSearch
 import to.pubky.maps.search.SearchActions
@@ -118,6 +119,7 @@ class SearchScreenshotTest {
             pinakesRank = 0,
             collections = 2,
             prominence = Prominence.Landmark,
+            kind = PlaceKind.Culture,
         )
 
     private val results =
@@ -135,6 +137,7 @@ class SearchScreenshotTest {
                 ),
                 photonRank = 1,
                 prominence = Prominence.Minor,
+                kind = PlaceKind.Transit,
             ),
             SearchResult(
                 place(
@@ -148,6 +151,7 @@ class SearchScreenshotTest {
                 ),
                 photonRank = 2,
                 prominence = Prominence.Minor,
+                kind = PlaceKind.Transit,
             ),
             SearchResult(
                 place(
@@ -160,11 +164,13 @@ class SearchScreenshotTest {
                     "Heimplatz 1, 8001 Zürich",
                 ),
                 photonRank = 3,
+                kind = PlaceKind.Shop,
             ),
             SearchResult(
                 place("Kunsthaus Aarau", 47.3904, 8.0457, OsmId(OsmType.Way, 8), PlaceSource.Photon, "Museum", "Aargauerplatz, 5000 Aarau"),
                 photonRank = 4,
                 prominence = Prominence.Landmark,
+                kind = PlaceKind.Culture,
             ),
         )
 
@@ -208,7 +214,14 @@ class SearchScreenshotTest {
             onMyLocation = {},
             onOpenSettings = {},
             placeCard = card,
-            search = MapSearch(state, recents, userLocation = here, actions = SearchActions()),
+            search =
+                MapSearch(
+                    state,
+                    recents,
+                    userLocation = here,
+                    actions = SearchActions(),
+                    credits = ServerDefaults.lists.searchAttribution(),
+                ),
         ) {
             Box(
                 modifier = Modifier.fillMaxSize().background(if (dark) Color(0xFF2B2D31) else Color(0xFFF2EFE9)),
@@ -281,13 +294,6 @@ class SearchScreenshotTest {
 
     @Test
     fun typingLargeFontPhoneLight() = capture("search-typing", Device.Phone, dark = false, largeFont = true) { Map(typing) }
-
-    /** Pinakes still asked, Photon answered: the list is there, the progress line runs. */
-    @Test
-    fun typingPinakesLoadingPhoneLight() =
-        capture("search-typing-loading", Device.Phone, dark = false) {
-            Map(typing.copy(results = results.drop(1), pinakes = SourceState.Loading))
-        }
 
     @Test
     fun resultsPhoneLight() = capture("search-results", Device.Phone, dark = false) { Map(onMap) }

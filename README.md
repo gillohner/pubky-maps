@@ -9,11 +9,15 @@ on request, a compass when the map is rotated, search, and Settings.
 **Search** (the bar at the top of the map) finds places, addresses, streets and towns as you type,
 from [Photon](https://github.com/komoot/photon) (OpenStreetMap data, biased to the map's centre) and
 Pinakes (places people referenced on Pubky, near the map). The same
-OpenStreetMap place from both is one result. Results show in a list and as pins; picking one centres
-the map and opens a small place card (name, what it is, distance, address). Coordinates
+OpenStreetMap place from both is one result, and a stop's platforms are one stop. Results show in a
+list (on a phone a sheet that drags between its first row, half and full height) and as pins with an
+icon of their kind, the best ones named; picking one centres the map and opens a small place card
+(name, what it is, distance, address). Signed in, places the people you follow referenced on Pubky
+rank higher. Coordinates
 (`47.37, 8.54`, `47°22'N 8°32'E`), `geo:` URIs and plus codes open a pin without any request. Recent
 searches stay on the phone (Settings → Privacy → Clear search history). Either source failing never
-holds back the other; with both unreachable the list says search is offline.
+holds back the other; with both unreachable the list and the map's degraded line say search is
+offline, and Search asks again. Photon is credited under the results and in Settings → Map data.
 
 Settings:
 

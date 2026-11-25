@@ -1,5 +1,6 @@
 package to.pubky.maps.map
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -8,13 +9,16 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -31,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -64,8 +69,8 @@ internal val SidePanelMinWidth = 600.dp
 /** Width of the search bar and its panel beside the map. */
 internal val SidePanelWidth = 400.dp
 
-/** The tallest the results list over the map gets on a phone, as a share of the screen. */
-private const val RESULTS_SHEET_HEIGHT_SHARE = 0.4f
+/** My location over a line of credits: the panel beside the map ends above them. */
+private val BottomControlsHeight = 96.dp
 
 /** What the map screen shows of search: plain state, so screenshots need no network. */
 data class MapSearch(
@@ -74,12 +79,15 @@ data class MapSearch(
     /** The user's last known position, for distances; null when unknown. */
     val userLocation: GeoPoint?,
     val actions: SearchActions,
+    /** The sources of search's results (Photon, OpenStreetMap), named under the results. */
+    val credits: List<AttributionLink> = emptyList(),
 )
 
 /**
  * The map screen: [map] fills the screen, the controls sit on top of it inside the safe area.
- * The search bar top start with Settings beside it, my location bottom end, the data credits bottom
- * start, and [placeCard] (a place opened from a link or picked in search) under them at the bottom.
+ * The search bar top start with Settings beside it, my location bottom end with the data credits
+ * under it in the bottom start corner, and [placeCard] (a place opened from a link or picked in
+ * search) under them at the bottom. A soft scrim under the status bar keeps its icons readable.
  * [missing] parts of the app (a service whose every server failed) show in one line under the bar.
  * Search: typing opens a full-screen page on a phone and a panel beside the map on a wide screen;
  * results show as pins and in a list (a sheet at the bottom on a phone, the panel on a wide screen).
@@ -102,7 +110,10 @@ fun MapScreen(
     BoxWithConstraints(modifier.fillMaxSize()) {
         val wide = maxWidth >= SidePanelMinWidth
         val mode = search?.state?.mode ?: SearchMode.Idle
+        val sheetShown = search != null && !wide && mode == SearchMode.Results && placeCard == null
+        val screenHeight = maxHeight
         map()
+        StatusBarScrim()
         BoxWithConstraints(
             Modifier
                 .fillMaxSize()
@@ -151,7 +162,7 @@ fun MapScreen(
                             .align(Alignment.TopStart)
                             .padding(top = TopControlSize + 8.dp)
                             .width(SidePanelWidth)
-                            .heightIn(max = maxHeight - TopControlSize - 8.dp - 56.dp - MapControlMargin),
+                            .heightIn(max = maxHeight - TopControlSize - 8.dp - BottomControlsHeight - MapControlMargin),
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surface,
                     shadowElevation = 3.dp,
@@ -162,38 +173,43 @@ fun MapScreen(
                         search.userLocation,
                         search.actions,
                         contentPadding = PaddingValues(vertical = 8.dp),
+                        credits = search.credits,
                     )
                 }
             }
-            val sheetMaxHeight = maxHeight * RESULTS_SHEET_HEIGHT_SHARE
-            // Bottom up: the place card or the results, the credits and my-location row above it, then snackbars.
-            Column(
-                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
+            // Bottom up: the place card, then the credits and my location above it, then snackbars. With
+            // the results sheet they ride on its top edge instead.
+            if (!sheetShown) {
+                Column(
+                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    BottomControls(attribution, onMyLocation, snackbarHostState)
+                    if (placeCard != null) {
+                        Box(Modifier.padding(top = MapControlMargin)) { placeCard() }
+                    }
+                }
+            }
+        }
+        if (sheetShown && search != null) {
+            val insets = WindowInsets.safeDrawing.asPaddingValues()
+            ResultsSheet(
+                height = screenHeight,
+                topSpace = insets.calculateTopPadding() + MapControlMargin + TopControlSize + 8.dp,
+                above = {
+                    Box(Modifier.padding(horizontal = MapControlMargin).padding(bottom = 8.dp)) {
+                        BottomControls(attribution, onMyLocation, snackbarHostState)
+                    }
+                },
             ) {
-                SnackbarHost(hostState = snackbarHostState, modifier = Modifier.padding(bottom = MapControlMargin))
-                Box(Modifier.fillMaxWidth()) {
-                    MapButton(
-                        icon = AppIcons.MyLocation,
-                        contentDescription = "Show my location",
-                        onClick = onMyLocation,
-                        size = 56.dp,
-                        tinted = true,
-                        modifier = Modifier.align(Alignment.BottomEnd),
-                    )
-                    AttributionBar(
-                        links = attribution,
-                        modifier =
-                            Modifier
-                                .align(Alignment.BottomStart)
-                                .padding(end = 56.dp + MapControlMargin),
-                    )
-                }
-                if (placeCard != null) {
-                    Box(Modifier.padding(top = MapControlMargin)) { placeCard() }
-                } else if (search != null && !wide && mode == SearchMode.Results) {
-                    ResultsSheet(search, maxHeight = sheetMaxHeight)
-                }
+                SearchList(
+                    search.state,
+                    search.recents,
+                    search.userLocation,
+                    search.actions,
+                    contentPadding = PaddingValues(bottom = insets.calculateBottomPadding() + 8.dp),
+                    credits = search.credits,
+                )
             }
         }
         if (search != null && !wide && mode == SearchMode.Editing) {
@@ -202,20 +218,44 @@ fun MapScreen(
     }
 }
 
-/** The results over the map on a phone, at the bottom like Google Maps' list sheet. */
+/**
+ * My location at the end, and under it the data credits in the bottom start corner, on a line of
+ * their own so they never run under the button; snackbars above both.
+ */
 @Composable
-private fun ResultsSheet(
-    search: MapSearch,
-    maxHeight: Dp,
+private fun BottomControls(
+    attribution: List<AttributionLink>,
+    onMyLocation: () -> Unit,
+    snackbarHostState: SnackbarHostState,
 ) {
-    Surface(
-        modifier = Modifier.padding(top = MapControlMargin).fillMaxWidth().heightIn(max = maxHeight),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 3.dp,
-    ) {
-        SearchList(search.state, search.recents, search.userLocation, search.actions, contentPadding = PaddingValues(vertical = 8.dp))
+    Column(Modifier.fillMaxWidth()) {
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = MapControlMargin),
+        )
+        MapButton(
+            icon = AppIcons.MyLocation,
+            contentDescription = "Show my location",
+            onClick = onMyLocation,
+            size = 56.dp,
+            tinted = true,
+            modifier = Modifier.align(Alignment.End),
+        )
+        AttributionBar(links = attribution, modifier = Modifier.padding(top = 8.dp))
     }
+}
+
+/** A soft shade under the status bar, so its icons stay readable over any map. */
+@Composable
+private fun StatusBarScrim() {
+    val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val shade = MaterialTheme.colorScheme.surface
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(top + MapControlMargin)
+            .background(Brush.verticalGradient(listOf(shade.copy(alpha = 0.7f), shade.copy(alpha = 0f)))),
+    )
 }
 
 /** Typing on a phone: a page over the map with the bar on top and the list under it. */
@@ -236,6 +276,7 @@ private fun SearchPage(search: MapSearch) {
                 search.userLocation,
                 search.actions,
                 modifier = Modifier.weight(1f).imePadding(),
+                credits = search.credits,
             )
         }
     }

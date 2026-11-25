@@ -41,15 +41,22 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
+import to.pubky.maps.config.AttributionLink
 import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.place.PlaceSource
 import to.pubky.maps.ui.AppIcons
+import to.pubky.maps.ui.rememberSafeLinkOpener
 
 /** Height of the search bar, as Google Maps and CoMaps draw theirs. */
 internal val SearchBarHeight = 48.dp
@@ -156,6 +163,7 @@ fun SearchList(
     actions: SearchActions,
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(0.dp),
+    credits: List<AttributionLink> = emptyList(),
 ) {
     val shownRecents = recentsFor(state, recents)
     LazyColumn(modifier = modifier, contentPadding = contentPadding) {
@@ -179,8 +187,30 @@ fun SearchList(
             items(state.results, key = { "result:${it.place.uri}" }) { result ->
                 ResultRow(result, userLocation, selected = result == state.selected) { actions.onSelect(result) }
             }
+            // The list may cover the map and its credits: the results' sources are named under them.
+            if (state.results.isNotEmpty() && credits.isNotEmpty()) item(key = "credits") { CreditsLine(credits) }
         }
     }
+}
+
+/** The sources of the results, each a link (Photon, OpenStreetMap). */
+@Composable
+private fun CreditsLine(credits: List<AttributionLink>) {
+    val openLink = rememberSafeLinkOpener()
+    val linkStyles = TextLinkStyles(style = SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant))
+    val text =
+        buildAnnotatedString {
+            credits.forEachIndexed { i, link ->
+                if (i > 0) append("  ")
+                withLink(LinkAnnotation.Url(link.url, linkStyles) { openLink(link.url) }) { append(link.label) }
+            }
+        }
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+    )
 }
 
 /**
@@ -257,7 +287,7 @@ private fun ResultRow(
             resultDetail(result).takeIf { it.isNotEmpty() }?.let { detail ->
                 { Text(detail, maxLines = 2, overflow = TextOverflow.Ellipsis) }
             },
-        leadingContent = { Icon(AppIcons.Place, contentDescription = null) },
+        leadingContent = { Icon(result.kind.icon, contentDescription = null) },
         trailingContent = {
             Column(horizontalAlignment = Alignment.End) {
                 distanceText(userLocation, place.point)?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
