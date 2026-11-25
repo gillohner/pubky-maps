@@ -9,6 +9,7 @@ import androidx.navigation.compose.rememberNavController
 import kotlinx.serialization.Serializable
 import to.pubky.maps.config.ServerConfigRepository
 import to.pubky.maps.map.MapRoute
+import to.pubky.maps.settings.LicencesRoute
 import to.pubky.maps.settings.SettingsScreen
 import to.pubky.maps.ui.PubkyMapsTheme
 
@@ -18,11 +19,18 @@ private data object MapDestination
 @Serializable
 private data object SettingsDestination
 
-/** The whole app: the map, and the settings on top of it. */
+@Serializable
+private data object LicencesDestination
+
+/**
+ * The whole app: the map, and the settings on top of it. [loadLicences] returns the AboutLibraries
+ * JSON of the bundled libraries.
+ */
 @Composable
 fun App(
     appInfo: AppInfo,
     serverConfigRepository: ServerConfigRepository,
+    loadLicences: suspend () -> String,
 ) {
     val serverConfig by serverConfigRepository.config.collectAsStateWithLifecycle()
     PubkyMapsTheme {
@@ -38,8 +46,12 @@ fun App(
                 SettingsScreen(
                     appInfo = appInfo,
                     serverConfig = serverConfig,
+                    onOpenLicences = { navController.navigate(LicencesDestination) { launchSingleTop = true } },
                     onBack = { navController.navigateUp() },
                 )
+            }
+            composable<LicencesDestination> {
+                LicencesRoute(loadLicences = loadLicences, onBack = { navController.navigateUp() })
             }
         }
     }

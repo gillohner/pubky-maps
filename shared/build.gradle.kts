@@ -49,9 +49,13 @@ kotlin {
             implementation(libs.kotlinx.serialization.core)
             implementation(libs.maplibre.compose)
             implementation(libs.maplibre.compose.location)
+            // LicencesScreen takes a Libs.
+            api(libs.aboutlibraries.core)
+            implementation(libs.aboutlibraries.compose.m3)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
         }
     }
 }

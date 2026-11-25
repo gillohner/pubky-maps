@@ -23,12 +23,13 @@ import to.pubky.maps.ui.rememberSafeLinkOpener
 private const val SOURCE_URL = "https://github.com/gillohner/pubky-maps"
 private const val LICENCE_URL = "$SOURCE_URL/blob/main/LICENSE"
 
-/** Settings. For now only "About": version, licence and the credits for the map data. */
+/** Settings: About (version, licence, source, open-source licences) and the credits for the map data. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     appInfo: AppInfo,
     serverConfig: ServerConfig,
+    onOpenLicences: () -> Unit,
     onBack: () -> Unit,
 ) {
     val openLink = rememberSafeLinkOpener()
@@ -64,6 +65,13 @@ fun SettingsScreen(
                     headlineContent = { Text("Source code") },
                     supportingContent = { Text(SOURCE_URL.removePrefix("https://")) },
                     modifier = Modifier.clickable { openLink(SOURCE_URL) },
+                )
+            }
+            item {
+                ListItem(
+                    headlineContent = { Text("Open-source licences") },
+                    supportingContent = { Text("The libraries in this app and their licences") },
+                    modifier = Modifier.clickable(onClick = onOpenLicences),
                 )
             }
             item { SectionHeader("Map data") }

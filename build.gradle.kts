@@ -6,9 +6,12 @@ plugins {
     alias(libs.plugins.android.kmp.library) apply false
     alias(libs.plugins.roborazzi) apply false
     alias(libs.plugins.ktlint) apply false
+    alias(libs.plugins.aboutlibraries.android) apply false
 }
 
-val ktlintVersion = libs.versions.ktlint.cli.get()
+val ktlintVersion =
+    libs.versions.ktlint.cli
+        .get()
 
 subprojects {
     apply(plugin = "org.jlleitschuh.gradle.ktlint")

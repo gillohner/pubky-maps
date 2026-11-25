@@ -4,6 +4,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.roborazzi)
+    // Generates res/raw/aboutlibraries.json: every bundled library and its licence, for Settings.
+    alias(libs.plugins.aboutlibraries.android)
 }
 
 android {
@@ -92,6 +94,7 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.compose.runtime)
     implementation(libs.compose.ui)
+    implementation(libs.kotlinx.coroutines.core)
     runtimeOnly(libs.maplibre.compose.runtime.opengl.android)
 
     testImplementation(libs.junit)

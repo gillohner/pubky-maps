@@ -15,6 +15,7 @@ import com.github.takahirom.roborazzi.RoborazziComposeOptions
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.github.takahirom.roborazzi.size
 import com.github.takahirom.roborazzi.uiMode
+import com.mikepenz.aboutlibraries.Libs
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -23,6 +24,7 @@ import org.robolectric.annotation.GraphicsMode
 import to.pubky.maps.AppInfo
 import to.pubky.maps.config.ServerDefaults
 import to.pubky.maps.map.MapScreen
+import to.pubky.maps.settings.LicencesScreen
 import to.pubky.maps.settings.SettingsScreen
 import to.pubky.maps.ui.PubkyMapsTheme
 
@@ -92,8 +94,14 @@ class ScreenshotTest {
         SettingsScreen(
             appInfo = AppInfo(versionName = "0.1.0", versionCode = 1),
             serverConfig = ServerDefaults.config,
+            onOpenLicences = {},
             onBack = {},
         )
+    }
+
+    @Composable
+    private fun Licences() {
+        LicencesScreen(libraries = Libs.Builder().withJson(LICENCES_JSON).build(), onBack = {})
     }
 
     @Test
@@ -122,4 +130,51 @@ class ScreenshotTest {
 
     @Test
     fun settingsTabletDark() = capture("settings", Device.Tablet, dark = true) { Settings() }
+
+    @Test
+    fun licencesPhoneLight() = capture("licences", Device.Phone, dark = false) { Licences() }
+
+    @Test
+    fun licencesPhoneDark() = capture("licences", Device.Phone, dark = true) { Licences() }
+
+    @Test
+    fun licencesTabletLight() = capture("licences", Device.Tablet, dark = false) { Licences() }
+
+    @Test
+    fun licencesTabletDark() = capture("licences", Device.Tablet, dark = true) { Licences() }
+
+    private companion object {
+        /** A fixed licence list, so the screenshots do not change with every dependency update. */
+        const val LICENCES_JSON = """
+            {
+              "libraries": [
+                {
+                  "uniqueId": "org.maplibre.compose:maplibre-compose",
+                  "artifactVersion": "0.20.0",
+                  "name": "MapLibre Compose",
+                  "developers": [{ "name": "MapLibre" }],
+                  "licenses": ["BSD-3-Clause"]
+                },
+                {
+                  "uniqueId": "androidx.compose.ui:ui",
+                  "artifactVersion": "1.12.0",
+                  "name": "Compose UI",
+                  "developers": [{ "name": "The Android Open Source Project" }],
+                  "licenses": ["Apache-2.0"]
+                },
+                {
+                  "uniqueId": "com.mikepenz:aboutlibraries-core",
+                  "artifactVersion": "15.3.0",
+                  "name": "AboutLibraries Core Library",
+                  "developers": [{ "name": "Mike Penz" }],
+                  "licenses": ["Apache-2.0"]
+                }
+              ],
+              "licenses": {
+                "BSD-3-Clause": { "name": "BSD 3-Clause License", "url": "https://spdx.org/licenses/BSD-3-Clause.html", "spdxId": "BSD-3-Clause" },
+                "Apache-2.0": { "name": "Apache License 2.0", "url": "https://spdx.org/licenses/Apache-2.0.html", "spdxId": "Apache-2.0" }
+              }
+            }
+        """
+    }
 }
