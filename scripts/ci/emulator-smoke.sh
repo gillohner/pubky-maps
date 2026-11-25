@@ -111,6 +111,15 @@ check_alive "map drawn"
 if centre_of "$(dump_ui map)" "Retry" > /dev/null; then fail "the map could not load any style (Retry notice shown)"; fi
 $drawn || fail "the map did not draw ($colours colours, most common $dominant in the middle of the screen)"
 
+# Let the remaining tiles and labels arrive: keep screenshotting until two in a row are identical.
+for _ in $(seq 1 10); do
+    sleep 3
+    screenshot map-next || continue
+    if cmp -s "$out/map.png" "$out/map-next.png"; then break; fi
+    mv "$out/map-next.png" "$out/map.png"
+done
+rm -f "$out/map-next.png"
+
 xy=$(wait_for "Settings" 10) || fail "no Settings button"
 adb shell input tap $xy
 wait_for "About" 15 > /dev/null || fail "Settings did not open"
