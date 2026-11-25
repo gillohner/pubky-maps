@@ -7,6 +7,7 @@ plugins {
     alias(libs.plugins.roborazzi) apply false
     alias(libs.plugins.ktlint) apply false
     alias(libs.plugins.aboutlibraries.android) apply false
+    alias(libs.plugins.sqldelight) apply false
 }
 
 val ktlintVersion =
