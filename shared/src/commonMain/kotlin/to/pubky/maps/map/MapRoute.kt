@@ -57,7 +57,6 @@ import to.pubky.maps.links.LinkedPlaceState
 import to.pubky.maps.place.OpeningLinkCard
 import to.pubky.maps.place.PlaceCard
 import to.pubky.maps.place.PlaceRef
-import to.pubky.maps.status.ServicePart
 import to.pubky.maps.search.RecentSearch
 import to.pubky.maps.search.SearchActions
 import to.pubky.maps.search.SearchArea
@@ -66,6 +65,7 @@ import to.pubky.maps.search.SearchServices
 import to.pubky.maps.search.SearchState
 import to.pubky.maps.search.distanceMeters
 import to.pubky.maps.search.distanceText
+import to.pubky.maps.status.ServicePart
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.hypot

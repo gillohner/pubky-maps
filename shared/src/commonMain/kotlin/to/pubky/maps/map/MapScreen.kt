@@ -40,7 +40,6 @@ import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import to.pubky.maps.config.AttributionLink
-import to.pubky.maps.status.ServicePart
 import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.search.RecentSearch
 import to.pubky.maps.search.SearchActions
@@ -49,6 +48,7 @@ import to.pubky.maps.search.SearchDivider
 import to.pubky.maps.search.SearchList
 import to.pubky.maps.search.SearchMode
 import to.pubky.maps.search.SearchState
+import to.pubky.maps.status.ServicePart
 import to.pubky.maps.ui.AppIcons
 import to.pubky.maps.ui.rememberSafeLinkOpener
 

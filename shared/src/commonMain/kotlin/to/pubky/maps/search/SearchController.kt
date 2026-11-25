@@ -12,6 +12,8 @@ import kotlinx.coroutines.launch
 import to.pubky.maps.place.PlaceRef
 import to.pubky.maps.place.PlaceSource
 import to.pubky.maps.place.formatCoordinate
+import to.pubky.maps.status.ServiceHealth
+import to.pubky.maps.status.ServicePart
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -61,22 +63,33 @@ data class SearchState(
  * keystroke would also flood the list); pressing Search asks at once, whatever the length.
  * Coordinates never go to the network. Photon and Pinakes are asked together and the list updates as
  * each answers, so a slow or failing source never holds back the other. With a [viewer] (the
- * signed-in user's pubky id), Pinakes ranks places the people they follow referenced higher.
+ * signed-in user's pubky id), Pinakes ranks places the people they follow referenced higher. When
+ * neither source answers, [health] names search as missing (the map's degraded line) until one does.
  */
 class SearchController(
     private val search: PlaceSearch,
     private val recents: RecentSearchStore,
     private val scope: CoroutineScope,
     private val viewer: () -> String? = { null },
+    private val health: ServiceHealth? = null,
     private val debounce: Duration = DEBOUNCE,
 ) {
     private val _state = MutableStateFlow(SearchState())
     val state: StateFlow<SearchState> = _state.asStateFlow()
 
-    private var job: Job? = null
+    /** The search asking the sources (after the typing pause, or at once for Search). */
+    private var searchJob: Job? = null
 
-    /** The text the running search asks for, while [job] runs one. */
-    private var runningText: String? = null
+    /** The text [searchJob] asks for. */
+    private var searchText: String? = null
+
+    /** What Search does after the answers: open a lone result. Waits for [searchJob]. */
+    private var submitJob: Job? = null
+
+    private fun cancelSearch() {
+        submitJob?.cancel()
+        searchJob?.cancel()
+    }
 
     /** The bar was tapped. */
     fun startEditing() = _state.update { it.copy(mode = SearchMode.Editing) }
@@ -91,7 +104,7 @@ class SearchController(
             _state.update { it.copy(query = text, mode = SearchMode.Editing) }
             return
         }
-        job?.cancel()
+        cancelSearch()
         _state.update { it.copy(query = text, mode = SearchMode.Editing, selected = null) }
         val geoLink = trimmed.startsWith("geo:", ignoreCase = true)
         when (val geo = parseGeoInput(trimmed, area.centre)) {
@@ -114,11 +127,12 @@ class SearchController(
     fun submit(area: SearchArea) {
         val text = state.value.query.trim()
         if (text.isEmpty()) return
-        recents.add(RecentSearch(text))
         val geo = parseGeoInput(text, area.centre)
+        // A geo: URI this app cannot read is no search, and no history entry either.
         if (geo == null && text.startsWith("geo:", ignoreCase = true)) return
+        recents.add(RecentSearch(text))
         if (geo is GeoInput.Point) {
-            job?.cancel()
+            cancelSearch()
             // The typed text is the history entry; the point adds nothing to it.
             showOnly(coordinateResult(geo), state.value.query)
             select(state.value.results.single(), remember = false)
@@ -127,16 +141,21 @@ class SearchController(
         val searchText = (geo as? GeoInput.Query)?.text ?: text
         _state.update { it.copy(mode = SearchMode.Results) }
         val current = state.value
-        val haveAnswer = current.resultsAreCurrent && !current.searching && current.photon != SourceState.Idle
+        // Only a full answer counts: Search asks a source again that failed (the connection may be back).
+        val haveAnswer =
+            current.resultsAreCurrent && current.photon == SourceState.Answered && current.pinakes == SourceState.Answered
         // A search for this very text that is already on its way is awaited, not asked again.
-        val running = job?.takeIf { it.isActive && runningText == searchText }
-        if (running == null) job?.cancel()
-        job =
+        val running = searchJob?.takeIf { it.isActive && this.searchText == searchText }
+        if (running == null) {
+            cancelSearch()
+            if (!haveAnswer) startSearch(searchText, area, wait = false)
+        } else {
+            submitJob?.cancel()
+        }
+        val asking = searchJob?.takeIf { it.isActive }
+        submitJob =
             scope.launch {
-                when {
-                    running != null -> running.join()
-                    !haveAnswer -> run(searchText, area)
-                }
+                asking?.join()
                 val results = state.value.results
                 if (results.size == 1 && state.value.mode == SearchMode.Results) select(results.single())
             }
@@ -170,12 +189,15 @@ class SearchController(
     ) {
         val place = entry.place
         if (place == null) {
-            onQueryChange(entry.query, area)
-            _state.update { it.copy(textSetBySearch = it.textSetBySearch + 1) }
+            // Searched at once, like pressing Search: no typing pause to wait for.
+            cancelSearch()
+            _state.update {
+                it.copy(query = entry.query, mode = SearchMode.Editing, selected = null, textSetBySearch = it.textSetBySearch + 1)
+            }
             submit(area)
             return
         }
-        job?.cancel()
+        cancelSearch()
         val result = SearchResult(place = place)
         _state.update {
             SearchState(
@@ -191,13 +213,14 @@ class SearchController(
 
     /** Empties the bar and keeps typing. */
     fun clearQuery() {
-        job?.cancel()
+        cancelSearch()
         _state.update { SearchState(mode = SearchMode.Editing, textSetBySearch = it.textSetBySearch + 1) }
     }
 
-    /** Leaves search: the map as it was, the bar empty. */
+    /** Leaves search: the map as it was, the bar empty, and no search outage named on the map. */
     fun close() {
-        job?.cancel()
+        cancelSearch()
+        health?.recovered(ServicePart.Search)
         _state.update { SearchState(textSetBySearch = it.textSetBySearch + 1) }
     }
 
@@ -241,10 +264,17 @@ class SearchController(
     private fun searchLater(
         text: String,
         area: SearchArea,
+    ) = startSearch(text, area, wait = true)
+
+    private fun startSearch(
+        text: String,
+        area: SearchArea,
+        wait: Boolean,
     ) {
-        job =
+        searchText = text
+        searchJob =
             scope.launch {
-                delay(debounce)
+                if (wait) delay(debounce)
                 run(text, area)
             }
     }
@@ -271,11 +301,10 @@ class SearchController(
     ) {
         val query = state.value.query
         val answers = MutableStateFlow(Answers())
-        runningText = text
         // Only if the text is still the same: a search cancelled in between must not leave a spinner.
         _state.update { if (it.stillFor(query)) it.copy(photon = SourceState.Loading, pinakes = SourceState.Loading) else it }
 
-        fun publish(a: Answers) =
+        fun publish(a: Answers) {
             _state.update {
                 if (!it.stillFor(query)) return@update it
                 it.copy(
@@ -285,11 +314,19 @@ class SearchController(
                     pinakes = a.pinakesState,
                 )
             }
-        try {
-            searchBoth(text, area, answers, ::publish)
-        } finally {
-            if (runningText == text) runningText = null
+            when {
+                a.photonState == SourceState.Unreachable && a.pinakesState == SourceState.Unreachable -> {
+                    health?.failed(ServicePart.Search)
+                }
+
+                a.photonState == SourceState.Answered || a.pinakesState == SourceState.Answered -> {
+                    health?.recovered(ServicePart.Search)
+                }
+
+                else -> {}
+            }
         }
+        searchBoth(text, area, answers, ::publish)
     }
 
     private suspend fun searchBoth(

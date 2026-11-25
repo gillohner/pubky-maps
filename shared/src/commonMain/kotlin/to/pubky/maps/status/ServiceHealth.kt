@@ -14,6 +14,9 @@ enum class ServicePart(
 
     /** Every Pinakes server failed: places from links show from their link text only. */
     Pinakes("Can't reach Pinakes"),
+
+    /** Neither Photon nor Pinakes answered the last search. */
+    Search("Search is offline"),
 }
 
 /**

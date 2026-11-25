@@ -5,9 +5,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import to.pubky.maps.place.PlaceSource
+import to.pubky.maps.status.ServiceHealth
+import to.pubky.maps.status.ServicePart
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -50,7 +53,9 @@ class SearchControllerTest {
     private val search = FakeSearch()
     private val recents = InMemoryRecentSearchStore()
 
-    private fun TestScope.controller(viewer: String? = null) = SearchController(search, recents, this, viewer = { viewer })
+    private val health = ServiceHealth()
+
+    private fun TestScope.controller(viewer: String? = null) = SearchController(search, recents, this, viewer = { viewer }, health = health)
 
     private fun SearchController.type(text: String) {
         for (i in 1..text.length) onQueryChange(text.take(i), area)
@@ -360,5 +365,84 @@ class SearchControllerTest {
             advanceUntilIdle()
             assertFalse(c.state.value.searching)
             assertEquals(emptyList<SearchResult>(), c.state.value.results)
+        }
+
+    @Test
+    fun searchAsksAgainASourceThatFailed() =
+        runTest {
+            search.photonDown = true
+            search.pinakesDown = true
+            val c = controller()
+            c.onQueryChange("kunsthaus", area)
+            advanceUntilIdle()
+            assertTrue(c.state.value.offline)
+            assertEquals(setOf(ServicePart.Search), health.missing.value)
+            // The connection is back: Search asks both again.
+            search.photonDown = false
+            search.pinakesDown = false
+            c.submit(area)
+            advanceUntilIdle()
+            assertEquals(listOf("kunsthaus", "kunsthaus"), search.photonQueries)
+            assertFalse(c.state.value.offline)
+            assertEquals(emptySet(), health.missing.value)
+            assertTrue(
+                c.state.value.results
+                    .isNotEmpty(),
+            )
+        }
+
+    @Test
+    fun oneSourceFailedIsAskedAgainToo() =
+        runTest {
+            search.pinakesDown = true
+            val c = controller()
+            c.onQueryChange("kunsthaus", area)
+            advanceUntilIdle()
+            search.pinakesDown = false
+            c.submit(area)
+            advanceUntilIdle()
+            assertEquals(2, search.pinakesQueries.size)
+            assertEquals(SourceState.Answered, c.state.value.pinakes)
+            // Both never down at once: search was never named offline.
+            assertEquals(emptySet(), health.missing.value)
+        }
+
+    @Test
+    fun leavingSearchCancelsTheSearchSearchWasWaitingFor() =
+        runTest {
+            search.photonDelay = 5_000
+            search.pinakesDelay = 5_000
+            val c = controller()
+            c.onQueryChange("kunsthaus", area)
+            advanceTimeBy(400)
+            c.submit(area)
+            c.close()
+            advanceUntilIdle()
+            // The requests were cancelled: nothing came back into the closed search.
+            assertEquals(SearchState(textSetBySearch = 1), c.state.value)
+            assertTrue(currentTime < 5_000L, "the search ran on after close: $currentTime ms")
+        }
+
+    @Test
+    fun anUnreadableGeoUriIsNoHistoryEntry() =
+        runTest {
+            val c = controller()
+            c.onQueryChange("geo:somewhere", area)
+            c.submit(area)
+            advanceUntilIdle()
+            assertEquals(emptyList<RecentSearch>(), recents.entries.value)
+        }
+
+    @Test
+    fun closingSearchClearsItsOutageFromTheMap() =
+        runTest {
+            search.photonDown = true
+            search.pinakesDown = true
+            val c = controller()
+            c.onQueryChange("kunsthaus", area)
+            advanceUntilIdle()
+            assertEquals(setOf(ServicePart.Search), health.missing.value)
+            c.close()
+            assertEquals(emptySet(), health.missing.value)
         }
 }
