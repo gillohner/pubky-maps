@@ -1,5 +1,6 @@
 package to.pubky.maps.account
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import to.pubky.maps.cache.AccountCache
 import to.pubky.maps.cache.CachedAccount
@@ -28,6 +29,9 @@ class FakePubkyCore : PubkyCore {
     var tagPaths = listOf<String>()
     var bookmarks = listOf<SavedPlace>()
     var failReads: CoreFailure? = null
+
+    /** When set, listing waits for it (a slow homeserver). */
+    var listGate: CompletableDeferred<Unit>? = null
 
     fun link(n: Int) = SignInLink(url = "pubkyauth://signin_grant?flow=$n&secret=s$n", nonce = "nonce$n", pendingState = "state$n")
 
@@ -93,21 +97,29 @@ class FakePubkyCore : PubkyCore {
         dir: String,
         cursor: String?,
     ): Page<String> {
+        listGate?.await()
         failReads?.let { throw it }
-        // Pages of two, the cursor being the index of the next item.
+        // Pages of two, the cursor being the index of the next item. Like the homeserver, a folder
+        // with nothing in it does not exist.
+        val inDir = tagPaths.filter { it.startsWith(dir) }
+        if (inDir.isEmpty()) throw CoreFailure.NotFound(dir)
         val from = cursor?.toInt() ?: 0
-        val page = tagPaths.filter { it.startsWith(dir) }.drop(from).take(2)
+        val page = inDir.drop(from).take(2)
         return Page(page, if (page.isEmpty()) null else (from + page.size).toString())
     }
 
     override suspend fun listBookmarks(cursor: String?): Page<SavedPlace> {
         failReads?.let { throw it }
-        return Page(if (cursor == null) bookmarks else emptyList(), if (cursor == null && bookmarks.isNotEmpty()) "end" else null)
+        if (bookmarks.isEmpty()) throw CoreFailure.NotFound("/priv/social/v1/bookmarks/")
+        return Page(if (cursor == null) bookmarks else emptyList(), if (cursor == null) "end" else null)
     }
 }
 
 class MemorySecretStore : SecretStore {
     val values = mutableMapOf<String, String>()
+
+    /** Thrown by [write], as by a broken Keystore. */
+    var writeFailure: Exception? = null
 
     override suspend fun read(name: String): String? = values[name]
 
@@ -115,6 +127,7 @@ class MemorySecretStore : SecretStore {
         name: String,
         value: String,
     ) {
+        writeFailure?.let { throw it }
         values[name] = value
     }
 

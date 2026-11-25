@@ -98,7 +98,13 @@ internal class AccountLoader(
         val items = mutableListOf<T>()
         var cursor: String? = null
         do {
-            val page = read(cursor)
+            val page =
+                try {
+                    read(cursor)
+                } catch (_: CoreFailure.NotFound) {
+                    // A folder nothing was ever written to does not exist on the homeserver (404).
+                    break
+                }
             items += page.items
             cursor = page.nextCursor
         } while (cursor != null && page.items.isNotEmpty() && items.size < MAX_ITEMS)

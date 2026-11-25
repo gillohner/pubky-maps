@@ -1,5 +1,6 @@
 package to.pubky.maps.account
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -400,6 +401,65 @@ class AccountControllerTest {
 
             val state = assertIs<AccountState.Unavailable>(account.state.value)
             assertTrue(state.reason.contains("not available"))
+        }
+
+    @Test
+    fun aNewUserWithNothingWrittenYetIsOnlineNotOffline() =
+        runTest {
+            // No profile, no tags folder, no saved places: the homeserver answers 404 for each.
+            val account = controller()
+            account.start()
+            account.onForeground()
+            signIn(account)
+            approve()
+            runCurrent()
+
+            val state = assertIs<AccountState.SignedIn>(account.state.value)
+            assertEquals(Connection.Online, state.connection)
+            assertEquals(false, state.refreshing)
+            assertEquals(emptySet(), health.missing.value)
+            assertNull(state.user.name)
+        }
+
+    @Test
+    fun aRefreshThatEndsAfterTheSignOutChangesNothing() =
+        runTest {
+            secrets.values[SecretStore.SESSION] = "grant-secret"
+            cache.stored = CachedAccount(USER, "Ada", 500, emptyList(), emptyList())
+            core.restore = { AccountSession(USER, "homeserver") }
+            core.tagPaths = listOf("/pub/social/v1/tags/a.json")
+            val gate = CompletableDeferred<Unit>()
+            core.listGate = gate
+            val account = controller()
+            account.start()
+            runCurrent()
+            assertEquals(true, (account.state.value as AccountState.SignedIn).refreshing)
+
+            account.signOut()
+            runCurrent()
+            core.failReads = CoreFailure.Auth("not signed in")
+            gate.complete(Unit)
+            runCurrent()
+
+            assertEquals(AccountState.SignedOut(), account.state.value)
+        }
+
+    @Test
+    fun aSecretThatCannotBeStoredEndsTheSignInWithANoticeInsteadOfACrash() =
+        runTest {
+            secrets.writeFailure = IllegalStateException("keystore")
+            val account = controller()
+            account.start()
+
+            val link = async { account.signIn() }
+            runCurrent()
+
+            assertNull(link.await())
+            val state = assertIs<AccountState.SignedOut>(account.state.value)
+            assertTrue(state.notice!!.contains("could not be stored"))
+            // The queue still works.
+            secrets.writeFailure = null
+            assertEquals(core.link(2).url, signIn(account))
         }
 
     @Test

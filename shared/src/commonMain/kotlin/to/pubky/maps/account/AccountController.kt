@@ -5,6 +5,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -108,14 +109,32 @@ class AccountController(
     private var restoreJob: Job? = null
     private var refreshJob: Job? = null
     private var retryJob: Job? = null
+    private var revokeJob: Job? = null
     private var retries = 0
+
+    /**
+     * Counts session changes (signed in, restored, signing out, signed out). A restore, refresh or
+     * revoke result is applied only while the session it was made for is still the current one.
+     */
+    private var session = 0
 
     /** True once the core holds a session for the user (restored or signed in here). */
     private var sessionInstalled = false
 
     init {
         scope.launch {
-            for (action in actions) action()
+            for (action in actions) {
+                try {
+                    action()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (
+                    // Storage, Keystore or SQLite failures must not stop the queue or the app.
+                    @Suppress("TooGenericExceptionCaught") e: Exception,
+                ) {
+                    failed(e)
+                }
+            }
         }
     }
 
@@ -124,6 +143,44 @@ class AccountController(
     }
 
     private suspend fun <T> io(block: () -> T): T = withContext(io) { block() }
+
+    /** Runs a core call beside the queue; any failure becomes a [CoreFailure]. */
+    private suspend fun <T> call(block: suspend () -> T): T =
+        try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: CoreFailure) {
+            throw e
+        } catch (
+            @Suppress("TooGenericExceptionCaught") e: Exception,
+        ) {
+            throw CoreFailure.Other(e::class.simpleName ?: "unexpected error")
+        }
+
+    /** An action failed outside the core (storage on this phone): end what it was doing, keep the rest. */
+    private fun failed(e: Exception) {
+        val what = e::class.simpleName ?: "error"
+        when (state.value) {
+            AccountState.Loading -> {
+                mutableState.value =
+                    AccountState.SignedOut(
+                        notice = "The sign-in stored on this phone could not be read ($what). Restart the app to try again.",
+                    )
+            }
+
+            is AccountState.SigningIn, is AccountState.SignedOut -> {
+                waitJob?.cancel()
+                waitJob = null
+                link = null
+                core?.cancelSignIn()
+                mutableState.value =
+                    AccountState.SignedOut(notice = "The sign-in could not be stored on this phone ($what). Please try again.")
+            }
+
+            else -> {}
+        }
+    }
 
     /**
      * Reads what this phone stored: restores the session or continues a running sign-in. [prepare]
@@ -160,7 +217,13 @@ class AccountController(
     /** Starts a sign-in and returns its link, to open in Pubky Ring; null when it cannot start now. */
     suspend fun signIn(): String? {
         val result = CompletableDeferred<String?>()
-        enqueue { result.complete(startSignIn()) }
+        enqueue {
+            try {
+                result.complete(startSignIn())
+            } finally {
+                result.complete(null)
+            }
+        }
         return result.await()
     }
 
@@ -172,7 +235,8 @@ class AccountController(
     /** Reads the user's data from the homeserver again. */
     fun refresh() =
         enqueue {
-            if (state.value is AccountState.SignedIn) reconnect()
+            val signedIn = state.value as? AccountState.SignedIn ?: return@enqueue
+            if (!signedIn.signingOut) reconnect()
         }
 
     /** Revokes the session (when the homeserver answers) and deletes the account's data from this phone. */
@@ -180,20 +244,32 @@ class AccountController(
         enqueue {
             val signedIn = state.value as? AccountState.SignedIn ?: return@enqueue
             if (signedIn.signingOut) return@enqueue
-            mutableState.value = signedIn.copy(signingOut = true)
             val core = core ?: return@enqueue
+            // Nothing that was running for this session may land after the sign-out.
+            stopSessionJobs()
+            val signingOut = ++session
+            mutableState.value = signedIn.copy(signingOut = true, refreshing = false)
+            val installed = sessionInstalled
             scope.launch {
                 val revoked =
                     try {
-                        sessionInstalled && core.signOut()
-                    } catch (e: CancellationException) {
-                        throw e
+                        installed && call { core.signOut() }
                     } catch (_: CoreFailure) {
                         false
                     }
-                enqueue { signedOut(notice = if (revoked) null else NOT_REVOKED) }
+                enqueue { if (session == signingOut) signedOut(notice = if (revoked) null else NOT_REVOKED) }
             }
         }
+
+    private suspend fun stopSessionJobs() {
+        retryJob?.cancel()
+        retryJob = null
+        refreshJob?.cancelAndJoin()
+        refreshJob = null
+        // Joined, so a restore that was just finishing cannot install its session after this.
+        restoreJob?.cancelAndJoin()
+        restoreJob = null
+    }
 
     private suspend fun startNow() {
         val created =
@@ -249,6 +325,9 @@ class AccountController(
 
             else -> {}
         }
+        // A session left from a sign-in whose result came too late is being revoked: wait for that,
+        // so the new sign-in cannot pick it up.
+        revokeJob?.join()
         val started =
             try {
                 core.startSignIn()
@@ -277,28 +356,62 @@ class AccountController(
         val flow = link ?: return
         waitJob =
             scope.launch {
+                val wait = coroutineContext[Job]
                 // A result handed out while the last wait was being cancelled installed its session
                 // without reaching us: take it from the core.
                 val step =
                     try {
-                        core.installedSession() ?: core.awaitSignIn()
+                        call { core.installedSession() ?: core.awaitSignIn() }
                     } catch (e: CoreFailure) {
-                        enqueue { if (link === flow) signInFailed(e) }
+                        enqueue { if (waitEnded(wait, flow)) signInFailed(e) }
                         return@launch
                     }
                 enqueue {
-                    if (link === flow) {
-                        when (step) {
-                            is SignInStep.SignedIn -> signedIn(step)
-                            is SignInStep.RelayChanged -> relayChanged(step.link)
+                    when {
+                        waitEnded(wait, flow) -> {
+                            when (step) {
+                                is SignInStep.SignedIn -> signedIn(step)
+                                is SignInStep.RelayChanged -> relayChanged(step.link)
+                            }
+                        }
+
+                        // The result of a sign-in that is no longer running (cancelled just as Ring
+                        // approved it): its session is in the core; revoke it.
+                        step is SignInStep.SignedIn && link !== flow -> {
+                            revokeStale(core)
                         }
                     }
                 }
             }
     }
 
-    private suspend fun relayChanged(next: SignInLink) {
+    /**
+     * A wait for [flow] ended. True when [flow] is still the running sign-in; then no other wait for it
+     * is left running.
+     */
+    private fun waitEnded(
+        wait: Job?,
+        flow: SignInLink,
+    ): Boolean {
+        if (link !== flow) return false
+        if (waitJob !== wait) waitJob?.cancel()
         waitJob = null
+        return true
+    }
+
+    private fun revokeStale(core: PubkyCore) {
+        if (state.value is AccountState.SignedIn) return
+        revokeJob =
+            scope.launch {
+                try {
+                    call { core.signOut() }
+                } catch (_: CoreFailure) {
+                    core.forgetSession()
+                }
+            }
+    }
+
+    private suspend fun relayChanged(next: SignInLink) {
         showLink(next, relayChanged = true)
     }
 
@@ -335,7 +448,6 @@ class AccountController(
     }
 
     private suspend fun signInFailed(failure: CoreFailure) {
-        waitJob = null
         if (failure is CoreFailure.Cancelled) return
         val notice =
             when (failure) {
@@ -347,8 +459,8 @@ class AccountController(
     }
 
     private suspend fun signedIn(step: SignInStep.SignedIn) {
-        waitJob = null
         link = null
+        session++
         val publicKey = step.session.publicKey
         // The account's row first: a stored session always has a cached user to show.
         io { cache.begin(publicKey) }
@@ -364,26 +476,27 @@ class AccountController(
     private fun restore() {
         if (restoreJob?.isActive == true) return
         val core = core ?: return
+        val current = session
         restoreJob =
             scope.launch {
                 val secret = secrets.read(SecretStore.SESSION) ?: return@launch
                 try {
-                    val session = core.restoreSession(secret)
-                    enqueue { restored(session) }
+                    val restoredSession = call { core.restoreSession(secret) }
+                    enqueue { if (session == current) restored(restoredSession) }
                 } catch (_: CoreFailure.Auth) {
-                    enqueue { signedOut(notice = SESSION_ENDED) }
+                    enqueue { if (session == current) signedOut(notice = SESSION_ENDED) }
                 } catch (_: CoreFailure) {
-                    enqueue { offline() }
+                    enqueue { if (session == current) offline() }
                 }
             }
     }
 
-    private suspend fun restored(session: AccountSession) {
+    private suspend fun restored(restoredSession: AccountSession) {
         if (state.value !is AccountState.SignedIn && state.value != AccountState.Loading) return
         sessionInstalled = true
         retries = 0
-        io { cache.begin(session.publicKey) }
-        val cached = io { cache.read() } ?: CachedAccount(session.publicKey, null, null, emptyList(), emptyList())
+        io { cache.begin(restoredSession.publicKey) }
+        val cached = io { cache.read() } ?: CachedAccount(restoredSession.publicKey, null, null, emptyList(), emptyList())
         mutableState.value = AccountState.SignedIn(AccountUser(cached.publicKey, cached.name), cached, Connection.Online)
         health.recovered(ServicePart.Homeserver)
         refreshData()
@@ -391,9 +504,20 @@ class AccountController(
 
     /** The homeserver did not answer: show what is cached and try again later (in the foreground). */
     private fun offline() {
-        health.failed(ServicePart.Homeserver)
         val state = state.value
-        if (state is AccountState.SignedIn) mutableState.value = state.copy(connection = Connection.Offline, refreshing = false)
+        when {
+            state is AccountState.SignedIn && !state.signingOut -> {
+                mutableState.value = state.copy(connection = Connection.Offline, refreshing = false)
+            }
+
+            // A stored session nothing was cached for: keep trying.
+            state == AccountState.Loading -> {}
+
+            else -> {
+                return
+            }
+        }
+        health.failed(ServicePart.Homeserver)
         if (!foreground) return
         val wait = retryDelays[minOf(retries, retryDelays.lastIndex)]
         retries++
@@ -414,17 +538,22 @@ class AccountController(
         if (refreshJob?.isActive == true) return
         val core = core ?: return
         val signedIn = state.value as? AccountState.SignedIn ?: return
+        if (signedIn.signingOut) return
         mutableState.value = signedIn.copy(refreshing = true)
         val publicKey = signedIn.user.publicKey
+        val current = session
         refreshJob =
             scope.launch {
                 try {
-                    val loaded = AccountLoader(core, now).load(publicKey)
-                    enqueue { refreshed(loaded) }
+                    val loaded = call { AccountLoader(core, now).load(publicKey) }
+                    enqueue { if (session == current) refreshed(loaded) }
                 } catch (_: CoreFailure.Auth) {
-                    enqueue { signedOut(notice = SESSION_ENDED) }
+                    enqueue { if (session == current) signedOut(notice = SESSION_ENDED) }
+                } catch (_: CoreFailure.Network) {
+                    enqueue { if (session == current) offline() }
                 } catch (_: CoreFailure) {
-                    enqueue { offline() }
+                    // The homeserver answered, with something this version cannot read: keep what is cached.
+                    enqueue { if (session == current) refreshDone() }
                 }
             }
     }
@@ -444,10 +573,15 @@ class AccountController(
             )
     }
 
+    private fun refreshDone() {
+        val signedIn = state.value as? AccountState.SignedIn ?: return
+        health.recovered(ServicePart.Homeserver)
+        mutableState.value = signedIn.copy(connection = Connection.Online, refreshing = false)
+    }
+
     private suspend fun signedOut(notice: String?) {
-        restoreJob?.cancel()
-        refreshJob?.cancel()
-        retryJob?.cancel()
+        stopSessionJobs()
+        session++
         core?.forgetSession()
         sessionInstalled = false
         secrets.delete(SecretStore.SESSION)
