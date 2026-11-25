@@ -38,19 +38,21 @@ sealed interface CheckResult {
 }
 
 /**
- * Looks for an update: asks each feed server in order and takes the first feed that is signed with a
- * trusted key and valid for this build. A server that cannot be reached or serves a feed that is not
- * accepted hands over to the next one.
+ * Looks for an update: asks every feed server and takes the newest feed that is signed with a trusted
+ * key and valid for this build, so a stale mirror early in the list cannot hide a newer build. A server
+ * that cannot be reached or serves a feed that is not accepted is skipped.
  */
 class UpdateChecker(
     private val fetch: suspend (url: String) -> ByteArray,
     private val trustedKeys: List<ByteArray>,
     private val verifier: SignatureVerifier,
+    private val allowLocalHttp: Boolean = false,
 ) {
     suspend fun check(
         feedUrls: List<String>,
         installed: InstalledBuild,
     ): CheckResult {
+        var newest: UpdateFeed? = null
         var refusal: FeedProblem? = null
         for (url in feedUrls) {
             val bytes =
@@ -61,12 +63,15 @@ class UpdateChecker(
                 } catch (_: Exception) {
                     continue
                 }
-            when (val read = readSignedFeed(bytes, trustedKeys, verifier, installed.appId, installed.channel)) {
-                is FeedReadResult.Valid -> return decide(read.feed, installed)
+            val read = readSignedFeed(bytes, trustedKeys, verifier, installed.appId, installed.channel, allowLocalHttp)
+            when (read) {
+                is FeedReadResult.Valid -> if (newest == null || read.feed.versionCode > newest.versionCode) newest = read.feed
                 is FeedReadResult.Invalid -> refusal = refusal ?: read.problem
             }
         }
-        return refusal?.let { CheckResult.Refused(it) } ?: CheckResult.Unreachable
+        return newest?.let { decide(it, installed) }
+            ?: refusal?.let { CheckResult.Refused(it) }
+            ?: CheckResult.Unreachable
     }
 }
 

@@ -75,7 +75,8 @@ class UpdateFeedTest {
         file: ByteArray,
         channel: UpdateChannel = UpdateChannel.Edge,
         keys: List<ByteArray> = listOf(key),
-    ) = readSignedFeed(file, keys, verifier, "to.pubky.maps", channel)
+        allowLocalHttp: Boolean = false,
+    ) = readSignedFeed(file, keys, verifier, "to.pubky.maps", channel, allowLocalHttp)
 
     private fun installed(
         versionCode: Long,
@@ -184,9 +185,10 @@ class UpdateFeedTest {
         for (feed in cases) {
             assertEquals(FeedReadResult.Invalid(FeedProblem.BadApk), read(signedFile(feed.toString())), feed.toString())
         }
-        // The update probe's fixture server on the phone itself.
-        val local = goodFeed.withApk("url", JsonPrimitive("http://127.0.0.1:18480/pubky-maps.apk"))
-        assertIs<FeedReadResult.Valid>(read(signedFile(local.toString())))
+        // The update probe's fixture server on the phone itself, only in the probe's build.
+        val local = signedFile(goodFeed.withApk("url", JsonPrimitive("http://127.0.0.1:18480/pubky-maps.apk")).toString())
+        assertEquals(FeedReadResult.Invalid(FeedProblem.BadApk), read(local))
+        assertIs<FeedReadResult.Valid>(read(local, allowLocalHttp = true))
     }
 
     @Test
@@ -227,6 +229,20 @@ class UpdateFeedTest {
         }
 
     @Test
+    fun takesTheNewestFeedOfAllServers() =
+        runTest {
+            val stale = signedFile(goodFeed.with("versionCode", JsonPrimitive(1_000_005)).toString())
+            val newest = signedFile(goodFeed.toString())
+            val responses = mapOf("https://stale.example/f" to stale, "https://new.example/f" to newest)
+            val checker = UpdateChecker(fetch = { responses.getValue(it) }, trustedKeys = listOf(key), verifier = verifier)
+            val result = checker.check(listOf("https://stale.example/f", "https://new.example/f"), installed(1_000_010))
+            assertEquals(1_000_012, assertIs<CheckResult.Available>(result).feed.versionCode)
+            // A server that hangs or fails does not hide the others either.
+            val failing = UpdateChecker(fetch = { if (it.contains("stale")) error("timed out") else newest }, listOf(key), verifier)
+            assertIs<CheckResult.Available>(failing.check(listOf("https://stale.example/f", "https://new.example/f"), installed(1)))
+        }
+
+    @Test
     fun checksAutomaticallyAtMostOnceADay() {
         val day = AUTO_CHECK_INTERVAL_MS
         val now = 100 * day
@@ -246,7 +262,7 @@ class UpdateFeedTest {
             UpdateStatus.Failed(FeedProblem.BadSignature.message),
             CheckResult.Refused(FeedProblem.BadSignature).toStatus(),
         )
-        val feed = Json.decodeFromString<UpdateFeed>(goodFeed.toString())
+        val feed = Json { ignoreUnknownKeys = true }.decodeFromString<UpdateFeed>(goodFeed.toString())
         assertEquals(
             UpdateStatus.Available(AvailableUpdate(1_000_012, "0.1.0-edge.12", 14_200_000)),
             CheckResult.Available(feed).toStatus(),

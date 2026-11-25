@@ -69,6 +69,7 @@ def main() -> None:
         "versionCode": int(a.version_code),
         "versionName": a.version_name,
         "minSdk": int(a.min_sdk),
+        # For people reading the feed; the app ignores it.
         "published": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "apk": {"url": a.url, "size": apk.stat().st_size, "sha256": sha256(apk)},
     }

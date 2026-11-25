@@ -9,14 +9,20 @@ import java.security.MessageDigest
 
 private const val TIMEOUT_MS = 30_000
 private const val MAX_FEED_BYTES = 64 * 1024
+private const val FEED_DEADLINE_MS = 60_000L
 
-/** GETs a small document (an update feed). Blocking: call it off the main thread. */
-fun fetchFeed(url: String): ByteArray =
-    openGet(url).useBody { input ->
-        val bytes = input.readNBytesCompat(MAX_FEED_BYTES + 1)
+/**
+ * GETs a small document (an update feed), giving up after [FEED_DEADLINE_MS] in all, so a server that
+ * answers one byte at a time cannot hold the check. Blocking: call it off the main thread.
+ */
+fun fetchFeed(url: String): ByteArray {
+    val deadline = System.nanoTime() + FEED_DEADLINE_MS * 1_000_000
+    return openGet(url).useBody { input ->
+        val bytes = input.readNBytesCompat(MAX_FEED_BYTES + 1, deadline)
         if (bytes.size > MAX_FEED_BYTES) throw IOException("the update feed is larger than $MAX_FEED_BYTES bytes")
         bytes
     }
+}
 
 /**
  * Downloads [url] to [target], reading at most [expectedSize] + 1 bytes, and reports progress.
@@ -98,11 +104,15 @@ private fun <T> HttpURLConnection.useBody(read: (InputStream) -> T): T =
         disconnect()
     }
 
-/** InputStream.readNBytes is API 33; this reads up to [limit] bytes on every Android. */
-private fun InputStream.readNBytesCompat(limit: Int): ByteArray {
+/** Reads up to [limit] bytes (InputStream.readNBytes is API 33), failing once [deadlineNanos] has passed. */
+private fun InputStream.readNBytesCompat(
+    limit: Int,
+    deadlineNanos: Long,
+): ByteArray {
     val out = java.io.ByteArrayOutputStream()
     val buffer = ByteArray(8 * 1024)
     while (out.size() < limit) {
+        if (System.nanoTime() > deadlineNanos) throw IOException("the update server is too slow")
         val n = read(buffer, 0, minOf(buffer.size, limit - out.size()))
         if (n < 0) break
         out.write(buffer, 0, n)

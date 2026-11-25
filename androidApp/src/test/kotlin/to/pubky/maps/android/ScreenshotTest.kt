@@ -177,24 +177,47 @@ class ScreenshotTest {
     @Test
     fun updateTabletDark() = capture("update", Device.Tablet, dark = true) { Update() }
 
-    @Test
-    fun updateDownloadingPhoneLight() =
-        capture("update-downloading", Device.Phone, dark = false) {
-            Update(UpdateDialog.Downloading(update, downloadedBytes = 6_100_000))
-        }
+    private val downloading = UpdateDialog.Downloading(update, downloadedBytes = 6_100_000)
+    private val permission = UpdateDialog.NeedsPermission(update)
+    private val refused =
+        UpdateDialog.NotInstalled(
+            "The downloaded file is not the one the signed update information names (its SHA-256 differs). " +
+                "Nothing was installed.",
+        )
 
     @Test
-    fun updatePermissionPhoneLight() =
-        capture("update-permission", Device.Phone, dark = false) { Update(UpdateDialog.NeedsPermission(update)) }
+    fun updateDownloadingPhoneLight() = capture("update-downloading", Device.Phone, dark = false) { Update(downloading) }
 
     @Test
-    fun updateRefusedPhoneDark() =
-        capture("update-refused", Device.Phone, dark = true) {
-            Update(
-                UpdateDialog.NotInstalled(
-                    "The downloaded file is not the one the signed update information names " +
-                        "(its SHA-256 differs). Nothing was installed.",
-                ),
-            )
-        }
+    fun updateDownloadingPhoneDark() = capture("update-downloading", Device.Phone, dark = true) { Update(downloading) }
+
+    @Test
+    fun updateDownloadingTabletLight() = capture("update-downloading", Device.Tablet, dark = false) { Update(downloading) }
+
+    @Test
+    fun updateDownloadingTabletDark() = capture("update-downloading", Device.Tablet, dark = true) { Update(downloading) }
+
+    @Test
+    fun updatePermissionPhoneLight() = capture("update-permission", Device.Phone, dark = false) { Update(permission) }
+
+    @Test
+    fun updatePermissionPhoneDark() = capture("update-permission", Device.Phone, dark = true) { Update(permission) }
+
+    @Test
+    fun updatePermissionTabletLight() = capture("update-permission", Device.Tablet, dark = false) { Update(permission) }
+
+    @Test
+    fun updatePermissionTabletDark() = capture("update-permission", Device.Tablet, dark = true) { Update(permission) }
+
+    @Test
+    fun updateRefusedPhoneLight() = capture("update-refused", Device.Phone, dark = false) { Update(refused) }
+
+    @Test
+    fun updateRefusedPhoneDark() = capture("update-refused", Device.Phone, dark = true) { Update(refused) }
+
+    @Test
+    fun updateRefusedTabletLight() = capture("update-refused", Device.Tablet, dark = false) { Update(refused) }
+
+    @Test
+    fun updateRefusedTabletDark() = capture("update-refused", Device.Tablet, dark = true) { Update(refused) }
 }

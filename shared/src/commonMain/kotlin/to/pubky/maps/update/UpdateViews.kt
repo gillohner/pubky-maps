@@ -28,6 +28,7 @@ fun UpdateSettingsRows(
     onAutoCheckChange: (Boolean) -> Unit,
 ) {
     val checking = state.status == UpdateStatus.Checking
+    val busy = checking || state.dialog is UpdateDialog.Downloading
     ListItem(
         headlineContent = { Text("Check for updates") },
         supportingContent = { Text(statusText(state)) },
@@ -37,7 +38,7 @@ fun UpdateSettingsRows(
             } else {
                 null
             },
-        modifier = Modifier.clickable(enabled = !checking, onClick = onCheckNow),
+        modifier = Modifier.clickable(enabled = !busy, onClick = onCheckNow),
     )
     ListItem(
         headlineContent = { Text("Check automatically") },

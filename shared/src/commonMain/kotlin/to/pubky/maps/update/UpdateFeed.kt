@@ -45,7 +45,6 @@ data class UpdateFeed(
     val versionName: String,
     /** The oldest Android (API level) the APK installs on. */
     val minSdk: Int,
-    val published: String,
     val apk: FeedApk,
 )
 
@@ -96,7 +95,8 @@ private val json = Json { ignoreUnknownKeys = true }
 /**
  * Reads a signed feed file: the signature must verify with one of [trustedKeys] over the exact bytes
  * of the feed document, and the feed must be for [appId] on [channel], in a known format, and name an
- * HTTPS download with a size and a SHA-256.
+ * HTTPS download with a size and a SHA-256. [allowLocalHttp] also accepts plain HTTP to the phone
+ * itself (127.0.0.1); only the update probe's build sets it.
  */
 fun readSignedFeed(
     file: ByteArray,
@@ -104,6 +104,7 @@ fun readSignedFeed(
     verifier: SignatureVerifier,
     appId: String,
     channel: UpdateChannel,
+    allowLocalHttp: Boolean = false,
 ): FeedReadResult {
     val signed =
         try {
@@ -136,18 +137,17 @@ fun readSignedFeed(
             feed.format != FEED_FORMAT -> FeedProblem.UnknownFormat
             feed.app != appId -> FeedProblem.WrongApp
             feed.channel != channel.id -> FeedProblem.WrongChannel
-            feed.versionCode <= 0 || !isAllowedDownload(feed.apk.url) -> FeedProblem.BadApk
+            feed.versionCode <= 0 || !isAllowedDownload(feed.apk.url, allowLocalHttp) -> FeedProblem.BadApk
             feed.apk.size !in 1..MAX_APK_BYTES || !SHA256_HEX.matches(feed.apk.sha256) -> FeedProblem.BadApk
             else -> null
         }
     return if (problem == null) FeedReadResult.Valid(feed) else FeedReadResult.Invalid(problem)
 }
 
-/**
- * HTTPS only. Plain HTTP is accepted for the phone itself (127.0.0.1), which Android lets through only
- * in the update probe's build (every other build blocks clear-text traffic).
- */
-private fun isAllowedDownload(url: String): Boolean = url.startsWith("https://") || url.startsWith("http://127.0.0.1:")
+private fun isAllowedDownload(
+    url: String,
+    allowLocalHttp: Boolean,
+): Boolean = url.startsWith("https://") || (allowLocalHttp && url.startsWith("http://127.0.0.1:"))
 
 /** Decodes a base64 public key; the app embeds them as text. */
 fun decodePublicKey(base64: String): ByteArray {

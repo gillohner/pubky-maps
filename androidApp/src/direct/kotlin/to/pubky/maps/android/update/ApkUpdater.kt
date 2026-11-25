@@ -2,17 +2,16 @@ package to.pubky.maps.android.update
 
 import android.app.Activity
 import android.app.Application
+import android.content.ActivityNotFoundException
 import android.content.Context
-import android.content.Intent
-import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
 import android.util.Log
-import androidx.core.content.FileProvider
-import androidx.core.net.toUri
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -41,35 +40,74 @@ private const val TAG = "PubkyMapsUpdates"
 private const val PREFS = "updates"
 private const val KEY_AUTO_CHECK = "auto_check"
 private const val KEY_LAST_CHECK = "last_check_ms"
-private const val APK_MIME = "application/vnd.android.package-archive"
+private const val KEY_PENDING = "pending_version_code"
+
+/** What Android reads from an APK file: its package and versionCode. */
+data class ArchiveFacts(
+    val packageName: String,
+    val versionCode: Long,
+)
+
+/** What the updater needs from Android, replaceable in tests. */
+interface UpdatePlatform {
+    /** Downloads [url] to [target] (blocking, interruptible); see [downloadTo]. */
+    fun download(
+        url: String,
+        target: File,
+        expectedSize: Long,
+        onProgress: (Long) -> Unit,
+    ): Long
+
+    fun readArchive(file: File): ArchiveFacts?
+
+    /** Whether "Install unknown apps" is allowed for the app. */
+    fun canInstallPackages(): Boolean
+
+    /** Opens Android's installer for [file] from [activity]. */
+    fun launchInstaller(
+        activity: Activity,
+        file: File,
+    )
+
+    /** Opens the "Install unknown apps" setting of the app. */
+    fun openInstallPermissionSettings(activity: Activity)
+
+    fun now(): Long
+}
 
 /**
- * The in-app updater of the APK published on GitHub. It checks the signed feed of the build's
- * channel (at start at most once a day, and on request), offers a newer build, downloads it into the
- * app's cache, checks its size and SHA-256 against the signed feed and its package and versionCode,
- * checks the file again, and hands it to Android's installer through a FileProvider. Android then
- * installs it only when it is signed with the same key as the installed app.
+ * The in-app updater of the APK published on GitHub. It checks the signed feed of the build's channel
+ * (at start at most once a day, and on request), offers a newer build, downloads it into the app's
+ * cache, checks its size and SHA-256 against the signed feed and its package and versionCode, checks
+ * the file again right before, and hands it to Android's installer. Android then installs it only
+ * when it is signed with the same key as the installed app.
  *
- * Runs on the main thread; network and file work go to [Dispatchers.IO].
+ * Runs on [main]; network, file and preference work go to [io]. Every failure ends in a state the
+ * user can see; nothing here can crash the app.
  */
 class ApkUpdater(
     private val app: Application,
     private val installed: InstalledBuild,
     private val servers: ServerConfigRepository,
     private val checker: UpdateChecker,
+    private val platform: UpdatePlatform,
+    private val main: CoroutineDispatcher = Dispatchers.Main.immediate,
+    private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : UpdateController {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private val failures =
+        CoroutineExceptionHandler { _, e ->
+            Log.e(TAG, "updates: failed", e)
+            mutableState.update {
+                it.copy(status = UpdateStatus.Failed("Something went wrong. Try again later."), dialog = null)
+            }
+        }
+    private val scope = CoroutineScope(SupervisorJob() + main + failures)
+    private val prefs by lazy { app.getSharedPreferences(PREFS, Context.MODE_PRIVATE) }
     private val updatesDir = File(app.cacheDir, "updates")
 
     private val mutableState =
         MutableStateFlow(
-            UpdatesUiState(
-                channel = installed.channel,
-                autoCheck = prefs.getBoolean(KEY_AUTO_CHECK, true),
-                status = UpdateStatus.NotChecked,
-                dialog = null,
-            ),
+            UpdatesUiState(channel = installed.channel, autoCheck = true, status = UpdateStatus.NotChecked, dialog = null),
         )
     override val state: StateFlow<UpdatesUiState> = mutableState.asStateFlow()
 
@@ -85,26 +123,37 @@ class ApkUpdater(
         app.registerActivityLifecycleCallbacks(ResumedActivityTracker())
     }
 
-    /** At app start: removes finished downloads and runs the daily check when it is due. */
+    /**
+     * At app start: removes old downloads, then checks when the daily check is due, or when the app was
+     * stopped while the user was allowing "Install unknown apps" for an update (offered again).
+     */
     fun onAppStart() {
-        val auto = if (state.value.autoCheck) "on" else "off"
-        Log.i(TAG, "updates: ${installed.versionName} (${installed.versionCode}) on ${installed.channel.id}; automatic checks $auto")
         scope.launch {
-            withContext(Dispatchers.IO) {
-                updatesDir.listFiles()?.forEach { it.delete() }
+            val stored =
+                withContext(io) {
+                    updatesDir.listFiles()?.forEach { it.delete() }
+                    Stored(
+                        autoCheck = prefs.getBoolean(KEY_AUTO_CHECK, true),
+                        lastCheck = prefs.getLong(KEY_LAST_CHECK, 0L).takeIf { it > 0 },
+                        pending = prefs.getLong(KEY_PENDING, 0L),
+                    )
+                }
+            mutableState.update { it.copy(autoCheck = stored.autoCheck) }
+            val auto = if (stored.autoCheck) "on" else "off"
+            Log.i(TAG, "updates: ${installed.versionName} (${installed.versionCode}) on ${installed.channel.id}; automatic checks $auto")
+            val pending = stored.pending > installed.versionCode
+            if (!pending && stored.pending != 0L) setPending(null)
+            if (pending || isAutoCheckDue(stored.autoCheck, stored.lastCheck, platform.now())) {
+                check(automatic = !pending)
             }
-        }
-        val last = prefs.getLong(KEY_LAST_CHECK, 0L).takeIf { it > 0 }
-        if (isAutoCheckDue(state.value.autoCheck, last, System.currentTimeMillis())) {
-            check(automatic = true)
         }
     }
 
     override fun checkNow() = check(automatic = false)
 
     override fun setAutoCheck(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_AUTO_CHECK, enabled).apply()
         mutableState.update { it.copy(autoCheck = enabled) }
+        scope.launch { withContext(io) { prefs.edit().putBoolean(KEY_AUTO_CHECK, enabled).apply() } }
     }
 
     private fun check(automatic: Boolean) {
@@ -112,17 +161,22 @@ class ApkUpdater(
         mutableState.update { it.copy(status = UpdateStatus.Checking) }
         checkJob =
             scope.launch {
-                val urls =
-                    servers.config.value.updateFeeds
-                        .forChannel(installed.channel)
-                val result = withContext(Dispatchers.IO) { checker.check(urls, installed) }
-                if (result != CheckResult.Unreachable) {
-                    prefs.edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis()).apply()
+                try {
+                    val urls =
+                        servers.config.value.updateFeeds
+                            .forChannel(installed.channel)
+                    val result = withContext(io) { checker.check(urls, installed) }
+                    if (result != CheckResult.Unreachable) {
+                        withContext(io) { prefs.edit().putLong(KEY_LAST_CHECK, platform.now()).apply() }
+                    }
+                    Log.i(TAG, "updates: ${if (automatic) "automatic" else "manual"} check: ${describe(result)}")
+                    offered = (result as? CheckResult.Available)?.feed
+                    val offer = offered?.let { UpdateDialog.Offer(AvailableUpdate.of(it), installed.versionName) }
+                    mutableState.update { it.copy(status = result.toStatus(), dialog = offer ?: it.dialog) }
+                } finally {
+                    // Cancelled or failed: never left showing "Checking…".
+                    mutableState.update { if (it.status == UpdateStatus.Checking) it.copy(status = UpdateStatus.NotChecked) else it }
                 }
-                Log.i(TAG, "updates: ${if (automatic) "automatic" else "manual"} check: ${describe(result)}")
-                offered = (result as? CheckResult.Available)?.feed
-                val offer = offered?.let { UpdateDialog.Offer(AvailableUpdate.of(it), installed.versionName) }
-                mutableState.update { it.copy(status = result.toStatus(), dialog = offer ?: it.dialog) }
             }
     }
 
@@ -130,12 +184,11 @@ class ApkUpdater(
         val feed = offered ?: return
         if (downloadJob?.isActive == true) return
         val update = AvailableUpdate.of(feed)
-        verified?.let { (file, verifiedFeed) ->
-            if (verifiedFeed == feed && file.exists()) {
-                mutableState.update { it.copy(dialog = null) }
-                handOff()
-                return
-            }
+        val ready = verified
+        if (ready != null && ready.second == feed && ready.first.exists()) {
+            mutableState.update { it.copy(dialog = null) }
+            handOff()
+            return
         }
         mutableState.update { it.copy(dialog = UpdateDialog.Downloading(update, 0)) }
         downloadJob =
@@ -159,32 +212,36 @@ class ApkUpdater(
         val file = File(updatesDir, "pubky-maps-${feed.versionCode}.apk")
         val part = File(updatesDir, "${file.name}.part")
         verified = null
-        return try {
-            withContext(Dispatchers.IO) {
+        var keep = false
+        try {
+            withContext(io) {
                 updatesDir.mkdirs()
                 updatesDir.listFiles()?.forEach { it.delete() }
             }
-            runInterruptible(Dispatchers.IO) {
-                downloadTo(feed.apk.url, part, feed.apk.size) { bytes ->
+            runInterruptible(io) {
+                platform.download(feed.apk.url, part, feed.apk.size) { bytes ->
                     mutableState.update { state ->
                         val dialog = state.dialog
                         if (dialog is UpdateDialog.Downloading) state.copy(dialog = dialog.copy(downloadedBytes = bytes)) else state
                     }
                 }
             }
-            val problem = withContext(Dispatchers.IO) { checkApk(part, feed) }
+            val problem = withContext(io) { checkApk(part, feed) ?: if (part.renameTo(file)) null else "The download could not be saved." }
             if (problem == null) {
-                withContext(Dispatchers.IO) { part.renameTo(file) }
+                keep = true
                 verified = file to feed
                 Log.i(TAG, "updates: ${file.name} matches the signed feed (size, SHA-256, package, versionCode)")
-            } else {
-                withContext(Dispatchers.IO) { part.delete() }
             }
-            problem
+            return problem
         } catch (e: IOException) {
-            withContext(Dispatchers.IO) { part.delete() }
             Log.w(TAG, "updates: download failed", e)
-            "The download failed (${update.versionName}). Check your connection and try again."
+            return "The download of ${update.versionName} failed. Check your connection and try again."
+        } finally {
+            // Also when cancelled: no partial or refused file stays in the cache.
+            withContext(NonCancellable + io) {
+                part.delete()
+                if (!keep) file.delete()
+            }
         }
     }
 
@@ -194,11 +251,8 @@ class ApkUpdater(
         feed: UpdateFeed,
     ): String? {
         checkDownload(file, feed.apk.size, feed.apk.sha256)?.let { return it }
-        val info = app.packageManager.getPackageArchiveInfo(file.path, 0)
-
-        @Suppress("DEPRECATION")
-        val code = info?.let { if (Build.VERSION.SDK_INT >= 28) it.longVersionCode else it.versionCode.toLong() }
-        if (info?.packageName != installed.appId || code != feed.versionCode) {
+        val facts = platform.readArchive(file)
+        if (facts?.packageName != installed.appId || facts.versionCode != feed.versionCode) {
             return "The downloaded file is not Pubky Maps ${feed.versionName}. Nothing was installed."
         }
         return null
@@ -210,42 +264,55 @@ class ApkUpdater(
      */
     private fun handOff() {
         val (file, feed) = verified ?: return
-        val activity = resumed.get()
-        if (activity == null) {
+        if (resumed.get() == null) {
             // The app is in the background: the installer opens when it comes back.
             handOffPending = true
             return
         }
-        if (!app.packageManager.canRequestPackageInstalls()) {
+        if (!platform.canInstallPackages()) {
             mutableState.update { it.copy(dialog = UpdateDialog.NeedsPermission(AvailableUpdate.of(feed))) }
             return
         }
         scope.launch {
-            val problem = withContext(Dispatchers.IO) { if (file.exists()) checkApk(file, feed) else "The download is gone." }
+            val problem = withContext(io) { if (file.exists()) checkApk(file, feed) else "The download is gone." }
             if (problem != null) {
                 verified = null
-                withContext(Dispatchers.IO) { file.delete() }
+                withContext(io) { file.delete() }
                 Log.w(TAG, "updates: not installed: $problem")
                 mutableState.update { it.copy(dialog = UpdateDialog.NotInstalled(problem)) }
                 return@launch
             }
-            val uri = FileProvider.getUriForFile(app, "${app.packageName}.updates", file)
-            val intent =
-                Intent(Intent.ACTION_VIEW)
-                    .setDataAndType(uri, APK_MIME)
-                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            Log.i(TAG, "updates: ${file.name} checked again; handed to the installer")
-            activity.startActivity(intent)
+            val activity = resumed.get()
+            if (activity == null) {
+                handOffPending = true
+                return@launch
+            }
+            try {
+                platform.launchInstaller(activity, file)
+                setPending(null)
+                Log.i(TAG, "updates: ${file.name} checked again; handed to the installer")
+            } catch (e: ActivityNotFoundException) {
+                Log.w(TAG, "updates: no installer", e)
+                mutableState.update { it.copy(dialog = UpdateDialog.NotInstalled("This phone has no app installer for updates.")) }
+            }
         }
     }
 
     override fun openInstallPermissionSettings() {
         val activity = resumed.get() ?: return
-        awaitingPermission = true
+        val feed = verified?.second ?: return
         mutableState.update { it.copy(dialog = null) }
-        activity.startActivity(
-            Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, "package:${app.packageName}".toUri()),
-        )
+        try {
+            platform.openInstallPermissionSettings(activity)
+            awaitingPermission = true
+            // If Android stops the app meanwhile, the next start offers this update again.
+            setPending(feed.versionCode)
+        } catch (e: ActivityNotFoundException) {
+            Log.w(TAG, "updates: no settings page for Install unknown apps", e)
+            mutableState.update {
+                it.copy(dialog = UpdateDialog.NotInstalled("Android has no setting to allow updates here. Install the update by hand."))
+            }
+        }
     }
 
     override fun cancelDownload() {
@@ -256,7 +323,16 @@ class ApkUpdater(
     override fun dismissDialog() {
         if (state.value.dialog is UpdateDialog.Downloading) return
         awaitingPermission = false
+        setPending(null)
         mutableState.update { it.copy(dialog = null) }
+    }
+
+    private fun setPending(versionCode: Long?) {
+        scope.launch {
+            withContext(io) {
+                prefs.edit().apply { if (versionCode == null) remove(KEY_PENDING) else putLong(KEY_PENDING, versionCode) }.apply()
+            }
+        }
     }
 
     private fun onResumed(activity: Activity) {
@@ -267,6 +343,12 @@ class ApkUpdater(
             handOff()
         }
     }
+
+    private data class Stored(
+        val autoCheck: Boolean,
+        val lastCheck: Long?,
+        val pending: Long,
+    )
 
     private inner class ResumedActivityTracker : Application.ActivityLifecycleCallbacks {
         override fun onActivityResumed(activity: Activity) = onResumed(activity)
