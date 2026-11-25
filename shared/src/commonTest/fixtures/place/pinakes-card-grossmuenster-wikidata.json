@@ -1,0 +1,288 @@
+{
+ "id": "6e15f1d4f2a4a66b1b0eb50140b135e5",
+ "uri": "https://www.wikidata.org/wiki/Q684948",
+ "status": "ok",
+ "type": "Place",
+ "type_path": [
+  "Thing",
+  "Place"
+ ],
+ "name": "Grossmünster",
+ "description": "church buildings in the city of Zurich, Switzerland",
+ "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9a/Grossm%C3%BCnster_Zurich_Switzerland_24Jun2021.jpg/960px-Grossm%C3%BCnster_Zurich_Switzerland_24Jun2021.jpg",
+ "embed": null,
+ "site": "Wikidata",
+ "point": {
+  "lat": 47.37,
+  "lon": 8.5441666666667
+ },
+ "start": null,
+ "end": null,
+ "group": {
+  "id": "d806da983aacde60b130fbf060cf1882",
+  "size": 2
+ },
+ "also_on": [
+  {
+   "id": "9237006a33bf5c9f206c5d0b4d3bf233",
+   "uri": "https://www.openstreetmap.org/way/36916418",
+   "site": "OpenStreetMap",
+   "embed": {
+    "provider": "openstreetmap",
+    "kind": "map",
+    "src": "https://www.openstreetmap.org/export/embed.html?bbox=8.54361%2C47.36988%2C8.54434%2C47.37033&layer=mapnik&marker=47.37012%2C8.54391",
+    "height": null,
+    "aspect": 1.7778,
+    "allow": [],
+    "autoplay_param": null
+   }
+  },
+  {
+   "uri": "https://www.grossmuenster.ch/de/",
+   "site": "Official website",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://als.wikipedia.org/wiki/Grossm%C3%BCnster",
+   "site": "Wikipedia (als)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://arz.wikipedia.org/wiki/%D9%83%D9%86%D9%8A%D8%B3%D9%87_%D8%AC%D8%B1%D9%88%D8%B3%D9%85%D9%88%D9%86%D8%B3%D8%AA%D8%B1",
+   "site": "Wikipedia (arz)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://be.wikipedia.org/wiki/%D0%93%D1%80%D0%BE%D1%81%D0%BC%D1%8E%D0%BD%D1%81%D1%82%D1%8D%D1%80",
+   "site": "Wikipedia (be)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://ca.wikipedia.org/wiki/Grossm%C3%BCnster",
+   "site": "Wikipedia (ca)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://cs.wikipedia.org/wiki/Grossm%C3%BCnster",
+   "site": "Wikipedia (cs)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://cy.wikipedia.org/wiki/Grossm%C3%BCnster",
+   "site": "Wikipedia (cy)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://de.wikipedia.org/wiki/Grossm%C3%BCnster",
+   "site": "Wikipedia (de)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://en.wikipedia.org/wiki/Grossm%C3%BCnster",
+   "site": "Wikipedia (en)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://eo.wikipedia.org/wiki/Granda_Mona%C4%A5ejo",
+   "site": "Wikipedia (eo)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://es.wikipedia.org/wiki/Grossm%C3%BCnster",
+   "site": "Wikipedia (es)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://eu.wikipedia.org/wiki/Grossm%C3%BCnster",
+   "site": "Wikipedia (eu)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://fa.wikipedia.org/wiki/%DA%AF%D8%B1%D9%88%D8%B3%E2%80%8C%D9%85%D9%88%D9%86%D8%B3%D8%AA%D8%B1",
+   "site": "Wikipedia (fa)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://fi.wikipedia.org/wiki/Grossm%C3%BCnster",
+   "site": "Wikipedia (fi)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://fr.wikipedia.org/wiki/Grossm%C3%BCnster",
+   "site": "Wikipedia (fr)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://fy.wikipedia.org/wiki/Grossm%C3%BCnster",
+   "site": "Wikipedia (fy)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://id.wikipedia.org/wiki/Grossm%C3%BCnster",
+   "site": "Wikipedia (id)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://it.wikipedia.org/wiki/Grossm%C3%BCnster",
+   "site": "Wikipedia (it)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://jv.wikipedia.org/wiki/Grossm%C3%BCnster",
+   "site": "Wikipedia (jv)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://ko.wikipedia.org/wiki/%EA%B7%B8%EB%A1%9C%EC%8A%A4%EB%AE%8C%EC%8A%A4%ED%84%B0",
+   "site": "Wikipedia (ko)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://no.wikipedia.org/wiki/Grossm%C3%BCnster",
+   "site": "Wikipedia (no)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://pl.wikipedia.org/wiki/Grossm%C3%BCnster",
+   "site": "Wikipedia (pl)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://pnb.wikipedia.org/wiki/%DA%AF%D8%B1%D8%A7%D8%B3_%D9%85%D9%86%D8%B3%D8%AA%D8%B1",
+   "site": "Wikipedia (pnb)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://ru.wikipedia.org/wiki/%D0%93%D1%80%D0%BE%D1%81%D0%BC%D1%8E%D0%BD%D1%81%D1%82%D0%B5%D1%80",
+   "site": "Wikipedia (ru)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://sk.wikipedia.org/wiki/Grossm%C3%BCnster",
+   "site": "Wikipedia (sk)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://sl.wikipedia.org/wiki/Grossm%C3%BCnster",
+   "site": "Wikipedia (sl)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://th.wikipedia.org/wiki/%E0%B9%82%E0%B8%81%E0%B8%A3%E0%B8%AA%E0%B8%A1%E0%B8%B6%E0%B8%99%E0%B8%AA%E0%B9%8C%E0%B9%80%E0%B8%97%E0%B8%AD%E0%B8%A3%E0%B9%8C",
+   "site": "Wikipedia (th)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://tr.wikipedia.org/wiki/Grossm%C3%BCnster",
+   "site": "Wikipedia (tr)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://uk.wikipedia.org/wiki/%D0%93%D1%80%D0%BE%D1%81%D1%81%D0%BC%D1%8E%D0%BD%D1%81%D1%82%D0%B5%D1%80",
+   "site": "Wikipedia (uk)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://zh.wikipedia.org/wiki/%E8%8B%8F%E9%BB%8E%E4%B8%96%E5%A4%A7%E6%95%99%E5%A0%82",
+   "site": "Wikipedia (zh)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  }
+ ],
+ "refs": [
+  "https://www.wikidata.org/wiki/Q684948"
+ ],
+ "collections": 0,
+ "open_in": [],
+ "credits": [
+  {
+   "field": "image",
+   "provider": "wikimedia_commons",
+   "source_url": "https://commons.wikimedia.org/wiki/File:Grossm%C3%BCnster_Zurich_Switzerland_24Jun2021.jpg",
+   "author": "Ilya Hirschberg (Kreecher)",
+   "license": "CC-BY-SA-4.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+   "lang": null,
+   "excerpted": false,
+   "modified": false,
+   "subject": null
+  }
+ ],
+ "category": null,
+ "address": null,
+ "bbox": null,
+ "tz": null,
+ "all_day": null,
+ "event_status": null,
+ "attendance": null,
+ "venue": null,
+ "organizer": null,
+ "from": null,
+ "facts": null,
+ "related": [],
+ "related_total": null,
+ "keys": [
+  "wikidata:Q684948"
+ ],
+ "aliases": [],
+ "updated_at": "2026-11-25T07:17:55.667788Z"
+}

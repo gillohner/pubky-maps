@@ -1,0 +1,274 @@
+{
+ "id": "49d6eb1c6a69946a41fe45ccd44c4a72",
+ "uri": "https://www.openstreetmap.org/relation/3768127",
+ "status": "ok",
+ "type": "Museum",
+ "type_path": [
+  "Thing",
+  "Place",
+  "CivicStructure",
+  "Museum"
+ ],
+ "name": "Kunsthaus",
+ "description": null,
+ "image": null,
+ "embed": {
+  "provider": "openstreetmap",
+  "kind": "map",
+  "src": "https://www.openstreetmap.org/export/embed.html?bbox=8.54734%2C47.36957%2C8.54871%2C47.37090&layer=mapnik&marker=47.37022%2C8.54798",
+  "height": null,
+  "aspect": 1.7778,
+  "allow": [],
+  "autoplay_param": null
+ },
+ "site": "OpenStreetMap",
+ "point": {
+  "lat": 47.3702241,
+  "lon": 8.5479797
+ },
+ "start": null,
+ "end": null,
+ "group": null,
+ "also_on": [
+  {
+   "uri": "https://www.britannica.com/topic/Kunsthaus-Zurich",
+   "site": "Britannica",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "http://www.kunsthaus.ch/",
+   "site": "Official website",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://www.wikidata.org/wiki/Q685038",
+   "site": "Wikidata",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://als.wikipedia.org/wiki/Kunsthaus_Z%C3%BCrich",
+   "site": "Wikipedia (als)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://arz.wikipedia.org/wiki/%D9%83%D9%88%D9%86%D8%B3%D8%AB%D8%A7%D9%88%D8%B3_%D8%B2%D9%8A%D9%88%D8%B1%D8%AE",
+   "site": "Wikipedia (arz)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://br.wikipedia.org/wiki/Kunsthaus_Z%C3%BCrich",
+   "site": "Wikipedia (br)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://ca.wikipedia.org/wiki/Kunsthaus_Z%C3%BCrich",
+   "site": "Wikipedia (ca)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://cs.wikipedia.org/wiki/D%C5%AFm_um%C4%9Bn%C3%AD_Curych",
+   "site": "Wikipedia (cs)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://de.wikipedia.org/wiki/Kunsthaus_Z%C3%BCrich",
+   "site": "Wikipedia (de)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://en.wikipedia.org/wiki/Kunsthaus_Z%C3%BCrich",
+   "site": "Wikipedia (en)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://eo.wikipedia.org/wiki/Artodomo_Zuriko",
+   "site": "Wikipedia (eo)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://es.wikipedia.org/wiki/Kunsthaus_Z%C3%BCrich",
+   "site": "Wikipedia (es)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://eu.wikipedia.org/wiki/Kunsthaus_Z%C3%BCrich",
+   "site": "Wikipedia (eu)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://fa.wikipedia.org/wiki/%DA%A9%D9%88%D9%86%D8%B3%D8%AA%D9%87%D8%A7%D9%88%D8%B3_%D8%B2%D9%88%D8%B1%DB%8C%D8%AE",
+   "site": "Wikipedia (fa)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://fr.wikipedia.org/wiki/Kunsthaus_de_Zurich",
+   "site": "Wikipedia (fr)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://hy.wikipedia.org/wiki/%D4%B3%D5%A5%D5%B2%D5%A1%D6%80%D5%BE%D5%A5%D5%BD%D5%BF%D5%AB_%D5%A9%D5%A1%D5%B6%D5%A3%D5%A1%D6%80%D5%A1%D5%B6_(%D5%91%D5%B5%D5%B8%D6%82%D6%80%D5%AB%D5%AD)",
+   "site": "Wikipedia (hy)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://id.wikipedia.org/wiki/Kunsthaus_Z%C3%BCrich",
+   "site": "Wikipedia (id)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://it.wikipedia.org/wiki/Kunsthaus_di_Zurigo",
+   "site": "Wikipedia (it)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://ja.wikipedia.org/wiki/%E3%83%81%E3%83%A5%E3%83%BC%E3%83%AA%E3%83%83%E3%83%92%E7%BE%8E%E8%A1%93%E9%A4%A8",
+   "site": "Wikipedia (ja)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://ko.wikipedia.org/wiki/%EC%B7%A8%EB%A6%AC%ED%9E%88_%EB%AF%B8%EC%88%A0%EA%B4%80",
+   "site": "Wikipedia (ko)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://nl.wikipedia.org/wiki/Kunsthaus_Z%C3%BCrich",
+   "site": "Wikipedia (nl)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://pl.wikipedia.org/wiki/Kunsthaus_Z%C3%BCrich",
+   "site": "Wikipedia (pl)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://pnb.wikipedia.org/wiki/%DA%A9%D9%86%D8%B3%D8%AA%DB%81%D8%A7%D8%A4%D8%B2_%D8%B2%DB%8C%D9%88%D8%B1%DA%86",
+   "site": "Wikipedia (pnb)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://pt.wikipedia.org/wiki/Museu_das_Belas_Artes_(Zurique)",
+   "site": "Wikipedia (pt)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://ru.wikipedia.org/wiki/%D0%9A%D1%83%D0%BD%D1%81%D1%82%D1%85%D0%B0%D1%83%D1%81_(%D0%A6%D1%8E%D1%80%D0%B8%D1%85)",
+   "site": "Wikipedia (ru)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://sv.wikipedia.org/wiki/Kunsthaus_Z%C3%BCrich",
+   "site": "Wikipedia (sv)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://tr.wikipedia.org/wiki/Z%C3%BCrih_Sanatevi",
+   "site": "Wikipedia (tr)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://uk.wikipedia.org/wiki/%D0%9A%D1%83%D0%BD%D1%81%D1%82%D0%B3%D0%B0%D1%83%D1%81_%D0%A6%D1%8E%D1%80%D0%B8%D1%85%D0%B0",
+   "site": "Wikipedia (uk)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  },
+  {
+   "uri": "https://zh.wikipedia.org/wiki/%E8%98%87%E9%BB%8E%E4%B8%96%E7%BE%8E%E8%A1%93%E9%A4%A8",
+   "site": "Wikipedia (zh)",
+   "derived": true,
+   "via": "wikidata",
+   "embed": null
+  }
+ ],
+ "refs": [
+  "https://www.openstreetmap.org/relation/3768127"
+ ],
+ "collections": 2,
+ "open_in": [],
+ "attribution": "© OpenStreetMap contributors (ODbL)",
+ "credits": [],
+ "category": "tourism/museum",
+ "address": {
+  "city": "Zürich",
+  "country_code": "ch",
+  "house_number": "1",
+  "postcode": "8001",
+  "street": "Heimplatz"
+ },
+ "bbox": [
+  8.5473425,
+  47.3695651,
+  8.5487069,
+  47.3708962
+ ],
+ "tz": null,
+ "all_day": null,
+ "event_status": null,
+ "attendance": null,
+ "venue": null,
+ "organizer": null,
+ "from": null,
+ "facts": null,
+ "related": [],
+ "related_total": null,
+ "keys": [
+  "osm:relation/3768127",
+  "wikidata:Q685038"
+ ],
+ "aliases": [],
+ "updated_at": "2026-11-25T07:17:49.389879Z"
+}

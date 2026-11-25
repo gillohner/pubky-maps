@@ -12,8 +12,10 @@ import kotlinx.coroutines.withContext
 import to.pubky.maps.App
 import to.pubky.maps.AppInfo
 import to.pubky.maps.BuildConfig
+import to.pubky.maps.android.links.AndroidInstalledApps
 import to.pubky.maps.android.links.IncomingIntent
 import to.pubky.maps.android.links.incoming
+import to.pubky.maps.android.links.openInApp
 import to.pubky.maps.android.links.shareText
 import to.pubky.maps.links.AppLinks
 
@@ -35,6 +37,8 @@ class MainActivity : ComponentActivity() {
                 linkedPlaces = app.linkedPlaces,
                 incoming = incomingLinks.receiveAsFlow(),
                 share = { text -> shareText(text) },
+                installedApps = AndroidInstalledApps(this),
+                openApp = { action -> openInApp(action) },
             )
         setContent {
             App(
@@ -45,6 +49,7 @@ class MainActivity : ComponentActivity() {
                 account = app.account,
                 links = links,
                 search = app.search,
+                places = app.places,
             )
         }
     }

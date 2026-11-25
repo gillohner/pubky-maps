@@ -1,0 +1,60 @@
+[
+ {
+  "rating_avg": 0.0,
+  "rating_count": 0,
+  "details": {
+   "content": "A place, for the card overview.\n\nhttps://www.openstreetmap.org/node/270803095\n\nTest data (pinakes-test, staging).",
+   "id": "0035ZWRE33J86",
+   "indexed_at": 1794347382828,
+   "author": "466weoro4e45cxdfdtxfjcuss1x6w91dfjn9mcmkksh6fexmx5xy",
+   "kind": "note",
+   "uri": "pubky://466weoro4e45cxdfdtxfjcuss1x6w91dfjn9mcmkksh6fexmx5xy/pub/social/v1/posts/0035ZWRE33J86",
+   "attachments": [],
+   "lock": null,
+   "deleted": false
+  },
+  "counts": {
+   "tags": 0,
+   "unique_tags": 0,
+   "replies": 0,
+   "reposts": 0,
+   "collections": 0
+  },
+  "tags": [],
+  "relationships": {
+   "replied": null,
+   "reposted": null,
+   "embedded": "https://www.openstreetmap.org/node/270803095",
+   "mentioned": []
+  }
+ },
+ {
+  "rating_avg": 0.0,
+  "rating_count": 0,
+  "details": {
+   "content": "Test data (pinakes-test, staging): note embedding an external link.",
+   "id": "0035Z3Z7QS18T",
+   "indexed_at": 1793921534789,
+   "author": "466weoro4e45cxdfdtxfjcuss1x6w91dfjn9mcmkksh6fexmx5xy",
+   "kind": "note",
+   "uri": "pubky://466weoro4e45cxdfdtxfjcuss1x6w91dfjn9mcmkksh6fexmx5xy/pub/social/v1/posts/0035Z3Z7QS18T",
+   "attachments": [],
+   "lock": null,
+   "deleted": false
+  },
+  "counts": {
+   "tags": 0,
+   "unique_tags": 0,
+   "replies": 0,
+   "reposts": 0,
+   "collections": 0
+  },
+  "tags": [],
+  "relationships": {
+   "replied": null,
+   "reposted": null,
+   "embedded": "https://www.openstreetmap.org/node/270803095",
+   "mentioned": []
+  }
+ }
+]

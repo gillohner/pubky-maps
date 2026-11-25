@@ -21,6 +21,8 @@ import to.pubky.maps.config.androidSettingsRepository
 import to.pubky.maps.links.CoreMapLinks
 import to.pubky.maps.links.LinkedPlaces
 import to.pubky.maps.links.MapLinks
+import to.pubky.maps.place.PlaceServices
+import to.pubky.maps.place.androidPlaceServices
 import to.pubky.maps.search.SearchServices
 import to.pubky.maps.search.androidSearchServices
 import to.pubky.maps.status.ServiceHealth
@@ -52,6 +54,17 @@ class PubkyMapsApplication : Application() {
             appVersion = BuildConfig.VERSION_NAME,
             viewer = { signedInKey() },
             health = serviceHealth,
+        )
+    }
+
+    /** Place pages and the map's Pubky places layer, with the place cache in the no-backup folder. */
+    val places: PlaceServices by lazy {
+        androidPlaceServices(
+            context = this,
+            scope = scope,
+            settings = settingsRepository.settings,
+            appVersion = BuildConfig.VERSION_NAME,
+            viewer = { signedInKey() },
         )
     }
 

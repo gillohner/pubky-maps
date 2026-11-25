@@ -1,0 +1,149 @@
+[
+ {
+  "rating_avg": 6.0,
+  "rating_count": 1,
+  "details": {
+   "id": "49d6eb1c6a69946a41fe45ccd44c4a72",
+   "uri": "https://www.openstreetmap.org/relation/3768127",
+   "scheme": "https",
+   "indexed_at": 1792548728304
+  },
+  "tags": [
+   {
+    "label": "art",
+    "taggers": [
+     "466weoro4e45cxdfdtxfjcuss1x6w91dfjn9mcmkksh6fexmx5xy"
+    ],
+    "taggers_count": 1,
+    "tag_uri": null
+   },
+   {
+    "label": "museum",
+    "taggers": [
+     "7ehtbiryqz1pkncn7jgrxnzcrzxz8po79dwczgswfeuu3zbh1kwy"
+    ],
+    "taggers_count": 1,
+    "tag_uri": null
+   }
+  ],
+  "taggers_count": 2,
+  "replies_count": 1,
+  "embeds_count": 0,
+  "collections_count": 2
+ },
+ {
+  "rating_avg": 0.0,
+  "rating_count": 0,
+  "details": {
+   "id": "c10fedfa853bcdbdd4b18d8257250518",
+   "uri": "https://www.openstreetmap.org/node/270803095",
+   "scheme": "https",
+   "indexed_at": 1792548723375
+  },
+  "tags": [
+   {
+    "label": "coffee",
+    "taggers": [
+     "w36y3s9xx5s37y6xn3hkam6pz66wui8cwek6swg3x13c6bc1nu8y",
+     "p5onm3q78y8btyjt9ntjcpcj1fq395q8gjuf94k35dz15yxiuy7y",
+     "5rgz31wy7bd61jrrw6rpj8hkm5qyrkjgrren1c81x79fku7pppjo"
+    ],
+    "taggers_count": 3,
+    "tag_uri": null
+   },
+   {
+    "label": "cake",
+    "taggers": [
+     "9691gshosbh87bec793yeup37q3rb5dhrxaeakwt4h5nu79qk1xy"
+    ],
+    "taggers_count": 1,
+    "tag_uri": null
+   },
+   {
+    "label": "rtiafter",
+    "taggers": [
+     "466weoro4e45cxdfdtxfjcuss1x6w91dfjn9mcmkksh6fexmx5xy"
+    ],
+    "taggers_count": 1,
+    "tag_uri": null
+   },
+   {
+    "label": "zurich",
+    "taggers": [
+     "w36y3s9xx5s37y6xn3hkam6pz66wui8cwek6swg3x13c6bc1nu8y"
+    ],
+    "taggers_count": 1,
+    "tag_uri": null
+   }
+  ],
+  "taggers_count": 6,
+  "replies_count": 1,
+  "embeds_count": 2,
+  "collections_count": 3
+ },
+ {
+  "rating_avg": 0.0,
+  "rating_count": 0,
+  "details": {
+   "id": "193616ac3e3c0140292e94b705084d22",
+   "uri": "https://www.openstreetmap.org/node/1236383343",
+   "scheme": "https",
+   "indexed_at": 1792548727743
+  },
+  "tags": [
+   {
+    "label": "train",
+    "taggers": [
+     "7ehtbiryqz1pkncn7jgrxnzcrzxz8po79dwczgswfeuu3zbh1kwy"
+    ],
+    "taggers_count": 1,
+    "tag_uri": null
+   },
+   {
+    "label": "zurich",
+    "taggers": [
+     "5rgz31wy7bd61jrrw6rpj8hkm5qyrkjgrren1c81x79fku7pppjo"
+    ],
+    "taggers_count": 1,
+    "tag_uri": null
+   }
+  ],
+  "taggers_count": 2,
+  "replies_count": 0,
+  "embeds_count": 0,
+  "collections_count": 2
+ },
+ {
+  "rating_avg": 0.0,
+  "rating_count": 0,
+  "details": {
+   "id": "b943e2386f043e7262ed1c2dd34a776f",
+   "uri": "https://www.openstreetmap.org/node/633601362",
+   "scheme": "https",
+   "indexed_at": 1792548723665
+  },
+  "tags": [
+   {
+    "label": "coffee",
+    "taggers": [
+     "w36y3s9xx5s37y6xn3hkam6pz66wui8cwek6swg3x13c6bc1nu8y",
+     "7ehtbiryqz1pkncn7jgrxnzcrzxz8po79dwczgswfeuu3zbh1kwy"
+    ],
+    "taggers_count": 2,
+    "tag_uri": null
+   },
+   {
+    "label": "brunch",
+    "taggers": [
+     "5rgz31wy7bd61jrrw6rpj8hkm5qyrkjgrren1c81x79fku7pppjo"
+    ],
+    "taggers_count": 1,
+    "tag_uri": null
+   }
+  ],
+  "taggers_count": 3,
+  "replies_count": 0,
+  "embeds_count": 0,
+  "collections_count": 0
+ }
+]

@@ -72,6 +72,17 @@ internal val SidePanelWidth = 400.dp
 /** My location over a line of credits: the panel beside the map ends above them. */
 private val BottomControlsHeight = 96.dp
 
+/**
+ * The place page in the map screen: [sheet] at the bottom of a phone (given its largest height and the
+ * system bar inset under it), [panel] beside the map on a wide screen. [full] is true while the phone
+ * sheet takes the whole screen.
+ */
+class PlacePageSlot(
+    val full: Boolean,
+    val sheet: @Composable (maxHeight: Dp, bottomInset: Dp) -> Unit,
+    val panel: @Composable (modifier: Modifier) -> Unit,
+)
+
 /** What the map screen shows of search: plain state, so screenshots need no network. */
 data class MapSearch(
     val state: SearchState,
@@ -105,12 +116,15 @@ fun MapScreen(
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
     placeCard: (@Composable () -> Unit)? = null,
     search: MapSearch? = null,
+    placePage: PlacePageSlot? = null,
     map: @Composable () -> Unit,
 ) {
     BoxWithConstraints(modifier.fillMaxSize()) {
         val wide = maxWidth >= SidePanelMinWidth
         val mode = search?.state?.mode ?: SearchMode.Idle
-        val sheetShown = search != null && !wide && mode == SearchMode.Results && placeCard == null
+        val sheetShown = search != null && !wide && mode == SearchMode.Results && placeCard == null && placePage == null
+        val pageSheet = placePage != null && !wide
+        val pagePanel = placePage != null && wide
         val screenHeight = maxHeight
         map()
         StatusBarScrim()
@@ -141,7 +155,8 @@ fun MapScreen(
                     size = TopControlSize,
                 )
             }
-            val panelShown = search != null && wide && (mode == SearchMode.Editing || mode == SearchMode.Results)
+            val searchPanel = search != null && wide && (mode == SearchMode.Editing || mode == SearchMode.Results)
+            val panelShown = searchPanel || pagePanel
             Column(
                 modifier =
                     Modifier
@@ -155,7 +170,15 @@ fun MapScreen(
                 if (mapUnavailable) MapUnavailableNotice(onRetry = onRetryMap)
                 if (missing.isNotEmpty()) DegradedBanner(missing)
             }
-            if (panelShown) {
+            if (pagePanel && placePage != null) {
+                placePage.panel(
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .padding(top = TopControlSize + 8.dp)
+                        .width(SidePanelWidth)
+                        .height(maxHeight - TopControlSize - 8.dp),
+                )
+            } else if (searchPanel) {
                 Surface(
                     modifier =
                         Modifier
@@ -179,12 +202,18 @@ fun MapScreen(
             }
             // Bottom up: the place card, then the credits and my location above it, then snackbars. With
             // the results sheet they ride on its top edge instead.
-            if (!sheetShown) {
+            if (!sheetShown && !pageSheet) {
                 Column(
                     modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    BottomControls(attribution, onMyLocation, snackbarHostState)
+                    // Beside the place panel, which takes the start side down to the bottom.
+                    BottomControls(
+                        attribution,
+                        onMyLocation,
+                        snackbarHostState,
+                        creditsStart = if (pagePanel) SidePanelWidth + MapControlMargin else 0.dp,
+                    )
                     if (placeCard != null) {
                         Box(Modifier.padding(top = MapControlMargin)) { placeCard() }
                     }
@@ -212,6 +241,22 @@ fun MapScreen(
                 )
             }
         }
+        if (pageSheet && placePage != null) {
+            // The place sheet at the bottom edge, the credits and my location riding on it (hidden while
+            // the sheet takes the whole screen), up to under the search bar.
+            val insets = WindowInsets.safeDrawing.asPaddingValues()
+            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+                if (!placePage.full) {
+                    Box(Modifier.padding(horizontal = MapControlMargin).padding(bottom = 8.dp)) {
+                        BottomControls(attribution, onMyLocation, snackbarHostState)
+                    }
+                }
+                placePage.sheet(
+                    screenHeight - insets.calculateTopPadding() - MapControlMargin - TopControlSize - 8.dp,
+                    insets.calculateBottomPadding(),
+                )
+            }
+        }
         if (search != null && !wide && mode == SearchMode.Editing) {
             SearchPage(search)
         }
@@ -227,6 +272,7 @@ private fun BottomControls(
     attribution: List<AttributionLink>,
     onMyLocation: () -> Unit,
     snackbarHostState: SnackbarHostState,
+    creditsStart: Dp = 0.dp,
 ) {
     Column(Modifier.fillMaxWidth()) {
         SnackbarHost(
@@ -241,7 +287,7 @@ private fun BottomControls(
             tinted = true,
             modifier = Modifier.align(Alignment.End),
         )
-        AttributionBar(links = attribution, modifier = Modifier.padding(top = 8.dp))
+        AttributionBar(links = attribution, modifier = Modifier.padding(top = 8.dp, start = creditsStart))
     }
 }
 

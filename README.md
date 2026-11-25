@@ -11,8 +11,8 @@ from [Photon](https://github.com/komoot/photon) (OpenStreetMap data, biased to t
 Pinakes (places people referenced on Pubky, near the map). The same
 OpenStreetMap place from both is one result, and a stop's platforms are one stop. Results show in a
 list (on a phone a sheet that drags between its first row, half and full height) and as pins with an
-icon of their kind; picking one centres the map and opens a small place card
-(name, what it is, distance, address). Signed in, places the people you follow referenced on Pubky
+icon of their kind; picking one centres the map and opens its place
+page. Signed in, places the people you follow referenced on Pubky
 rank higher. Coordinates
 (`47.37, 8.54`, `47°22'N 8°32'E`), `geo:` URIs and plus codes open a pin without any request. Recent
 searches stay on the phone (Settings → Privacy → Clear search history). Either source failing never
@@ -28,24 +28,39 @@ Settings:
   marked. The map uses its style list in order, the next style taking over when one fails to load;
   sign-in uses the Pkarr and sign-in relay lists (from the next start after a change); opening a
   map link asks the Pinakes list; search uses the Photon and Pinakes lists the same way (the next
-  server takes over on an error, a timeout or "too many requests"); the Nexus list is stored and
-  editable, and no feature reads it yet.
+  server takes over on an error, a timeout or "too many requests"); place pages and the map's Pubky
+  places use the Pinakes and Nexus lists the same way.
 - **What is stored online:** per kind of data (saved places, home and work, lists, check-ins, tracks,
   location history, photo locations) phone only, homeserver private or public. Tags and reviews are
   public by nature. The choices are stored; nothing uploads data yet.
-- **Open in other apps:** a switch per app a place can be opened in (stored for the place page's
-  Open in menu, which does not exist yet; the list it will show is built in `links/OpenIn.kt`).
+- **Open in other apps:** a switch per app a place can be opened in from the place page's Open in
+  menu (`links/OpenIn.kt` builds the list).
 - **Follow local rules:** hides features a country forbids (stored; no feature has a rule yet).
 - **About:** version, updates (in the APK from GitHub releases, which updates itself from a signed
   update feed), licence, source code and the open-source licences of the bundled libraries and of
   the Rust crates in the core.
 - **Map data:** the credits of every map source.
 
+**Place pages** open from a search result, a link from another app, a point of interest tapped on
+the base map (by its OpenStreetMap element) or a Pubky place on the map. On a phone the page is a
+sheet over the map (header only, half the screen, or the whole screen); on a wide screen a panel
+beside it. It shows the name, what the place is, the distance and the address, Share and Open in
+(the apps switched on in Settings, installed ones first); the Pinakes card's photo and text with
+their credits; OpenStreetMap details from the card's facts when Pinakes serves them (opening hours with open or closed now, phone,
+website, wheelchair access, cuisine); Pubky tags with their counts and who tagged (people the user
+follows first, the user's own tags marked); photos and posts about the place from Nexus, newest first;
+the public lists that hold it; and the same place on other services ("Also on"). Each part loads on
+its own and is hidden while it has nothing. What a page showed is kept on the phone, so a place
+reopens offline with a note saying when it was saved. Typed coordinates open a page without any
+request.
+
+The map also shows the places people referenced on Pubky (from zoom 12, from Pinakes, clustered).
+
 **Map links.** Links from other map apps open in Pubky Maps: tapped (`geo:`, `om://`, `cm://`,
 and Google Maps, Apple Maps, Waze, OpenStreetMap, OsmAnd, Organic Maps, CoMaps and HERE web links
 when the user lets the app open them) or shared as text from another app's Share. The map moves to
-the place, pins it and shows a card with its name, where it is and Share (the name plus an
-openstreetmap.org link). Short links (`maps.app.goo.gl`, `maps.apple/p/`) are followed by their
+the place, pins it and shows it with its name, where it is and Share (the name plus an
+openstreetmap.org link), as a place page. Short links (`maps.app.goo.gl`, `maps.apple/p/`) are followed by their
 redirect header only; the place's name and point come from Pinakes when it knows the link, else from
 the link text. The link the user had stays the place's URI.
 
@@ -67,6 +82,13 @@ the link text. The link the user had stays the place's URI.
   ranking is checked against a fixed Zürich query set with recorded answers
   (`shared/src/commonTest/fixtures/search/`, refreshed by `scripts/search/record-fixtures.py`).
   Requests carry `User-Agent: PubkyMaps/<version>`.
+- Place pages (`shared/.../place/`): `PlacePageController` loads each part on its own (Pinakes card,
+  then Nexus tags/posts/people for every link of the place, and the lists) and caches what was shown
+  in its own SQLite database (`place-cache.db`, never in a backup); `OpeningSchedule` evaluates OSM
+  opening hours parsed by osm-opening-hours. The map's Pubky places layer (`map/MapPlacesLayer.kt`)
+  asks Pinakes for the view grown by half, at most 1,000 places, and MapLibre clusters them. The
+  readers are tested against recorded answers (`shared/src/commonTest/fixtures/place/`, refreshed by
+  `scripts/place/record-fixtures.py`).
 - Settings are one JSON file with a schema version, written by AndroidX DataStore
   (`config/SettingsRepository.kt`, `config/SettingsCodec.kt`). Only the user's own changes are
   stored, so new defaults reach everyone who did not change that setting. A file from an older

@@ -17,6 +17,9 @@ enum class PlaceSource {
 
     /** Coordinates the user typed or pasted. */
     Coordinates,
+
+    /** A place tapped on the base map (its OpenStreetMap element). */
+    Map,
 }
 
 /**

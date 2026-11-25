@@ -1,0 +1,30 @@
+[
+ {
+  "rating_avg": 0.0,
+  "rating_count": 0,
+  "details": {
+   "content": "Test data (pinakes-test, staging): reply to an external link.",
+   "id": "0035Z3Z64ZYJJ",
+   "indexed_at": 1793921509785,
+   "author": "466weoro4e45cxdfdtxfjcuss1x6w91dfjn9mcmkksh6fexmx5xy",
+   "kind": "note",
+   "uri": "pubky://466weoro4e45cxdfdtxfjcuss1x6w91dfjn9mcmkksh6fexmx5xy/pub/social/v1/posts/0035Z3Z64ZYJJ",
+   "attachments": [],
+   "lock": null,
+   "deleted": false
+  },
+  "counts": {
+   "tags": 0,
+   "unique_tags": 0,
+   "replies": 0,
+   "reposts": 0,
+   "collections": 0
+  },
+  "tags": [],
+  "relationships": {
+   "replied": "https://www.openstreetmap.org/node/270803095",
+   "reposted": null,
+   "mentioned": []
+  }
+ }
+]

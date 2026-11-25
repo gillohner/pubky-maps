@@ -120,7 +120,7 @@ check_alive "typing"
 python3 -I -c "
 import json, sys
 lines = [json.loads(l) for l in open(sys.argv[1], encoding='utf-8') if l.strip()]
-short = [l['q'] for l in lines if len(l['q']) < 3]
+short = [l['q'] for l in lines if l['q'] is not None and len(l['q']) < 3]
 assert not short, f'asked for short text: {short}'
 # adb types fast, so typing pauses rarely; 9 letters asked per keystroke would be 7 requests.
 photon = [l['q'] for l in lines if l['path'] == '/api']
@@ -151,7 +151,6 @@ centre_of "$dump" "Search here" > /dev/null || fail "back from the results did n
 if centre_of "$dump" "Museum · Heimplatz 1, 8001 Zürich" > /dev/null; then fail "the results stayed after back"; fi
 
 # Coordinates: no request, a card titled with the point.
-lines_before=$(wc -l < "$log")
 xy=$(wait_for "Search here" 10) || fail "no search bar after back"
 adb shell input tap $xy
 sleep 1
@@ -159,7 +158,12 @@ adb shell input text "47.37,8.54"
 adb shell input keyevent KEYCODE_ENTER
 wait_for "Coordinates" 15 > /dev/null || fail "typed coordinates did not open a card"
 screenshot search-coordinates
-[ "$(wc -l < "$log")" = "$lines_before" ] || fail "coordinates went to the network"
+# The map's Pubky places layer may ask for the area; nothing may carry the typed point.
+python3 -I -c "
+import json, sys
+lines = [json.loads(l) for l in open(sys.argv[1], encoding='utf-8') if l.strip()]
+sent = [l for l in lines if '47.37' in (l['q'] or '') or '47.37' in (l.get('uri') or '')]
+assert not sent, f'the typed point was sent: {sent}'" "$log" || fail "coordinates went to the network"
 adb shell input keyevent KEYCODE_BACK
 sleep 1
 
