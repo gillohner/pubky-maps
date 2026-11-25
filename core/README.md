@@ -4,8 +4,8 @@ The Rust core of Pubky Maps. It signs the user in with Pubky Ring, reads and wri
 homeserver, and builds the social objects the app writes about places: tags, reviews, photos,
 lists and saved places. Kotlin calls it through UniFFI (package `to.pubky.maps.core`).
 
-It bundles the `pubky` SDK (0.18) and `pubky-social-specs` (1.0.0-rc.2). Object ids, paths and
-validation come from the specs crate.
+It bundles the `pubky` SDK (0.18), `pubky-social-specs` (1.0.0-rc.2) and the workspace's
+`map-links` crate. Object ids, paths and validation come from the specs crate.
 
 ## API in short
 
@@ -47,6 +47,21 @@ validation come from the specs crate.
 - Places: `normalizePlaceUri`, `osmPlaceUri` and `geoPlaceUri`. Places are canonical OSM URLs,
   `geo:lat,lon` with at most 5 fraction digits, or the link the user pasted (an Android
   search link `geo:0,0?q=<name or address>` is kept as it is, never moved to 0,0).
+- Map links (from the `map-links` crate in `core/map-links`): `parseMapLink(url)` and
+  `findMapLink(sharedText)` read a Google Maps, Apple Maps, Waze, OpenStreetMap, OsmAnd,
+  Organic Maps, CoMaps, HERE or `geo:` link from its text (name, point, OSM element, zoom,
+  search text, the provider's place id); `buildPlaceLink` and `buildDirectionsLink` make the
+  link that opens a place in one of those apps (`null` where the app has none);
+  `mapLinkPlaceUri` gives the canonical OSM URL or `geo:` URI. Two calls use the network:
+  `resolveMapLink(url)` follows a short link (`maps.app.goo.gl`, `goo.gl/maps`, `maps.apple/p/`)
+  reading only `Location` headers (HEAD, or a GET whose body is never read), at most 4 hops,
+  HTTPS to short-link hosts only; `openMapLink(text, pinakesServers)` does that, then asks
+  Pinakes (`/v1/resources/by-uri`, the link as pasted, then its OSM element; the next server
+  when one fails) and falls back to the link text. Its `LinkedPlace.sourceUri` is the link
+  as the user had it, the URI tags and posts go on; `pointIsView` marks a map-view or search
+  centre (not a place), `shortLinkUnfollowed` and `pinakesUnreachable` say which network step
+  failed. Link requests give up after 5 s to connect and 10 s in all. `placeFromText(text)` gives
+  the same place from the text alone (no network, no core instance), to show at once.
 - Objects: `tagPlace` and `untagPlace`, `postReview`, `postPhoto` (JPEG/PNG/WebP, no HEIC,
   EXIF stripped by the caller), `createCollection` and `editCollection` (at most 100 places),
   and `bookmarkPlace`, `removeBookmark` and `listBookmarks`. The pure `build*` functions return

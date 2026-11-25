@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["core", "core/uniffi-bindgen"]
+members = ["core", "core/map-links", "core/uniffi-bindgen"]
 
 [workspace.package]
 edition = "2024"

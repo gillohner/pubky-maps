@@ -11,6 +11,9 @@ enum class ServicePart(
     val missingText: String,
 ) {
     Homeserver("Can't reach your homeserver"),
+
+    /** Every Pinakes server failed: places from links show from their link text only. */
+    Pinakes("Can't reach Pinakes"),
 }
 
 /**

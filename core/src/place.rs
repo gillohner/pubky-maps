@@ -8,6 +8,7 @@
 //! Everything passes the social specs' universal reference gate last, so the result is
 //! always a valid `uri`/`parent`/`embed`/bookmark target.
 
+use map_links::format_coordinate;
 use pubky_social_specs::{canonicalize_universal, frozen_trim};
 
 use crate::error::CoreError;
@@ -210,23 +211,6 @@ fn check_range(lat: f64, lon: f64) -> Result<(), CoreError> {
         )));
     }
     Ok(())
-}
-
-/// Rounded to `digits` fraction digits, trailing zeros dropped, never `-0`.
-fn format_coordinate(value: f64, digits: u8) -> String {
-    let mut s = format!("{value:.prec$}", prec = usize::from(digits));
-    if s.contains('.') {
-        while s.ends_with('0') {
-            s.pop();
-        }
-        if s.ends_with('.') {
-            s.pop();
-        }
-    }
-    if s == "-0" {
-        s = "0".into();
-    }
-    s
 }
 
 #[cfg(test)]

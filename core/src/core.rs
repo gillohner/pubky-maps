@@ -11,7 +11,7 @@ use pubky_social_specs::{
 use tokio::runtime::{Handle, Runtime};
 
 use crate::auth::{AuthRequest, FlowSpec};
-use crate::config::{CoreConfig, build_client};
+use crate::config::{CoreConfig, build_client, link_client};
 use crate::error::{CoreError, redact};
 use crate::objects::{
     self, BuiltFile, BuiltObject, CollectionEdit, CollectionItem, bookmark_filename_of,
@@ -167,6 +167,8 @@ impl Drop for AbortOnDrop {
 pub struct PubkyMapsCore {
     handle: Handle,
     inner: Arc<Inner>,
+    /// Plain HTTPS client for map links: short-link hops and Pinakes lookups (no redirects).
+    pub(crate) links: reqwest::Client,
     /// Last field: shut down after everything else is dropped.
     _runtime: OwnedRuntime,
 }
@@ -393,7 +395,7 @@ async fn list_own(
 
 impl PubkyMapsCore {
     /// Runs `work` on the core's runtime and waits for it; dropping the wait aborts it.
-    async fn run<T, F>(&self, work: F) -> Result<T, CoreError>
+    pub(crate) async fn run<T, F>(&self, work: F) -> Result<T, CoreError>
     where
         T: Send + 'static,
         F: Future<Output = Result<T, CoreError>> + Send + 'static,
@@ -430,10 +432,11 @@ impl PubkyMapsCore {
         let handle = runtime.handle().clone();
         let runtime = OwnedRuntime(Some(runtime));
         let build_handle = handle.clone();
-        let (client, config) = handle
+        let (client, links, config) = handle
             .spawn_blocking(move || {
                 let _context = build_handle.enter();
-                build_client(&config).map(|client| (client, config))
+                let links = link_client(config.request_timeout)?;
+                build_client(&config).map(|client| (client, links, config))
             })
             .await
             .map_err(|_| CoreError::internal("building the core panicked"))??;
@@ -448,6 +451,7 @@ impl PubkyMapsCore {
         Ok(Arc::new(Self {
             handle,
             inner,
+            links,
             _runtime: runtime,
         }))
     }

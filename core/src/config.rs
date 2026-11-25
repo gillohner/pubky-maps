@@ -149,7 +149,27 @@ pub(crate) fn icann_client(timeout: Duration) -> Result<reqwest::Client, CoreErr
         .map_err(|e| CoreError::internal(format!("HTTP client: {e}")))
 }
 
-/// Builds the one HTTP client the core uses for everything.
+/// Connect deadline of map-link requests (short-link hops, Pinakes lookups).
+const LINK_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+/// Whole-request deadline of map-link requests; the configured timeout when that is shorter.
+const LINK_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// The map-link client: like [`icann_client`], but it never follows a redirect, so a short
+/// link's hops are read one `Location` header at a time, and it gives up sooner.
+pub(crate) fn link_client(timeout: Duration) -> Result<reqwest::Client, CoreError> {
+    reqwest::Client::builder()
+        .user_agent(USER_AGENT)
+        // A host that drops packets must not hold a link for the whole request timeout: the
+        // place is already on screen from the link text, and the next server should get a turn.
+        .connect_timeout(LINK_CONNECT_TIMEOUT.min(timeout))
+        .timeout(LINK_REQUEST_TIMEOUT.min(timeout))
+        .redirect(reqwest::redirect::Policy::none())
+        .tls_backend_preconfigured(webpki_tls_config()?)
+        .build()
+        .map_err(|e| CoreError::internal(format!("HTTP client: {e}")))
+}
+
+/// Builds the Pubky HTTP client (homeservers, Pkarr relays, the DHT).
 pub(crate) fn build_client(config: &ValidConfig) -> Result<PubkyHttpClient, CoreError> {
     let relay_http = icann_client(config.request_timeout)?;
 
