@@ -772,8 +772,8 @@ internal data class TaggersLine(
 /**
  * "Tagged by Anna, Ben and 3 others": the first two people (the ones the user follows first) are
  * named and shown; the others are the distinct people over all labels, a person who used several
- * labels counted once, plus the people Nexus counts on a label but does not list (it lists five per
- * label). The user is said apart ("You tagged it …") and counted nowhere. Null when nobody but the
+ * labels counted once, and the people Nexus counts on a label but does not list (it lists five per
+ * label): when those could be people already counted, the line says "at least" the sure number. The user is said apart ("You tagged it …") and counted nowhere. Null when nobody but the
  * user tagged.
  */
 internal fun taggersLine(
@@ -791,18 +791,23 @@ internal fun taggersLine(
     val named = listed.take(2)
     // Unlisted people per label; the user is one of them on a label they used but Nexus did not list them for.
     val unlisted =
-        tags.sumOf { tag ->
+        tags.map { tag ->
             val hidden = (tag.count - tag.taggers.size).coerceAtLeast(0)
             if (tag.mine && viewer !in tag.taggers) (hidden - 1).coerceAtLeast(0) else hidden
         }
-    val others = listed.size - named.size + unlisted
+    // At most every unlisted person is someone new; at least the largest label is (its people are
+    // distinct). Nexus does not say who the unlisted are, so a range is said as "at least".
+    val most = listed.size + unlisted.sum()
+    val least = maxOf(listed.size, tags.maxOf { tag -> tag.count - if (tag.mine) 1 else 0 })
+    val others = least - named.size
+    val atLeast = if (least < most) "at least " else ""
     val names = named.map { personName(it, people[it]) }
     val text =
         "Tagged by " +
             when {
                 others == 0 && names.size == 1 -> names[0]
                 others == 0 -> "${names[0]} and ${names[1]}"
-                else -> "${names.joinToString(", ")} and $others ${if (others == 1) "other" else "others"}"
+                else -> "${names.joinToString(", ")} and $atLeast$others ${if (others == 1) "other" else "others"}"
             }
     return TaggersLine(named, text)
 }

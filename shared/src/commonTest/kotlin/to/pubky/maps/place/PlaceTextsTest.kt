@@ -107,6 +107,17 @@ class PlaceTextsTest {
         // Nexus lists at most 5 per label: people it counts but does not list are added, label by label.
         val unlisted = taggersLine(listOf(tag("art", "ben", "anna", "cleo", count = 12)), people, null)!!
         assertEquals("Tagged by Anna, Ben and 10 others", unlisted.text)
+        // Two labels with unlisted people: they may be the same people, so the sure number is said as "at least".
+        val popular =
+            taggersLine(
+                listOf(
+                    tag("art", "ben", "anna", "cleo", "dora", "eve", count = 12),
+                    tag("museum", "anna", "fred", "gus", "hal", "ivy", count = 7),
+                ),
+                people,
+                null,
+            )!!
+        assertEquals("Tagged by Anna, Ben and at least 10 others", popular.text)
         // The user is said apart and counted nowhere, also with two labels of their own.
         val mine =
             taggersLine(
