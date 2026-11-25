@@ -1,0 +1,104 @@
+[
+ {
+  "rating_avg": 0.0,
+  "rating_count": 0,
+  "details": {
+   "content": "{\"name\":\"Card review: every card type\",\"description\":\"One example of every card type, in one list.\\n\\nTest data (pinakes-test, staging).\",\"items\":[{\"uri\":\"https://musicbrainz.org/artist/b5416a54-4941-4fcf-b2a0-7f98da6f9344\"},{\"uri\":\"https://musicbrainz.org/artist/056e4f3e-d505-4dad-8ec1-d04f521cbb56\"},{\"uri\":\"https://musicbrainz.org/recording/833f00e1-781f-4edd-90e4-e52712618862\"},{\"uri\":\"https://musicbrainz.org/release-group/8e8a594f-2175-38c7-a871-abb68ec363e7\"},{\"uri\":\"https://www.youtube.com/watch?v=5NV6Rdv1a3I\"},{\"uri\":\"https://open.spotify.com/track/69kOkLUCkxIZYexIgSG8rq\"},{\"uri\":\"https://tycho.bandcamp.com/album/dive\"},{\"uri\":\"https://tidal.com/browse/track/77646168\"},{\"uri\":\"https://www.mixcloud.com/spartacus/party-time/\"},{\"uri\":\"https://podcastindex.org/podcast/759235?episode=61210434390\"},{\"uri\":\"https://podcasts.apple.com/us/podcast/darknet-diaries/id1296350485\"},{\"uri\":\"https://www.openstreetmap.org/node/270803095\"},{\"uri\":\"https://www.openstreetmap.org/node/240109189\"},{\"uri\":\"https://www.openstreetmap.org/relation/3768127\"},{\"uri\":\"https://www.openstreetmap.org/way/257865725\"},{\"uri\":\"https://www.openstreetmap.org/node/8232514281\"},{\"uri\":\"https://www.openstreetmap.org/node/1236383343\"},{\"uri\":\"https://www.openstreetmap.org/node/5437614622\"},{\"uri\":\"https://luma.com/mq18d987\"},{\"uri\":\"https://www.songkick.com/concerts/43150471-noah-kahan-at-hallenstadion\"},{\"uri\":\"https://calendar.google.com/calendar/ical/en.ch%23holiday%40group.v.calendar.google.com/public/basic.ics\"},{\"uri\":\"https://www.youtube.com/watch?v=dQw4w9WgXcQ\"},{\"uri\":\"https://www.themoviedb.org/movie/603\"},{\"uri\":\"https://www.themoviedb.org/tv/1396\"},{\"uri\":\"https://en.wikipedia.org/wiki/Bitcoin\"},{\"uri\":\"https://bitcoinmagazine.com/news/cftc-proposes-rules-following-clarity-fail\"},{\"uri\":\"https://bitcoinops.org/en/podcast/2026/08/25/\"},{\"uri\":\"https://openlibrary.org/works/OL27258W\"},{\"uri\":\"https://www.nature.com/articles/nature12373\"},{\"uri\":\"https://www.clevelandart.org/art/1958.39\"},{\"uri\":\"https://99percentinvisible.org/?p=48749\"},{\"uri\":\"https://mastodon.social/@Gargron/1\"},{\"uri\":\"https://stacker.news/items/1597957\"},{\"uri\":\"https://gnusha.org/pi/bitcoindev/02c201dce227$e808e050$b81aa0f0$@voskuil.org/\"},{\"uri\":\"https://mempool.space/block/0000000000000000001c8018d9cb3b742ef25114f27563e3fc4a1902167f9893\"},{\"uri\":\"https://mempool.space/tx/a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d\"},{\"uri\":\"https://mempool.space/address/1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa\"},{\"uri\":\"https://mempool.space/lightning/node/03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f\"},{\"uri\":\"https://mempool.space/lightning/channel/892785849701564416\"},{\"uri\":\"https://www.anchorwatch.com/\"},{\"uri\":\"https://github.com/videolan/vlc\"},{\"uri\":\"https://f-droid.org/packages/org.videolan.vlc\"},{\"uri\":\"https://rastro.domains/\"},{\"uri\":\"https://chatgpt.com/\"},{\"uri\":\"https://www.imem.app/\"},{\"uri\":\"https://www.wikidata.org/wiki/Q57206016\"},{\"uri\":\"pubky://3jubjyq4fkh4dq38exrpuo8we6xta8a6rhxnjjzyoo7j4r3f4rjo/pub/loopky/decks/icvetu0ujilj/manifest.json\"},{\"uri\":\"pubky://8febau67zieo93b9ejk947msc7oc9e6b7jo6whkj5smtzsrmrigo/pub/pubky-rooms/rooms/0035TNXH48JYE\"},{\"uri\":\"https://job-boards.greenhouse.io/strike/jobs/6191942004\"},{\"uri\":\"https://www.bbcgoodfood.com/recipes/classic-lasagne-0\"},{\"uri\":\"http://www.dancarlin.com/product/hardcore-history-74-mania-for-subjugation-iv\"},{\"uri\":\"https://ror.org/03yrm5c26\"},{\"uri\":\"https://www.rcsb.org/structure/6VXX\"},{\"uri\":\"https://www.uniprot.org/uniprotkb/P69905/entry\"},{\"uri\":\"https://pubchem.ncbi.nlm.nih.gov/compound/2244\"},{\"uri\":\"https://www.gbif.org/species/1341976\"},{\"uri\":\"https://www.inaturalist.org/observations/333069440\"},{\"uri\":\"https://clinicaltrials.gov/study/NCT04368728\"},{\"uri\":\"https://www.federalregister.gov/documents/2026/09/09/2026-18291/self-regulatory-organizations-nasdaq-texas-llc-notice-of-filing-and-order-granting-accelerated\"},{\"uri\":\"https://www.sec.gov/Archives/edgar/data/1992870/000114036126033208/ef20077161_10q.htm\"},{\"uri\":\"https://music.apple.com/song/1440717826\"},{\"uri\":\"https://www.binance.com/\"},{\"uri\":\"https://example.com/pinakes-does-not-know-this-link-1104\"}],\"layout\":\"list\"}",
+   "id": "0035ZRTMYFEZ2",
+   "indexed_at": 1794279852667,
+   "author": "466weoro4e45cxdfdtxfjcuss1x6w91dfjn9mcmkksh6fexmx5xy",
+   "kind": "collection",
+   "uri": "pubky://466weoro4e45cxdfdtxfjcuss1x6w91dfjn9mcmkksh6fexmx5xy/pub/social/v1/posts/0035ZRTMYFEZ2",
+   "attachments": [],
+   "lock": null,
+   "deleted": false
+  },
+  "counts": {
+   "tags": 1,
+   "unique_tags": 1,
+   "replies": 0,
+   "reposts": 0,
+   "collections": 0
+  },
+  "tags": [
+   {
+    "label": "card-review",
+    "taggers": [
+     "kpsik5mcjizxe9pf6cymejzy4gwxa6rjo9wg97n8yp9roqyt6euy"
+    ],
+    "taggers_count": 1,
+    "tag_uri": null
+   }
+  ],
+  "relationships": {
+   "replied": null,
+   "reposted": null,
+   "mentioned": []
+  }
+ },
+ {
+  "rating_avg": 0.0,
+  "rating_count": 0,
+  "details": {
+   "content": "{\"name\":\"Card review: places and events\",\"description\":\"Places from OpenStreetMap, events, a concert and a calendar feed.\\n\\nTest data (pinakes-test, staging).\",\"items\":[{\"uri\":\"https://www.openstreetmap.org/node/270803095\"},{\"uri\":\"https://www.openstreetmap.org/node/240109189\"},{\"uri\":\"https://www.openstreetmap.org/relation/3768127\"},{\"uri\":\"https://www.openstreetmap.org/way/257865725\"},{\"uri\":\"https://www.openstreetmap.org/node/8232514281\"},{\"uri\":\"https://www.openstreetmap.org/node/1236383343\"},{\"uri\":\"https://www.openstreetmap.org/node/5437614622\"},{\"uri\":\"https://luma.com/mq18d987\"},{\"uri\":\"https://www.songkick.com/concerts/43150471-noah-kahan-at-hallenstadion\"},{\"uri\":\"https://calendar.google.com/calendar/ical/en.ch%23holiday%40group.v.calendar.google.com/public/basic.ics\"}],\"layout\":\"list\"}",
+   "id": "0035ZRTMQP27E",
+   "indexed_at": 1794279848195,
+   "author": "466weoro4e45cxdfdtxfjcuss1x6w91dfjn9mcmkksh6fexmx5xy",
+   "kind": "collection",
+   "uri": "pubky://466weoro4e45cxdfdtxfjcuss1x6w91dfjn9mcmkksh6fexmx5xy/pub/social/v1/posts/0035ZRTMQP27E",
+   "attachments": [],
+   "lock": null,
+   "deleted": false
+  },
+  "counts": {
+   "tags": 1,
+   "unique_tags": 1,
+   "replies": 0,
+   "reposts": 0,
+   "collections": 0
+  },
+  "tags": [
+   {
+    "label": "card-review",
+    "taggers": [
+     "kpsik5mcjizxe9pf6cymejzy4gwxa6rjo9wg97n8yp9roqyt6euy"
+    ],
+    "taggers_count": 1,
+    "tag_uri": null
+   }
+  ],
+  "relationships": {
+   "replied": null,
+   "reposted": null,
+   "mentioned": []
+  }
+ },
+ {
+  "rating_avg": 0.0,
+  "rating_count": 0,
+  "details": {
+   "content": "{\"name\":\"RTI audit list (test data)\",\"items\":[{\"uri\":\"https://www.openstreetmap.org/node/270803095\"},{\"uri\":\"https://tycho.bandcamp.com/album/dive\"}],\"layout\":\"list\"}",
+   "id": "0035Z3Z9BY58T",
+   "indexed_at": 1793921564730,
+   "author": "466weoro4e45cxdfdtxfjcuss1x6w91dfjn9mcmkksh6fexmx5xy",
+   "kind": "collection",
+   "uri": "pubky://466weoro4e45cxdfdtxfjcuss1x6w91dfjn9mcmkksh6fexmx5xy/pub/social/v1/posts/0035Z3Z9BY58T",
+   "attachments": [],
+   "lock": null,
+   "deleted": false
+  },
+  "counts": {
+   "tags": 0,
+   "unique_tags": 0,
+   "replies": 0,
+   "reposts": 0,
+   "collections": 0
+  },
+  "tags": [],
+  "relationships": {
+   "replied": null,
+   "reposted": null,
+   "mentioned": []
+  }
+ }
+]

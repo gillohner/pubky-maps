@@ -10,9 +10,11 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -23,17 +25,29 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
+import androidx.compose.ui.text.intl.Locale
+import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import org.maplibre.compose.camera.CameraFit
 import org.maplibre.compose.camera.CameraMoveReason
 import org.maplibre.compose.camera.CameraPosition
 import org.maplibre.compose.camera.CameraUpdate
+import org.maplibre.compose.interaction.ClickResult
+import org.maplibre.compose.interaction.MapInteractions
 import org.maplibre.compose.layers.LocationIndicatorLayer
 import org.maplibre.compose.location.LocationMeasurement
 import org.maplibre.compose.location.LocationPermission
@@ -51,13 +65,25 @@ import org.maplibre.compose.overlay.DisappearingScaleBar
 import org.maplibre.compose.style.BaseStyle
 import org.maplibre.compose.util.DpPadding
 import org.maplibre.spatialk.geojson.BoundingBox
+import org.maplibre.spatialk.geojson.Point
 import org.maplibre.spatialk.geojson.Position
 import to.pubky.maps.config.ServerLists
 import to.pubky.maps.links.GeoPoint
+import to.pubky.maps.links.LinkProvider
 import to.pubky.maps.links.LinkedPlaceState
+import to.pubky.maps.place.GeoBox
+import to.pubky.maps.place.OpenInApps
 import to.pubky.maps.place.OpeningLinkCard
 import to.pubky.maps.place.PlaceCard
+import to.pubky.maps.place.PlacePageActions
+import to.pubky.maps.place.PlacePageContext
+import to.pubky.maps.place.PlacePageState
+import to.pubky.maps.place.PlacePanel
 import to.pubky.maps.place.PlaceRef
+import to.pubky.maps.place.PlaceRefSaver
+import to.pubky.maps.place.PlaceServices
+import to.pubky.maps.place.PlaceSheet
+import to.pubky.maps.place.SheetStop
 import to.pubky.maps.search.RecentSearch
 import to.pubky.maps.search.SearchActions
 import to.pubky.maps.search.SearchArea
@@ -67,11 +93,13 @@ import to.pubky.maps.search.SearchState
 import to.pubky.maps.search.distanceMeters
 import to.pubky.maps.search.distanceText
 import to.pubky.maps.status.ServicePart
+import to.pubky.maps.ui.rememberSafeLinkOpener
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.pow
+import kotlin.time.Clock
 
 /** Where the map opens before it knows anything about the user: the whole world. */
 private val WorldCamera = CameraPosition(center = Position(longitude = 0.0, latitude = 30.0), zoom = 1.0)
@@ -98,14 +126,27 @@ fun MapRoute(
     onClosePlace: () -> Unit = {},
     linkMessages: Flow<String> = emptyFlow(),
     search: SearchServices? = null,
+    places: PlaceServices? = null,
+    openIn: OpenInApps? = null,
 ) {
     val sources = servers.mapStyles(isSystemInDarkTheme())
     // Saved, so a trip to Settings does not start again from a style that already failed.
     var fallbackIndex by rememberSaveable(sources) { mutableIntStateOf(0) }
     val fallback = StyleFallback(sources, fallbackIndex)
     val locationState = rememberLocationState(provider = rememberDefaultLocationProvider())
+    // A point of interest or Pubky place tapped on the map; kept on rotation.
+    var tapped by rememberSaveable(stateSaver = PlaceRefSaver) { mutableStateOf<PlaceRef?>(null) }
     // Only a place is pinned: a map view or a search near a point only moves the camera.
-    val pinnedPoint by rememberUpdatedState(linkedPlace.place?.takeIf { it.pinned }?.point)
+    val pinnedPoint by rememberUpdatedState(linkedPlace.place?.takeIf { it.pinned }?.point ?: tapped?.point)
+    val layerState =
+        places
+            ?.layer
+            ?.state
+            ?.collectAsStateWithLifecycle()
+            ?.value
+    val pubkyPlaces by rememberUpdatedState(layerState?.takeUnless { it.hidden }?.places.orEmpty())
+    var clusterTarget by remember { mutableStateOf<Position?>(null) }
+    val scope = rememberCoroutineScope()
     val searchState =
         search
             ?.controller
@@ -127,6 +168,17 @@ fun MapRoute(
             initialCameraPosition = WorldCamera,
         ) {
             LocationIndicatorLayer(id = "user-location", locationState = locationState)
+            if (pubkyPlaces.isNotEmpty()) {
+                MapPlacesPins(
+                    pubkyPlaces,
+                    onSelect = { place ->
+                        search?.controller?.close()
+                        onClosePlace()
+                        tapped = place.toPlaceRef()
+                    },
+                    onCluster = { clusterTarget = it },
+                )
+            }
             pinnedPoint?.let { PlacePin(it) }
             searchPins?.let { pins ->
                 if (search != null) SearchPins(pins.results, pins.selected, onSelect = search.controller::select)
@@ -162,6 +214,35 @@ fun MapRoute(
         )
     }
     LaunchedEffect(linkMessages) { linkMessages.collect { snackbarHostState.showOnly(it) } }
+    // A place from a link or a search replaces a tapped one.
+    LaunchedEffect(linkedPlace.placedAt, linkedPlace.opening) { if (linkedPlace.opening || linkedPlace.place != null) tapped = null }
+    LaunchedEffect(clusterTarget) {
+        val target = clusterTarget ?: return@LaunchedEffect
+        clusterTarget = null
+        mapState.animateCamera(CameraUpdate(center = target, zoom = mapState.cameraPosition.zoom + 2))
+    }
+    // The Pubky places layer asks Pinakes when the camera rests.
+    // Held while the page of typed coordinates is open and the user has not moved the map (see layerMayAsk).
+    val layerHeld = remember { mutableStateOf(false) }
+    if (places != null) {
+        LaunchedEffect(mapState, places) {
+            snapshotFlow { if (mapState.isCameraMoving) null else mapState.viewport }
+                .filterNotNull()
+                .collectLatest { viewport ->
+                    delay(CAMERA_REST_MS)
+                    if (layerHeld.value) return@collectLatest
+                    val view =
+                        viewBox(
+                            viewport.visibleBounds.west,
+                            viewport.visibleBounds.south,
+                            viewport.visibleBounds.east,
+                            viewport.visibleBounds.north,
+                        )
+                    // A view across the antimeridian is left out (no box can say it to Pinakes).
+                    if (view != null) places.layer.onCameraIdle(view, viewport.cameraPosition.zoom)
+                }
+        }
+    }
 
     val mapSearch =
         if (search != null && searchState != null) {
@@ -171,6 +252,28 @@ fun MapRoute(
             null
         }
     val selected = searchState?.selected?.takeIf { searchState.mode == SearchMode.Selected }
+    // Searching closes a tapped place.
+    val searchOpen = searchState != null && searchState.mode != SearchMode.Idle
+    LaunchedEffect(searchOpen) { if (searchOpen) tapped = null }
+
+    // The place page: a search pick, else a place a link opened, else a tapped one.
+    val shown: ShownPlace? =
+        when {
+            places == null -> null
+            selected != null && search != null -> ShownPlace(selected.place, SheetStop.Half, search.controller::closeCard)
+            linkedPlace.opening -> null
+            place != null && !place.viewOnly -> ShownPlace(place, SheetStop.Half, onClosePlace, linkedPlace.provider)
+            tapped != null -> tapped?.let { ShownPlace(it, SheetStop.Peek, onClose = { tapped = null }) }
+            else -> null
+        }
+    var movedSinceShown by remember(shown?.place?.uri) { mutableStateOf(false) }
+    LaunchedEffect(shown?.place?.uri) {
+        // The first value is the reason of the move that is already over.
+        snapshotFlow { mapState.cameraMoveReason }.drop(1).collect { if (it == CameraMoveReason.Gesture) movedSinceShown = true }
+    }
+    val held = !layerMayAsk(shown?.place?.source, movedSinceShown)
+    SideEffect { layerHeld.value = held }
+    val placePage = places?.let { rememberPlacePage(it, shown, mapSearch?.userLocation, onSharePlace, openIn) }
 
     MapScreen(
         attribution = (fallback.current ?: sources.first()).attribution,
@@ -181,8 +284,13 @@ fun MapRoute(
         missing = missing,
         snackbarHostState = snackbarHostState,
         search = mapSearch,
+        placePage = placePage,
         placeCard =
             when {
+                placePage != null -> {
+                    null
+                }
+
                 selected != null -> {
                     {
                         PlaceCard(
@@ -215,7 +323,29 @@ fun MapRoute(
                 }
             },
     ) {
-        MaplibreMap(state = mapState) {
+        MaplibreMap(
+            state = mapState,
+            interactions =
+                remember(mapState, places) {
+                    MapInteractions {
+                        callbacks {
+                            click {
+                                onUnhandled { event ->
+                                    if (places != null) {
+                                        scope.launch {
+                                            val poi = mapState.tappedPoi(event.screenOffset) ?: return@launch
+                                            search?.controller?.close()
+                                            onClosePlace()
+                                            tapped = poi
+                                        }
+                                    }
+                                    ClickResult.Pass
+                                }
+                            }
+                        }
+                    }
+                },
+        ) {
             Box(
                 Modifier
                     .fillMaxSize()
@@ -332,6 +462,107 @@ private fun resultsFitPadding(size: DpSize?): DpPadding =
         // Half the screen for the sheet, plus my location and the credits riding on its edge.
         DpPadding(left = 48.dp, top = RESULTS_FIT_TOP, right = 48.dp, bottom = (size?.height ?: 800.dp) / 2 + 120.dp)
     }
+
+/** How long the camera must rest before the Pubky places layer asks for its area. */
+private const val CAMERA_REST_MS = 400L
+
+/** How far from a tap a point of interest still counts as tapped. */
+private val TAP_SLOP = 12.dp
+
+/** The place page open on the map, the stop its sheet opens at, and how it closes. */
+private class ShownPlace(
+    val place: PlaceRef,
+    val initialStop: SheetStop,
+    val onClose: () -> Unit,
+    val provider: LinkProvider? = null,
+)
+
+/** The base map's point of interest at [offset] (its OSM element), or null. */
+private suspend fun MapState.tappedPoi(offset: DpOffset): PlaceRef? {
+    val layers =
+        style.layers
+            .filter { it.sourceLayer in PoiSourceLayers }
+            .map { it.id }
+            .toSet()
+    if (layers.isEmpty()) return null
+    val area = DpRect(offset.x - TAP_SLOP, offset.y - TAP_SLOP, offset.x + TAP_SLOP, offset.y + TAP_SLOP)
+    return queryRenderedFeatures(area, layers).firstNotNullOfOrNull { feature ->
+        val point = (feature.geometry as? Point)?.coordinates ?: positionFromScreenLocation(offset) ?: return@firstNotNullOfOrNull null
+        val properties =
+            feature.properties
+                ?.mapNotNull { (key, value) -> (value as? JsonPrimitive)?.contentOrNull?.let { key to it } }
+                ?.toMap()
+                .orEmpty()
+        tappedPlace(
+            id = feature.id?.contentOrNull?.toLongOrNull(),
+            properties = properties,
+            point = GeoPoint(point.latitude.coerceIn(-90.0, 90.0), ((point.longitude + 540.0) % 360.0) - 180.0),
+        )
+    }
+}
+
+/**
+ * The place page of [shown] for the map screen: its state from [places], the sheet's stop (saved per
+ * place), the clock, and its actions. Null when no place is open.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun rememberPlacePage(
+    places: PlaceServices,
+    shown: ShownPlace?,
+    userLocation: GeoPoint?,
+    onSharePlace: ((PlaceRef) -> Unit)?,
+    openIn: OpenInApps?,
+): PlacePageSlot? {
+    LaunchedEffect(shown?.place) {
+        val place = shown?.place
+        if (place != null) places.pages.open(place) else places.pages.close()
+    }
+    val pageState by places.pages.state.collectAsStateWithLifecycle()
+    var stop by rememberSaveable(shown?.place?.uri) { mutableStateOf(shown?.initialStop ?: SheetStop.Peek) }
+    val now by produceState(Clock.System.now()) {
+        while (true) {
+            delay(CLOCK_TICK_MS)
+            value = Clock.System.now()
+        }
+    }
+    if (shown == null) return null
+    BackHandler { shown.onClose() }
+    val page = pageState?.takeIf { it.place.uri == shown.place.uri } ?: PlacePageState(shown.place)
+    // Built once per place and point (it asks the core and the package manager), not per recomposition.
+    val openInPlace = page.place.copy(point = page.place.point ?: page.card?.point)
+    val openInActions =
+        remember(openIn, openInPlace.uri, openInPlace.point, openInPlace.name) { openIn?.actions?.invoke(openInPlace).orEmpty() }
+    val zone = TimeZone.currentSystemDefault()
+    val context =
+        PlacePageContext(
+            now = now.toLocalDateTime(zone),
+            nowMillis = now.toEpochMilliseconds(),
+            timeZone = zone,
+            language = Locale.current.language,
+            distance = distanceText(userLocation, shown.place.point ?: page.card?.point),
+            provider = shown.provider,
+        )
+    val actions =
+        PlacePageActions(
+            onClose = shown.onClose,
+            onShare = onSharePlace?.let { share -> { share(shown.place) } },
+            openIn = openInActions,
+            onOpenIn = { openIn?.open?.invoke(it) },
+            onOpenLink = rememberSafeLinkOpener(),
+            onLoadMorePosts = places.pages::loadMorePosts,
+        )
+    return PlacePageSlot(
+        full = stop == SheetStop.Full,
+        sheet = { maxHeight, inset ->
+            PlaceSheet(page, context, actions, stop, { stop = it }, maxHeight, bottomInset = inset)
+        },
+        panel = { modifier -> PlacePanel(page, context, actions, modifier) },
+    )
+}
+
+/** The place page's clock moves on once a minute (open now, post ages). */
+private const val CLOCK_TICK_MS = 60_000L
 
 /** A phone screen's half diagonal in dp, for a map whose size is not known yet. */
 private const val FALLBACK_HALF_DIAGONAL_DP = 500.0

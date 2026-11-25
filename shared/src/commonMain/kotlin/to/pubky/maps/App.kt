@@ -12,6 +12,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import coil3.ImageLoader
+import coil3.compose.setSingletonImageLoaderFactory
+import coil3.network.ktor3.KtorNetworkFetcherFactory
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.serialization.Serializable
@@ -22,10 +25,14 @@ import to.pubky.maps.config.AppSettings
 import to.pubky.maps.config.Service
 import to.pubky.maps.config.SettingsRepository
 import to.pubky.maps.links.AppLinks
+import to.pubky.maps.links.LinkTarget
 import to.pubky.maps.links.LinkedPlaceState
 import to.pubky.maps.links.OpenIn
 import to.pubky.maps.map.MapRoute
+import to.pubky.maps.place.OpenInApps
+import to.pubky.maps.place.PlaceServices
 import to.pubky.maps.search.SearchServices
+import to.pubky.maps.search.searchHttpClient
 import to.pubky.maps.settings.AddServerScreen
 import to.pubky.maps.settings.LicencesRoute
 import to.pubky.maps.settings.OpenInAppsScreen
@@ -74,7 +81,8 @@ private data object AccountDestination
  * AboutLibraries JSON of the bundled libraries. [updates] is the in-app updater, null in builds that
  * an app store updates. [account] is the Pubky account (sign-in with Pubky Ring), null where there is
  * none. [links] opens map links other apps send and shares places; null where the core is not
- * available. [search] is the place search; null where it is not available.
+ * available. [search] is the place search; null where it is not available. [places] opens place
+ * pages and shows the places people referenced on Pubky on the map; null where it is not available.
  */
 @Composable
 fun App(
@@ -85,14 +93,24 @@ fun App(
     account: AccountUi? = null,
     links: AppLinks? = null,
     search: SearchServices? = null,
+    places: PlaceServices? = null,
 ) {
     val loaded by settingsRepository.settings.collectAsStateWithLifecycle()
+    // Place photos and profile pictures, with the app's User-Agent like every other request. Coil
+    // keeps the first loader for the process, so the client is made once, inside it.
+    setSingletonImageLoaderFactory { context ->
+        val imageClient = searchHttpClient(appInfo.versionName)
+        ImageLoader
+            .Builder(context)
+            .components { add(KtorNetworkFetcherFactory(httpClient = { imageClient })) }
+            .build()
+    }
     val updatesState = updates?.state?.collectAsStateWithLifecycle()?.value
     PubkyMapsTheme {
         // The settings file is read in a few milliseconds at start-up; until then the window stays
         // blank instead of loading the default map style and switching to the user's own.
         loaded?.let { settings ->
-            AppNavigation(appInfo, settings, settingsRepository, loadLicences, updates, updatesState, account, links, search)
+            AppNavigation(appInfo, settings, settingsRepository, loadLicences, updates, updatesState, account, links, search, places)
         }
         val dialog = updatesState?.dialog
         if (updates != null && dialog != null) {
@@ -120,6 +138,7 @@ private fun AppNavigation(
     account: AccountUi?,
     links: AppLinks?,
     search: SearchServices?,
+    places: PlaceServices?,
 ) {
     val update: ((AppSettings) -> AppSettings) -> Unit = remember(settingsRepository) { { settingsRepository.update(it) } }
     val navController = rememberNavController()
@@ -178,6 +197,24 @@ private fun AppNavigation(
                 linkMessages = links?.linkedPlaces?.messages ?: emptyFlow(),
                 missing = missing,
                 search = search,
+                places = places,
+                openIn =
+                    links?.let { l ->
+                        OpenInApps(
+                            actions = { place ->
+                                place.point
+                                    ?.let {
+                                        OpenIn.actions(
+                                            LinkTarget(it, place.name, place.osm, place.zoom),
+                                            settings,
+                                            l.installedApps,
+                                            l.mapLinks,
+                                        )
+                                    }.orEmpty()
+                            },
+                            open = l.openApp,
+                        )
+                    },
             )
         }
         composable<SettingsDestination> {

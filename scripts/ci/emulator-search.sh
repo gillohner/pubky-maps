@@ -120,7 +120,7 @@ check_alive "typing"
 python3 -I -c "
 import json, sys
 lines = [json.loads(l) for l in open(sys.argv[1], encoding='utf-8') if l.strip()]
-short = [l['q'] for l in lines if len(l['q']) < 3]
+short = [l['q'] for l in lines if l['q'] is not None and len(l['q']) < 3]
 assert not short, f'asked for short text: {short}'
 # adb types fast, so typing pauses rarely; 9 letters asked per keystroke would be 7 requests.
 photon = [l['q'] for l in lines if l['path'] == '/api']
@@ -158,8 +158,19 @@ sleep 1
 adb shell input text "47.37,8.54"
 adb shell input keyevent KEYCODE_ENTER
 wait_for "Coordinates" 15 > /dev/null || fail "typed coordinates did not open a card"
+# The camera rests on the point; the Pubky places layer must not ask for that area either.
+sleep 3
 screenshot search-coordinates
-[ "$(wc -l < "$log")" = "$lines_before" ] || fail "coordinates went to the network"
+python3 -I -c "
+import json, sys
+lines = [json.loads(l) for l in open(sys.argv[1], encoding='utf-8') if l.strip()]
+after = lines[int(sys.argv[2]):]
+assert not after, f'requests while typed coordinates were shown: {after}'
+def centred(box):
+    w, s, e, n = map(float, box.split(','))
+    return abs((w + e) / 2 - 8.54) < 0.005 and abs((s + n) / 2 - 47.37) < 0.005
+sent = [l for l in lines if '47.37' in (l['q'] or '') or '47.37' in (l.get('uri') or '') or (l.get('bbox') and centred(l['bbox']))]
+assert not sent, f'the typed point was sent: {sent}'" "$log" "$lines_before" || fail "coordinates went to the network"
 adb shell input keyevent KEYCODE_BACK
 sleep 1
 

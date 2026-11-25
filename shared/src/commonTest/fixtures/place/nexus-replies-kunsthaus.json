@@ -1,0 +1,30 @@
+[
+ {
+  "rating_avg": 0.0,
+  "rating_count": 0,
+  "details": {
+   "content": "{\"rating\":6}",
+   "id": "0035XV8NYZVDR",
+   "indexed_at": 1794993433768,
+   "author": "466weoro4e45cxdfdtxfjcuss1x6w91dfjn9mcmkksh6fexmx5xy",
+   "kind": "rating",
+   "uri": "pubky://466weoro4e45cxdfdtxfjcuss1x6w91dfjn9mcmkksh6fexmx5xy/pub/social/v1/posts/0035XV8NYZVDR",
+   "attachments": [],
+   "lock": null,
+   "deleted": false
+  },
+  "counts": {
+   "tags": 0,
+   "unique_tags": 0,
+   "replies": 0,
+   "reposts": 0,
+   "collections": 0
+  },
+  "tags": [],
+  "relationships": {
+   "replied": "https://www.openstreetmap.org/relation/3768127",
+   "reposted": null,
+   "mentioned": []
+  }
+ }
+]

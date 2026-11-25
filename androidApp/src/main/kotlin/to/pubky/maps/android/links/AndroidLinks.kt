@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import to.pubky.maps.links.IncomingLinks
 import to.pubky.maps.links.InstalledApps
+import to.pubky.maps.links.OpenInAction
 
 /** Pubky Ring's return links: `pubkymaps://auth/{success|error|cancel}?nonce=…`. */
 private const val RING_RETURN_SCHEME = "pubkymaps"
@@ -59,6 +60,28 @@ class AndroidInstalledApps(
         context.packageManager
             .queryIntentActivities(Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0")), 0)
             .any { it.activityInfo.packageName != context.packageName }
+}
+
+/**
+ * Opens an "Open in" entry: in its app when it names one, else whatever opens its link (a browser,
+ * or the system's chooser for `geo:`). Does nothing when nothing can open it.
+ */
+fun Context.openInApp(action: OpenInAction) {
+    val view = Intent(Intent.ACTION_VIEW, Uri.parse(action.uri)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    action.packageName?.let(view::setPackage)
+    val intent =
+        if (action.packageName == null &&
+            action.uri.startsWith("geo:")
+        ) {
+            Intent.createChooser(view, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        } else {
+            view
+        }
+    try {
+        startActivity(intent)
+    } catch (e: ActivityNotFoundException) {
+        // Uninstalled since the list was made.
+    }
 }
 
 /** Opens the system share sheet with [text]. Does nothing on a phone with nothing to share to. */

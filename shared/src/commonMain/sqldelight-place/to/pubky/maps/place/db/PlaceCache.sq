@@ -1,0 +1,21 @@
+-- What the place page last showed of each place (Pinakes card, Pubky tags, posts, lists), so it can
+-- be reopened offline. Public data only; the newest places are kept (PlaceCache.KEPT).
+
+CREATE TABLE place (
+    uri TEXT NOT NULL PRIMARY KEY,
+    -- A PlaceSnapshot as JSON.
+    snapshot TEXT NOT NULL,
+    -- When it was saved, epoch milliseconds.
+    saved_at INTEGER NOT NULL
+);
+
+CREATE INDEX place_saved_at ON place(saved_at);
+
+get:
+SELECT snapshot FROM place WHERE uri = ?;
+
+put:
+INSERT OR REPLACE INTO place(uri, snapshot, saved_at) VALUES (?, ?, ?);
+
+keepNewest:
+DELETE FROM place WHERE uri NOT IN (SELECT uri FROM place ORDER BY saved_at DESC LIMIT ?);

@@ -32,6 +32,10 @@ androidx-annotation = "1.10.0"
 sqldelight = "2.4.1"
 # QR code of the Pubky Ring sign-in link.
 qrose = "1.3.1"
+# The place page: OSM opening hours (StreetComplete's parser), dates in the place's day, images.
+osm-opening-hours = "0.4.0"
+kotlinx-datetime = "0.8.0"
+coil = "3.6.3"
 
 # Tests and checks
 junit = "4.13.2"
@@ -67,6 +71,10 @@ sqldelight-runtime = { module = "app.cash.sqldelight:runtime", version.ref = "sq
 sqldelight-android-driver = { module = "app.cash.sqldelight:android-driver", version.ref = "sqldelight" }
 sqldelight-sqlite-driver = { module = "app.cash.sqldelight:sqlite-driver", version.ref = "sqldelight" }
 qrose = { module = "io.github.alexzhirkevich:qrose", version.ref = "qrose" }
+osm-opening-hours = { module = "de.westnordost:osm-opening-hours", version.ref = "osm-opening-hours" }
+kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
+coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
+coil-network-ktor3 = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-android = { module = "io.ktor:ktor-client-android", version.ref = "ktor" }
 ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }

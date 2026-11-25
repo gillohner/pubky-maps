@@ -1,0 +1,50 @@
+package to.pubky.maps.place
+
+import app.cash.sqldelight.db.SqlDriver
+import kotlinx.serialization.SerializationException
+import to.pubky.maps.place.db.PlaceCacheDatabase
+import to.pubky.maps.search.SearchJson
+
+/**
+ * The places the page showed, for reopening them offline. Calls block on disk: call them off the
+ * main thread.
+ */
+interface PlaceCache {
+    /** What was saved for [uri], or null. */
+    fun read(uri: String): PlaceSnapshot?
+
+    /** Saves [snapshot] under its uri, replacing what was there. */
+    fun write(snapshot: PlaceSnapshot)
+}
+
+/** [PlaceCache] in SQLite, keeping the [kept] most recently saved places. */
+class SqlPlaceCache(
+    driver: SqlDriver,
+    private val kept: Long = KEPT,
+) : PlaceCache {
+    private val queries = PlaceCacheDatabase(driver).placeCacheQueries
+
+    override fun read(uri: String): PlaceSnapshot? {
+        val json = queries.get(uri).executeAsOneOrNull() ?: return null
+        return try {
+            SearchJson.decodeFromString(PlaceSnapshot.serializer(), json)
+        } catch (e: SerializationException) {
+            // Written by another app version in a shape this one cannot read: as if not saved.
+            null
+        } catch (e: IllegalArgumentException) {
+            null
+        }
+    }
+
+    override fun write(snapshot: PlaceSnapshot) {
+        queries.transaction {
+            queries.put(snapshot.uri, SearchJson.encodeToString(PlaceSnapshot.serializer(), snapshot), snapshot.savedAt)
+            queries.keepNewest(kept)
+        }
+    }
+
+    companion object {
+        /** About 2 to 10 KB each. */
+        const val KEPT = 300L
+    }
+}

@@ -130,7 +130,7 @@ fun OpeningLinkCard(modifier: Modifier = Modifier) {
 }
 
 /** Why the card shows less than it could, when a network step failed. */
-private val PlaceRef.offlineNote: String?
+internal val PlaceRef.offlineNote: String?
     get() =
         when {
             shortLinkUnfollowed -> "Offline: the short link could not be followed."
@@ -142,7 +142,7 @@ private val PlaceRef.offlineNote: String?
  * The address, else the coordinates of a pinned place unless the title already is them (a view or a
  * search has none).
  */
-private fun PlaceRef.detailLine(): String? {
+internal fun PlaceRef.detailLine(): String? {
     if (address != null) return address
     if (!pinned) return null
     val point = point ?: return null
@@ -175,5 +175,5 @@ val LinkProvider.title: String
         }
 
 /** "a Google Maps", "an OsmAnd". */
-private val LinkProvider.withArticle: String
+internal val LinkProvider.withArticle: String
     get() = if (title.first().lowercaseChar() in "aeiou") "an $title" else "a $title"

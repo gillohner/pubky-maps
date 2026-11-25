@@ -98,6 +98,10 @@ kotlin {
             api(libs.sqldelight.runtime)
             implementation(libs.qrose)
             implementation(libs.ktor.client.core)
+            implementation(libs.osm.opening.hours)
+            api(libs.kotlinx.datetime)
+            implementation(libs.coil.compose)
+            implementation(libs.coil.network.ktor3)
         }
         androidMain {
             kotlin.srcDir(files(coreBindingsDir).builtBy(generateCoreBindings))
@@ -130,10 +134,27 @@ sqldelight {
         create("CacheDatabase") {
             packageName.set("to.pubky.maps.cache.db")
         }
+        // What the place page showed, for reopening places offline: public data, kept apart from the
+        // account cache (which sign-out deletes) in its own file.
+        create("PlaceCacheDatabase") {
+            packageName.set("to.pubky.maps.place.db")
+            srcDirs.setFrom("src/commonMain/sqldelight-place")
+        }
     }
 }
 
 tasks.withType<Test>().configureEach {
+    // As in :androidApp: osm-opening-hours ships Java 21 class files, so the host tests run on 21.
+    javaLauncher.set(
+        javaToolchains.launcherFor {
+            languageVersion.set(
+                JavaLanguageVersion.of(
+                    libs.versions.java.test
+                        .get(),
+                ),
+            )
+        },
+    )
     dependsOn(generateCoreBindings)
     // The tests load this library: a change of the core reruns them even when the bindings stay the same.
     inputs.file(hostCoreLibrary).withPathSensitivity(PathSensitivity.NONE)

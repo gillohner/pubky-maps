@@ -135,4 +135,8 @@ class AppLinks(
     val incoming: Flow<String>,
     /** Shares text through the system share sheet. */
     val share: (String) -> Unit,
+    /** Which map apps are on the phone, for "Open in". */
+    val installedApps: InstalledApps,
+    /** Opens an "Open in" entry in its app (or the browser, or the `geo:` chooser). */
+    val openApp: (OpenInAction) -> Unit,
 )

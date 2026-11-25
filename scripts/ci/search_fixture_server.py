@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Serves recorded Photon and Pinakes answers on 127.0.0.1 for the emulator search test, so the
 test needs no public network. A query from the fixture set (queries.json) gets its recorded answer,
-any other query an empty one. Every request is logged as one JSON line (path, q, User-Agent).
+any other query an empty one; other routes (the place page's card reads) a 404, as for a link
+Pinakes does not know. Every request is logged as one JSON line (path, q, uri, bbox, User-Agent).
 
 Usage: search_fixture_server.py <port> <fixture dir> <request log>
 """
@@ -30,13 +31,17 @@ FILES = {"/api": "photon", "/v1/search": "pinakes"}
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802 (http.server's name)
         url = urlparse(self.path)
-        q = parse_qs(url.query).get("q", [""])[0]
+        # None for requests without text (the place page's card and area requests).
+        q = parse_qs(url.query).get("q", [None])[0]
         with open(log_path, "a", encoding="utf-8") as log:
-            log.write(json.dumps({"path": url.path, "q": q, "ua": self.headers.get("User-Agent", "")}) + "\n")
+            uri = parse_qs(url.query).get("uri", [None])[0]
+            bbox = parse_qs(url.query).get("bbox", [None])[0]
+            line = {"path": url.path, "q": q, "uri": uri, "bbox": bbox, "ua": self.headers.get("User-Agent", "")}
+            log.write(json.dumps(line) + "\n")
         if url.path not in FILES:
             self.send_error(404)
             return
-        slug = SLUGS.get(fold(unicodedata.normalize("NFC", q)))
+        slug = SLUGS.get(fold(unicodedata.normalize("NFC", q))) if q is not None else None
         if slug:
             with open(f"{fixtures}/{slug}.{FILES[url.path]}.json", "rb") as f:
                 body = f.read()
