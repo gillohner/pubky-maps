@@ -2,10 +2,12 @@ name: android
 # One build job checks the app (unit tests, Android lint, ktlint, Roborazzi screenshots) and builds
 # the debug APK; the emulator job installs that APK, starts the app, waits for the map to draw,
 # opens Settings, goes back, and fails on a crash.
+# Every push to a branch of this repository runs it once (the result shows on its pull request);
+# pull requests from forks run it through the pull_request event.
 on:
-  pull_request:
   push:
-    branches: [main]
+    branches: ["**"]
+  pull_request:
   workflow_dispatch:
 concurrency:
   group: android-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.head_ref || github.sha }}
@@ -21,6 +23,7 @@ env:
     -Dorg.gradle.internal.repository.initial.backoff=2000
 jobs:
   build:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
