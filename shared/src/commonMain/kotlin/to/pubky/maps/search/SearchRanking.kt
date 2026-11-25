@@ -242,13 +242,16 @@ object SearchRanking {
     }
 }
 
+/** The category of a platform: a platform repeats any stop of its name. */
+private const val PLATFORM = "Platform"
+
 /** Stops of one name and kind closer than this are one stop (its platforms and poles). */
 private const val SAME_STOP_METERS = 150.0
 
 /**
  * Drops a transit stop, platform or signpost that repeats a better ranked one of the same name and
- * category within [SAME_STOP_METERS] (OSM maps one stop as several platforms and poles; map apps show
- * the stop once). Places people use on Pubky are always kept.
+ * category (a platform repeats any stop of its name) within [SAME_STOP_METERS]: OSM maps one stop as
+ * several platforms and poles, map apps show the stop once. Places people use on Pubky always stay.
  */
 internal fun List<SearchResult>.withoutRepeatedStops(): List<SearchResult> {
     val kept = ArrayList<SearchResult>(size)
@@ -260,7 +263,7 @@ internal fun List<SearchResult>.withoutRepeatedStops(): List<SearchResult> {
                 point != null &&
                 kept.any { k ->
                     k.prominence == Prominence.Minor &&
-                        k.place.category == row.place.category &&
+                        (k.place.category == row.place.category || PLATFORM in setOf(k.place.category, row.place.category)) &&
                         normalizeForMatch(k.place.title) == normalizeForMatch(row.place.title) &&
                         k.place.point?.let { distanceMeters(it, point) <= SAME_STOP_METERS } == true
                 }

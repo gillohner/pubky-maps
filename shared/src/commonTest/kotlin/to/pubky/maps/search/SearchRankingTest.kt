@@ -65,6 +65,8 @@ class SearchRankingTest {
         val rows = rank("kunsthaus", "kunsthaus")
         assertEquals(1, rows.count { it.place.title == "Kunsthaus" && it.place.category == "Tram stop" })
         assertEquals(1, rows.count { it.place.title == "Kunsthaus" && it.place.category == "Bus stop" })
+        // A platform of the stop is the stop.
+        assertEquals(0, rows.count { it.place.title == "Kunsthaus" && it.place.category == "Platform" })
         assertEquals(1, rank("letzigrund", "letzigrund").count { it.place.category == "Platform" })
         // Same-name shops are distinct places and stay.
         assertTrue(rank("spruengli", "sprüngli").count { it.place.title == "Sprüngli" } >= 5)
