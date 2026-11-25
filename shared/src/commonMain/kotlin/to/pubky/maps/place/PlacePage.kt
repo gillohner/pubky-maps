@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -13,10 +14,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -31,12 +32,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -210,49 +211,77 @@ private fun OpenInButton(actions: PlacePageActions) {
 }
 
 /**
+ * Draws a remote image: [onError] when it cannot be loaded (the caller then leaves it out). The app
+ * uses Coil; screenshot tests provide a local stand-in, since images load over the network.
+ */
+val LocalRemoteImage =
+    staticCompositionLocalOf<@Composable (url: String, contentDescription: String?, modifier: Modifier, onError: () -> Unit) -> Unit> {
+        { url, contentDescription, modifier, onError ->
+            val placeholder = ColorPainter(MaterialTheme.colorScheme.surfaceContainerHighest)
+            AsyncImage(
+                model = url,
+                contentDescription = contentDescription,
+                modifier = modifier,
+                placeholder = placeholder,
+                error = placeholder,
+                onError = { onError() },
+                contentScale = ContentScale.Crop,
+            )
+        }
+    }
+
+/** A remote image that is left out once it fails to load. */
+@Composable
+private fun RemoteImage(
+    url: String,
+    contentDescription: String?,
+    modifier: Modifier,
+    overlay: @Composable BoxScope.() -> Unit = {},
+) {
+    var failed by remember(url) { mutableStateOf(false) }
+    if (failed) return
+    Box(modifier) {
+        LocalRemoteImage.current(url, contentDescription, Modifier.matchParentSize()) { failed = true }
+        overlay()
+    }
+}
+
+/** Section titles: clearly stronger than the text under them. */
+private val SectionTitleWeight = FontWeight.SemiBold
+
+/**
  * The sections under the header, each shown only when it has something, each from its own source:
  * the card's photo and text, OSM details, Pubky tags, photos, posts, lists, "Also on" and the data
- * credits.
+ * credits (with the card text's credit).
  */
-fun LazyListScope.placeSections(
+@Composable
+fun PlaceSections(
     page: PlacePageState,
     context: PlacePageContext,
     actions: PlacePageActions,
+    modifier: Modifier = Modifier,
 ) {
-    val card = page.card
-    if (card == null && PlacePart.Card in page.loading) {
-        item(key = "loading") { LoadingBlock() }
-    }
-    card?.image?.let { image ->
-        item(key = "image") { CardImage(image, card.credit("image"), actions) }
-    }
-    card?.description?.let { description ->
-        item(key = "description") { Description(description, card.credit("description"), actions) }
-    }
-    page.osm?.let { osm ->
-        item(key = "details") { OsmDetailsSection(osm, context, actions) }
-    }
-    val tags = page.tags
-    if (tags.isNotEmpty()) item(key = "tags") { TagsSection(tags, page.people, page.viewer) }
-    if (page.photos.isNotEmpty()) item(key = "photos") { PhotosSection(page.photos, actions) }
-    if (page.posts.isNotEmpty()) {
-        item(key = "posts-title") { SectionTitle("Posts") }
-        items(page.posts, key = { it.uri }) { post -> PostRow(post, page.people[post.author], context) }
-        if (page.morePosts) {
-            item(key = "posts-more") {
-                TextButton(
-                    onClick = actions.onLoadMorePosts,
-                    enabled = !page.loadingMorePosts,
-                    modifier = Modifier.padding(horizontal = 8.dp),
-                ) { Text(if (page.loadingMorePosts) "Loading…" else "More posts") }
-            }
+    Column(modifier) {
+        val card = page.card
+        if (card == null && PlacePart.Card in page.loading) LoadingBlock()
+        card?.image?.let { image -> CardImage(image, card.credit("image"), actions) }
+        card?.description?.let { Description(it) }
+        val osm = page.osm
+        osm?.let { OsmDetailsSection(it, context, actions) }
+        val tags = page.tags
+        if (tags.isNotEmpty()) TagsSection(tags, page.people, page.viewer, page.taggerCount)
+        if (page.photos.isNotEmpty()) PhotosSection(page.photos, actions)
+        if (page.posts.isNotEmpty()) {
+            SectionTitle("Posts")
+            page.posts.forEach { post -> PostRow(post, page.people[post.author], context) }
+            if (page.morePosts) MorePostsRow(page.loadingMorePosts, actions.onLoadMorePosts)
         }
+        if (page.lists.isNotEmpty()) ListsSection(page.lists, page.listCount, page.people)
+        if (page.nothingOnPubky) NothingOnPubky()
+        val alsoOn = card?.let { alsoOnShown(it.alsoOn, page.place.uri, context.language, hasWebsite = osm?.website != null) }.orEmpty()
+        if (alsoOn.isNotEmpty()) AlsoOnSection(alsoOn, actions)
+        DataCredits(page, actions)
     }
-    if (page.lists.isNotEmpty()) item(key = "lists") { ListsSection(page.lists, page.people) }
-    if (page.nothingOnPubky) item(key = "nothing-on-pubky") { NothingOnPubky() }
-    val alsoOn = card?.let { alsoOnShown(it.alsoOn, page.place.uri, context.language) }.orEmpty()
-    if (alsoOn.isNotEmpty()) item(key = "also-on") { AlsoOnSection(alsoOn, actions) }
-    item(key = "credits") { DataCredits(page) }
 }
 
 @Composable
@@ -261,7 +290,8 @@ private fun SectionTitle(text: String) {
         HorizontalDivider(Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
         Text(
             text,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = SectionTitleWeight,
             modifier =
                 Modifier
                     .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)
@@ -286,72 +316,54 @@ private fun LoadingBlock() {
     }
 }
 
+/** Small text that must stay readable: 12 sp, the theme's secondary text colour (WCAG AA on its surfaces). */
 @Composable
-private fun RemoteImage(
-    url: String,
-    contentDescription: String?,
-    modifier: Modifier,
+private fun SmallText(
+    text: String,
+    modifier: Modifier = Modifier,
 ) {
-    val placeholder = ColorPainter(MaterialTheme.colorScheme.surfaceContainerHighest)
-    AsyncImage(
-        model = url,
-        contentDescription = contentDescription,
-        modifier = modifier,
-        placeholder = placeholder,
-        error = placeholder,
-        fallback = placeholder,
-        contentScale = ContentScale.Crop,
-    )
+    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = modifier)
 }
 
+/** The card's image with its credit as a small strip over its bottom edge; tapping the strip opens the licence. */
 @Composable
 private fun CardImage(
     url: String,
     credit: PlaceCredit?,
     actions: PlacePageActions,
 ) {
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-        RemoteImage(
-            url,
-            contentDescription = "Photo of the place",
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
-                    .clip(RoundedCornerShape(12.dp)),
-        )
-        credit?.let { CreditLine(creditText("Photo", it), it, actions) }
-    }
-}
-
-@Composable
-private fun Description(
-    text: String,
-    credit: PlaceCredit?,
-    actions: PlacePageActions,
-) {
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Text(text, style = MaterialTheme.typography.bodyLarge)
-        credit?.let { CreditLine(creditText("Text", it), it, actions) }
-    }
-}
-
-/** A credit under an image or a text; tapping opens its source page. */
-@Composable
-private fun CreditLine(
-    text: String,
-    credit: PlaceCredit,
-    actions: PlacePageActions,
-) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    RemoteImage(
+        url,
+        contentDescription = "Photo of the place",
         modifier =
             Modifier
-                .padding(top = 4.dp)
-                .clickable { actions.onOpenLink(credit.licenseUrl ?: credit.sourceUrl) },
-    )
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .fillMaxWidth()
+                .aspectRatio(16f / 9f)
+                .clip(RoundedCornerShape(12.dp)),
+    ) {
+        credit?.let {
+            Text(
+                creditText("Photo", it),
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .background(Color.Black.copy(alpha = 0.6f))
+                        .clickable { actions.onOpenLink(it.licenseUrl ?: it.sourceUrl) }
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun Description(text: String) {
+    Text(text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
 }
 
 @Composable
@@ -392,6 +404,7 @@ private fun DetailRow(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .heightIn(min = 48.dp)
                 .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
                 .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -419,7 +432,7 @@ private fun HoursRow(
         Modifier
             .fillMaxWidth()
             .then(if (week != null) Modifier.clickable { expanded = !expanded } else Modifier)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(PlaceIcons.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -448,14 +461,7 @@ private fun HoursRow(
                 }
             }
         }
-        if (schedule?.mentionsHolidays == true) {
-            Text(
-                "Hours may differ on holidays.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 40.dp, top = 4.dp),
-            )
-        }
+        if (schedule?.mentionsHolidays == true) SmallText("Hours may differ on holidays.", Modifier.padding(start = 40.dp, top = 4.dp))
     }
 }
 
@@ -465,11 +471,11 @@ private fun personName(
     person: PlacePerson?,
 ): String = person?.name ?: shortPubkyId(id)
 
+/** A person's picture, else the first letter of their name, else a person icon (never a key's first character). */
 @Composable
 private fun Avatar(
-    id: String,
     person: PlacePerson?,
-    size: Int = 28,
+    size: Int = 32,
 ) {
     Box(
         Modifier
@@ -478,13 +484,19 @@ private fun Avatar(
             .background(MaterialTheme.colorScheme.secondaryContainer),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            personName(id, person).removePrefix("pubky").take(1).uppercase(),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSecondaryContainer,
-        )
+        val initial = person?.name?.firstOrNull { it.isLetter() }
+        if (initial != null) {
+            Text(initial.uppercase(), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSecondaryContainer)
+        } else {
+            Icon(
+                AppIcons.AccountCircle,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.size((size * 3 / 4).dp),
+            )
+        }
         person?.avatarUrl?.let { url ->
-            AsyncImage(model = url, contentDescription = null, modifier = Modifier.size(size.dp), contentScale = ContentScale.Crop)
+            LocalRemoteImage.current(url, null, Modifier.size(size.dp)) {}
         }
     }
 }
@@ -496,73 +508,90 @@ private fun TagsSection(
     tags: List<PlaceTag>,
     people: Map<String, PlacePerson>,
     viewer: String?,
+    taggerCount: Int,
 ) {
     Column {
         SectionTitle("Tags on Pubky")
         FlowRow(
             modifier = Modifier.padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             tags.forEach { tag ->
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = if (tag.mine) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                    contentColor = if (tag.mine) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                ) {
-                    Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(tag.label, style = MaterialTheme.typography.labelLarge)
-                        Spacer(Modifier.width(6.dp))
-                        Text(tag.count.toString(), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                // 48 dp tall like a touch target: s2c makes the chips toggle the user's own tag.
+                Box(Modifier.heightIn(min = 48.dp), contentAlignment = Alignment.Center) {
+                    val colors = MaterialTheme.colorScheme
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (tag.mine) colors.primaryContainer else colors.surfaceContainerHigh,
+                        contentColor = if (tag.mine) colors.onPrimaryContainer else colors.onSurface,
+                    ) {
+                        Row(
+                            Modifier.heightIn(min = 36.dp).padding(horizontal = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(tag.label, style = MaterialTheme.typography.labelLarge)
+                            Spacer(Modifier.width(6.dp))
+                            Text(tag.count.toString(), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
         }
-        // The user's own tags are said below, in words.
-        val taggers =
-            tags
-                .flatMap { it.taggers }
-                .distinct()
-                .filter { it != viewer }
-                .sortedByDescending { people[it]?.followed == true }
-        if (taggers.isNotEmpty()) {
-            Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                taggers.take(4).forEach { id ->
-                    Avatar(id, people[id])
+        val line = taggersLine(tags, people, viewer, taggerCount)
+        if (line != null) {
+            Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                line.shown.forEach { id ->
+                    Avatar(people[id])
                     Spacer(Modifier.width(4.dp))
                 }
                 Spacer(Modifier.width(4.dp))
-                Text(
-                    taggersText(taggers, people),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Text(line.text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        tags.firstOrNull { it.mine }?.let {
-            Text(
-                "You tagged it ${tags.filter { t -> t.mine }.joinToString(", ") { t -> t.label }}.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
-            )
+        val mine = tags.filter { it.mine }
+        if (mine.isNotEmpty()) {
+            SmallText("You tagged it ${mine.joinToString(", ") { it.label }}.", Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
         }
     }
 }
 
-/** "Tagged by Anna and Ben", "Tagged by Anna, Ben and 3 others". */
-internal fun taggersText(
-    taggers: List<String>,
+/** The people shown with avatars and the line beside them; one count for both. */
+internal data class TaggersLine(
+    val shown: List<String>,
+    val text: String,
+)
+
+/**
+ * "Tagged by Anna, Ben and 3 others": the first two named people the user follows first, and the
+ * others counted from Nexus' tagger count of the place (people Nexus did not list included); the
+ * user's own tags are said apart. The avatars are the people named. Null when nobody but the user
+ * tagged.
+ */
+internal fun taggersLine(
+    tags: List<PlaceTag>,
     people: Map<String, PlacePerson>,
-): String {
-    val names = taggers.take(2).map { personName(it, people[it]) }
-    val rest = taggers.size - names.size
-    return "Tagged by " +
-        when {
-            rest == 0 && names.size == 1 -> names[0]
-            rest == 0 -> "${names[0]} and ${names[1]}"
-            else -> "${names.joinToString(", ")} and $rest ${if (rest == 1) "other" else "others"}"
-        }
+    viewer: String?,
+    taggerCount: Int,
+): TaggersLine? {
+    val listed =
+        tags
+            .flatMap { it.taggers }
+            .distinct()
+            .filter { it != viewer }
+            .sortedByDescending { people[it]?.followed == true }
+    if (listed.isEmpty()) return null
+    val named = listed.take(2)
+    val mine = if (tags.any { it.mine }) 1 else 0
+    val others = (maxOf(taggerCount - mine, listed.size) - named.size).coerceAtLeast(0)
+    val names = named.map { personName(it, people[it]) }
+    val text =
+        "Tagged by " +
+            when {
+                others == 0 && names.size == 1 -> names[0]
+                others == 0 -> "${names[0]} and ${names[1]}"
+                else -> "${names.joinToString(", ")} and $others ${if (others == 1) "other" else "others"}"
+            }
+    return TaggersLine(named, text)
 }
 
 @Composable
@@ -595,7 +624,7 @@ private fun PostRow(
     context: PlacePageContext,
 ) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Avatar(post.author, author, size = 36)
+        Avatar(author, size = 40)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             val then = Instant.fromEpochMilliseconds(post.indexedAt).toLocalDateTime(context.timeZone)
@@ -605,31 +634,57 @@ private fun PostRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (post.content.isNotEmpty()) {
-                Text(post.content, style = MaterialTheme.typography.bodyMedium, maxLines = 8, overflow = TextOverflow.Ellipsis)
+                Text(post.content, style = MaterialTheme.typography.bodyLarge, maxLines = 8, overflow = TextOverflow.Ellipsis)
             }
         }
     }
 }
 
+/** "More posts" as a full-width row at the section's margin. */
+@Composable
+private fun MorePostsRow(
+    loading: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clickable(enabled = !loading, onClick = onClick)
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            if (loading) "Loading…" else "More posts",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.weight(1f),
+        )
+        if (!loading) Icon(PlaceIcons.ExpandMore, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+    }
+}
+
+/**
+ * The public lists holding the place, as text: there is no list screen yet, so the rows do not look
+ * tappable (a chevron would promise one).
+ */
 @Composable
 private fun ListsSection(
     lists: List<PlaceList>,
+    count: Int,
     people: Map<String, PlacePerson>,
 ) {
     Column {
-        SectionTitle(if (lists.size == 1) "In 1 list" else "In ${lists.size} lists")
+        SectionTitle(if (count == 1) "In 1 list" else "In $count lists")
         lists.forEach { list ->
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text(list.name ?: "A list", style = MaterialTheme.typography.bodyLarge)
                 val by = if (list.mine) "Your list" else "By ${personName(list.author, people[list.author])}"
-                val count = list.itemCount?.let { if (it == 1) "1 place" else "$it places" }
-                Text(
-                    listOfNotNull(by, count).joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                val places = list.itemCount?.let { if (it == 1) "1 place" else "$it places" }
+                SmallText(listOfNotNull(by, places).joinToString(" · "))
             }
         }
+        if (count > lists.size) SmallText("Showing ${lists.size} of $count.", Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
     }
 }
 
@@ -644,10 +699,13 @@ private fun AlsoOnSection(
         FlowRow(
             modifier = Modifier.padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             links.forEach { link ->
-                OutlinedButton(onClick = { actions.onOpenLink(link.uri) }, contentPadding = PaddingValues(horizontal = 12.dp)) {
+                OutlinedButton(
+                    onClick = { actions.onOpenLink(link.uri) },
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) {
                     Text(link.site)
                 }
             }
@@ -665,20 +723,30 @@ private fun NothingOnPubky() {
     )
 }
 
-/** Where the page's data came from, as the sources' licences ask. */
+/**
+ * Where the page's data came from, as the sources' licences ask: one line per source at the end,
+ * the card text's credit among them (tap opens its licence or source).
+ */
 @Composable
-private fun DataCredits(page: PlacePageState) {
-    val parts =
+private fun DataCredits(
+    page: PlacePageState,
+    actions: PlacePageActions,
+) {
+    val textCredit = page.card?.takeIf { it.description != null }?.credit("description")
+    val lines =
         listOfNotNull(
             page.card?.let { "Place card: Pinakes" },
             page.card?.attribution ?: page.osm?.let { "© OpenStreetMap contributors (ODbL)" },
             "Tags and posts: Pubky (Nexus)".takeIf { page.tags.isNotEmpty() || page.posts.isNotEmpty() || page.photos.isNotEmpty() },
         )
-    if (parts.isEmpty()) return
-    Text(
-        parts.joinToString(" · "),
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 16.dp),
-    )
+    if (lines.isEmpty() && textCredit == null) return
+    Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        textCredit?.let { credit ->
+            SmallText(
+                creditText("Text", credit),
+                Modifier.clickable { actions.onOpenLink(credit.licenseUrl ?: credit.sourceUrl) },
+            )
+        }
+        lines.forEach { SmallText(it) }
+    }
 }

@@ -51,10 +51,12 @@ website, wheelchair access, cuisine); Pubky tags with their counts and who tagge
 follows first, the user's own tags marked); photos and posts about the place from Nexus, newest first;
 the public lists that hold it; and the same place on other services ("Also on"). Each part loads on
 its own and is hidden while it has nothing. What a page showed is kept on the phone, so a place
-reopens offline with a note saying when it was saved. Typed coordinates open a page without any
-request.
+reopens offline with a note saying when it was saved; the user's own tags and lists in it are shown
+only to the account that saw them. Typed coordinates open a page without any request, and the
+map's Pubky places wait until the user moves the map away from the typed point.
 
 The map also shows the places people referenced on Pubky (from zoom 12, from Pinakes, clustered).
+When no Pinakes server answers, the map's status line says so.
 
 **Map links.** Links from other map apps open in Pubky Maps: tapped (`geo:`, `om://`, `cm://`,
 and Google Maps, Apple Maps, Waze, OpenStreetMap, OsmAnd, Organic Maps, CoMaps and HERE web links
@@ -86,7 +88,8 @@ the link text. The link the user had stays the place's URI.
   then Nexus tags/posts/people for every link of the place, and the lists) and caches what was shown
   in its own SQLite database (`place-cache.db`, never in a backup); `OpeningSchedule` evaluates OSM
   opening hours parsed by osm-opening-hours. The map's Pubky places layer (`map/MapPlacesLayer.kt`)
-  asks Pinakes for the view grown by half, at most 1,000 places, and MapLibre clusters them. The
+  asks Pinakes for the view grown by half and widened to a 1/16° grid, at most 1,000 places, and
+  MapLibre clusters them. The
   readers are tested against recorded answers (`shared/src/commonTest/fixtures/place/`, refreshed by
   `scripts/place/record-fixtures.py`).
 - Settings are one JSON file with a schema version, written by AndroidX DataStore

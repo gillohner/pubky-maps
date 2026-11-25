@@ -10,6 +10,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -33,6 +34,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
@@ -220,12 +222,15 @@ fun MapRoute(
         mapState.animateCamera(CameraUpdate(center = target, zoom = mapState.cameraPosition.zoom + 2))
     }
     // The Pubky places layer asks Pinakes when the camera rests.
+    // Held while the page of typed coordinates is open and the user has not moved the map (see layerMayAsk).
+    val layerHeld = remember { mutableStateOf(false) }
     if (places != null) {
         LaunchedEffect(mapState, places) {
             snapshotFlow { if (mapState.isCameraMoving) null else mapState.viewport }
                 .filterNotNull()
                 .collectLatest { viewport ->
                     delay(CAMERA_REST_MS)
+                    if (layerHeld.value) return@collectLatest
                     val view =
                         viewBox(
                             viewport.visibleBounds.west,
@@ -261,6 +266,13 @@ fun MapRoute(
             tapped != null -> tapped?.let { ShownPlace(it, SheetStop.Peek, onClose = { tapped = null }) }
             else -> null
         }
+    var movedSinceShown by remember(shown?.place?.uri) { mutableStateOf(false) }
+    LaunchedEffect(shown?.place?.uri) {
+        // The first value is the reason of the move that is already over.
+        snapshotFlow { mapState.cameraMoveReason }.drop(1).collect { if (it == CameraMoveReason.Gesture) movedSinceShown = true }
+    }
+    val held = !layerMayAsk(shown?.place?.source, movedSinceShown)
+    SideEffect { layerHeld.value = held }
     val placePage = places?.let { rememberPlacePage(it, shown, mapSearch?.userLocation, onSharePlace, openIn) }
 
     MapScreen(
@@ -517,6 +529,10 @@ private fun rememberPlacePage(
     if (shown == null) return null
     BackHandler { shown.onClose() }
     val page = pageState?.takeIf { it.place.uri == shown.place.uri } ?: PlacePageState(shown.place)
+    // Built once per place and point (it asks the core and the package manager), not per recomposition.
+    val openInPlace = page.place.copy(point = page.place.point ?: page.card?.point)
+    val openInActions =
+        remember(openIn, openInPlace.uri, openInPlace.point, openInPlace.name) { openIn?.actions?.invoke(openInPlace).orEmpty() }
     val zone = TimeZone.currentSystemDefault()
     val context =
         PlacePageContext(
@@ -531,7 +547,7 @@ private fun rememberPlacePage(
         PlacePageActions(
             onClose = shown.onClose,
             onShare = onSharePlace?.let { share -> { share(shown.place) } },
-            openIn = openIn?.actions?.invoke(page.place.copy(point = page.place.point ?: page.card?.point)).orEmpty(),
+            openIn = openInActions,
             onOpenIn = { openIn?.open?.invoke(it) },
             onOpenLink = rememberSafeLinkOpener(),
             onLoadMorePosts = places.pages::loadMorePosts,

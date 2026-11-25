@@ -18,6 +18,8 @@ import to.pubky.maps.search.SourceAnswer
 import to.pubky.maps.search.categoryOf
 import to.pubky.maps.search.osmIdFromUrl
 import to.pubky.maps.search.schemaTypeLabel
+import to.pubky.maps.status.ServiceHealth
+import to.pubky.maps.status.ServicePart
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
@@ -46,6 +48,8 @@ class MapPlacesLayer(
     private val scope: CoroutineScope,
     private val clock: Clock = Clock.System,
     private val maxAge: Duration = 5.minutes,
+    /** Told when every Pinakes server failed (the map names it) and when one answers again. */
+    private val health: ServiceHealth? = null,
 ) {
     private val _state = MutableStateFlow(MapPlacesState())
     val state: StateFlow<MapPlacesState> = _state.asStateFlow()
@@ -77,7 +81,7 @@ class MapPlacesLayer(
                 clock.now() - last.at < maxAge &&
                 !(last.truncated && zoom >= last.zoom + 2)
         if (fresh) return
-        val area = view.expandedBy(0.5)
+        val area = view.expandedBy(0.5).snappedOutward(GRID_DEGREES)
         asked = Asked(area, zoom, clock.now(), truncated = false)
         job?.cancel()
         job =
@@ -95,11 +99,13 @@ class MapPlacesLayer(
                         SourceAnswer.Unreachable -> {
                             // Asked again on the next stop of the camera.
                             asked = null
+                            health?.failed(ServicePart.Pinakes)
                             return@launch
                         }
                     }
                     pages++
                 } while (cursor != null && pages < MAX_PAGES)
+                health?.recovered(ServicePart.Pinakes)
                 val truncated = cursor != null
                 asked = asked?.copy(truncated = truncated)
                 _state.value = MapPlacesState(places.distinctBy { it.uri }, area, truncated, hidden = _state.value.hidden)
@@ -112,6 +118,12 @@ class MapPlacesLayer(
 
         /** Up to 1,000 places: enough for a city centre, cheap for Pinakes' 120 requests a minute. */
         const val MAX_PAGES = 2
+
+        /**
+         * Asked areas are widened to a 1/16° grid (about 7 km), so a request never says where exactly the
+         * user looks, and nearby views ask for the same area.
+         */
+        const val GRID_DEGREES = 0.0625
     }
 }
 
@@ -134,6 +146,16 @@ fun viewBox(
     if (w > e) return null
     return GeoBox(w, lat(south), e, lat(north))
 }
+
+/**
+ * Whether the layer may ask for the area in view. Not while the page of typed coordinates is open and
+ * the user has not moved the map since: the view is centred on the typed point, which never leaves
+ * the phone.
+ */
+fun layerMayAsk(
+    shownSource: PlaceSource?,
+    movedByUserSinceShown: Boolean,
+): Boolean = shownSource != PlaceSource.Coordinates || movedByUserSinceShown
 
 /** The place page reference of a Pubky places layer pin. */
 fun MapPlace.toPlaceRef(): PlaceRef =

@@ -96,9 +96,10 @@ fun App(
     places: PlaceServices? = null,
 ) {
     val loaded by settingsRepository.settings.collectAsStateWithLifecycle()
-    // Place photos and profile pictures, with the app's User-Agent like every other request.
-    val imageClient = remember(appInfo.versionName) { searchHttpClient(appInfo.versionName) }
+    // Place photos and profile pictures, with the app's User-Agent like every other request. Coil
+    // keeps the first loader for the process, so the client is made once, inside it.
     setSingletonImageLoaderFactory { context ->
+        val imageClient = searchHttpClient(appInfo.versionName)
         ImageLoader
             .Builder(context)
             .components { add(KtorNetworkFetcherFactory(httpClient = { imageClient })) }

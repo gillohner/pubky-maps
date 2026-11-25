@@ -8,14 +8,14 @@ import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -71,7 +71,10 @@ fun PlaceSheet(
     val maxPx = with(density) { maxHeight.toPx() }
     val insetPx = with(density) { bottomInset.toPx() }
     val peekPx = ((if (headerPx > 0) headerPx + handlePx else with(density) { 180.dp.toPx() }) + insetPx).coerceAtMost(maxPx)
-    val stops = SheetStops(peek = peekPx, half = maxPx * 0.5f, full = maxPx)
+    // The top stop is no taller than the page: a short page leaves no empty sheet under its end.
+    var contentPx by remember { mutableIntStateOf(0) }
+    val fullPx = if (contentPx > 0 && headerPx > 0) (headerPx + handlePx + contentPx).coerceAtMost(maxPx) else maxPx
+    val stops = SheetStops(peek = peekPx, half = (maxPx * 0.5f).coerceAtMost(fullPx), full = fullPx)
     // The resting height, animated between stops; while a finger moves the sheet, [dragged].
     val resting = remember { Animatable(stops.height(stop)) }
     var dragged by remember { mutableStateOf<Float?>(null) }
@@ -155,11 +158,21 @@ fun PlaceSheet(
                 Handle(stop) { onStopChange(SheetStops.afterTap(stop)) }
                 PlaceHeader(page, context, actions)
             }
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth().weight(1f).nestedScroll(nestedScroll),
-                contentPadding = PaddingValues(bottom = bottomInset),
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .nestedScroll(nestedScroll)
+                    .verticalScroll(rememberScrollState()),
             ) {
-                placeSections(page, context, actions)
+                PlaceSections(
+                    page,
+                    context,
+                    actions,
+                    Modifier
+                        .onSizeChanged { contentPx = it.height }
+                        .padding(bottom = bottomInset),
+                )
             }
         }
     }
@@ -208,9 +221,9 @@ fun PlacePanel(
         color = MaterialTheme.colorScheme.surface,
         shadowElevation = 3.dp,
     ) {
-        LazyColumn(Modifier.fillMaxSize()) {
-            item(key = "header") { PlaceHeader(page, context, actions, modifier = Modifier.padding(top = 8.dp)) }
-            placeSections(page, context, actions)
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+            PlaceHeader(page, context, actions, modifier = Modifier.padding(top = 8.dp))
+            PlaceSections(page, context, actions)
         }
     }
 }

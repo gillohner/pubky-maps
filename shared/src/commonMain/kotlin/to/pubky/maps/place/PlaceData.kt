@@ -22,6 +22,8 @@ import kotlinx.serialization.json.JsonPrimitive
 import to.pubky.maps.search.SearchHttpException
 import to.pubky.maps.search.ServerFallback
 import to.pubky.maps.search.SourceAnswer
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -80,6 +82,15 @@ data class GeoBox(
     val north: Double,
 ) {
     fun contains(other: GeoBox): Boolean = other.west >= west && other.east <= east && other.south >= south && other.north <= north
+
+    /** This box widened to the [step]-degree grid around it, kept on the globe. */
+    fun snappedOutward(step: Double): GeoBox =
+        GeoBox(
+            west = (floor(west / step) * step).coerceAtLeast(-180.0),
+            south = (floor(south / step) * step).coerceAtLeast(-90.0),
+            east = (ceil(east / step) * step).coerceAtMost(180.0),
+            north = (ceil(north / step) * step).coerceAtMost(90.0),
+        )
 
     /** This box grown by [share] of its size on each side, kept on the globe. */
     fun expandedBy(share: Double): GeoBox {

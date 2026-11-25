@@ -53,6 +53,12 @@ data class PlacePageState(
             PlacePart.Social !in loading && PlacePart.Posts !in loading && PlacePart.Lists !in loading &&
                 social != null && social.tags.isEmpty() && posts.isEmpty() && photos.isEmpty() && lists.isEmpty()
 
+    /** How many people tagged the place: Nexus' count, at least the people listed. */
+    val taggerCount: Int get() = social?.taggerCount ?: 0
+
+    /** How many public lists hold the place: the card's count, at least the lists shown. */
+    val listCount: Int get() = maxOf(card?.collections ?: 0, lists.size)
+
     /** The OSM details of the card, null when it has none. */
     val osm: OsmDetails? get() = card?.facts?.let(OsmDetails::from)
 
@@ -144,7 +150,9 @@ class PlacePageController(
             update(place) { it.copy(loading = emptySet()) }
             return
         }
-        val cached = cache?.let { withContext(io) { runCatching { it.read(place.uri) }.getOrNull() } }
+        val viewer = viewer()
+        // Saved for another account (or signed in when the user now is not): nothing in it is theirs.
+        val cached = cache?.let { withContext(io) { runCatching { it.read(place.uri) }.getOrNull() } }?.forViewer(viewer)
         if (cached != null) {
             update(place) {
                 it.copy(
@@ -158,7 +166,6 @@ class PlacePageController(
                 )
             }
         }
-        val viewer = viewer()
         val card =
             when (val answer = data.card(listOfNotNull(place.uri, place.osm?.url))) {
                 is SourceAnswer.Answered -> {
@@ -326,6 +333,7 @@ class PlacePageController(
                 photos = page.photos,
                 lists = page.lists,
                 savedAt = clock.now().toEpochMilliseconds(),
+                viewer = page.viewer,
             )
         cache?.let { withContext(io) { runCatching { it.write(snapshot) } } }
     }

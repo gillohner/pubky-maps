@@ -65,6 +65,7 @@ class PubkyMapsApplication : Application() {
             settings = settingsRepository.settings,
             appVersion = BuildConfig.VERSION_NAME,
             viewer = { signedInKey() },
+            health = serviceHealth,
         )
     }
 

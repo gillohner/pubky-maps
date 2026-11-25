@@ -140,14 +140,19 @@ fun savedText(at: LocalDateTime): String = "${at.date.day} ${MONTHS[at.date.mont
 
 /**
  * The "Also on" links worth a row: one Wikipedia (the phone's language, else English), every other
- * service once, and not the link the page is about.
+ * service once, not the link the page is about, and not Wikidata's "Official website" when the
+ * details already have a website row ([hasWebsite]).
  */
 fun alsoOnShown(
     links: List<AlsoOnLink>,
     pageUri: String,
     language: String,
+    hasWebsite: Boolean = false,
 ): List<AlsoOnLink> {
-    val (wikipedias, others) = links.filter { it.uri != pageUri }.partition { it.site.startsWith("Wikipedia (") }
+    val (wikipedias, others) =
+        links
+            .filter { it.uri != pageUri && !(hasWebsite && it.site == "Official website") }
+            .partition { it.site.startsWith("Wikipedia (") }
     val wikipedia =
         wikipedias.firstOrNull { it.site == "Wikipedia ($language)" }
             ?: wikipedias.firstOrNull { it.site == "Wikipedia (en)" }

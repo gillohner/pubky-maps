@@ -20,6 +20,8 @@ import to.pubky.maps.place.PlaceSource
 import to.pubky.maps.place.ResourceView
 import to.pubky.maps.place.parseMapPlaces
 import to.pubky.maps.search.SourceAnswer
+import to.pubky.maps.status.ServiceHealth
+import to.pubky.maps.status.ServicePart
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -102,7 +104,8 @@ class MapPlacesLayerTest {
             assertFalse(layer.state.value.hidden)
             val asked = data.asked.single().first
             assertTrue(asked.contains(oldTown))
-            assertEquals(oldTown.west - (oldTown.east - oldTown.west) * 0.5, asked.west, 1e-9)
+            // The view grown by half (8.5275..8.5575, 47.36..47.38), widened to the 1/16° grid.
+            assertEquals(GeoBox(8.5, 47.3125, 8.5625, 47.375 + 0.0625), asked)
             // A small pan stays inside: no request.
             layer.onCameraIdle(oldTown.copy(west = oldTown.west + 0.002, east = oldTown.east + 0.002), zoom = 15.0)
             advanceUntilIdle()
@@ -168,6 +171,38 @@ class MapPlacesLayerTest {
             advanceUntilIdle()
             assertEquals(3, data.asked.size)
         }
+
+    @Test
+    fun aMissingPinakesIsReportedAndItsReturnToo() =
+        runTest {
+            val data = AreaData().apply { down = true }
+            val health = ServiceHealth()
+            val layer = MapPlacesLayer(data, this, TestClock(), health = health)
+            layer.onCameraIdle(oldTown, zoom = 15.0)
+            advanceUntilIdle()
+            assertEquals(setOf(ServicePart.Pinakes), health.missing.value)
+            data.down = false
+            layer.onCameraIdle(oldTown, zoom = 15.0)
+            advanceUntilIdle()
+            assertEquals(emptySet<ServicePart>(), health.missing.value)
+            assertEquals(11, layer.state.value.places.size)
+        }
+
+    @Test
+    fun theLayerWaitsWhileTypedCoordinatesAreShown() {
+        assertFalse(layerMayAsk(PlaceSource.Coordinates, movedByUserSinceShown = false))
+        assertTrue(layerMayAsk(PlaceSource.Coordinates, movedByUserSinceShown = true))
+        assertTrue(layerMayAsk(PlaceSource.Pinakes, movedByUserSinceShown = false))
+        assertTrue(layerMayAsk(null, movedByUserSinceShown = false))
+    }
+
+    @Test
+    fun areasSnapOutwardToTheGrid() {
+        // A view centred on a typed point asks for a grid cell, whose centre is not the point.
+        val asked = GeoBox(8.535, 47.365, 8.545, 47.375).snappedOutward(MapPlacesLayer.GRID_DEGREES)
+        assertEquals(GeoBox(8.5, 47.3125, 8.5625, 47.375), asked)
+        assertEquals(GeoBox(-180.0, -90.0, 180.0, 90.0), GeoBox(-179.99, -89.99, 179.99, 89.99).snappedOutward(0.0625))
+    }
 
     @Test
     fun viewsOnOtherWorldCopiesAreWrapped() {

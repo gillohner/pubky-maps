@@ -242,6 +242,70 @@ class PlacePageControllerTest {
         }
 
     @Test
+    fun aCachedPageShowsNothingAsTheirsToAnotherAccountOrSignedOut() =
+        runTest {
+            val cache = MemoryPlaceCache()
+            val signedIn = controller(FakePlaceData(), cache, viewer = PlaceFixtures.TESTER)
+            signedIn.open(schober)
+            advanceUntilIdle()
+            assertTrue(
+                signedIn.state.value!!
+                    .tags
+                    .any { it.mine },
+            )
+            assertTrue(
+                signedIn.state.value!!
+                    .lists
+                    .all { it.mine },
+            )
+            assertEquals(PlaceFixtures.TESTER, cache.saved[FakePlaceData.SCHOBER]?.viewer)
+
+            // Signed out, everything offline: the saved page, with nothing of the old account's.
+            val down =
+                FakePlaceData().apply {
+                    pinakesDown = true
+                    nexusDown = true
+                }
+            val signedOut = controller(down, cache, viewer = null)
+            signedOut.open(schober)
+            advanceUntilIdle()
+            val page = signedOut.state.value!!
+            assertTrue(page.offline)
+            assertEquals(4, page.tags.size)
+            assertFalse(page.tags.any { it.mine })
+            assertFalse(page.lists.any { it.mine })
+            assertFalse(page.people.values.any { it.followed })
+
+            // Another account: its own lists are its own again.
+            val other = controller(down, cache, viewer = "someoneelse").also { it.open(schober) }
+            advanceUntilIdle()
+            assertFalse(
+                other.state.value!!
+                    .tags
+                    .any { it.mine },
+            )
+            assertFalse(
+                other.state.value!!
+                    .lists
+                    .any { it.mine },
+            )
+        }
+
+    @Test
+    fun theListCountIsTheCardsNotThePageShown() =
+        runTest {
+            val pages = controller(FakePlaceData())
+            pages.open(schober)
+            advanceUntilIdle()
+            val page = pages.state.value!!
+            assertEquals(3, page.listCount)
+            val bigger = page.copy(card = page.card!!.copy(collections = 25))
+            assertEquals(25, bigger.listCount)
+            // Nexus' tagger count of the Schober's link (6 people over 4 labels).
+            assertEquals(6, page.taggerCount)
+        }
+
+    @Test
     fun postsArePaged() =
         runTest {
             val one = parseNexusPosts(PlaceFixtures.read("nexus-replies-schober.json"), PlaceFixtures.NEXUS).single()

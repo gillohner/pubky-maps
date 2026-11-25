@@ -128,6 +128,8 @@ data class PlaceSocial(
     val resourceIds: List<String>,
     val replyCount: Int,
     val embedCount: Int,
+    /** How many people tagged the place (over its links). */
+    val taggerCount: Int = 0,
 )
 
 /** Everything the page showed, as cached for offline reopening. */
@@ -142,4 +144,23 @@ data class PlaceSnapshot(
     val lists: List<PlaceList> = emptyList(),
     /** When it was saved, epoch milliseconds. */
     val savedAt: Long = 0,
-)
+    /**
+     * Whose page it was (the signed-in user's pubky id, null signed out): their own tags and lists and
+     * whom they follow are true only for them.
+     */
+    val viewer: String? = null,
+) {
+    /**
+     * This snapshot as [viewer] may see it: for someone else (another account, or signed out), nothing
+     * is theirs and they follow nobody; lists they wrote are theirs again.
+     */
+    fun forViewer(viewer: String?): PlaceSnapshot {
+        if (viewer == this.viewer) return this
+        return copy(
+            social = social?.copy(tags = social.tags.map { it.copy(mine = false) }),
+            people = people.map { it.copy(followed = false) },
+            lists = lists.map { it.copy(mine = viewer != null && it.author == viewer) },
+            viewer = viewer,
+        )
+    }
+}

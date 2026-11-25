@@ -7,8 +7,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
 import com.github.takahirom.roborazzi.RoborazziComposeOptions
@@ -33,6 +36,7 @@ import to.pubky.maps.links.OsmType
 import to.pubky.maps.map.MapScreen
 import to.pubky.maps.map.PlacePageSlot
 import to.pubky.maps.place.AlsoOnLink
+import to.pubky.maps.place.LocalRemoteImage
 import to.pubky.maps.place.PlaceCardInfo
 import to.pubky.maps.place.PlaceCredit
 import to.pubky.maps.place.PlaceList
@@ -78,6 +82,7 @@ class PlaceScreenshotTest {
         name: String,
         device: Device,
         dark: Boolean,
+        imagesFail: Boolean = false,
         content: @Composable () -> Unit,
     ) {
         val theme = if (dark) "dark" else "light"
@@ -89,7 +94,9 @@ class PlaceScreenshotTest {
                     uiMode(if (dark) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO)
                 },
         ) {
-            PubkyMapsTheme { content() }
+            PubkyMapsTheme {
+                CompositionLocalProvider(LocalRemoteImage provides if (imagesFail) FailingImage else StandInImage) { content() }
+            }
         }
     }
 
@@ -188,6 +195,7 @@ class PlaceScreenshotTest {
                     resourceIds = listOf("49d6eb1c6a69946a41fe45ccd44c4a72"),
                     replyCount = 2,
                     embedCount = 3,
+                    taggerCount = 15,
                 ),
             people = people,
             posts =
@@ -317,6 +325,9 @@ class PlaceScreenshotTest {
     fun richSectionsDark() = capture("place-rich-sections", Device.TallPhone, dark = true) { Page(rich, SheetStop.Full) }
 
     @Test
+    fun noPhotoPhoneLight() = capture("place-no-photo", Device.Phone, dark = false, imagesFail = true) { Page(rich) }
+
+    @Test
     fun richPeekPhoneLight() = capture("place-rich-peek", Device.Phone, dark = false) { Page(rich, SheetStop.Peek) }
 
     @Test
@@ -354,4 +365,14 @@ class PlaceScreenshotTest {
 
     @Test
     fun offlineTabletDark() = capture("place-offline", Device.Tablet, dark = true) { Page(offline) }
+}
+
+/** Images load over the network, which tests do not use: a drawn stand-in (sky over a roof line). */
+private val StandInImage: @Composable (String, String?, Modifier, () -> Unit) -> Unit = { _, _, modifier, _ ->
+    Box(modifier.background(Brush.verticalGradient(listOf(Color(0xFF8DB6D9), Color(0xFFC9DCEB), Color(0xFF7A6A5A)))))
+}
+
+/** An image that cannot be loaded: the page leaves it out. */
+private val FailingImage: @Composable (String, String?, Modifier, () -> Unit) -> Unit = { _, _, _, onError ->
+    LaunchedEffect(Unit) { onError() }
 }

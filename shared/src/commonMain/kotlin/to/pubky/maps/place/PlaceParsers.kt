@@ -91,6 +91,8 @@ data class ResourceView(
     val tags: List<ViewTag>,
     val replies: Int,
     val embeds: Int,
+    /** How many people tagged the link, Nexus' count (more than it lists per label). */
+    val taggers: Int = 0,
 )
 
 data class ViewTag(
@@ -108,6 +110,7 @@ fun parseNexusResourceViews(json: String): List<ResourceView> =
             uri = view.details.uri,
             tags = view.tags.map { ViewTag(it.label, it.taggers, it.taggersCount, it.tagUri) },
             replies = view.repliesCount,
+            taggers = view.taggersCount,
             embeds = view.embedsCount,
         )
     }
@@ -135,6 +138,8 @@ fun mergeResourceViews(views: List<ResourceView>): PlaceSocial {
         resourceIds = views.map { it.id }.distinct(),
         replyCount = views.sumOf { it.replies },
         embedCount = views.sumOf { it.embeds },
+        // A person who tagged two links of the place is counted twice: Nexus counts per link.
+        taggerCount = maxOf(views.sumOf { it.taggers }, tags.flatMap { it.taggers }.distinct().size),
     )
 }
 
@@ -298,6 +303,7 @@ private data class NexusResourceView(
     val details: NexusResourceDetails,
     val tags: List<NexusTag> = emptyList(),
     @SerialName("replies_count") val repliesCount: Int = 0,
+    @SerialName("taggers_count") val taggersCount: Int = 0,
     @SerialName("embeds_count") val embedsCount: Int = 0,
 )
 
