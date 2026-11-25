@@ -5,8 +5,8 @@ import android.security.keystore.KeyProperties
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.security.GeneralSecurityException
 import java.security.KeyStore
+import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -20,8 +20,9 @@ private const val TAG_BITS = 128
  * [SecretStore] as one file per secret in [dir], each AES-256-GCM encrypted with [key] (on Android a
  * Keystore key that never leaves the secure hardware or the Keystore process, see
  * [androidKeystoreKey]). A file holds the 12-byte IV and the ciphertext; the secret's name is the
- * associated data, so a file copied to another name does not decrypt. A file that does not decrypt
- * (a lost or replaced key, a damaged file) reads as missing and is deleted.
+ * associated data, so a file copied to another name does not decrypt. A file that fails its
+ * authentication check (a replaced key, a damaged file) reads as missing and is deleted; other
+ * errors are thrown and leave the file.
  */
 class EncryptedFileSecretStore(
     private val dir: File,
@@ -32,14 +33,16 @@ class EncryptedFileSecretStore(
         withContext(io) {
             val file = fileOf(name)
             if (!file.exists()) return@withContext null
+            val bytes = file.readBytes()
             try {
-                val bytes = file.readBytes()
-                if (bytes.size <= IV_BYTES) throw GeneralSecurityException("too short")
+                if (bytes.size <= IV_BYTES) throw AEADBadTagException("too short")
                 val cipher = Cipher.getInstance(TRANSFORMATION)
                 cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(TAG_BITS, bytes, 0, IV_BYTES))
                 cipher.updateAAD(name.encodeToByteArray())
                 cipher.doFinal(bytes, IV_BYTES, bytes.size - IV_BYTES).decodeToString()
-            } catch (_: GeneralSecurityException) {
+            } catch (_: AEADBadTagException) {
+                // Not sealed with this key for this name: it can never be read. Any other error (a
+                // Keystore that does not answer right now) is thrown, and the file stays.
                 file.delete()
                 null
             }

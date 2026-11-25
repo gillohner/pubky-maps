@@ -114,8 +114,18 @@ private fun AppNavigation(
         // Only from a page that is fully shown: a second quick tap would also leave the page below.
         if (navController.currentBackStackEntry?.lifecycle?.currentState == Lifecycle.State.RESUMED) navController.navigateUp()
     }
-    val accountState: AccountState? = account?.controller?.state?.collectAsStateWithLifecycle()?.value
-    val missing = account?.health?.missing?.collectAsStateWithLifecycle()?.value ?: emptySet()
+    val accountState: AccountState? =
+        account
+            ?.controller
+            ?.state
+            ?.collectAsStateWithLifecycle()
+            ?.value
+    val missing =
+        account
+            ?.health
+            ?.missing
+            ?.collectAsStateWithLifecycle()
+            ?.value ?: emptySet()
     if (account != null) {
         // Pubky Ring sent the user back: show the sign-in, also when the app was started by that.
         LaunchedEffect(account) {

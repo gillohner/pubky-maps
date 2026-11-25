@@ -40,6 +40,8 @@ val generateCoreBindings =
         )
         outputs.dir(coreBindingsDir)
         outputs.file(hostCoreLibrary)
+        // The dev profile keeps the symbol table uniffi-bindgen reads; hostCoreLibrary is its output.
+        environment("PROFILE", "dev")
         commandLine("bash", root.file("scripts/gen-kotlin-bindings.sh").asFile.path, coreBindingsDir.get().asFile.path)
     }
 
@@ -126,5 +128,7 @@ sqldelight {
 
 tasks.withType<Test>().configureEach {
     dependsOn(generateCoreBindings)
+    // The tests load this library: a change of the core reruns them even when the bindings stay the same.
+    inputs.file(hostCoreLibrary).withPathSensitivity(PathSensitivity.NONE)
     systemProperty("uniffi.component.pubky_maps_core.libraryOverride", hostCoreLibrary.get().path)
 }

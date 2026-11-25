@@ -53,7 +53,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleRingReturn(intent: Intent?) {
-        val data = intent?.data ?: return
+        // Reopened from Recents, the task replays the link that started it: that one was handled.
+        if (intent == null || intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+        val data = intent.data ?: return
         if (data.scheme == RING_RETURN_SCHEME) app.account.onRingCallback(data.toString())
     }
 

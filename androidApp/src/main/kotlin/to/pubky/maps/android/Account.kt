@@ -43,7 +43,11 @@ internal fun startAccount(
     val controller =
         AccountController(
             createCore = {
-                val servers = settings.settings.filterNotNull().first().servers
+                val servers =
+                    settings.settings
+                        .filterNotNull()
+                        .first()
+                        .servers
                 createUniffiPubkyCore(
                     CoreServers(
                         pkarrRelays = servers[Service.PkarrRelay].map { it.url },

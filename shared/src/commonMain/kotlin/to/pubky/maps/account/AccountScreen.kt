@@ -167,6 +167,8 @@ private fun SigningIn(
         when {
             state.returned -> {
                 Waiting("Finishing the sign-in…")
+                // Should the approval not arrive, the user can approve again.
+                if (ringOnThisPhone) TextButton(onClick = { onOpenRing(state.link) }) { Text("Open Pubky Ring again") }
             }
 
             ringOnThisPhone && !showQr -> {
