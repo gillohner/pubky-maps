@@ -2,6 +2,7 @@ package to.pubky.maps.write
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -18,6 +19,7 @@ import to.pubky.maps.cache.CachedTag
 import to.pubky.maps.config.AppSettings
 import to.pubky.maps.config.DataKind
 import to.pubky.maps.config.StorageChoice
+import kotlin.coroutines.ContinuationInterceptor
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -697,5 +699,57 @@ class WriteControllerTest {
             assertEquals(listOf(coffeeList), writer.own.value.lists)
             assertEquals(listOf(coffeeList), store.stored)
             assertFalse(writer.own.value.listsLoaded, "the page says the lists may be out of date")
+        }
+
+    @Test
+    fun theCoreIsBuiltOnTheIoDispatcherNeverOnTheCallers() =
+        runTest {
+            val io = StandardTestDispatcher(testScheduler, name = "io")
+            val builtOn = mutableListOf<ContinuationInterceptor?>()
+            signedIn()
+            val writer =
+                WriteController(
+                    writes = {
+                        builtOn += currentCoroutineContext()[ContinuationInterceptor]
+                        writes
+                    },
+                    store = store,
+                    phone = phone,
+                    files = files,
+                    account = account,
+                    updateAccount = {},
+                    refreshAccount = {},
+                    settings = { settings },
+                    scope = backgroundScope,
+                    io = io,
+                    now = { 1_000L },
+                )
+            runCurrent()
+            writer.save(target)
+            runCurrent()
+
+            assertTrue(builtOn.isNotEmpty())
+            assertTrue(builtOn.all { it === io }, "built on $builtOn")
+        }
+
+    @Test
+    fun undoPutsAPlaceBackIntoTheFullListItWasTakenFrom() =
+        runTest {
+            val full = coffeeList.copy(items = (1..99).map { "geo:$it,1" } + OSM)
+            writes.scans = mapOf(false to ListScan(listOf(full), emptyList()), true to ListScan(emptyList(), emptyList()))
+            signedIn()
+            val writer = controller()
+
+            writer.removeFromList(target, setOf(OSM), full)
+            runCurrent()
+            assertEquals("Removed from “Coffee”.", messages.last())
+            actions.last().action!!.invoke()
+            runCurrent()
+
+            assertEquals(
+                listOf("editList(${full.uri}, $OSM, remove=true)", "editList(${full.uri}, $OSM, remove=false)"),
+                sent,
+            )
+            assertFalse(messages.any { it.contains("already holds") })
         }
 }

@@ -168,7 +168,7 @@ class WriteController(
         // The core spells places for comparing them; it is built once, beside the queue.
         scope.launch {
             // A native library that does not load is an Error; the app goes on without writes.
-            val built = attempt { writes() }.getOrNull()
+            val built = attempt { coreWrites() }.getOrNull()
             enqueue {
                 if (core == null) core = built
                 publish()
@@ -353,7 +353,9 @@ class WriteController(
         list: OwnList,
     ): Unit =
         enqueue {
-            if (list.full) {
+            // The list as it is now: after "Removed from" a full list has room again for its Undo.
+            val current = own.value.lists.firstOrNull { it.uri == list.uri } ?: list
+            if (current.full) {
                 tell("“${list.name}” already holds ${OwnList.MAX_LIST_ITEMS} places, the most a list can hold.")
                 return@enqueue
             }
@@ -439,13 +441,11 @@ class WriteController(
             send()
         }
 
-    private fun write(
-        target: WriteTarget,
-        op: WriteOp,
-    ) = enqueue {
-        add(target, op)
-        send()
-    }
+    /**
+     * The core's writes, built on first use on [io]: loading the native library and building the core
+     * must never run on the main thread (the controller's scope is the main thread on Android).
+     */
+    private suspend fun coreWrites(): PubkyWrites = core ?: withContext(io) { writes() }.also { core = it }
 
     /**
      * Builds an object with the core's spec builders for the signed-in user, or says why it cannot be
@@ -459,7 +459,7 @@ class WriteController(
         }
         val result =
             attempt {
-                val core = core ?: writes().also { core = it }
+                val core = coreWrites()
                 block(core, author)
             }
         result.exceptionOrNull()?.let { failure ->
@@ -551,7 +551,7 @@ class WriteController(
     }
 
     private suspend fun execute(op: WriteOp): Any? {
-        val core = core ?: writes().also { core = it }
+        val core = coreWrites()
         return when (op) {
             is WriteOp.Tag -> {
                 core.tag(op.place, op.label)
@@ -720,7 +720,7 @@ class WriteController(
         publish()
         listsJob =
             scope.launch {
-                val core = attempt { core ?: writes().also { core = it } }.getOrNull()
+                val core = attempt { coreWrites() }.getOrNull()
                 // Each root on its own: a homeserver refusing /priv (alpha) still lists the public ones.
                 val public = core?.let { c -> attempt { c.lists(private = false, skip = io { store.otherPosts(false) }) } }
                 val private = core?.let { c -> attempt { c.lists(private = true, skip = io { store.otherPosts(true) }) } }
