@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only in the update probe's builds (-Ppubkymaps.updateProbe=true): the fixture feed and APK are
+     served over plain HTTP on the phone's localhost (scripts/ci/update-probe.py). -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>

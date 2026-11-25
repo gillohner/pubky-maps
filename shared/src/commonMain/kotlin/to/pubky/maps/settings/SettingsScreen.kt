@@ -19,11 +19,16 @@ import to.pubky.maps.AppInfo
 import to.pubky.maps.config.ServerConfig
 import to.pubky.maps.ui.AppIcons
 import to.pubky.maps.ui.rememberSafeLinkOpener
+import to.pubky.maps.update.UpdateSettingsRows
+import to.pubky.maps.update.UpdatesUiState
 
 private const val SOURCE_URL = "https://github.com/gillohner/pubky-maps"
 private const val LICENCE_URL = "$SOURCE_URL/blob/main/LICENSE"
 
-/** Settings: About (version, licence, source, open-source licences) and the credits for the map data. */
+/**
+ * Settings: About (version, updates in builds that update themselves ([updates] not null), licence,
+ * source, open-source licences) and the credits for the map data.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -31,6 +36,9 @@ fun SettingsScreen(
     serverConfig: ServerConfig,
     onOpenLicences: () -> Unit,
     onBack: () -> Unit,
+    updates: UpdatesUiState? = null,
+    onCheckForUpdates: () -> Unit = {},
+    onAutoCheckUpdatesChange: (Boolean) -> Unit = {},
 ) {
     val openLink = rememberSafeLinkOpener()
     Scaffold(
@@ -52,6 +60,9 @@ fun SettingsScreen(
                     headlineContent = { Text("Pubky Maps") },
                     supportingContent = { Text("Version ${appInfo.versionName} (${appInfo.versionCode})") },
                 )
+            }
+            if (updates != null) {
+                item { UpdateSettingsRows(updates, onCheckForUpdates, onAutoCheckUpdatesChange) }
             }
             item {
                 ListItem(
