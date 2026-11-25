@@ -11,6 +11,12 @@ enum class PlaceSource {
 
     /** The text of a map link alone: Pinakes did not know it or could not be reached. */
     LinkText,
+
+    /** A Photon search result (an OpenStreetMap place or address) that Pinakes does not know. */
+    Photon,
+
+    /** Coordinates the user typed or pasted. */
+    Coordinates,
 }
 
 /**
@@ -33,6 +39,10 @@ data class PlaceRef(
     val shortLinkUnfollowed: Boolean = false,
     /** [point] is only the centre of a map view or of a search, not the place itself. */
     val pointIsView: Boolean = false,
+    /** The postal address, one line ("Heimplatz 1, 8001 Zürich"), when a source knows it. */
+    val address: String? = null,
+    /** What kind of place it is, in words ("Museum", "Street"), when a source says. */
+    val category: String? = null,
 ) {
     /** True when [point] is the place, so the map pins it: not a map view, not a search near it. */
     val pinned: Boolean get() = point != null && !pointIsView && query == null

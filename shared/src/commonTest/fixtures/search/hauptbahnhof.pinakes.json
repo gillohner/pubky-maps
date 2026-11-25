@@ -1,0 +1,103 @@
+{
+ "items": [
+  {
+   "id": "193616ac3e3c0140292e94b705084d22",
+   "uri": "https://www.openstreetmap.org/node/1236383343",
+   "status": "ok",
+   "type": "TrainStation",
+   "type_path": [
+    "Thing",
+    "Place",
+    "CivicStructure",
+    "TrainStation"
+   ],
+   "name": "Zürich Hauptbahnhof",
+   "description": null,
+   "image": null,
+   "embed": {
+    "provider": "openstreetmap",
+    "kind": "map",
+    "src": "https://www.openstreetmap.org/export/embed.html?bbox=8.53436%2C47.37310%2C8.54436%2C47.38310&layer=mapnik&marker=47.37810%2C8.53936",
+    "height": null,
+    "aspect": 1.7778,
+    "allow": [],
+    "autoplay_param": null
+   },
+   "site": "OpenStreetMap",
+   "point": {
+    "lat": 47.3781008,
+    "lon": 8.5393635
+   },
+   "start": null,
+   "end": null,
+   "group": null,
+   "also_on": [
+    {
+     "uri": "https://www.sbb.ch/de/reiseinformationen/bahnhoefe/bahnhof-finden/bahnhof-zuerich-hb.html",
+     "site": "Official website",
+     "derived": true,
+     "via": "wikidata",
+     "embed": null
+    },
+    {
+     "uri": "https://www.wikidata.org/wiki/Q224494",
+     "site": "Wikidata",
+     "derived": true,
+     "via": "wikidata",
+     "embed": null
+    },
+    {
+     "uri": "https://ca.wikipedia.org/wiki/Estaci%C3%B3_Central_de_Z%C3%BAric",
+     "site": "Wikipedia (ca)",
+     "derived": true,
+     "via": "wikidata",
+     "embed": null
+    },
+    {
+     "uri": "https://cs.wikipedia.org/wiki/Z%C3%BCrich_Hauptbahnhof",
+     "site": "Wikipedia (cs)",
+     "derived": true,
+     "via": "wikidata",
+     "embed": null
+    },
+    {
+     "uri": "https://de.wikipedia.org/wiki/Z%C3%BCrich_Hauptbahnhof",
+     "site": "Wikipedia (de)",
+     "derived": true,
+     "via": "wikidata",
+     "embed": null
+    },
+    {
+     "uri": "https://en.wikipedia.org/wiki/Z%C3%BCrich_Hauptbahnhof",
+     "site": "Wikipedia (en)",
+     "derived": true,
+     "via": "wikidata",
+     "embed": null
+    },
+    {
+     "uri": "https://eo.wikipedia.org/wiki/Z%C3%BCrich_HB_(stacidomo)",
+     "site": "Wikipedia (eo)",
+     "derived": true,
+     "via": "wikidata",
+     "embed": null
+    },
+    {
+     "uri": "https://es.wikipedia.org/wiki/Estaci%C3%B3n_central_de_Z%C3%BArich",
+     "site": "Wikipedia (es)",
+     "derived": true,
+     "via": "wikidata",
+     "embed": null
+    }
+   ],
+   "refs": [
+    "https://www.openstreetmap.org/node/1236383343"
+   ],
+   "collections": 2,
+   "open_in": [],
+   "attribution": "© OpenStreetMap contributors (ODbL)",
+   "credits": []
+  }
+ ],
+ "cursor": null,
+ "reach_truncated": false
+}

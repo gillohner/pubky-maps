@@ -4,7 +4,18 @@ A maps app on OpenStreetMap with Pubky social data on top. It runs on Android; t
 code also declares iOS targets, which are not built yet.
 
 The app shows a full-screen online map in light or dark (following the system), the user's location
-on request, a compass when the map is rotated, and Settings:
+on request, a compass when the map is rotated, search, and Settings.
+
+**Search** (the bar at the top of the map) finds places, addresses, streets and towns as you type,
+from [Photon](https://github.com/komoot/photon) (OpenStreetMap data, biased to the map's centre) and
+Pinakes (places people referenced on Pubky, near the map). The same
+OpenStreetMap place from both is one result. Results show in a list and as pins; picking one centres
+the map and opens a small place card (name, what it is, distance, address). Coordinates
+(`47.37, 8.54`, `47°22'N 8°32'E`), `geo:` URIs and plus codes open a pin without any request. Recent
+searches stay on the phone (Settings → Privacy → Clear search history). Either source failing never
+holds back the other; with both unreachable the list says search is offline.
+
+Settings:
 
 - **Account:** sign in with [Pubky Ring](https://github.com/pubky/pubky-ring). It shows the user's
   profile name, tags and saved places, kept on the phone so they stay readable offline, and signs out.
@@ -12,8 +23,9 @@ on request, a compass when the map is rotated, and Settings:
   Pkarr relays, sign-in relay). Users add, remove, reorder and reset them; servers run by Synonym are
   marked. The map uses its style list in order, the next style taking over when one fails to load;
   sign-in uses the Pkarr and sign-in relay lists (from the next start after a change); opening a
-  map link asks the Pinakes list; the Photon and Nexus lists are stored and editable, and no feature
-  reads them yet.
+  map link asks the Pinakes list; search uses the Photon and Pinakes lists the same way (the next
+  server takes over on an error, a timeout or "too many requests"); the Nexus list is stored and
+  editable, and no feature reads it yet.
 - **What is stored online:** per kind of data (saved places, home and work, lists, check-ins, tracks,
   location history, photo locations) phone only, homeserver private or public. Tags and reviews are
   public by nature. The choices are stored; nothing uploads data yet.
@@ -45,6 +57,12 @@ the link text. The link the user had stays the place's URI.
   `shared/src/commonMain/kotlin/to/pubky/maps/config/ServerDefaults.kt`; users edit the lists in
   Settings. When a map style fails to load, the map tries the next one in the list. The update feeds
   are fixed per build and not part of the user's settings.
+- Search (`shared/.../search/`): `SearchController` debounces typing (300 ms, nothing under 3
+  characters), asks Photon and Pinakes together over Ktor and ranks the merged answers
+  (`SearchRanking`: text match, distance, each source's order, prominence, Pubky collections). The
+  ranking is checked against a fixed Zürich query set with recorded answers
+  (`shared/src/commonTest/fixtures/search/`, refreshed by `scripts/search/record-fixtures.py`).
+  Requests carry `User-Agent: PubkyMaps/<version>`.
 - Settings are one JSON file with a schema version, written by AndroidX DataStore
   (`config/SettingsRepository.kt`, `config/SettingsCodec.kt`). Only the user's own changes are
   stored, so new defaults reach everyone who did not change that setting. A file from an older
@@ -128,7 +146,8 @@ every other server (`ServerDefaults.updateFeeds`): any mirror can serve the same
 `androidApp/screenshots/` holds the reference screenshots of every screen: phone (412x915 dp) and
 tablet (1280x800 dp), light and dark. The JVM cannot draw the MapLibre map, so the map screen shows a
 flat placeholder under its controls there; the emulator smoke test in CI screenshots the real map,
-and the update probe screenshots each step of an in-app update.
+the emulator search test (`scripts/ci/emulator-search.sh`, recorded answers served on the runner)
+screenshots search with its pins, and the update probe screenshots each step of an in-app update.
 
 ## Emulator tests in CI
 
@@ -150,6 +169,7 @@ and the update probe screenshots each step of an in-app update.
 - Map tiles and styles: [OpenFreeMap](https://openfreemap.org) (styles Liberty and Dark, built on
   [OpenMapTiles](https://www.openmaptiles.org/)), with [VersaTiles](https://versatiles.org) (Colorful
   and Colorful Dark) as the fallback.
+- Search: [Photon](https://photon.komoot.io) by komoot (OpenStreetMap data), and Pinakes.
 - Icons: [Material icons](https://github.com/google/material-design-icons) (Apache-2.0).
 
 The map always shows the credits of the style it draws; Settings → Map data lists every source.

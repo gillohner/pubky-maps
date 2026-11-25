@@ -1,0 +1,280 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "R",
+    "osm_id": 1682248,
+    "osm_key": "place",
+    "osm_value": "city",
+    "type": "city",
+    "name": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "countrycode": "CH",
+    "extra": {
+     "admin_level": "8"
+    },
+    "extent": [
+     8.4480182,
+     47.434665,
+     8.6254529,
+     47.3202184
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5410422,
+     47.3744489
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "R",
+    "osm_id": 1690227,
+    "osm_key": "place",
+    "osm_value": "state",
+    "type": "state",
+    "name": "Zürich",
+    "country": "Schweiz",
+    "countrycode": "CH",
+    "extra": {
+     "admin_level": "4"
+    },
+    "extent": [
+     8.3576934,
+     47.6944697,
+     8.984951,
+     47.1594356
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.656394,
+     47.4133024
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 1236383343,
+    "osm_key": "railway",
+    "osm_value": "station",
+    "type": "house",
+    "name": "Zürich Hauptbahnhof",
+    "street": "Passage Löwenstrasse",
+    "locality": "City",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8021",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5393635,
+     47.3781008
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 1239733410,
+    "osm_key": "railway",
+    "osm_value": "station",
+    "type": "house",
+    "name": "Zürich Stadelhofen",
+    "street": "Stadelhoferstrasse",
+    "locality": "Hochschulen",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8024",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5483858,
+     47.3665643
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 8540830501,
+    "osm_key": "information",
+    "osm_value": "map",
+    "type": "house",
+    "name": "Zürich",
+    "street": "Sagentobelbachweg",
+    "locality": "Hirzenbach",
+    "district": "Schwamendingen",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8301",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5951188,
+     47.3970606
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 1189482494,
+    "osm_key": "railway",
+    "osm_value": "station",
+    "type": "house",
+    "name": "Zürich Oerlikon",
+    "street": "Hofwiesenstrasse",
+    "locality": "Oerlikon",
+    "district": "Kreis 11",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8050",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5441507,
+     47.4114986
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 1231420538,
+    "osm_key": "railway",
+    "osm_value": "station",
+    "type": "house",
+    "name": "Zürich Hardbrücke",
+    "street": "Hardbrücke",
+    "locality": "Hard",
+    "district": "Aussersihl",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8004",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5173926,
+     47.3851609
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 3080372105,
+    "osm_key": "railway",
+    "osm_value": "station",
+    "type": "house",
+    "housenumber": "12",
+    "name": "Zürich Altstetten",
+    "street": "Altstetterplatz",
+    "locality": "Altstetten",
+    "district": "Kreis 9",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8048",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.4893332,
+     47.3913167
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "R",
+    "osm_id": 32362,
+    "osm_key": "water",
+    "osm_value": "lake",
+    "type": "other",
+    "name": "Zürichsee",
+    "county": "Bezirk Meilen",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "countrycode": "CH",
+    "extent": [
+     8.5349476,
+     47.3668829,
+     8.9479333,
+     47.1913073
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.597868,
+     47.2790956
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 691127675,
+    "osm_key": "natural",
+    "osm_value": "peak",
+    "type": "other",
+    "name": "Zürichberg",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8044",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5668775,
+     47.3856804
+    ]
+   }
+  }
+ ]
+}

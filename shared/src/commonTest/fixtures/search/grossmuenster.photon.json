@@ -1,0 +1,287 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 36916418,
+    "osm_key": "amenity",
+    "osm_value": "place_of_worship",
+    "type": "house",
+    "name": "Grossmünster",
+    "street": "Grossmünsterplatz",
+    "locality": "Rathaus",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8001",
+    "countrycode": "CH",
+    "extent": [
+     8.5436055,
+     47.3703299,
+     8.5443388,
+     47.3698754
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5439115,
+     47.3701214
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 292437788,
+    "osm_key": "amenity",
+    "osm_value": "place_of_worship",
+    "type": "house",
+    "name": "Grossmünsterkapelle",
+    "street": "Kirchgasse",
+    "locality": "Rathaus",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8024",
+    "countrycode": "CH",
+    "extent": [
+     8.5447564,
+     47.3703892,
+     8.5449466,
+     47.3702108
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5448131,
+     47.3703303
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 736762707,
+    "osm_key": "highway",
+    "osm_value": "pedestrian",
+    "type": "street",
+    "name": "Grossmünsterplatz",
+    "locality": "Rathaus",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8024",
+    "countrycode": "CH",
+    "extent": [
+     8.5435625,
+     47.3702007,
+     8.5437199,
+     47.3700085
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5435835,
+     47.3700869
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "R",
+    "osm_id": 12608226,
+    "osm_key": "place",
+    "osm_value": "village",
+    "type": "city",
+    "name": "Groß Münsterberg",
+    "county": "powiat sztumski",
+    "state": "Woiwodschaft Pommern",
+    "country": "Polen",
+    "countrycode": "PL",
+    "extra": {
+     "admin_level": "8"
+    },
+    "extent": [
+     19.3070772,
+     53.8702919,
+     19.3728983,
+     53.8412017
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     19.34692,
+     53.85318
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 287072748,
+    "osm_key": "natural",
+    "osm_value": "peak",
+    "type": "other",
+    "name": "Großmutter",
+    "city": "Blankenburg (Harz)",
+    "county": "Landkreis Harz",
+    "state": "Sachsen-Anhalt",
+    "country": "Deutschland",
+    "postcode": "38889",
+    "countrycode": "DE"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     10.9659086,
+     51.7868015
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 3553808031,
+    "osm_key": "natural",
+    "osm_value": "peak",
+    "type": "other",
+    "name": "Großmutter",
+    "city": "Kazanow",
+    "county": "Bezirk Semil",
+    "state": "Reichenberger Region",
+    "country": "Tschechien",
+    "postcode": "512 64",
+    "countrycode": "CZ"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     15.170277,
+     50.552833
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 2998459501,
+    "osm_key": "natural",
+    "osm_value": "tree",
+    "type": "house",
+    "name": "Schwedeneiche",
+    "district": "Bredereiche",
+    "city": "Fürstenberg/Havel",
+    "county": "Oberhavel",
+    "state": "Brandenburg",
+    "country": "Deutschland",
+    "postcode": "16798",
+    "countrycode": "DE"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     13.2368892,
+     53.1603064
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 120978157,
+    "osm_key": "landuse",
+    "osm_value": "meadow",
+    "type": "other",
+    "name": "Großmutter",
+    "district": "Lampersdorf",
+    "city": "Wermsdorf",
+    "county": "Nordsachsen",
+    "state": "Sachsen",
+    "country": "Deutschland",
+    "countrycode": "DE",
+    "extent": [
+     13.0320379,
+     51.2908268,
+     13.0351347,
+     51.2894141
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     13.033562,
+     51.2901857
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 677525126,
+    "osm_key": "historic",
+    "osm_value": "archaeological_site",
+    "type": "house",
+    "name": "Langer Stein",
+    "district": "Ostrau",
+    "city": "Petersberg",
+    "county": "Saalekreis",
+    "state": "Sachsen-Anhalt",
+    "country": "Deutschland",
+    "postcode": "06193",
+    "countrycode": "DE"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     11.9871438,
+     51.6110847
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 800449431,
+    "osm_key": "place",
+    "osm_value": "locality",
+    "type": "locality",
+    "name": "Großmutter",
+    "district": "Born auf dem Darß",
+    "city": "Born a. Darß",
+    "county": "Vorpommern-Rügen",
+    "state": "Mecklenburg-Vorpommern",
+    "country": "Deutschland",
+    "postcode": "18375",
+    "countrycode": "DE"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     12.5277908,
+     54.4026948
+    ]
+   }
+  }
+ ]
+}

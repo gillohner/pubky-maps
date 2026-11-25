@@ -1,0 +1,167 @@
+{
+ "lat": 47.3769,
+ "lon": 8.5417,
+ "zoom": 13,
+ "radius_m": 10000,
+ "limit": 10,
+ "lang": "de",
+ "queries": [
+  {
+   "query": "kunsthaus",
+   "fixture": "kunsthaus",
+   "expect": {
+    "title": "Kunsthaus",
+    "category": "Museum",
+    "lat": 47.37022,
+    "lon": 8.54798,
+    "within_m": 150
+   }
+  },
+  {
+   "query": "hauptbahnhof",
+   "fixture": "hauptbahnhof",
+   "expect": {
+    "title": "Zürich Hauptbahnhof",
+    "lat": 47.3781,
+    "lon": 8.53936,
+    "within_m": 300
+   }
+  },
+  {
+   "query": "bahnhofstrasse",
+   "fixture": "bahnhofstrasse",
+   "expect": {
+    "title": "Bahnhofstrasse",
+    "category": "Street",
+    "lat": 47.3717,
+    "lon": 8.539,
+    "within_m": 1500
+   }
+  },
+  {
+   "query": "zürich",
+   "fixture": "zuerich",
+   "expect": {
+    "title": "Zürich",
+    "category": "City",
+    "lat": 47.37445,
+    "lon": 8.54104,
+    "within_m": 1000
+   }
+  },
+  {
+   "query": "uetliberg",
+   "fixture": "uetliberg",
+   "expect": {
+    "title": "Uetliberg",
+    "lat": 47.34945,
+    "lon": 8.49196,
+    "within_m": 100
+   }
+  },
+  {
+   "query": "grossmünster",
+   "fixture": "grossmuenster",
+   "expect": {
+    "title": "Grossmünster",
+    "lat": 47.37012,
+    "lon": 8.54391,
+    "within_m": 100
+   }
+  },
+  {
+   "query": "eth",
+   "fixture": "eth",
+   "expect": {
+    "title": "ETH Zürich, Zentrum",
+    "lat": 47.3765,
+    "lon": 8.54732,
+    "within_m": 200
+   }
+  },
+  {
+   "query": "zoo",
+   "fixture": "zoo",
+   "expect": {
+    "title": "Zoo Zürich",
+    "lat": 47.38691,
+    "lon": 8.5776,
+    "within_m": 200
+   }
+  },
+  {
+   "query": "bahnhofstrasse 1",
+   "fixture": "bahnhofstrasse-1",
+   "expect": {
+    "title": "Bahnhofstrasse 1",
+    "lat": 47.3673,
+    "lon": 8.53987,
+    "within_m": 100
+   }
+  },
+  {
+   "query": "lugano",
+   "fixture": "lugano",
+   "expect": {
+    "title": "Lugano",
+    "category": "City",
+    "lat": 46.0038,
+    "lon": 8.95123,
+    "within_m": 2000
+   }
+  },
+  {
+   "query": "conditorei schober",
+   "fixture": "conditorei-schober",
+   "expect": {
+    "title": "Conditorei schober",
+    "on_pubky": true,
+    "lat": 47.37087,
+    "lon": 8.54182,
+    "within_m": 50
+   }
+  },
+  {
+   "query": "lindenhof",
+   "fixture": "lindenhof",
+   "expect": {
+    "title": "Lindenhof",
+    "lat": 47.373,
+    "lon": 8.5408,
+    "within_m": 100
+   }
+  },
+  {
+   "query": "letzigrund",
+   "fixture": "letzigrund",
+   "expect": {
+    "title": "Stadion Letzigrund",
+    "lat": 47.3826,
+    "lon": 8.504,
+    "within_m": 100
+   }
+  },
+  {
+   "query": "sprüngli",
+   "fixture": "spruengli",
+   "expect": {
+    "title": "Sprüngli",
+    "lat": 47.3717,
+    "lon": 8.539,
+    "within_m": 1500
+   }
+  },
+  {
+   "query": "polyterrasse",
+   "fixture": "polyterrasse",
+   "expect": {
+    "title": "Polyterrasse",
+    "lat": 47.37617,
+    "lon": 8.54671,
+    "within_m": 150
+   }
+  }
+ ],
+ "about": "Zürich query set: the map centred on Zürich at zoom 13 (phone screen, 3.3 km to a corner). Each query's expected first result is the place a person typing it means: its title, optionally its category and whether it is on Pubky, and a point it must be within within_m of. Fixtures are the services' answers, recorded by scripts/search/record-fixtures.py. The test requires at least 9 in 10 first results right (the plan's target) and prints every miss.",
+ "half_diagonal_m": 3333
+}

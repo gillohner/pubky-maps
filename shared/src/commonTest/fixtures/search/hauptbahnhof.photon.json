@@ -1,0 +1,65 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 7922707159,
+    "osm_key": "highway",
+    "osm_value": "bus_stop",
+    "type": "house",
+    "name": "Hauptbahnhof",
+    "street": "Bahnhofplatz",
+    "locality": "Heiligberg",
+    "district": "Altstadt",
+    "city": "Winterthur",
+    "county": "Bezirk Winterthur",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8401",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.7240148,
+     47.498962
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 315995933,
+    "osm_key": "highway",
+    "osm_value": "platform",
+    "type": "house",
+    "name": "Hauptbahnhof",
+    "street": "Bahnhofplatz",
+    "locality": "Neuwiesen",
+    "district": "Altstadt",
+    "city": "Winterthur",
+    "county": "Bezirk Winterthur",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8401",
+    "countrycode": "CH",
+    "extent": [
+     8.7242423,
+     47.5005048,
+     8.7244056,
+     47.5002999
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.724324,
+     47.5004024
+    ]
+   }
+  }
+ ]
+}

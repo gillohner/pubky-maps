@@ -80,6 +80,7 @@ kotlin {
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.ui)
+            implementation(libs.compose.ui.backhandler)
             implementation(libs.compose.material3)
             implementation(libs.navigation.compose)
             implementation(libs.lifecycle.runtime.compose)
@@ -96,6 +97,7 @@ kotlin {
             // AccountCache takes a SqlDriver.
             api(libs.sqldelight.runtime)
             implementation(libs.qrose)
+            implementation(libs.ktor.client.core)
         }
         androidMain {
             kotlin.srcDir(files(coreBindingsDir).builtBy(generateCoreBindings))
@@ -103,12 +105,17 @@ kotlin {
                 implementation("${libs.jna.get()}@aar")
                 implementation(libs.androidx.annotation)
                 implementation(libs.sqldelight.android.driver)
+                implementation(libs.ktor.client.android)
             }
+        }
+        iosMain.dependencies {
+            implementation(libs.ktor.client.darwin)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
             implementation(libs.okio.fakefilesystem)
+            implementation(libs.ktor.client.mock)
         }
         getByName("androidHostTest").dependencies {
             // JNA with its desktop native part, and SQLite over JDBC, for tests on this machine.

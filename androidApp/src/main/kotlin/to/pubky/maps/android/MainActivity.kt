@@ -44,6 +44,7 @@ class MainActivity : ComponentActivity() {
                 updates = app.updates,
                 account = app.account,
                 links = links,
+                search = app.search,
             )
         }
     }

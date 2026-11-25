@@ -1,0 +1,277 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 648907100,
+    "osm_key": "shop",
+    "osm_value": "pastry",
+    "type": "house",
+    "housenumber": "21",
+    "name": "Sprüngli",
+    "street": "Bahnhofstrasse",
+    "locality": "Lindenhof",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8001",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5391402,
+     47.3694816
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 4833061539,
+    "osm_key": "shop",
+    "osm_value": "pastry",
+    "type": "house",
+    "housenumber": "15",
+    "name": "Sprüngli",
+    "street": "Bahnhofplatz",
+    "locality": "City",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8001",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5398485,
+     47.378218
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 4424939165,
+    "osm_key": "shop",
+    "osm_value": "pastry",
+    "type": "house",
+    "name": "Sprüngli",
+    "locality": "Bahnhofplatz",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8001",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.53931,
+     47.3774218
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 4860115692,
+    "osm_key": "shop",
+    "osm_value": "pastry",
+    "type": "house",
+    "housenumber": "5",
+    "name": "Sprüngli",
+    "street": "Gottfried-Keller-Strasse",
+    "locality": "Hochschulen",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8001",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5472073,
+     47.3662285
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 4833061625,
+    "osm_key": "shop",
+    "osm_value": "pastry",
+    "type": "house",
+    "housenumber": "8",
+    "name": "Sprüngli",
+    "street": "Stadelhoferstrasse",
+    "locality": "Hochschulen",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8001",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5486725,
+     47.3666125
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 4833061530,
+    "osm_key": "shop",
+    "osm_value": "pastry",
+    "type": "house",
+    "name": "Sprüngli",
+    "locality": "City",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8001",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5405334,
+     47.3778716
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 4424600912,
+    "osm_key": "shop",
+    "osm_value": "pastry",
+    "type": "house",
+    "name": "Sprüngli",
+    "locality": "City",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8001",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5400382,
+     47.3777153
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 4424654368,
+    "osm_key": "shop",
+    "osm_value": "pastry",
+    "type": "house",
+    "name": "Sprüngli",
+    "locality": "City",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8001",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5392659,
+     47.37872
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 1110775408,
+    "osm_key": "shop",
+    "osm_value": "pastry",
+    "type": "house",
+    "housenumber": "67",
+    "name": "Sprüngli",
+    "street": "Bahnhofstrasse",
+    "locality": "Lindenhof",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8001",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5380616,
+     47.3736573
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 4827130160,
+    "osm_key": "shop",
+    "osm_value": "pastry",
+    "type": "house",
+    "housenumber": "10",
+    "name": "Sprüngli",
+    "street": "Tessinerplatz",
+    "locality": "Enge",
+    "district": "Kreis 2",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8002",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5313588,
+     47.3646238
+    ]
+   }
+  }
+ ]
+}

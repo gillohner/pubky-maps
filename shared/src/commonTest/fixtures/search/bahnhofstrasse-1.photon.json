@@ -1,0 +1,299 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 89971420,
+    "osm_key": "building",
+    "osm_value": "commercial",
+    "type": "house",
+    "housenumber": "1",
+    "street": "Bahnhofstrasse",
+    "locality": "Lindenhof",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8001",
+    "countrycode": "CH",
+    "extent": [
+     8.539614,
+     47.3674333,
+     8.5400312,
+     47.3672135
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5398712,
+     47.3672965
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 6138652365,
+    "osm_key": "tourism",
+    "osm_value": "gallery",
+    "type": "house",
+    "housenumber": "1",
+    "name": "Hauser & Wirth",
+    "street": "Bahnhofstrasse",
+    "locality": "Lindenhof",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8001",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.539971,
+     47.3672969
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 11971361518,
+    "osm_key": "office",
+    "osm_value": "financial",
+    "type": "house",
+    "housenumber": "1",
+    "name": "Union Bancaire Privée",
+    "street": "Bahnhofstrasse",
+    "locality": "Lindenhof",
+    "district": "Altstadt",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8001",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5399508,
+     47.3673386
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 100183555,
+    "osm_key": "building",
+    "osm_value": "apartments",
+    "type": "house",
+    "housenumber": "1",
+    "street": "Bahnhofstrasse",
+    "city": "Kilchberg",
+    "county": "Bezirk Horgen",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8802",
+    "countrycode": "CH",
+    "extent": [
+     8.5483977,
+     47.3242065,
+     8.5485856,
+     47.3240495
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5484916,
+     47.3241448
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 8191490734,
+    "osm_key": "amenity",
+    "osm_value": "bank",
+    "type": "house",
+    "housenumber": "1",
+    "name": "Raiffeisenbank Region Glatt",
+    "street": "Bahnhofstrasse",
+    "city": "Wallisellen",
+    "county": "Bezirk Bülach",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8304",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.589621,
+     47.4150229
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 55539262,
+    "osm_key": "building",
+    "osm_value": "apartments",
+    "type": "house",
+    "housenumber": "1",
+    "street": "Bahnhofstrasse",
+    "locality": "Leepünt",
+    "district": "Hermikon",
+    "city": "Dübendorf",
+    "county": "Bezirk Uster",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8600",
+    "countrycode": "CH",
+    "extent": [
+     8.6176741,
+     47.3974667,
+     8.6181686,
+     47.3972202
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.6179479,
+     47.3973463
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 2921525228,
+    "osm_key": "amenity",
+    "osm_value": "pharmacy",
+    "type": "house",
+    "housenumber": "1",
+    "name": "Bahnhof-Apotheke",
+    "street": "Bahnhofstrasse",
+    "city": "Kilchberg",
+    "county": "Bezirk Horgen",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8802",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5484968,
+     47.3241085
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 9312490318,
+    "osm_key": "amenity",
+    "osm_value": "childcare",
+    "type": "house",
+    "housenumber": "1",
+    "name": "Fugu Kinderkrippe",
+    "street": "Bahnhofstrasse",
+    "locality": "Leepünt",
+    "district": "Hermikon",
+    "city": "Dübendorf",
+    "county": "Bezirk Uster",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8600",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.6181396,
+     47.3973629
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 1492865484,
+    "osm_key": "amenity",
+    "osm_value": "bank",
+    "type": "house",
+    "housenumber": "1",
+    "name": "UBS",
+    "street": "Bahnhofstrasse",
+    "locality": "Leepünt",
+    "district": "Hermikon",
+    "city": "Dübendorf",
+    "county": "Bezirk Uster",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8600",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.6179717,
+     47.3972818
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 66833652,
+    "osm_key": "building",
+    "osm_value": "train_station",
+    "type": "house",
+    "housenumber": "1",
+    "street": "Bahnhofstrasse",
+    "locality": "Oberwacht",
+    "district": "Itschnach",
+    "city": "Küsnacht",
+    "county": "Bezirk Meilen",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8700",
+    "countrycode": "CH",
+    "extent": [
+     8.5803975,
+     47.3193235,
+     8.5807013,
+     47.3188802
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.5805457,
+     47.3191055
+    ]
+   }
+  }
+ ]
+}

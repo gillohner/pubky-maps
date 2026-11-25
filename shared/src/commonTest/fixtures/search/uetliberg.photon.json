@@ -1,0 +1,293 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 1262086033,
+    "osm_key": "railway",
+    "osm_value": "station",
+    "type": "house",
+    "name": "Uetliberg",
+    "street": "Uetliberg",
+    "locality": "Friesenberg",
+    "district": "Wiedikon",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8063",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.4874187,
+     47.3518692
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 29971007,
+    "osm_key": "natural",
+    "osm_value": "peak",
+    "type": "other",
+    "name": "Uetliberg",
+    "city": "Stallikon",
+    "county": "Bezirk Affoltern",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8143",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.4919649,
+     47.3494459
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 240058704,
+    "osm_key": "place",
+    "osm_value": "locality",
+    "type": "locality",
+    "name": "Uetliberg",
+    "district": "Sellenbüren",
+    "city": "Stallikon",
+    "county": "Bezirk Affoltern",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8143",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.4912515,
+     47.3497519
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 694650959,
+    "osm_key": "highway",
+    "osm_value": "footway",
+    "type": "street",
+    "name": "Uetliberg",
+    "locality": "Friesenberg",
+    "district": "Wiedikon",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8063",
+    "countrycode": "CH",
+    "extent": [
+     8.4872847,
+     47.3527114,
+     8.4877225,
+     47.3516152
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.4875905,
+     47.3521688
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 110534279,
+    "osm_key": "railway",
+    "osm_value": "platform",
+    "type": "house",
+    "name": "Uetliberg",
+    "street": "Uetliberg",
+    "locality": "Friesenberg",
+    "district": "Wiedikon",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8063",
+    "countrycode": "CH",
+    "extent": [
+     8.4874197,
+     47.3525979,
+     8.487673,
+     47.351649
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.4875468,
+     47.3521233
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 11821236753,
+    "osm_key": "information",
+    "osm_value": "guidepost",
+    "type": "house",
+    "name": "Uetliberg",
+    "street": "Uetliberg",
+    "locality": "Friesenberg",
+    "district": "Wiedikon",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8063",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.4876246,
+     47.3518922
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 110534277,
+    "osm_key": "railway",
+    "osm_value": "platform",
+    "type": "house",
+    "name": "Uetliberg",
+    "street": "Uetliberg",
+    "locality": "Friesenberg",
+    "district": "Wiedikon",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8063",
+    "countrycode": "CH",
+    "extent": [
+     8.4873221,
+     47.3526948,
+     8.4875667,
+     47.351735
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.4874509,
+     47.3522134
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 1262086047,
+    "osm_key": "railway",
+    "osm_value": "stop",
+    "type": "house",
+    "name": "Uetliberg",
+    "street": "Uetliberg",
+    "locality": "Friesenberg",
+    "district": "Wiedikon",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8063",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.4874299,
+     47.3518061
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "N",
+    "osm_id": 1262086037,
+    "osm_key": "railway",
+    "osm_value": "stop",
+    "type": "house",
+    "name": "Uetliberg",
+    "street": "Uetliberg",
+    "locality": "Friesenberg",
+    "district": "Wiedikon",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8063",
+    "countrycode": "CH"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.4873785,
+     47.3518246
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "osm_type": "W",
+    "osm_id": 694650959,
+    "osm_key": "railway",
+    "osm_value": "platform",
+    "type": "house",
+    "name": "Uetliberg",
+    "street": "Uetliberg",
+    "locality": "Friesenberg",
+    "district": "Wiedikon",
+    "city": "Zürich",
+    "county": "Bezirk Zürich",
+    "state": "Zürich",
+    "country": "Schweiz",
+    "postcode": "8063",
+    "countrycode": "CH",
+    "extent": [
+     8.4872847,
+     47.3527114,
+     8.4877225,
+     47.3516152
+    ]
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     8.4875905,
+     47.3521688
+    ]
+   }
+  }
+ ]
+}
