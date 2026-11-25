@@ -1,0 +1,15 @@
+[package]
+name = "map-links"
+version = "0.1.0"
+description = "Reads and builds map links: Google Maps, Apple Maps, Waze, OpenStreetMap, OsmAnd, Organic Maps, CoMaps, HERE and geo: URIs"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+percent-encoding = "2"
+url = "2"
+
+[dev-dependencies]
+proptest = "1"

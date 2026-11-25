@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 21ac0315e96cca108db3eade367559bbdcdb3f1a3b2cdd06e380f4e06d4b343c # shrinks to place = Place { point: Point { lat: 0.0, lon: 0.0 }, name: None, osm: None, zoom: Some(1.0) }, app = OrganicMapsWeb
+cc 24ced4f9a2065138f9227ff7ea5afecb9233c6a3fca2e33c5aa0222b386dd5e2 # shrinks to place = Place { point: Point { lat: 0.0, lon: 0.0 }, name: Some("."), osm: None, zoom: None }, app = OrganicMapsWeb
