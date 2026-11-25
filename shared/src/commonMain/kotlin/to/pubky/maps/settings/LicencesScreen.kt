@@ -19,6 +19,11 @@ import com.mikepenz.aboutlibraries.Libs
 import com.mikepenz.aboutlibraries.ui.compose.m3.LibrariesContainer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import to.pubky.maps.ui.AppIcons
 
 /** Reads the licence list with [loadLicences] off the main thread, then shows [LicencesScreen]. */
@@ -37,6 +42,22 @@ fun LicencesRoute(
 
 /** The AboutLibraries list in [json]; an empty list when it cannot be read. */
 fun parseLicences(json: String): Libs = Libs.Builder().withJson(json).build()
+
+/**
+ * One AboutLibraries document from several (the Gradle libraries and the Rust crates of the core):
+ * their libraries one after the other, their licences together. A document that cannot be read is
+ * left out.
+ */
+fun mergeLicenceLists(vararg documents: String): String {
+    val libraries = mutableListOf<JsonElement>()
+    val licences = mutableMapOf<String, JsonElement>()
+    for (document in documents) {
+        val parsed = runCatching { Json.parseToJsonElement(document).jsonObject }.getOrNull() ?: continue
+        (parsed["libraries"] as? JsonArray)?.let { libraries.addAll(it) }
+        (parsed["licenses"] as? JsonObject)?.let { licences.putAll(it) }
+    }
+    return JsonObject(mapOf("libraries" to JsonArray(libraries), "licenses" to JsonObject(licences))).toString()
+}
 
 /** Every library bundled in the app, with its licence; a tap shows the licence text. */
 @OptIn(ExperimentalMaterial3Api::class)

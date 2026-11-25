@@ -161,9 +161,45 @@ val buildCoreForAndroid =
         outputDir.set(layout.buildDirectory.dir("generated/coreJniLibs"))
     }
 
+/**
+ * Writes res/raw/rust_licences.json (scripts/rust-licences.py): the Rust crates linked into the core
+ * with their licences, in the AboutLibraries format, for the app's open-source licence screen.
+ */
+abstract class ListRustLicences
+    @Inject
+    constructor(
+        private val exec: ExecOperations,
+    ) : DefaultTask() {
+        @get:InputFiles
+        @get:PathSensitive(PathSensitivity.RELATIVE)
+        abstract val sources: ConfigurableFileCollection
+
+        @get:InputFile
+        @get:PathSensitive(PathSensitivity.RELATIVE)
+        abstract val script: RegularFileProperty
+
+        @get:OutputDirectory
+        abstract val outputDir: DirectoryProperty
+
+        @TaskAction
+        fun list() {
+            val out = outputDir.get().file("raw/rust_licences.json").asFile
+            exec.exec { commandLine("python3", "-I", script.get().asFile.path, out.path) }
+        }
+    }
+
+val listRustLicences =
+    tasks.register<ListRustLicences>("listRustLicences") {
+        val root = rootProject.layout.projectDirectory
+        sources.from(root.file("Cargo.toml"), root.file("Cargo.lock"), root.file("core/Cargo.toml"))
+        script.set(root.file("scripts/rust-licences.py"))
+        outputDir.set(layout.buildDirectory.dir("generated/rustLicences"))
+    }
+
 androidComponents {
     onVariants { variant ->
         variant.sources.jniLibs?.addGeneratedSourceDirectory(buildCoreForAndroid, BuildCoreForAndroid::outputDir)
+        variant.sources.res?.addGeneratedSourceDirectory(listRustLicences, ListRustLicences::outputDir)
     }
     beforeVariants { variant ->
         // Store builds are only ever release bundles, and the unit and screenshot tests run once,
