@@ -24,10 +24,10 @@ fun ServersScreen(
     onBack: () -> Unit,
 ) {
     SettingsPage(title = "Server lists", onBack = onBack) {
-        item {
-            PageIntro("Each service uses the first server in its list. When it fails, the next one takes over.")
+        item { PageIntro("Each list holds a service's servers in the order they are tried.") }
+        if (Service.entries.any { service -> settings.servers[service].any { SynonymHosts.isSynonymServer(it.url) } }) {
+            item { PageIntro(SYNONYM_EXPLANATION) }
         }
-        item { PageIntro(SYNONYM_EXPLANATION) }
         for ((group, services) in serviceGroups) {
             item { SectionHeader(group) }
             for (service in services) {

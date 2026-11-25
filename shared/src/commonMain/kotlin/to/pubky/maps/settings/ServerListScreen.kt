@@ -49,7 +49,7 @@ fun ServerListScreen(
     val list = settings.servers[service]
     var confirmingReset by rememberSaveable { mutableStateOf(false) }
     SettingsPage(title = service.title, onBack = onBack) {
-        item { PageIntro("${service.description} The app tries them from the top.") }
+        item { PageIntro("${service.description} Listed in the order they are tried.") }
         list.forEachIndexed { index, entry ->
             item(key = entry.url) {
                 ServerRow(
@@ -80,7 +80,10 @@ fun ServerListScreen(
                 }
             }
         }
-        item { PageIntro(SYNONYM_EXPLANATION) }
+        // Only where it explains a badge on this page.
+        if (list.any { SynonymHosts.isSynonymServer(it.url) }) {
+            item { PageIntro(SYNONYM_EXPLANATION) }
+        }
     }
     if (confirmingReset) {
         AlertDialog(

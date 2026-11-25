@@ -143,7 +143,8 @@ data class AppSettings(
 
     /**
      * Adds a server at the end of [service]'s list. [name] may be blank: the host is shown then. A new
-     * map style credits its own host, since the app cannot know what data it draws.
+     * map style credits its own host and OpenStreetMap: the app cannot know what data it draws, and
+     * nearly every web map style draws OSM data, whose licence requires the credit.
      */
     fun withServerAdded(
         service: Service,
@@ -156,7 +157,8 @@ data class AppSettings(
         val list = servers[service]
         if (list.any { ServerUrl.parse(it.url) == parsed }) return AddServerResult.Refused("This server is already in the list.")
         val shownName = name.trim().ifEmpty { parsed.host }
-        val attribution = if (service.isMapStyle) listOf(AttributionLink(shownName, parsed.origin)) else emptyList()
+        val attribution =
+            if (service.isMapStyle) listOf(AttributionLink(shownName, parsed.origin), ServerDefaults.openStreetMap) else emptyList()
         return AddServerResult.Added(withServerList(service, list + ServerEntry(shownName, parsed.url, attribution)))
     }
 

@@ -117,8 +117,23 @@ class AppSettingsTest {
 
         val entry = style.servers[Service.MapStyleDark].last()
         assertEquals("Night", entry.name)
-        assertEquals(listOf(AttributionLink("Night", "https://tiles.example.org")), entry.attribution)
+        assertEquals(listOf(AttributionLink("Night", "https://tiles.example.org"), ServerDefaults.openStreetMap), entry.attribution)
         assertTrue(AttributionLink("Night", "https://tiles.example.org") in style.servers.allAttribution())
+    }
+
+    @Test
+    fun theOpenStreetMapCreditStaysWhenEveryDefaultStyleIsGone() {
+        var own = defaults
+        for (service in listOf(Service.MapStyleLight, Service.MapStyleDark)) {
+            own = own.added(service, "https://tiles.example.org/${service.key}.json", "Own")
+            for (url in ServerDefaults.lists[service].map { it.url }) own = own.withServerRemoved(service, url)
+            assertEquals(1, own.servers[service].size)
+        }
+
+        assertEquals(1, own.servers.allAttribution().count { it == ServerDefaults.openStreetMap })
+        for (service in listOf(Service.MapStyleLight, Service.MapStyleDark)) {
+            assertTrue(ServerDefaults.openStreetMap in own.servers[service].single().attribution)
+        }
     }
 
     @Test

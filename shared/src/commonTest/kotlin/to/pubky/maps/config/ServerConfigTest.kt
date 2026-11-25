@@ -56,6 +56,8 @@ class ServerConfigTest {
     fun allAttributionListsEachCreditOnce() {
         val credits = defaults.allAttribution()
 
+        assertTrue(ServerDefaults.openStreetMap in credits)
+
         assertEquals(credits.distinct(), credits)
         assertEquals(1, credits.count { it.url == "https://www.openstreetmap.org/copyright" })
     }

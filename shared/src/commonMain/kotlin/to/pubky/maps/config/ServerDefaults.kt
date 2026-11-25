@@ -2,7 +2,11 @@ package to.pubky.maps.config
 
 /** The servers the app starts with. Every default server address lives here. */
 object ServerDefaults {
-    private val openStreetMap =
+    /**
+     * The credit for OpenStreetMap data (ODbL). Settings always list it, and a map style the user adds
+     * carries it, since nearly every web map style draws OSM data.
+     */
+    val openStreetMap =
         AttributionLink("© OpenStreetMap contributors", "https://www.openstreetmap.org/copyright")
     private val openFreeMap = AttributionLink("OpenFreeMap", "https://openfreemap.org")
     private val openMapTiles = AttributionLink("© OpenMapTiles", "https://www.openmaptiles.org/")

@@ -56,9 +56,12 @@ data class ServerLists(
     /** The map styles for the light or the dark theme. */
     fun mapStyles(darkTheme: Boolean): List<ServerEntry> = get(if (darkTheme) Service.MapStyleDark else Service.MapStyleLight)
 
-    /** Every credit of every configured map style, each once, in list order. */
+    /**
+     * Every credit of every configured map style, each once, in list order; the OpenStreetMap credit
+     * is always there, also when the user replaced every default style.
+     */
     fun allAttribution(): List<AttributionLink> =
-        (get(Service.MapStyleLight) + get(Service.MapStyleDark)).flatMap { it.attribution }.distinct()
+        ((get(Service.MapStyleLight) + get(Service.MapStyleDark)).flatMap { it.attribution } + ServerDefaults.openStreetMap).distinct()
 }
 
 /** Update feed addresses per channel, in the order the updater tries them. */
