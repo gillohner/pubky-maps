@@ -607,7 +607,16 @@ class OfflineMapsTest {
         }
 
     @Test
-    fun areasAreNamedAfterTheirCentre() {
+    fun anAreaIsNamedAfterTheTownTheMapLabelsInIt() =
+        runTest(UnconfinedTestDispatcher()) {
+            val store = FakeStore()
+            val offline = offlineMaps(store)
+            offline.download(zurich, listOf(light), place = "Zürich")
+            assertEquals("Zürich", offline.maps().single().name)
+        }
+
+    @Test
+    fun areasWithoutALabelledTownAreNamedAfterTheirCentre() {
         assertEquals("Map around 33.87° S, 151.20° E", areaName(AreaBounds(151.1, -33.9, 151.3, -33.84)))
         assertEquals("Map around 40.71° N, 74.01° W", areaName(AreaBounds(-74.05, 40.68, -73.97, 40.74)))
     }

@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
@@ -38,6 +39,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import org.maplibre.compose.camera.CameraFit
@@ -436,7 +438,8 @@ fun MapRoute(
 /**
  * The area picker on the live map while [offline] asks for an area: the frame's area is measured
  * whenever the camera rests (and unknown while it moves, so Download never takes an area the frame
- * has left), back closes the picker, Download starts the download in [styleUrls].
+ * has left), back closes the picker, Download starts the download in [styleUrls], named after the
+ * town the map labels in the frame.
  */
 @Composable
 private fun rememberAreaPicker(
@@ -445,10 +448,13 @@ private fun rememberAreaPicker(
     styleUrls: List<String>,
     onDownloadStarted: () -> Unit,
 ): AreaPickerUi? {
+    val scope = rememberCoroutineScope()
     val picking by offline.picking.collectAsStateWithLifecycle()
     SystemBack(enabled = picking) { offline.stopPicking() }
     if (!picking) return null
     var frame by remember { mutableStateOf<DpRect?>(null) }
+    // Download was tapped and the labels are being read: a second tap starts nothing.
+    var naming by remember { mutableStateOf(false) }
     val area by produceState<AreaBounds?>(null, mapState) {
         // The viewport changes with every camera move and arrives once the map (attached again on
         // the way back from Settings) can convert screen points.
@@ -459,13 +465,61 @@ private fun rememberAreaPicker(
         fits = area?.let { fitsInOneDownload(it) },
         onFrame = { frame = it },
         onDownload = {
-            area?.takeIf { fitsInOneDownload(it) }?.let {
-                offline.download(it, styleUrls)
-                onDownloadStarted()
+            val bounds = area?.takeIf { fitsInOneDownload(it) }
+            val shownFrame = frame
+            if (bounds != null && shownFrame != null && !naming) {
+                naming = true
+                scope.launch {
+                    try {
+                        // The labels the map draws now, read before the picker closes.
+                        val place = mapState.placeNameIn(shownFrame)
+                        // Back or Cancel while they were read: the pick is over, nothing downloads.
+                        if (!offline.picking.value) return@launch
+                        offline.download(bounds, styleUrls, place = place)
+                        onDownloadStarted()
+                    } finally {
+                        naming = false
+                    }
+                }
             }
         },
         onCancel = offline::stopPicking,
     )
+}
+
+/**
+ * The name of the most important town the map labels in [frame] ([areaPlaceName]), counting only
+ * places whose point is in the frame; null without one.
+ */
+private suspend fun MapState.placeNameIn(frame: DpRect): String? {
+    val layers =
+        style.layers
+            .filter { it.sourceLayer in PlaceLabelSourceLayers }
+            .map { it.id }
+            .toSet()
+    if (layers.isEmpty()) return null
+    val features =
+        try {
+            queryRenderedFeatures(frame, layers)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // A map that cannot answer (its style changing) names the area after its centre.
+            return null
+        }
+    val centreX = (frame.left + frame.right) / 2
+    val centreY = (frame.top + frame.bottom) / 2
+    val labels =
+        features.mapNotNull { feature ->
+            val at = (feature.geometry as? Point)?.coordinates?.let { screenLocationFromPosition(it) }
+            // A label that only reaches into the frame is of a place outside the area.
+            if (at != null && (at.x < frame.left || at.x > frame.right || at.y < frame.top || at.y > frame.bottom)) return@mapNotNull null
+            PlaceLabel(
+                properties = feature.properties.strings(),
+                distance = at?.let { hypot((it.x - centreX).value, (it.y - centreY).value).toDouble() } ?: Double.MAX_VALUE,
+            )
+        }
+    return areaPlaceName(labels)
 }
 
 /** The box around the map under [frame]; null while the map cannot tell. */
@@ -606,18 +660,20 @@ private suspend fun MapState.tappedPoi(offset: DpOffset): PlaceRef? {
     val area = DpRect(offset.x - TAP_SLOP, offset.y - TAP_SLOP, offset.x + TAP_SLOP, offset.y + TAP_SLOP)
     return queryRenderedFeatures(area, layers).firstNotNullOfOrNull { feature ->
         val point = (feature.geometry as? Point)?.coordinates ?: positionFromScreenLocation(offset) ?: return@firstNotNullOfOrNull null
-        val properties =
-            feature.properties
-                ?.mapNotNull { (key, value) -> (value as? JsonPrimitive)?.contentOrNull?.let { key to it } }
-                ?.toMap()
-                .orEmpty()
         tappedPlace(
             id = feature.id?.contentOrNull?.toLongOrNull(),
-            properties = properties,
+            properties = feature.properties.strings(),
             point = GeoPoint(point.latitude.coerceIn(-90.0, 90.0), ((point.longitude + 540.0) % 360.0) - 180.0),
         )
     }
 }
+
+/** A tile feature's properties that are text or numbers, as text. */
+private fun JsonObject?.strings(): Map<String, String> =
+    this
+        ?.mapNotNull { (key, value) -> (value as? JsonPrimitive)?.contentOrNull?.let { key to it } }
+        ?.toMap()
+        .orEmpty()
 
 /**
  * The place page of [shown] for the map screen: its state from [places], the sheet's stop (saved per

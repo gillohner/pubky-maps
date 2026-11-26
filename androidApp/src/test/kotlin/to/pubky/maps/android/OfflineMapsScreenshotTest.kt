@@ -76,9 +76,10 @@ class OfflineMapsScreenshotTest {
     private val maps =
         OfflineMapsState.Ready(
             listOf(
-                OfflineMap("d", "Map around 46.95° N, 7.45° E", 4, OfflineMapStatus.Downloading(42), 6_300_000),
-                OfflineMap("c", "Map around 47.37° N, 8.54° E", 3, OfflineMapStatus.Ready, 18_400_000),
-                OfflineMap("b", "Map around 46.01° N, 8.96° E", 2, OfflineMapStatus.Paused(64), 9_100_000),
+                OfflineMap("d", "Bern", 4, OfflineMapStatus.Downloading(42), 6_300_000),
+                OfflineMap("c", "Zürich", 3, OfflineMapStatus.Ready, 18_400_000),
+                OfflineMap("b", "Lugano", 2, OfflineMapStatus.Paused(64), 9_100_000),
+                // An area the map labels no town in keeps the name of its centre.
                 OfflineMap("a", "Map around 46.20° N, 6.14° E", 1, OfflineMapStatus.TooLarge, 50_200_000),
             ),
         )
@@ -141,8 +142,8 @@ class OfflineMapsScreenshotTest {
             List(
                 OfflineMapsState.Ready(
                     listOf(
-                        OfflineMap("b", "Map around 47.37° N, 8.54° E", 2, OfflineMapStatus.Paused(100, update = true), 18_400_000),
-                        OfflineMap("a", "Map around 46.95° N, 7.45° E", 1, OfflineMapStatus.Ready, 6_300_000),
+                        OfflineMap("b", "Zürich", 2, OfflineMapStatus.Paused(100, update = true), 18_400_000),
+                        OfflineMap("a", "Bern", 1, OfflineMapStatus.Ready, 6_300_000),
                     ),
                 ),
             )

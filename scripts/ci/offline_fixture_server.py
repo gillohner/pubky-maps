@@ -4,9 +4,10 @@ no public network. Both styles take their vector source from source.json (a Tile
 must check again at every load, as OpenFreeMap's does after an hour), whose tile addresses carry the
 current release of the map data: GET /release/<n> moves them, as a map server does with each release.
 Every tile is one water polygon over the whole tile, so a drawn map is the styles' water colour and a
-missing tile the background colour. Each tile answers after a short wait, so parallel requests
-overlap; every request is logged as one JSON line (path, User-Agent, how many tile requests were
-open at once).
+missing tile the background colour, and a grid of points labelled as the city "Fixture Town"
+(OpenMapTiles' place layer, drawn as dots in the water colour), for the name of a downloaded area.
+Each tile answers after a short wait, so parallel requests overlap; every request is logged as one
+JSON line (path, User-Agent, how many tile requests were open at once).
 
 Usage: offline_fixture_server.py <port> <request log>
 """
@@ -32,6 +33,14 @@ def style(background: str, water: str) -> dict:
         "layers": [
             {"id": "background", "type": "background", "paint": {"background-color": background}},
             {"id": "water", "type": "fill", "source": "fixture", "source-layer": "water", "paint": {"fill-color": water}},
+            # Dots, not text: a label needs glyphs, and the app finds the places in either.
+            {
+                "id": "place",
+                "type": "circle",
+                "source": "fixture",
+                "source-layer": "place",
+                "paint": {"circle-color": water, "circle-radius": 3},
+            },
         ],
     }
 
@@ -70,7 +79,30 @@ def water_tile() -> bytes:
     return field(3, layer)
 
 
-TILE = water_tile()
+def place_layer() -> bytes:
+    """OpenMapTiles' place layer: a city named "Fixture Town" at each of 8 x 8 points over the tile, so
+    a few of them are in the frame at every zoom the area picker shows. Each is a feature of its own,
+    as a town's label is."""
+    keys = [b"name", b"class"]
+    values = [b"Fixture Town", b"city"]
+    step = 4096 // 8
+    features = b""
+    for row in range(8):
+        for column in range(8):
+            geometry = [1 | 1 << 3, zigzag(step // 2 + column * step), zigzag(step // 2 + row * step)]
+            features += field(
+                2,
+                varint(1 << 3) + varint(1 + row * 8 + column)
+                + field(2, b"".join(varint(v) for v in (0, 0, 1, 1)))
+                + varint(3 << 3) + varint(1)
+                + field(4, b"".join(varint(v) for v in geometry)),
+            )
+    layer = varint(15 << 3) + varint(2) + field(1, b"place") + features
+    layer += b"".join(field(3, key) for key in keys) + b"".join(field(4, field(1, value)) for value in values)
+    return field(3, layer + varint(5 << 3) + varint(4096))
+
+
+TILE = water_tile() + place_layer()
 
 
 class Handler(BaseHTTPRequestHandler):

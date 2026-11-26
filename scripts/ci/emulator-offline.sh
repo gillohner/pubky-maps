@@ -2,11 +2,12 @@
 # Offline maps on a running emulator, against two tiny map styles served on the runner
 # (scripts/ci/offline_fixture_server.py through adb reverse; no public network): Settings > Offline
 # maps > Download an area opens the area picker on the map; Download fetches the area in the light
-# and the dark style until the list says Ready, with the app's User-Agent, never more than 4 tile
-# requests at once and no tile twice. Then the server moves its tiles to a new release and the app,
-# started far from the area, updates the area by itself. With the server gone the area draws in
-# light and dark (the fixture's water colour, not the bare background), also after three theme
-# switches in one process (which count MainActivity's instances for StrictMode). Delete removes it.
+# and the dark style until the list says Ready under the name of the town the map labels in it, with
+# the app's User-Agent, never more than 4 tile requests at once and no tile twice. Then the server
+# moves its tiles to a new release and the app, started far from the area, updates the area by
+# itself. With the server gone the area draws in light and dark (the fixture's water colour, not the
+# bare background), also after three theme switches in one process (which count MainActivity's
+# instances for StrictMode). Delete removes it.
 # Usage: emulator-offline.sh <apk> <out dir>
 set -euo pipefail
 
@@ -111,6 +112,8 @@ adb shell input tap $xy
 
 wait_for "On this phone" 15 > /dev/null || fail "Download did not open the Offline maps page"
 wait_ready offline-list 120 || fail "the offline map did not finish downloading"
+# Named after the town the map labels in the frame, not its coordinates.
+wait_for "Fixture Town" 5 > /dev/null || fail "the offline map is not named after the town in its area"
 screenshot offline-ready
 check_alive "offline map ready"
 
@@ -224,7 +227,7 @@ wait_ready offline-final 20 || fail "the offline map is not Ready on the list"
 xy=$(python3 -I - "$(dump_ui offline-delete)" <<'PY'
 import re, sys, xml.etree.ElementTree as ET
 for node in ET.parse(sys.argv[1]).getroot().iter("node"):
-    if (node.get("content-desc") or "").startswith("Delete Map around"):
+    if (node.get("content-desc") or "").startswith("Delete Fixture Town"):
         x1, y1, x2, y2 = map(int, re.findall(r"\d+", node.get("bounds")))
         print((x1 + x2) // 2, (y1 + y2) // 2)
         break
