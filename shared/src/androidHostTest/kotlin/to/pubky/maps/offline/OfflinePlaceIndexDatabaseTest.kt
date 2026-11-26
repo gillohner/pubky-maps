@@ -15,6 +15,10 @@ import java.nio.file.Files
 import java.util.Properties
 import java.util.zip.DeflaterOutputStream
 import java.util.zip.GZIPOutputStream
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.random.Random
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -419,6 +423,13 @@ class OfflinePlaceIndexDatabaseTest {
         index.find("bäckerei")
         val took = measureTime { assertEquals(30, index.find("bäck")?.size) }
         assertTrue(took.inWholeMilliseconds < 100, "search took $took")
+        // A word of every place, and its first letter as the user starts typing it: their nearest
+        // places are looked up around the map centre, not among all 60,000.
+        for (common in listOf("place", "p")) {
+            index.find(common)
+            val tookCommon = measureTime { assertEquals(30, index.find(common)?.size) }
+            assertTrue(tookCommon.inWholeMilliseconds < 100, "search for '$common' took $tookCommon")
+        }
         // Two words, one a town's: looked up around the map centre and around the town.
         val inTown = measureTime { assertEquals(30, index.find("bäck ${TOWNS[0]}")?.size) }
         assertTrue(inTown.inWholeMilliseconds < 100, "search in a town took $inTown")
@@ -427,6 +438,99 @@ class OfflinePlaceIndexDatabaseTest {
         val locality = measureTime { assertNotNull(index.localityOf(null, GeoPoint(47.36, 8.52), null)) }
         println("a locality in $locality")
         assertTrue(locality.inWholeMilliseconds < 50, "a locality took $locality")
+    }
+
+    @Test
+    fun aCommonWordFindsTheSamePlacesAroundTheCentreAsThroughItsIndex() {
+        val random = Random(35)
+        // At random points (no two places equally far from a centre), every other one a street,
+        // "Berg" only in the west, and villages named with the common words too.
+        val places =
+            (0 until 12_000).asSequence().map { i ->
+                val lat = 47.30 + random.nextDouble() * 0.15
+                val lon = 8.45 + random.nextDouble() * 0.24
+                val name = if (lon < 8.55 && i % 3 == 0) "Berg $i" else "Platz $i"
+                when (i % 4) {
+                    1 -> place(name, lat, lon, osm = i.toLong() + 1)
+                    3 -> place(name, lat, lon, osm = i.toLong() + 1, value = "bus_stop", category = "Bus Stop")
+                    else -> place(name, lat, lon, key = "highway", value = "minor", category = "Street")
+                }
+            }
+        val towns =
+            (0 until 40).asSequence().map { i ->
+                val name = listOf("Berg", "Bergdorf", "Platz", "Stadt", "Street")[i % 5]
+                place(
+                    name,
+                    47.30 + random.nextDouble() * 0.15,
+                    8.45 + random.nextDouble() * 0.24,
+                    osm = 100_000L + i,
+                    key = "place",
+                    value = "village",
+                    category = null,
+                )
+            }
+        val index = index()
+        index.replace("a", 0, places + towns)
+        val throughTheWord =
+            SqlOfflinePlaceIndex(
+                JdbcSqliteDriver("jdbc:sqlite:${File(dir, "offline-places.db").path}", Properties()),
+                io = Dispatchers.Unconfined,
+                boxFrom = Long.MAX_VALUE,
+            )
+        // In the middle, at a corner, in the west (Berg) and the east (none), and outside the places.
+        val centres =
+            listOf(GeoPoint(47.375, 8.57), GeoPoint(47.30, 8.45), GeoPoint(47.40, 8.47), GeoPoint(47.33, 8.67), GeoPoint(47.0, 8.0))
+        val words = listOf("s", "st", "street", "b", "berg", "p", "platz", "bus", "stop", "1", "12")
+        val queries = listOf("s", "street", "berg", "p", "platz 1", "berg street", "cafe berg", "street bergdorf")
+        for (centre in centres) {
+            // The nearest few hundred, which the search picks its results from.
+            for (word in words) assertEquals(throughTheWord.named(word, centre), index.named(word, centre), "'$word' at $centre")
+            val area = SearchArea(centre, zoom = 14.0, halfDiagonalMeters = 3_000.0)
+            for (query in queries) {
+                val expected = runBlocking { throughTheWord.search(query, area) }
+                assertTrue(expected.orEmpty().isNotEmpty(), "'$query' finds places")
+                assertEquals(expected, runBlocking { index.search(query, area) }, "'$query' at $centre")
+            }
+        }
+    }
+
+    @Test
+    fun aBoxCountsOnlyOnceItsCircleHoldsTheNearest() {
+        val random = Random(36)
+        val centre = GeoPoint(46.5, 7.5)
+
+        fun near(
+            distance: ClosedFloatingPointRange<Double>,
+            angle: Double,
+        ): GeoPoint {
+            val d = distance.start + random.nextDouble() * (distance.endInclusive - distance.start)
+            return GeoPoint(centre.lat + d * sin(angle), centre.lon + d * cos(angle))
+        }
+        // Around the centre: 300 within the first box's circle (0.01 degrees), 200 in its corners
+        // (outside the circle), and 100 just outside the box on its axes, nearer than the corners.
+        // The first box holds 400 of them, but the nearest 400 are the inner 300 and the axes' 100.
+        val inner = (0 until 300).map { near(0.0..0.0095, random.nextDouble() * 2 * PI) }
+        val corners = (0 until 200).map { i -> near(0.0110..0.0138, PI / 4 + (i % 4) * PI / 2 + (random.nextDouble() - 0.5) * 0.1) }
+        val axes = (0 until 100).map { i -> near(0.0101..0.0104, (i % 4) * PI / 2 + (random.nextDouble() - 0.5) * 0.02) }
+        // And so many elsewhere that the word is common.
+        val elsewhere = (0 until 5_000).map { GeoPoint(46.0 + random.nextDouble() * 0.2, 7.0 + random.nextDouble() * 0.2) }
+        val index = index()
+        index.replace(
+            "a",
+            0,
+            (inner + corners + axes + elsewhere).asSequence().mapIndexed { i, point ->
+                place("Gasse $i", point.lat, point.lon, key = "highway", value = "minor", category = "Street")
+            },
+        )
+        val throughTheWord =
+            SqlOfflinePlaceIndex(
+                JdbcSqliteDriver("jdbc:sqlite:${File(dir, "offline-places.db").path}", Properties()),
+                io = Dispatchers.Unconfined,
+                boxFrom = Long.MAX_VALUE,
+            )
+        val nearest = index.named("gasse", centre)
+        assertEquals(throughTheWord.named("gasse", centre), nearest)
+        assertTrue(axes.all { a -> nearest.any { it.point == a } }, "the places on the axes are among the nearest")
     }
 
     @Test
