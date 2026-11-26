@@ -483,8 +483,15 @@ class WriteControllerTest {
                 )
             val writer = controller()
 
-            // The sign-out has begun (the account's store is being cleared) and the writer has not
-            // seen it yet: the homeserver bookmark is still the user's.
+            assertEquals(
+                listOf(SavedEntry(OSM, Kept.Private, null)),
+                writer.own.value.saved
+                    .filter { it.place == OSM },
+            )
+
+            // The sign-out has begun (the account's store is about to be cleared) and the writer has
+            // not seen it yet: the homeserver bookmark is still the user's. The bookmark's page comes
+            // first, as the phone place's publish() would drop the bookmark from what the next one reads.
             account.value = (account.value as AccountState.SignedIn).copy(signingOut = true)
             writer.remember(target, setOf(OSM))
             writer.remember(WriteTarget(onPhone, "Lindenhof", SCHOBER), setOf(onPhone))
@@ -495,14 +502,8 @@ class WriteControllerTest {
             assertEquals(
                 listOf(PhoneSaved(onPhone, "Lindenhof", 7L, SCHOBER)),
                 phone.data.saved,
-                "a place saved on the phone still keeps its point",
+                "a place saved on the phone still gets the page's point",
             )
-
-            // Once the writer has seen the sign-out, the bookmark is no longer the user's at all.
-            writer.remember(target, setOf(OSM))
-            runCurrent()
-            assertEquals(emptyMap(), store.names)
-            assertEquals(emptyMap(), store.points())
         }
 
     @Test
