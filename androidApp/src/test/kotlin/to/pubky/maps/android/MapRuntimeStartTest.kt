@@ -36,5 +36,8 @@ class MapRuntimeStartTest {
         assertEquals("only MapLibre's files", listOf("photos"), cacheFiles())
     }
 
-    private fun cacheFiles(): List<String> = context.cacheDir.list().orEmpty().sorted()
+    private fun cacheFiles(): List<String> {
+        val names = context.cacheDir.list() ?: return emptyList()
+        return names.sorted()
+    }
 }
