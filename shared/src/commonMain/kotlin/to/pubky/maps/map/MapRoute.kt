@@ -36,6 +36,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -351,6 +352,32 @@ fun MapRoute(
     }
     val held = !layerMayAsk(shown?.place?.source, movedSinceShown)
     SideEffect { layerHeld.value = held }
+    // The map that a place page leaves in view (MapScreen reports it).
+    var uncoveredMap by remember { mutableStateOf<DpRect?>(null) }
+    // A place tapped on the map opens its sheet or panel over the map, maybe over the place: once the
+    // sheet has opened, a place it hides moves to the middle of the map left in view, as in Google
+    // Maps. Once per tap (saved): a rotation or a return from Settings leaves the map where it is, and
+    // a map the user is moving stays theirs. Search picks and links centre the map themselves.
+    var keptInView by rememberSaveable { mutableStateOf<String?>(null) }
+    val tappedShown = tapped?.takeIf { shown?.place?.uri == it.uri }
+    LaunchedEffect(tappedShown) {
+        val place = tappedShown
+        if (place == null) {
+            if (tapped == null) keptInView = null
+            return@LaunchedEffect
+        }
+        val point = place.point ?: return@LaunchedEffect
+        if (keptInView == place.uri) return@LaunchedEffect
+        val room = settled(snapshotFlow { uncoveredMap }).first()
+        keptInView = place.uri
+        if (movedSinceShown || mapState.isCameraMoving) return@LaunchedEffect
+        val size = mapState.viewport?.size ?: return@LaunchedEffect
+        val at = mapState.screenLocationFromPosition(Position(longitude = point.lon, latitude = point.lat)) ?: return@LaunchedEffect
+        val shift = panIntoView(at, room) ?: return@LaunchedEffect
+        val centre =
+            mapState.positionFromScreenLocation(DpOffset(size.width / 2 + shift.x, size.height / 2 + shift.y)) ?: return@LaunchedEffect
+        mapState.animateCamera(CameraUpdate(center = centre))
+    }
     val placePage = places?.let { rememberPlacePage(it, shown, mapSearch?.userLocation, onSharePlace, openIn, writes, onWrite) }
     // The area on screen goes offline in the style on screen and the other theme's of the same server.
     val areaPicker =
@@ -380,6 +407,7 @@ fun MapRoute(
         search = mapSearch,
         placePage = placePage,
         areaPicker = areaPicker,
+        onUncoveredMap = { uncoveredMap = it },
         placeCard =
             when {
                 placePage != null -> {
