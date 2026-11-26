@@ -109,7 +109,11 @@ class OfflineMapResources(
             }
 
             429 -> {
-                val retryAfter = response.headers[HttpHeaders.RetryAfter]?.trim()?.toLongOrNull()?.let { clock.now() + it.seconds }
+                val retryAfter =
+                    response.headers[HttpHeaders.RetryAfter]
+                        ?.trim()
+                        ?.toLongOrNull()
+                        ?.let { clock.now() + it.seconds }
                 MapResourceLoad.Failed(MapResourceError.RateLimit, "The map server is busy", retryAfter)
             }
 
@@ -124,7 +128,11 @@ class OfflineMapResources(
     }
 
     private fun HttpResponse.cacheControl(): List<String> =
-        headers.getAll(HttpHeaders.CacheControl).orEmpty().flatMap { it.split(',') }.map { it.trim().lowercase() }
+        headers
+            .getAll(HttpHeaders.CacheControl)
+            .orEmpty()
+            .flatMap { it.split(',') }
+            .map { it.trim().lowercase() }
 
     /** From max-age, else the Expires header. */
     private fun HttpResponse.expires(): Instant? {

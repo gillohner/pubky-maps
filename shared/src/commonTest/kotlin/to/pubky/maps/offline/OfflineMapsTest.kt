@@ -89,6 +89,7 @@ class OfflineMapsTest {
     private val zurich = AreaBounds(west = 8.448, south = 47.32, east = 8.625, north = 47.435)
     private val light = "https://tiles.example.org/styles/light"
     private val dark = "https://tiles.example.org/styles/dark"
+
     /** A millisecond later at each download. */
     private val clock =
         object : Clock {
