@@ -425,6 +425,16 @@ class OfflineMapsTest {
             assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
             assertEquals(emptyList(), store.updating())
             assertFalse(offline.downloading)
+            // The closed app's walk may have stored new tiles before it could tell: the area counts as new.
+            val newDataAt = offline.maps().single().newDataAt
+            assertTrue(newDataAt > 0)
+            // A later check that fetches nothing leaves it.
+            advanceTimeBy(CHECK_INTERVAL)
+            runCurrent()
+            advanceTimeBy(QUIET_CHECK * 2)
+            runCurrent()
+            assertEquals(listOf(light, dark, light, dark), store.resumed)
+            assertEquals(newDataAt, offline.maps().single().newDataAt)
         }
 
     @Test

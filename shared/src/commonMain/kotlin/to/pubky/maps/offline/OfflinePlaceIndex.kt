@@ -88,31 +88,28 @@ class SqlOfflinePlaceIndex(
             val rarest = words.minBy { counts.getValue(it) }
             val centre = area.centre
 
-            fun nearest(
-                from: String,
-                until: String,
-            ) = queries
-                .withWordFrom(from, until, centre.lat, centre.lon, CANDIDATES) {
-                    _,
-                    _,
-                    name,
-                    osmType,
-                    osmId,
-                    key,
-                    value,
-                    category,
-                    lat,
-                    lon,
-                    ->
-                    OfflinePlace(name, osmOf(osmType, osmId), key, value, category, GeoPoint(lat, lon))
-                }.executeAsList()
+            val place = {
+                _: Long,
+                _: String,
+                name: String,
+                osmType: String?,
+                osmId: Long?,
+                key: String,
+                value: String,
+                category: String?,
+                lat: Double,
+                lon: Double,
+                ->
+                OfflinePlace(name, osmOf(osmType, osmId), key, value, category, GeoPoint(lat, lon))
+            }
+            val starting = queries.withWordFrom(rarest, rarest.until(), centre.lat, centre.lon, CANDIDATES, place).executeAsList()
             val found =
                 if (counts.getValue(rarest) <= CANDIDATES) {
-                    nearest(rarest, rarest.until())
+                    starting
                 } else {
                     // Too many start with it for the nearest few hundred to hold every one: those
                     // with the word itself ("Uster", not "Usterstrasse") are looked up too.
-                    (nearest(rarest, rarest.until()) + nearest(rarest, rarest + '\u0000'))
+                    (starting + queries.withWord(rarest, centre.lat, centre.lon, CANDIDATES, place).executeAsList())
                         .distinct()
                         .sortedBy { distanceMeters(it.point, centre) }
                 }
@@ -122,7 +119,7 @@ class SqlOfflinePlaceIndex(
                         val placeWords = wordsOf(place)
                         words.all { w -> placeWords.any { it.startsWith(w) } }
                     }.withoutRepeatedPieces()
-            // A place named exactly as typed passes the cut wherever it is: the ranking puts it first.
+            // A place named exactly as typed passes the cut also when farther than the others: the ranking puts it first.
             val (exact, others) = matching.partition { normalizeForMatch(it.name) == typed }
             (exact + others).take(RESULTS)
         }

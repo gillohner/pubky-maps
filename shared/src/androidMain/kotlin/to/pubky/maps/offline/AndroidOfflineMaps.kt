@@ -13,10 +13,11 @@ import java.io.File
 /**
  * Sets up MapLibre for the process, before its first map: its database (the map cache and the
  * offline maps) in the no-backup folder, and [OfflineMapResources] for the requests of offline
- * downloads while [downloading], telling [fetchedNewData] when one got new map data. MapLibre's default database is in the cache folder, which Android
- * empties when the phone runs low on storage, so the one from before is deleted in [scope]: this runs
- * on the main thread at app start, and listing and deleting files there is disk work the start waits
- * for (StrictMode fails the emulator tests on it). MapLibre never opens the old file, so it can go later.
+ * downloads while [downloading], telling [fetchedNewData] when one got new map data. MapLibre's
+ * default database is in the cache folder, which Android empties when the phone runs low on
+ * storage, so the one from before is deleted in [scope]: this runs on the main thread at app start,
+ * and listing and deleting files there is disk work the start waits for (StrictMode fails the
+ * emulator tests on it). MapLibre never opens the old file, so it can go later.
  */
 @OptIn(ExperimentalMaplibreComposeApi::class)
 fun configureMapRuntime(

@@ -69,3 +69,10 @@ SELECT DISTINCT place.* FROM word JOIN place ON place.id = word.place
 WHERE word.word >= :from AND word.word < :until
 ORDER BY (place.lat - :lat) * (place.lat - :lat) + (place.lon - :lon) * (place.lon - :lon)
 LIMIT :limit;
+
+-- The places with the word itself, nearest to the point first.
+withWord:
+SELECT DISTINCT place.* FROM word JOIN place ON place.id = word.place
+WHERE word.word = :word
+ORDER BY (place.lat - :lat) * (place.lat - :lat) + (place.lon - :lon) * (place.lon - :lon)
+LIMIT :limit;

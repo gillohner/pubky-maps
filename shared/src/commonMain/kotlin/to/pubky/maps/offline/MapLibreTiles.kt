@@ -109,7 +109,7 @@ internal class LinkedTile(
 /**
  * The ids of the newest of [tiles] (the highest id: MapLibre adds a release's tiles after those of
  * the one before) for each source and place in the grid, newest first. A map server's release is a
- * part of its tile address with digits (OpenFreeMap: `.../planet/20251119_001001_pt/{z}/{x}/{y}.pbf`),
+ * part of its tile address's path with digits (OpenFreeMap: `.../planet/20251119_001001_pt/{z}/{x}/{y}.pbf`),
  * so addresses that differ only in such parts are one source; a style's other sources keep theirs.
  */
 internal fun newestOfEachSource(tiles: List<LinkedTile>): List<Long> =
@@ -119,7 +119,14 @@ internal fun newestOfEachSource(tiles: List<LinkedTile>): List<Long> =
         .map { same -> same.maxOf { it.id } }
         .sortedDescending()
 
-/** A tile address without the parts that name a release ([newestOfEachSource]). */
-private fun sourceOf(urlTemplate: String): String = urlTemplate.split('/').filterNot { part -> part.any { it.isDigit() } }.joinToString("/")
+/**
+ * A tile address without the parts that name a release ([newestOfEachSource]): the path's parts
+ * with digits, but not the server (`https://tiles2.example:8080`) nor the tile's own (`{y}.pbf?v=2`).
+ */
+private fun sourceOf(urlTemplate: String): String {
+    val parts = urlTemplate.split('/')
+    val tile = parts.indexOfFirst { '{' in it }.takeIf { it >= 0 } ?: parts.size
+    return parts.filterIndexed { i, part -> i < 3 || i >= tile || part.none { it.isDigit() } }.joinToString("/")
+}
 
 private fun ByteArray.isGzip(): Boolean = size >= 2 && this[0] == 0x1f.toByte() && this[1] == 0x8b.toByte()

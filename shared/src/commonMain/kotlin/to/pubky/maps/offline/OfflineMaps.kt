@@ -315,6 +315,10 @@ class OfflineMaps(
         val job =
             scope.launch(start = CoroutineStart.LAZY) {
                 try {
+                    // An update an earlier run left open (the app was closed, the user paused it)
+                    // may have stored its tiles already, so this walk fetching nothing proves no
+                    // update: it ends with new map data all the same.
+                    val leftOpen = handles.filter { handle -> packs.any { it.handle === handle && it.metadata?.updating == true } }
                     if (check) handles.forEach { mark(it) { m -> m.copy(updating = true) } }
                     for (handle in handles) {
                         val fetchedBefore = fetches.value
@@ -333,7 +337,9 @@ class OfflineMaps(
                             walking -= handle
                             if (stateOf(handle) == PackState.Complete) {
                                 started.value -= handle
-                                mark(handle) { done(it, fetches.value != fetchedBefore, clock.now().toEpochMilliseconds()) }
+                                mark(
+                                    handle,
+                                ) { done(it, fetches.value != fetchedBefore || handle in leftOpen, clock.now().toEpochMilliseconds()) }
                                 rest(handle)
                                 continue
                             }
@@ -347,7 +353,11 @@ class OfflineMaps(
                         // report an update stopped at the limit complete, as it counts the old tiles.
                         started.first { handle !in it }
                         if (handle in halted || stateOf(handle) != PackState.Complete) return@launch
-                        if (check) mark(handle) { done(it, fetches.value != fetchedBefore, clock.now().toEpochMilliseconds()) }
+                        if (check) {
+                            mark(
+                                handle,
+                            ) { done(it, fetches.value != fetchedBefore || handle in leftOpen, clock.now().toEpochMilliseconds()) }
+                        }
                         rest(handle)
                     }
                 } finally {
@@ -472,8 +482,9 @@ internal val CHECK_INTERVAL = 30.minutes
 internal val QUIET_CHECK = 10.seconds
 
 /**
- * A check's walk of a pack finished: the pack is up to date. When the walk [fetched] tiles, or an
- * earlier walk of this update found new data, the pack has new map data from now on.
+ * A check's walk of a pack finished: the pack is up to date. When the walk [fetched] tiles (or
+ * finished an update an earlier run left open), or an earlier walk of this update found new data,
+ * the pack has new map data from now on.
  */
 private fun done(
     metadata: PackMetadata,

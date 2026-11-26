@@ -49,10 +49,10 @@ interface OfflinePlaceStore {
  * Keeps [store] in step with the offline maps ([maps]): the places of an area are read from its
  * tiles once it is Ready, read again once it is Ready with other map data than they were read from
  * ([OfflineMap.newDataAt], kept with them, so an update that finished while the app was closed or
- * during a read is not missed), and deleted with the area. Tiles are read only while no area downloads (MapLibre writes them then). A read is tried
- * again after [retry]: up to [MAX_TRIES] times per area and process when the tiles fail (no pack of
- * the area, an unknown layout), up to [MAX_BUSY_TRIES] times per process when they are busy (each
- * try copies MapLibre's database).
+ * during a read is not missed), and deleted with the area. Tiles are read only while no area
+ * downloads (MapLibre writes them then). A read is tried again after [retry]: up to [MAX_TRIES]
+ * times per area and process when the tiles fail (no pack of the area, an unknown layout), up to
+ * [MAX_BUSY_TRIES] times per process when they are busy (each try copies MapLibre's database).
  */
 class OfflinePlaceIndexer(
     private val maps: StateFlow<OfflineMapsState>,

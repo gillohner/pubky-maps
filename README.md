@@ -53,7 +53,7 @@ release before's tiles stay linked to the area, from a copy of MapLibre's databa
 download runs (MapLibre's own SQLite writes the file; a second SQLite in the process must not open
 it). When Photon cannot be reached, search answers from these places: every typed word starts a word
 of the name or the category, looked up by the rarest of them, nearest first (a place named exactly as
-typed always among them), merged with Pinakes when it answers. The list says the places are from the
+typed also when farther than the others), merged with Pinakes when it answers. The list says the places are from the
 offline maps and that addresses need a connection, and the map's credits stand under them. Deleting
 an area deletes its places.
 
