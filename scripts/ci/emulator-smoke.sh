@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Smoke test on a running emulator: install the APK, start the app, wait until the map has drawn,
-# open Settings and each settings page, switch "Follow local rules" off and check it stays off
-# after a restart, open the open-source licences and swipe to their end, then go back with the
-# system back button. Fails on a crash or when the app is
-# not in front. Screenshots, the UI dumps and the log go to <out dir>.
+# Smoke test on a running emulator: install the APK, start the app, wait until the map has drawn
+# and hold the start time to a budget, open Settings and each settings page, switch "Follow local
+# rules" off and check it stays off after a restart (a second start held to a budget), open the
+# open-source licences and swipe to their end, then go back with the system back button. Fails on a
+# crash or when the app is not in front. Screenshots, the UI dumps, the start times and the log go
+# to <out dir>.
 # Usage: emulator-smoke.sh <apk> <out dir>
 set -euo pipefail
 
@@ -99,8 +100,33 @@ check_alive() {
     grep -q "$pkg/" "$out/resumed.txt" || fail "the app is not the resumed activity ($1): $(cat "$out/resumed.txt")"
 }
 
+# How long a start may take until the map has drawn its first whole view (Android's "Fully drawn",
+# see check_start_time). The budgets are for this CI emulator (software GPU, shared runner), which is
+# several times slower than a phone; the plan's target is under 1 s on a mid-range phone. The first
+# start fetches the style and tiles over the network (10.1 and 18.1 s in the first two runs, 11-26),
+# the restart has them in MapLibre's cache (6.0 and 8.1 s). Runners differ up to about 2x, so each
+# budget is over twice the slowest run: it fails a start that waits for a network timeout or got
+# several times slower, not a slow runner.
+first_start_budget_ms=45000
+restart_budget_ms=20000
+
+# Prints the last start's times from Android's "Displayed" and "Fully drawn" lines (start_time.py) and
+# fails when its map took longer than $2 ms; waits up to a minute for the map. $1 names the start.
+check_start_time() {
+    local status=3
+    for _ in $(seq 1 30); do
+        adb logcat -d | grep -E "Displayed |Fully drawn " > "$out/start-$1.txt" || true
+        status=0
+        python3 -I "$here/start_time.py" "$out/start-$1.txt" "$pkg" "$1" "$2" || status=$?
+        [ "$status" = 3 ] || break
+        sleep 2
+    done
+    [ "$status" = 3 ] && fail "no \"Displayed\" and \"Fully drawn\" lines of the $1 start of $pkg after a minute; see start-$1.txt"
+    [ "$status" = 0 ] || fail "the map of the $1 start took longer than its budget; see start-$1.txt"
+}
+
 adb install -r "$apk"
-# A log buffer large enough to keep StrictMode's reports from the start until the end.
+# A log buffer large enough to keep StrictMode's reports and the start's lines until the end.
 adb logcat -G 16M || true
 adb logcat -c || true
 adb logcat -b crash -c || true
@@ -140,6 +166,7 @@ for _ in $(seq 1 10); do
     mv "$out/map-next.png" "$out/map.png"
 done
 rm -f "$out/map-next.png"
+check_start_time first "$first_start_budget_ms"
 
 open_settings() {
     local xy
@@ -216,6 +243,8 @@ adb shell am force-stop "$pkg"
 started=$(adb shell am start -W -n "$pkg/.android.MainActivity" 2>&1) || true
 if grep -q "Error" <<< "$started"; then fail "the app did not start again: $started"; fi
 wait_for "Show my location" 60 > /dev/null || fail "the map screen did not appear after the restart"
+# Before Settings: the map leaves the screen there and would not report.
+check_start_time restart "$restart_budget_ms"
 open_settings
 xy=$(wait_for "Follow local rules" 10) || fail "no Follow local rules switch after the restart"
 [ "$(checked_of "$(dump_ui rules-after)" "Follow local rules")" = "false" ] || fail "Follow local rules was not kept across the restart"

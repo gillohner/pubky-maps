@@ -12,7 +12,8 @@ A change is done when all of these pass on its head commit:
 - `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test` when
   `core/` changed (CI: `.github/workflows/core.yml`).
 - CI (`.github/workflows/android.yml`) green, including the emulator smoke test that installs the
-  debug APK, waits for the map to draw, opens Settings and goes back, then the sign-in probe
+  debug APK, waits for the map to draw (within the start-time budget of `scripts/ci/emulator-smoke.sh`),
+  opens Settings and goes back, then the sign-in probe
   (`scripts/ci/sign-in-probe.py`, Pubky Ring sign-in up to the link and back on a fixture relay);
   when the app, the core or CI changed, the Synonym-blocked test (`scripts/ci/synonym-blocked.py`);
   and, when the updater or the release changed, the update probe (`scripts/ci/update-probe.py`): two signed release builds, a

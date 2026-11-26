@@ -225,7 +225,11 @@ screenshots search with its pins, and the update probe screenshots each step of 
 
 ## Emulator tests in CI
 
-- Smoke test (`scripts/ci/emulator-smoke.sh`): the map draws, Settings opens, back returns.
+- Smoke test (`scripts/ci/emulator-smoke.sh`): the map draws, Settings opens, back returns. The
+  app calls `reportFullyDrawn` once the map has drawn its first whole view (MapLibre idle with a
+  style from the list); the test reads Android's "Displayed" and "Fully drawn" times of the first
+  start and of a restart (`scripts/ci/start_time.py`) and fails when the map took longer than the
+  budget set in that script.
 - Offline maps (`scripts/ci/emulator-offline.sh`, two tiny styles served on the runner): an area
   downloads from Settings → Offline maps until Ready, with at most 4 tile requests at a time, the
   app's User-Agent and no tile twice; after the server moves its tiles to a new release the app
