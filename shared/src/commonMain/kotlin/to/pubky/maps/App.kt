@@ -3,6 +3,7 @@ package to.pubky.maps
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -19,6 +20,7 @@ import coil3.compose.setSingletonImageLoaderFactory
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
 import to.pubky.maps.account.AccountRoute
 import to.pubky.maps.account.AccountState
@@ -31,7 +33,9 @@ import to.pubky.maps.links.AppLinks
 import to.pubky.maps.links.LinkTarget
 import to.pubky.maps.links.LinkedPlaceState
 import to.pubky.maps.links.OpenIn
+import to.pubky.maps.map.LastMapViewStore
 import to.pubky.maps.map.MapRoute
+import to.pubky.maps.map.StartView
 import to.pubky.maps.offline.OfflineMaps
 import to.pubky.maps.offline.OfflineMapsScreen
 import to.pubky.maps.offline.offlineMapsSummary
@@ -113,6 +117,8 @@ private data class WriteDestination(
  * available. [search] is the place search; null where it is not available. [places] opens place
  * pages and shows the places people referenced on Pubky on the map; null where it is not available.
  * [offline] downloads areas for use without a connection; null where it is not available.
+ * [lastMapView] keeps where the user left the map, so the next start opens there; null opens the
+ * whole world.
  */
 @Composable
 fun App(
@@ -128,6 +134,7 @@ fun App(
     offline: OfflineMaps? = null,
     /** Called once the map has drawn its first whole view; Android reports it as the start's fully drawn time. */
     onMapDrawn: () -> Unit = {},
+    lastMapView: LastMapViewStore? = null,
 ) {
     val loaded by settingsRepository.settings.collectAsStateWithLifecycle()
     // Place photos and profile pictures, with the app's User-Agent like every other request. Coil
@@ -158,6 +165,7 @@ fun App(
                 writes,
                 offline,
                 onMapDrawn,
+                lastMapView,
             )
         }
         val dialog = updatesState?.dialog
@@ -191,6 +199,7 @@ private fun AppNavigation(
     writes: WriteUi?,
     offline: OfflineMaps?,
     onMapDrawn: () -> Unit,
+    lastMapView: LastMapViewStore?,
 ) {
     val update: ((AppSettings) -> AppSettings) -> Unit = remember(settingsRepository) { { settingsRepository.update(it) } }
     val navController = rememberNavController()
@@ -253,6 +262,13 @@ private fun AppNavigation(
 
     NavHost(navController = navController, startDestination = MapDestination) {
         composable<MapDestination> {
+            // Read with the settings at start-up (a few milliseconds): the map opens at its view
+            // instead of drawing the world first and jumping. Taken once per map, so the saves of
+            // the map's own moves do not recompose it.
+            val startView by produceState(lastMapView?.startView?.value ?: StartView.Read(null), lastMapView) {
+                if (lastMapView != null) value = lastMapView.startView.first { it is StartView.Read }
+            }
+            val opensAt = startView as? StartView.Read ?: return@composable
             val linkedPlace =
                 links
                     ?.linkedPlaces
@@ -294,6 +310,8 @@ private fun AppNavigation(
                 offline = offline,
                 onDownloadStarted = { navController.open(OfflineMapsDestination) },
                 onMapDrawn = onMapDrawn,
+                startView = opensAt.view,
+                onViewRested = { lastMapView?.save(it) },
             )
         }
         composable<SettingsDestination> {

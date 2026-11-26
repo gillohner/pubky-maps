@@ -3,7 +3,7 @@ name: android
 # and CI tools' self-checks) and builds the debug APK, with the Rust core built by Gradle (bindings from a
 # host build, jniLibs with cargo-ndk). The emulator job installs that APK, starts the app, waits for
 # the map to draw, opens Settings and each settings page, checks that a setting survives a restart,
-# goes back, fails on a crash, then runs the sign-in probe (scripts/ci/sign-in-probe.py): Settings >
+# goes back, checks that the map opens where a link left it, fails on a crash, then runs the sign-in probe (scripts/ci/sign-in-probe.py): Settings >
 # Account, the QR code's pubkyauth:// link on a fixture relay, Ring's return links, a process kill in
 # the middle; the map links (scripts/ci/emulator-links.sh): a geo: link, a Google Maps link and
 # shared text each open the app on their place (screenshots in the artifact); and search

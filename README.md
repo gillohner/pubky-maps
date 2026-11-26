@@ -4,7 +4,9 @@ A maps app on OpenStreetMap with Pubky social data on top. It runs on Android; t
 code also declares iOS targets, which are not built yet.
 
 The app shows a full-screen online map in light or dark (following the system), the user's location
-on request, a compass when the map is rotated, search, and Settings.
+on request, a compass when the map is rotated, search, and Settings. The map opens where the user
+left it (centre, zoom, turn and tilt, stored on the phone only in the no-backup folder once the
+camera has rested for a second); the first start opens on the whole world.
 
 **Search** (the bar at the top of the map) finds places, addresses, streets and towns as you type,
 from [Photon](https://github.com/komoot/photon) (OpenStreetMap data, biased to the map's centre) and
@@ -225,7 +227,8 @@ screenshots search with its pins, and the update probe screenshots each step of 
 
 ## Emulator tests in CI
 
-- Smoke test (`scripts/ci/emulator-smoke.sh`): the map draws, Settings opens, back returns. The
+- Smoke test (`scripts/ci/emulator-smoke.sh`): the map draws, Settings opens, back returns, and
+  after a map link moved the map to Zürich the next start opens it there. The
   app calls `reportFullyDrawn` once the map has drawn its first whole view (MapLibre idle with a
   style from the list); the test reads Android's "Displayed" and "Fully drawn" times of the first
   start and of a restart (`scripts/ci/start_time.py`) and fails when the map took longer than the

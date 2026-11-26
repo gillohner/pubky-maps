@@ -57,6 +57,7 @@ class MainActivity : ComponentActivity() {
                 // The map on screen is the start's "fully drawn" time (logcat "Fully drawn"), held
                 // to a budget by the emulator smoke test.
                 onMapDrawn = ::reportFullyDrawn,
+                lastMapView = app.lastMapView,
             )
         }
     }

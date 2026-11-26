@@ -111,7 +111,7 @@ import kotlin.math.max
 import kotlin.math.pow
 import kotlin.time.Clock
 
-/** Where the map opens before it knows anything about the user: the whole world. */
+/** Where the map opens on a first start (no view stored yet): the whole world. */
 private val WorldCamera = CameraPosition(center = Position(longitude = 0.0, latitude = 30.0), zoom = 1.0)
 
 /** The zoom the map moves to when it shows the user's location. */
@@ -150,6 +150,10 @@ fun MapRoute(
     onDownloadStarted: () -> Unit = {},
     /** Called once the map has drawn its first whole view of a style from the list. */
     onMapDrawn: () -> Unit = {},
+    /** Where the map opens: where the user left it at the last start; null for the whole world. */
+    startView: MapView? = null,
+    /** Called with each view the camera rests at, to open there at the next start. */
+    onViewRested: (MapView) -> Unit = {},
 ) {
     val dark = isSystemInDarkTheme()
     val sources = servers.mapStyles(dark)
@@ -188,7 +192,8 @@ fun MapRoute(
     val mapState =
         rememberMapState(
             baseStyle = fallback.current?.let { BaseStyle.Uri(it.url) } ?: BaseStyle.Empty,
-            initialCameraPosition = WorldCamera,
+            // Read once: later views are kept by the map's own saved state (rotation, Settings).
+            initialCameraPosition = remember { startView?.toCameraPosition() ?: WorldCamera },
         ) {
             LocationIndicatorLayer(id = "user-location", locationState = locationState)
             if (pubkyPlaces.isNotEmpty()) {
@@ -227,6 +232,12 @@ fun MapRoute(
         val styleReady =
             snapshotFlow { mapState.style.loadState is StyleLoadState.Ready && mapState.style.baseStyle is BaseStyle.Uri }
         if (awaitMapDrawn(mapState.events, styleReady)) mapDrawn()
+    }
+
+    // The next start opens where the camera last rested.
+    val viewRested by rememberUpdatedState(onViewRested)
+    LaunchedEffect(mapState) {
+        restingViews(snapshotFlow { if (mapState.isCameraMoving) null else mapState.cameraPosition }).collect { viewRested(it) }
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
