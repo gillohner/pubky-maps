@@ -39,7 +39,8 @@ fun configureMapRuntime(
 /**
  * The offline maps of the process, in MapLibre's database; created once, after [configureMapRuntime].
  * They check for new map data only on a network Android does not count as metered (no network
- * counts as metered).
+ * counts as metered); an update they began pauses when the phone moves to a metered network (a
+ * moment without a network does not pause it).
  */
 fun androidOfflineMaps(
     context: Context,
@@ -50,5 +51,6 @@ fun androidOfflineMaps(
         store = MapLibrePackStore({ DefaultMapRuntime.instance.offlineStorage }, context.resources.displayMetrics.density),
         scope = scope,
         unmetered = { connectivity?.isActiveNetworkMetered == false },
+        metered = { connectivity?.activeNetwork != null && connectivity.isActiveNetworkMetered },
     )
 }
