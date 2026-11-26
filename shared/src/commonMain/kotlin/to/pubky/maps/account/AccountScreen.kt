@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import io.github.alexzhirkevich.qrose.rememberQrCodePainter
 import to.pubky.maps.ui.AppIcons
 import to.pubky.maps.ui.rememberSafeLinkOpener
+import to.pubky.maps.write.placeText
 
 // Where people get Pubky Ring: links to open, not servers the app talks to.
 private const val RING_PLAY_URL = "https://play.google.com/store/apps/details?id=to.pubky.ring"
@@ -76,6 +77,8 @@ fun AccountScreen(
     onBack: () -> Unit,
     /** Why the app asks to sign in now ("Sign in to tag this place."), shown above the sign-in. */
     reason: String? = null,
+    /** The name the app knows for a place (as the cache spells it), or null. */
+    placeName: (String) -> String? = { null },
 ) {
     Scaffold(
         topBar = {
@@ -112,7 +115,7 @@ fun AccountScreen(
                     AccountState.Loading -> Loading()
                     is AccountState.SignedOut -> SignedOut(state, onSignIn, reason)
                     is AccountState.SigningIn -> SigningIn(state, ringOnThisPhone, onOpenRing, onCancelSignIn)
-                    is AccountState.SignedIn -> SignedIn(state, onSignOut)
+                    is AccountState.SignedIn -> SignedIn(state, onSignOut, placeName)
                     is AccountState.Unavailable -> Paragraph(state.reason)
                 }
             }
@@ -251,7 +254,10 @@ private fun GetRing() {
 private fun SignedIn(
     state: AccountState.SignedIn,
     onSignOut: () -> Unit,
+    placeName: (String) -> String?,
 ) {
+    // A place reads as its name, as on the Saved page; one whose name is not known as its link in words.
+    val place: (String) -> String = { placeName(it) ?: placeText(it) }
     var confirmSignOut by rememberSaveable { mutableStateOf(false) }
     if (state.refreshing || state.signingOut) {
         LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -280,13 +286,13 @@ private fun SignedIn(
         title = "Your tags",
         count = state.cached.tags.size,
         empty = "No tags yet.",
-        items = state.cached.tags.map { it.label to placeLabel(it.place) },
+        items = state.cached.tags.map { it.label to place(it.place) },
     )
     ItemSection(
         title = "Saved places",
         count = state.cached.bookmarks.size,
         empty = "No saved places yet.",
-        items = state.cached.bookmarks.map { placeLabel(it.place) to null },
+        items = state.cached.bookmarks.map { place(it.place) to null },
     )
     OutlinedButton(
         onClick = { confirmSignOut = true },

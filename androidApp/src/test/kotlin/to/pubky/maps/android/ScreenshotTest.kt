@@ -187,8 +187,16 @@ class ScreenshotTest {
             onRefresh = {},
             onSignOut = {},
             onBack = {},
+            placeName = placeNames::get,
         )
     }
+
+    /** Names the app stored for two of the places; the relation and the geo point have none. */
+    private val placeNames =
+        mapOf(
+            "https://www.openstreetmap.org/node/2405123" to "Café Henrici",
+            "https://www.openstreetmap.org/way/48210334" to "Lindenhof",
+        )
 
     private val signedOut = AccountState.SignedOut()
     private val signedIn = AccountState.SignedIn(user, cached, Connection.Online)

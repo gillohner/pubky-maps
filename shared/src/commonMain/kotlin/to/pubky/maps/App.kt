@@ -319,7 +319,20 @@ private fun AppNavigation(
                     back()
                 }
                 BackHandler(enabled = waiting != null) { leave() }
-                AccountRoute(account = account, onBack = leave, reason = waiting?.intent?.signInReason)
+                val names =
+                    writes
+                        ?.controller
+                        ?.own
+                        ?.collectAsStateWithLifecycle()
+                        ?.value
+                        ?.names
+                        .orEmpty()
+                AccountRoute(
+                    account = account,
+                    onBack = leave,
+                    reason = waiting?.intent?.signInReason,
+                    placeName = { place -> writes?.controller?.normalize(place)?.let(names::get) },
+                )
             }
         }
         if (writes != null) {

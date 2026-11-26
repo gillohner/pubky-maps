@@ -108,7 +108,8 @@ def main():
     for _, label in TAGS:
         if label not in shown:
             dev.fail(f"the cached tag {label!r} is not on the Account page")
-    if "openstreetmap.org/way/48210334" not in shown:
+    # No name is stored for the saved place here, so it reads as its link in words.
+    if "OpenStreetMap way 48210334" not in shown:
         dev.fail("the cached saved place is not on the Account page")
     dev.screenshot("account")
     dev.check_alive("account page")
