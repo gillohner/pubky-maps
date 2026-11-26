@@ -37,11 +37,17 @@ upload() {
   return 1
 }
 
-# A read of GitHub's API, tried three times; it fails the run when GitHub does not answer.
-api() {
+# A read from GitHub (`gh <args>`), tried three times; it fails the run when GitHub does not answer.
+# Only the answer of the attempt that worked is printed: a failed `gh api` prints GitHub's error
+# body on stdout.
+read_gh() {
+  local out i
   for i in 1 2 3; do
-    gh api "$@" && return 0
-    echo "::warning::gh api $1 failed (attempt $i); trying again" >&2
+    if out=$(gh "$@"); then
+      printf '%s\n' "$out"
+      return 0
+    fi
+    echo "::warning::gh $1 $2 failed (attempt $i); trying again" >&2
     sleep $((i * 10))
   done
   return 1
@@ -84,8 +90,9 @@ case $tag in
       fi
       if [ "$tag" = edge ]; then
         # Separate assignments, so a failed call fails the run instead of comparing an empty answer.
-        at=$(api "repos/$repo/releases/tags/$tag" --jq .target_commitish)
-        status=$(api "repos/$repo/compare/$at...$sha" --jq .status)
+        # (gh release view also finds the release while a failed tag move left it a draft.)
+        at=$(read_gh release view "$tag" -R "$repo" --json targetCommitish -q .targetCommitish)
+        status=$(read_gh api "repos/$repo/compare/$at...$sha" --jq .status)
         if [ "$status" != ahead ] && [ "$status" != identical ]; then
           echo "::warning::the $tag release has a build of ${at::7}, and ${sha::7} does not come after it ($status); nothing published"
           [ -z "${GITHUB_OUTPUT:-}" ] || echo "published=false" >> "$GITHUB_OUTPUT"

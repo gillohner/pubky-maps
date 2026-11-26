@@ -7,6 +7,7 @@ when the edge release already has the build of the chosen commit. CI: android.ym
 Usage: edge-commit-check.py
 """
 import importlib.util
+import json
 import os
 import subprocess
 import sys
@@ -38,10 +39,14 @@ for status in ("behind", "diverged"):
     expect(sha == old and why.startswith("warning::"), f"main's head {status}: {sha[:7]} {why}")
 
 # main() against a fake `gh`: GitHub's answers for main at `new`, one commit after `old`.
-# RELEASE is the edge release's answer ("<target commit> <has the feed>"), unset: there is none.
+# RELEASE is the edge release as GitHub gives it (JSON, read with the script's --jq by jq), unset:
+# there is none.
 FAKE_GH = f"""#!/usr/bin/env python3
-import os, sys
+import os, subprocess, sys
 path = sys.argv[2]
+if path == "repos/o/r/releases/tags/edge" and "RELEASE" in os.environ:
+    jq = sys.argv[sys.argv.index("--jq") + 1]
+    sys.exit(subprocess.run(["jq", "-r", jq], input=os.environ["RELEASE"], text=True).returncode)
 if "FAIL" in os.environ:
     sys.exit("gh: HTTP 503")
 answers = {{
@@ -51,8 +56,6 @@ answers = {{
     "repos/o/r/contents/.github/workflows/release.yml?ref={old}": "{workflow}",
     "repos/o/r/contents/.github/workflows/release.yml?ref={new}": "{workflow}",
 }}
-if "RELEASE" in os.environ:
-    answers["repos/o/r/releases/tags/edge"] = os.environ["RELEASE"]
 if path not in answers:
     sys.exit("gh: no answer for " + path)
 print(answers[path])
@@ -76,10 +79,17 @@ def check_main(what, run_sha, want_sha, want_build, *, notice, warning="", **env
     expect(ok, f"main() {what}: {code} {out!r} {err!r}")
 
 
-check_main("of an older run", old, new, "true", RELEASE=f"{old} true", notice="notice::main moved on to 2f1fe8f")
-check_main("of main's head", new, new, "true", RELEASE=f"{old} true", notice="notice::2f1fe8f is main's head")
-check_main("when edge has the head's build", old, new, "false", RELEASE=f"{new} true", notice="nothing to build")
-check_main("when edge has the head's commit but no feed", new, new, "true", RELEASE=f"{new} false",
+
+
+def release(target, *assets):
+    return json.dumps({"target_commitish": target, "assets": [{"name": a} for a in assets]})
+
+
+FILES = ("pubky-maps-0.1.0-edge.20.apk", "update-edge.json", "SHA256SUMS")
+check_main("of an older run", old, new, "true", RELEASE=release(old, *FILES), notice="notice::main moved on to 2f1fe8f")
+check_main("of main's head", new, new, "true", RELEASE=release(old, *FILES), notice="notice::2f1fe8f is main's head")
+check_main("when edge has the head's build", old, new, "false", RELEASE=release(new, *FILES), notice="nothing to build")
+check_main("when edge has the head's commit but no feed", new, new, "true", RELEASE=release(new, FILES[0]),
            notice="notice::2f1fe8f is main's head")
 check_main("without an edge release", new, new, "true", notice="no live edge build")
 check_main("without GitHub", old, old, "true", FAIL="1", notice="no live edge build", warning="HTTP 503")

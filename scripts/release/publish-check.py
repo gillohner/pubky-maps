@@ -19,25 +19,32 @@ live_sha, sha = "7d9785b" + "a" * 33, "f2351e5" + "b" * 33
 failures = []
 
 # Answers by environment: EXISTS (the release is there), LIVE_VC (the live feed's versionCode),
-# STATUS (GitHub's compare of the live build's commit with this one; FAIL: the call fails).
+# STATUS (GitHub's compare of the live build's commit with this one; FAIL: the call fails, FLAKY: the
+# first call fails with GitHub's error body on stdout, as `gh api` does, then it answers `ahead`).
 FAKE_GH = f"""#!/usr/bin/env python3
 import json, os, sys
 args = sys.argv[1:]
 with open(os.environ["CALLS"], "a") as log:
     log.write(json.dumps(args) + "\\n")
 if args[:2] == ["release", "view"]:
-    if "--json" in args:
+    if "targetCommitish" in args:
+        print("{live_sha}")
+    elif "--json" in args:
         print("pubky-maps-old.apk 1" if "size" in args[-1] else "pubky-maps-old.apk")
     elif "EXISTS" not in os.environ:
         sys.exit("release not found")
 elif args[0] == "api" and "-X" not in args:
     path = args[1]
-    if path == "repos/o/r/releases/tags/" + os.environ["TAG"]:
-        print("{live_sha}")
-    elif path == "repos/o/r/compare/{live_sha}...{sha}":
-        if os.environ["STATUS"] == "FAIL":
-            sys.exit("gh: HTTP 502")
-        print(os.environ["STATUS"])
+    if path == "repos/o/r/compare/{live_sha}...{sha}":
+        status = os.environ["STATUS"]
+        if status == "FLAKY":
+            flaky = os.environ["CALLS"] + ".flaky"
+            status = "ahead" if os.path.exists(flaky) else "FAIL"
+            open(flaky, "w").close()
+        if status == "FAIL":
+            print('{{"message":"Server Error","status":"502"}}')
+            sys.exit("gh: Server Error (HTTP 502)")
+        print(status)
     else:
         sys.exit("gh: no answer for " + path)
 """
@@ -92,8 +99,9 @@ def changes(log):
             or (c[0] == "api" and "-X" in c)]
 
 
-# Edge, a newer commit (and a re-run of the same commit): tag moved, files, feed, then the target commit.
-for status in ("ahead", "identical"):
+# Edge, a newer commit (also when GitHub's compare first fails, and on a re-run of the same commit):
+# tag moved, files, feed, then the target commit.
+for status in ("ahead", "FLAKY", "identical"):
     code, published, log, out = publish("edge", status=status)
     feed_up = index(log, lambda c: c[:2] == ["release", "upload"] and any(a.endswith("/update-edge.json") for a in c))
     named = index(log, lambda c: c[:2] == ["release", "edit"] and "--target" in c and c[c.index("--target") + 1] == sha)
