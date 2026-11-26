@@ -104,6 +104,7 @@ class PlaceCopyTest {
         assertEquals("47.3701, 8.5481", clipText)
         compose.onNodeWithText("Copied").assertExists()
         compose.mainClock.advanceTimeBy(2_500)
+        frames()
         assertEquals(0, compose.onAllNodesWithText("Copied").fetchSemanticsNodes().size)
     }
 
@@ -130,12 +131,18 @@ class PlaceCopyTest {
         assertEquals("Heimplatz 1, 8001 Zürich", clipText)
         compose.onNodeWithText("Address copied").assertExists()
         compose.mainClock.advanceTimeBy(2_500)
+        frames()
         assertEquals(0, compose.onAllNodesWithText("Address copied").fetchSemanticsNodes().size)
     }
 
-    /** Draws two frames, enough for a tap's state to show, without running the two-second timer. */
+    /**
+     * Draws two frames, enough for a tap's state to show, without running the two-second timer; after each,
+     * the main looper runs the layout (with the clock stopped, a frame recomposes but does not lay out).
+     */
     private fun frames() {
-        compose.mainClock.advanceTimeByFrame()
-        compose.mainClock.advanceTimeByFrame()
+        repeat(2) {
+            compose.mainClock.advanceTimeByFrame()
+            compose.waitForIdle()
+        }
     }
 }
