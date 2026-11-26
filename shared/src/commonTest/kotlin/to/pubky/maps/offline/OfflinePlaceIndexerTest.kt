@@ -73,7 +73,7 @@ class OfflinePlaceIndexerTest {
         id: String,
         status: OfflineMapStatus,
         newDataAt: Long = 0,
-    ) = OfflineMap(id, "Map $id", 0, status, 0, newDataAt)
+    ) = OfflineMap(id, "Map $id", 0, status, 0, newDataAt = newDataAt)
 
     private fun TestScope.start() {
         val dispatcher = StandardTestDispatcher(testScheduler)
