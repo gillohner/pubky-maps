@@ -163,4 +163,7 @@ class OfflineMapsScreenshotTest {
 
     @Test
     fun areaPickerTooLargePhoneLight() = capture("area-picker-too-large", Device.Phone, dark = false) { Picker(fits = false) }
+
+    @Test
+    fun areaPickerLargeFontPhoneLight() = capture("area-picker", Device.Phone, dark = false, largeFont = true) { Picker(fits = true) }
 }

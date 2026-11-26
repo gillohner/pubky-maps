@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.widthIn
@@ -109,8 +109,10 @@ private fun AreaPickerControls(
             .padding(MapControlMargin),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        // The bar is as tall as the search bar it replaces, and grows when a large font wraps its text
+        // (a fixed height cut 'the area' off at 200 %); the frame below takes what is left.
         Surface(
-            modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth().height(TopControlSize),
+            modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth().heightIn(min = TopControlSize),
             shape = RoundedCornerShape(TopControlSize / 2),
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             shadowElevation = 3.dp,
@@ -120,7 +122,7 @@ private fun AreaPickerControls(
                 Text(
                     "Move the map to frame the area",
                     style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.semantics { heading() },
+                    modifier = Modifier.weight(1f).padding(end = 16.dp, top = 4.dp, bottom = 4.dp).semantics { heading() },
                 )
             }
         }
