@@ -210,7 +210,7 @@ suspend fun saveRestingViews(
     try {
         val rests =
             cameras
-                .onEach { if (!it.moving || it.byGesture) leftAt = it.position }
+                .onEach { if (!it.moving) leftAt = it.position }
                 .map { if (it.moving) null else it.position }
         restingViews(rests).collect { save(it) }
     } finally {
