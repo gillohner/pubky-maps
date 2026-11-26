@@ -39,7 +39,8 @@ limit, instead of staying with the area until it is deleted. A new pack left by 
 the next check. On a network Android counts as metered the walk stops after 10 seconds when it
 finds a new release (Google Maps and OsmAnd update offline maps on Wi-Fi); an update begun on
 Wi-Fi stops within 10 seconds of the phone moving to a metered network (a moment without a network
-does not stop it), and one the user resumed goes on on any network. Once a walk shows "Updating",
+does not stop a walk already downloading; a walk that finds a new release without a network stops
+there as on mobile data), and one the user resumed goes on on any network. Once a walk shows "Updating",
 the area stays so until the walk of its last style is complete. An update that stops
 before it finishes leaves the area marked "Update paused" (MapLibre would call it complete, as it
 counts the old release's tiles too); Resume goes on with it, and so does the next check on Wi-Fi
