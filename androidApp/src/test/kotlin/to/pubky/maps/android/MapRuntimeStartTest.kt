@@ -2,6 +2,7 @@ package to.pubky.maps.android
 
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Assert.assertEquals
@@ -16,6 +17,7 @@ import java.io.File
  * MapLibre's old database in the cache folder is deleted, but not on the thread that sets MapLibre up
  * (the main thread at app start, where StrictMode reports the listing and the deletes).
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class MapRuntimeStartTest {
