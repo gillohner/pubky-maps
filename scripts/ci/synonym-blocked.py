@@ -141,7 +141,11 @@ def app_pid(dev):
 
 def outbox_wakes_the_closed_app(dev):
     """A write that cannot be sent keeps a job; Android runs it, and so starts the app, with the app closed."""
-    dev.open_link(WAITING_PLACE)
+    # To the app itself: on this image Google Maps also opens geo: links, so a plain VIEW asks which app.
+    started = dev.adb("shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", f"'{WAITING_PLACE}'",
+                      "-p", PKG, check=False)
+    if "Error" in started:
+        dev.fail(f"the geo: link did not reach the app: {started.strip()}")
     dev.tap("Save", timeout=30)
     if dev.wait_for("Saved", 15) is None:
         dev.fail("the place page does not show the place as saved")
