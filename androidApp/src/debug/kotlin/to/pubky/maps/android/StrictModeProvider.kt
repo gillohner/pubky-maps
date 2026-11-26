@@ -60,14 +60,28 @@ private fun isPrivateFolderLookup(frame: StackTraceElement): Boolean =
     frame.className == "android.app.ContextImpl" && frame.methodName in setOf("ensurePrivateDirExists", "getDataDir")
 
 /**
+ * The class named by an instance count violation's message ("class to.pubky.maps.android.MainActivity;
+ * instances=2; limit=1"). StrictMode raises it for a leaked activity: after a garbage collection more
+ * instances of the class are still in memory than the app has running. Its stack is one made-up frame
+ * (`StrictMode.setClassInstanceLimit`), so the leak is blamed on the class that leaked.
+ */
+private val leakedClass = Regex("""^class ([\w.$]+); instances=""")
+
+/**
  * One log line for a violation: "ours" when the app's own code made the call, "app-folder" when
  * that call was only a lookup of the app's private folders, "library" when a library made it
- * (MapLibre, Ktor, ...); then the kind and the blamed frame.
+ * (MapLibre, Ktor, ...); then the kind and the blamed frame. A leaked activity ([message] names its
+ * class) is "ours" when the activity is one of ours, and is reported at its class.
  */
 internal fun strictModeReport(
     kind: String,
     stack: Array<StackTraceElement>,
+    message: String? = null,
 ): String {
+    val leaked = message?.let { leakedClass.find(it) }?.groupValues?.get(1)
+    if (leaked != null) {
+        return "${if (leaked.startsWith("to.pubky.maps.")) "ours" else "library"} $kind at $leaked"
+    }
     val frame = blamedFrame(stack)
     val owner =
         when {
@@ -77,6 +91,11 @@ internal fun strictModeReport(
         }
     return "$owner $kind at ${frame ?: "the platform"}"
 }
+
+/** [strictModeReport] of a violation StrictMode raised. */
+@RequiresApi(Build.VERSION_CODES.P)
+internal fun strictModeReport(violation: Violation): String =
+    strictModeReport(violation.javaClass.simpleName, violation.stackTrace, violation.message)
 
 /**
  * Debug builds only: StrictMode reports disk access, unbuffered I/O, custom slow calls and resource
@@ -126,7 +145,7 @@ class StrictModeProvider : ContentProvider() {
 
     @RequiresApi(Build.VERSION_CODES.P)
     private fun report(violation: Violation) {
-        Log.w(STRICT_MODE_TAG, strictModeReport(violation.javaClass.simpleName, violation.stackTrace), violation)
+        Log.w(STRICT_MODE_TAG, strictModeReport(violation), violation)
     }
 
     // The provider holds no data; it exists only to run onCreate before the app.
