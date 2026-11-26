@@ -4,6 +4,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -113,14 +115,139 @@ class OfflineMapsTest {
             offline.startPicking()
             offline.download(zurich, listOf(light, dark, light))
             assertFalse(offline.picking.value)
-            assertEquals(listOf(light, dark), store.resumed)
+            assertEquals(listOf(light), store.resumed)
             // The throttle is on before MapLibre sends the first request of a pack.
-            assertEquals(listOf(true, true), store.downloadingAtResume)
+            assertEquals(listOf(true), store.downloadingAtResume)
             val map = offline.maps().single()
             assertEquals("area-1", map.id)
             assertEquals("Map around 47.38° N, 8.54° E", map.name)
             assertEquals(1_800_000_000_000, map.createdAt)
             assertEquals(OfflineMapStatus.Paused(0), map.status)
+        }
+
+    @Test
+    fun theSecondStyleStartsOnceTheFirstIsComplete() =
+        runTest(UnconfinedTestDispatcher()) {
+            val store = FakeStore()
+            val offline = offlineMaps(store)
+            offline.download(zurich, listOf(light, dark))
+            store.progress(light, PackProgress(PackState.Downloading, 60, 100))
+            assertEquals(listOf(light), store.resumed)
+            // Each style is half of the area.
+            assertEquals(OfflineMapStatus.Downloading(30), offline.maps().single().status)
+
+            store.progress(light, PackProgress(PackState.Complete, 100, 100))
+            assertEquals(listOf(light, dark), store.resumed)
+            assertEquals(listOf(true, true), store.downloadingAtResume)
+            store.progress(dark, PackProgress(PackState.Downloading, 20, 100))
+            assertEquals(OfflineMapStatus.Downloading(60), offline.maps().single().status)
+        }
+
+    @Test
+    fun aPausedAreaDoesNotStartItsNextStyle() =
+        runTest(UnconfinedTestDispatcher()) {
+            val store = FakeStore()
+            val offline = offlineMaps(store)
+            offline.download(zurich, listOf(light, dark))
+            store.progress(light, PackProgress(PackState.Downloading, 10, 100))
+            offline.pause("area-1")
+            store.progress(light, PackProgress(PackState.Paused, 10, 100))
+            assertFalse(offline.downloading)
+            assertEquals(listOf(light), store.resumed)
+
+            // A download stopped at the limit does not go on with the next style either.
+            offline.resume("area-1")
+            assertEquals(listOf(light, light), store.resumed)
+            store.progress(light, PackProgress(PackState.Downloading, 2_996, 4_000, 1_000_000, 2_996, 1_000_000))
+            store.progress(light, PackProgress(PackState.Paused, 2_996, 4_000, 1_000_000, 2_996, 1_000_000))
+            assertEquals(listOf(light, light), store.resumed)
+            assertEquals(OfflineMapStatus.TooLarge, offline.maps().single().status)
+            assertFalse(offline.downloading)
+        }
+
+    /** An area downloaded in both styles, as MapLibre reports it once complete. */
+    private fun TestScope.readyArea(): Pair<FakeStore, OfflineMaps> {
+        val store = FakeStore()
+        val offline = offlineMaps(store)
+        offline.download(zurich, listOf(light, dark))
+        store.progress(light, PackProgress(PackState.Complete, 100, 100, 3_000_000, 80, 2_500_000))
+        store.progress(dark, PackProgress(PackState.Complete, 100, 100, 2_600_000, 80, 2_500_000))
+        assertFalse(offline.downloading)
+        store.resumed.clear()
+        return store to offline
+    }
+
+    @Test
+    fun aReadyAreaIsWalkedAgainAndStaysReadyWhenNothingChanged() =
+        runTest(UnconfinedTestDispatcher()) {
+            val (store, offline) = readyArea()
+            advanceTimeBy(FIRST_CHECK)
+            runCurrent()
+            assertEquals(listOf(light), store.resumed)
+            assertTrue(offline.downloading)
+            // MapLibre counts the walk from 0; the row stays as it was.
+            store.progress(light, PackProgress(PackState.Downloading, 20, 100, 500_000, 10, 400_000))
+            store.progress(light, PackProgress(PackState.Complete, 100, 100, 3_000_000, 80, 2_500_000))
+            val ready = offline.maps().single()
+            assertEquals(OfflineMapStatus.Ready, ready.status)
+            assertEquals(3_100_000, ready.bytes)
+            // A Complete during the first seconds may be the report from before the walk.
+            assertEquals(listOf(light), store.resumed)
+
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            assertEquals(listOf(light, dark), store.resumed)
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            assertFalse(offline.downloading)
+            assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
+
+            // And again later.
+            advanceTimeBy(CHECK_INTERVAL)
+            runCurrent()
+            assertEquals(listOf(light, dark, light), store.resumed)
+        }
+
+    @Test
+    fun aWalkThatFindsNewMapDataShowsAsAnUpdate() =
+        runTest(UnconfinedTestDispatcher()) {
+            val (store, offline) = readyArea()
+            advanceTimeBy(FIRST_CHECK)
+            runCurrent()
+            // The map server moved its tiles: the walk downloads the area at their new addresses.
+            store.progress(light, PackProgress(PackState.Downloading, 21, 100, 500_000, 20, 400_000))
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            assertEquals(OfflineMapStatus.Downloading(60, update = true), offline.maps().single().status)
+            assertEquals("Updating · 60% · 3.1\u00A0MB", statusText(offline.maps().single()))
+            assertEquals(listOf(light), store.resumed)
+            assertTrue(offline.downloading)
+
+            store.progress(light, PackProgress(PackState.Complete, 100, 100, 3_000_000, 80, 2_500_000))
+            assertEquals(listOf(light, dark), store.resumed)
+            store.progress(dark, PackProgress(PackState.Complete, 100, 100, 2_600_000, 80, 2_500_000))
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
+            assertFalse(offline.downloading)
+        }
+
+    @Test
+    fun aPausedUpdateEndsTheCheck() =
+        runTest(UnconfinedTestDispatcher()) {
+            val (store, offline) = readyArea()
+            advanceTimeBy(FIRST_CHECK)
+            runCurrent()
+            store.progress(light, PackProgress(PackState.Downloading, 21, 100))
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            offline.pause("area-1")
+            store.progress(light, PackProgress(PackState.Paused, 21, 100))
+            assertEquals(OfflineMapStatus.Paused(60), offline.maps().single().status)
+            assertFalse(offline.downloading)
+            advanceTimeBy(QUIET_CHECK * 3)
+            runCurrent()
+            assertEquals(listOf(light), store.resumed)
         }
 
     @Test
@@ -138,6 +265,7 @@ class OfflineMapsTest {
             assertTrue(offline.downloading)
 
             store.progress(light, PackProgress(PackState.Complete, 100, 100, 3_000_000, 80, 2_500_000))
+            // The dark style starts now.
             assertTrue(offline.downloading)
             store.progress(dark, PackProgress(PackState.Complete, 100, 100, 2_600_000, 80, 2_500_000))
             assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
@@ -250,7 +378,7 @@ class OfflineMapsTest {
             offline.download(zurich, listOf(light, dark))
             assertEquals(setOf(light, dark), store.deleted.toSet())
             assertEquals(2, store.deleted.size)
-            assertEquals(listOf(light), store.resumed)
+            assertEquals(emptyList(), store.resumed)
             assertEquals(emptyList(), offline.maps())
             assertFalse(offline.downloading)
         }

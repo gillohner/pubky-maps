@@ -156,7 +156,7 @@ internal fun statusText(map: OfflineMap): String {
         }
 
         is OfflineMapStatus.Downloading -> {
-            "Downloading · ${status.percent}% · $size" +
+            "${if (status.update) "Updating" else "Downloading"} · ${status.percent}% · $size" +
                 (status.retrying?.let { "\nTrying again: $it" } ?: "")
         }
 

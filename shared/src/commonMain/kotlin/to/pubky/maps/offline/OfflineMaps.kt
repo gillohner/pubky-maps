@@ -1,17 +1,24 @@
 package to.pubky.maps.offline
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.random.Random
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 /** One offline map in the list: the packs of one downloaded area (one per map style) together. */
 data class OfflineMap(
@@ -24,13 +31,17 @@ data class OfflineMap(
 )
 
 sealed interface OfflineMapStatus {
-    /** [retrying] names the last failure while the download tries again (no connection, a server error). */
+    /**
+     * [retrying] names the last failure while the download tries again (no connection, a server
+     * error). An [update] fetches the map data the map server published since the area was ready.
+     */
     data class Downloading(
         val percent: Int,
         val retrying: String? = null,
+        val update: Boolean = false,
     ) : OfflineMapStatus
 
-    /** Not downloading, not complete: a download the app was closed during. */
+    /** Not downloading, not complete: paused by the user, or a download the app was closed during. */
     data class Paused(
         val percent: Int,
     ) : OfflineMapStatus
@@ -55,10 +66,12 @@ sealed interface OfflineMapsState {
 
 /**
  * The offline maps of the phone: download the map of an area (in every map style the app shows, so
- * light and dark both work offline), list them, resume and delete them. A download that goes over the
- * limits of [OfflineLimits] is stopped. [downloading] is true from just before a download starts
- * until every pack this process started is complete, stopped or deleted; [OfflineMapResources]
- * throttles requests while it is.
+ * light and dark both work offline), list them, resume and delete them. The styles of an area
+ * download one after the other, so the second finds the tiles they share in the database instead
+ * of fetching them again. A download that goes over the limits of [OfflineLimits] is stopped. Ready
+ * areas are checked for new map data now and then ([checkForUpdates]). [downloading] is true from
+ * just before a download starts until every pack this process started is complete, stopped or
+ * deleted; [OfflineMapResources] throttles requests while it is.
  */
 class OfflineMaps(
     private val store: PackStore,
@@ -77,6 +90,21 @@ class OfflineMaps(
     /** The packs each download of this process created, which the store may not list yet. */
     private val createdFor = mutableMapOf<String, MutableList<Any>>()
 
+    /** The download or check that runs for an area: its packs one after the other. */
+    private val runs = mutableMapOf<String, Job>()
+
+    /**
+     * Packs a check resumed less than [QUIET_CHECK] ago. They were complete before, so until then a
+     * report of Complete may still be the one from before the check.
+     */
+    private val walking = mutableSetOf<Any>()
+
+    /** The areas being checked, with what they took on the phone before the check. */
+    private val checking = MutableStateFlow<Map<String, Long>>(emptyMap())
+
+    /** Checked areas that are fetching new map data: they show as updating. */
+    private val updating = MutableStateFlow<Set<String>>(emptySet())
+
     /** Read on MapLibre's threads for every request: a plain read of the current packs. */
     val downloading: Boolean get() = started.value.isNotEmpty()
 
@@ -91,14 +119,13 @@ class OfflineMaps(
     val problem: StateFlow<String?> = _problem.asStateFlow()
 
     val state: StateFlow<OfflineMapsState> =
-        store.state
-            .map { state ->
-                when (state) {
-                    PackStoreState.Loading -> OfflineMapsState.Loading
-                    is PackStoreState.Failed -> OfflineMapsState.Failed(state.message)
-                    is PackStoreState.Ready -> OfflineMapsState.Ready(areas(state.packs))
-                }
-            }.stateIn(scope, SharingStarted.Eagerly, OfflineMapsState.Loading)
+        combine(store.state, checking, updating) { state, checking, updating ->
+            when (state) {
+                PackStoreState.Loading -> OfflineMapsState.Loading
+                is PackStoreState.Failed -> OfflineMapsState.Failed(state.message)
+                is PackStoreState.Ready -> OfflineMapsState.Ready(areas(state.packs, checking, updating))
+            }
+        }.stateIn(scope, SharingStarted.Eagerly, OfflineMapsState.Loading)
 
     private var packs: List<StoredPack> = emptyList()
 
@@ -108,6 +135,13 @@ class OfflineMaps(
                 if (state !is PackStoreState.Ready) return@collect
                 packs = state.packs
                 state.packs.forEach { watch(it) }
+            }
+        }
+        scope.launch {
+            delay(FIRST_CHECK)
+            while (true) {
+                checkForUpdates()
+                delay(CHECK_INTERVAL)
             }
         }
     }
@@ -153,42 +187,103 @@ class OfflineMaps(
                         store.delete(handle)
                         return@launch
                     }
-                    started.value += handle
-                    store.resume(handle)
                 }
             } catch (e: Exception) {
                 _problem.value = "Couldn't start the download: ${e.message ?: "the offline storage failed"}"
                 // Half an area would not show in both themes: the styles already created go.
                 createdFor.remove(metadata.area)
-                created.forEach { handle ->
-                    runCatching {
-                        store.pause(handle)
-                        store.delete(handle)
-                    }
-                    started.value -= handle
-                }
+                created.forEach { handle -> runCatching { store.delete(handle) } }
+                return@launch
             }
+            runInTurn(metadata.area, created)
         }
     }
 
     /** Continues a paused offline map. */
     fun resume(id: String) {
         _problem.value = null
-        packs.filter { it.areaId == id && it.progress.state != PackState.Complete }.forEach {
-            stopping.value -= it.handle
-            started.value += it.handle
-            runCatching { store.resume(it.handle) }
-                .onFailure { e -> _problem.value = "Couldn't resume the download: ${e.message ?: "the offline storage failed"}" }
-        }
+        val unfinished = packs.filter { it.areaId == id && it.progress.state != PackState.Complete }.map { it.handle }
+        stopping.value -= unfinished.toSet()
+        runInTurn(id, unfinished)
     }
 
     /** Pauses an offline map that is downloading; [resume] continues it. */
     fun pause(id: String) {
         _problem.value = null
+        runs.remove(id)?.cancel()
         packs.filter { it.areaId == id && it.handle in started.value }.forEach { stop(it.handle) }
     }
 
+    /**
+     * Resumes every ready area once more, one style after the other. MapLibre then walks the pack
+     * again from the copies of the style and its sources in its database and fetches only what is
+     * missing there. When the map is online it keeps those copies current, and a map server such as
+     * OpenFreeMap moves its tiles to new addresses with each release of its map data: the walk then
+     * downloads the area at the new addresses (within the limits, as any download), and without it
+     * the area would draw no map offline. Nothing changed: the walk ends without a request.
+     */
+    internal fun checkForUpdates() {
+        areas(packs).filter { it.status == OfflineMapStatus.Ready && it.id !in runs }.forEach { map ->
+            val handles = packs.filter { it.areaId == map.id }.map { it.handle }
+            if (handles.any { it in started.value }) return@forEach
+            checking.value += map.id to map.bytes
+            runInTurn(map.id, handles, check = true)
+        }
+    }
+
+    /**
+     * Resumes [handles] one after the other, each once the one before is complete; a pack that stops
+     * another way (paused, at the limit, deleted) ends the run. A [check] walks complete packs again
+     * ([checkForUpdates]); one that is still downloading after [QUIET_CHECK] shows as updating.
+     */
+    private fun runInTurn(
+        area: String,
+        handles: List<Any>,
+        check: Boolean = false,
+    ) {
+        runs.remove(area)?.cancel()
+        // Started once it is in [runs], so a run that ends at once also leaves it.
+        val job =
+            scope.launch(start = CoroutineStart.LAZY) {
+                try {
+                    for (handle in handles) {
+                        if (check) walking += handle
+                        started.value += handle
+                        try {
+                            store.resume(handle)
+                        } catch (e: Exception) {
+                            _problem.value = "Couldn't resume the download: ${e.message ?: "the offline storage failed"}"
+                            started.value -= handle
+                            return@launch
+                        }
+                        if (check) {
+                            delay(QUIET_CHECK)
+                            walking -= handle
+                            if (stateOf(handle) == PackState.Complete) {
+                                started.value -= handle
+                                continue
+                            }
+                            updating.value += area
+                        }
+                        // [watch] takes the pack out once it is complete or paused.
+                        started.first { handle !in it }
+                        if (stateOf(handle) != PackState.Complete) return@launch
+                    }
+                } finally {
+                    walking -= handles.toSet()
+                    checking.value -= area
+                    updating.value -= area
+                    if (runs[area] === coroutineContext.job) runs.remove(area)
+                }
+            }
+        runs[area] = job
+        job.start()
+    }
+
+    private fun stateOf(handle: Any): PackState? = packs.firstOrNull { it.handle === handle }?.progress?.state
+
     fun delete(id: String) {
+        runs.remove(id)?.cancel()
         val listed = packs.filter { it.areaId == id }.map { it.handle }
         val area = listed + createdFor.remove(id).orEmpty().filter { handle -> listed.none { it === handle } }
         deleted += id
@@ -224,9 +319,13 @@ class OfflineMaps(
         val handle = pack.handle
         if (handle !in started.value) return
         when {
-            progress.state == PackState.Complete || (handle in stopping.value && progress.state != PackState.Downloading) -> {
+            handle in stopping.value && progress.state != PackState.Downloading -> {
                 started.value -= handle
                 stopping.value -= handle
+            }
+
+            progress.state == PackState.Complete && handle !in walking -> {
+                started.value -= handle
             }
 
             handle !in stopping.value && overLimit(progress) -> {
@@ -250,17 +349,42 @@ internal fun overLimit(progress: PackProgress): Boolean =
 /** About the largest vector tile of a dense city at zoom 14. */
 private const val LARGEST_TILE_BYTES = 500_000L
 
+/** The first check for new map data, after the map has loaded its style (and so refreshed its copies). */
+internal val FIRST_CHECK = 1.minutes
+
+/** OpenFreeMap lets a map keep its sources for an hour; checking twice as often finds a change in time. */
+internal val CHECK_INTERVAL = 30.minutes
+
+/** Long enough for MapLibre to walk a complete pack in its database and report it. */
+internal val QUIET_CHECK = 10.seconds
+
 private val StoredPack.areaId: String get() = metadata?.area ?: "pack-${handle.hashCode()}"
 
-/** The packs grouped by area, newest first. */
-internal fun areas(packs: List<StoredPack>): List<OfflineMap> =
+/**
+ * The packs grouped by area, newest first. An area in [checking] shows as it was (Ready, its size
+ * before the check) unless it is in [updating]. The percent is each style's share: the styles
+ * download one after the other, and one not started yet reports nothing to do.
+ */
+internal fun areas(
+    packs: List<StoredPack>,
+    checking: Map<String, Long> = emptyMap(),
+    updating: Set<String> = emptySet(),
+): List<OfflineMap> =
     packs
         .groupBy { it.areaId }
         .map { (id, area) ->
             val first = area.first().metadata
             val progress = area.map { it.progress }
-            val required = progress.sumOf { it.requiredResources }
-            val percent = if (required > 0) (100.0 * progress.sumOf { it.completedResources } / required).toInt().coerceIn(0, 100) else 0
+            val done =
+                progress.sumOf {
+                    when {
+                        it.state == PackState.Complete -> 1.0
+                        it.requiredResources > 0 -> it.completedResources.toDouble() / it.requiredResources
+                        else -> 0.0
+                    }
+                }
+            val percent = (100 * done / progress.size).toInt().coerceIn(0, 100)
+            val before = checking[id]
             OfflineMap(
                 id = id,
                 name = first?.name ?: "Offline map",
@@ -271,20 +395,28 @@ internal fun areas(packs: List<StoredPack>): List<OfflineMap> =
                             OfflineMapStatus.TooLarge
                         }
 
+                        before != null && id !in updating -> {
+                            OfflineMapStatus.Ready
+                        }
+
                         progress.all { it.state == PackState.Complete } -> {
                             OfflineMapStatus.Ready
                         }
 
                         progress.any { it.state == PackState.Downloading } -> {
-                            OfflineMapStatus.Downloading(percent, progress.firstNotNullOfOrNull { it.error })
+                            OfflineMapStatus.Downloading(percent, progress.firstNotNullOfOrNull { it.error }, update = id in updating)
                         }
 
                         else -> {
                             OfflineMapStatus.Paused(percent)
                         }
                     },
-                // The styles of an area share its tiles: they are stored once.
-                bytes = progress.maxOf { it.completedTileBytes } + progress.sumOf { it.completedBytes - it.completedTileBytes },
+                // The styles of an area share its tiles: they are stored once. A check counts again from 0.
+                bytes =
+                    maxOf(
+                        before ?: 0,
+                        progress.maxOf { it.completedTileBytes } + progress.sumOf { it.completedBytes - it.completedTileBytes },
+                    ),
             )
         }.sortedByDescending { it.createdAt }
 

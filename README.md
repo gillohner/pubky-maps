@@ -24,9 +24,13 @@ in the frame downloads in the style on screen and the other theme's first style,
 and dark without a connection. One download may take at most 3,000 tiles (zoom 0 to 14) and 50 MB of
 tiles, with at most 4 requests at a time and the app's User-Agent (OpenFreeMap's terms for offline
 downloads, applied to every map server); the picker refuses a larger area and a download that grows
-past the limit stops. The list shows each area's progress and size; a download the app was closed
-during resumes from there, and an area deletes. MapLibre keeps the offline maps and the map cache in
-one database in the no-backup folder.
+past the limit stops. The two styles download one after the other, so the tiles they share are
+fetched once. The list shows each area's progress and size; a download paused or the app was closed
+during resumes from there, and an area deletes. A minute after the start and every 30 minutes the
+app walks each ready area again: unchanged, this costs no request; when the map server has moved
+its tiles to a new release (OpenFreeMap does with each one), the area downloads again at the new
+addresses, within the same limits, and shows "Updating". MapLibre keeps the offline maps and the map
+cache in one database in the no-backup folder.
 
 Settings:
 
@@ -216,8 +220,9 @@ screenshots search with its pins, and the update probe screenshots each step of 
 
 - Smoke test (`scripts/ci/emulator-smoke.sh`): the map draws, Settings opens, back returns.
 - Offline maps (`scripts/ci/emulator-offline.sh`, two tiny styles served on the runner): an area
-  downloads from Settings → Offline maps until Ready, with at most 4 tile requests at a time and the
-  app's User-Agent, and deletes.
+  downloads from Settings → Offline maps until Ready, with at most 4 tile requests at a time, the
+  app's User-Agent and no tile twice; after the server moves its tiles to a new release the app
+  updates the area by itself; with the server gone the area draws in light and dark; it deletes.
 - Sign-in probe (`scripts/ci/sign-in-probe.py`): Pubky Ring cannot run in CI, so a fixture relay on
   the runner stands in for the sign-in relay. The probe opens Settings → Account, starts a sign-in,
   reads the QR code, checks the link and that the app listens on the relay, then opens Ring's return
