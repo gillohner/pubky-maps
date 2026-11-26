@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.StrictMode
 import android.os.strictmode.Violation
 import android.util.Log
+import androidx.annotation.RequiresApi
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -20,13 +21,28 @@ private val reporter: ExecutorService by lazy {
 internal const val STRICT_MODE_TAG = "PubkyMapsStrictMode"
 
 /**
- * The packages of Android, Java, Kotlin and AndroidX. A violation's stack is read from the top and
- * these frames are skipped: the first frame after them is the code that asked for the slow call.
- * AndroidX and kotlinx are skipped too, so a blocking DataStore read or a `runBlocking` on the main
- * thread is blamed on the app code that made it.
+ * The packages of Android, Java, Kotlin and AndroidX, and the I/O layers the app calls directly. A
+ * violation's stack is read from the top and these frames are skipped: the first frame after them is
+ * the code that asked for the slow call. So a blocking DataStore read, an okio file read, a
+ * `runBlocking` or a call into the Rust core (through JNA) on the main thread is blamed on the app code
+ * that made it.
  */
 private val platformPackages =
-    listOf("android.", "androidx.", "com.android.", "dalvik.", "java.", "javax.", "jdk.", "kotlin.", "kotlinx.", "libcore.", "sun.")
+    listOf(
+        "android.",
+        "androidx.",
+        "com.android.",
+        "com.sun.jna.",
+        "dalvik.",
+        "java.",
+        "javax.",
+        "jdk.",
+        "kotlin.",
+        "kotlinx.",
+        "libcore.",
+        "okio.",
+        "sun.",
+    )
 
 /** The first frame of [stack] that is not in the platform: the code a violation is blamed on. */
 internal fun blamedFrame(stack: Array<StackTraceElement>): StackTraceElement? =
@@ -47,8 +63,9 @@ internal fun strictModeReport(
 
 /**
  * Debug builds only: StrictMode reports disk and network access on the main thread and leaked
- * resources to the log. It never stops the app; the emulator tests read the log and fail on a
- * report about our code (an ANR waiting to happen on a slow phone). Release builds do not have it.
+ * resources to the log (a leak is seen only when the garbage collector runs). It never stops the app;
+ * the emulator tests read the log and fail on a report about our code (an ANR waiting to happen on a
+ * slow phone). Release builds do not have it.
  */
 class StrictModeProvider : ContentProvider() {
     override fun onCreate(): Boolean {
@@ -74,6 +91,7 @@ class StrictModeProvider : ContentProvider() {
             thread.penaltyListener(reporter, ::report)
             vm.penaltyListener(reporter, ::report)
         } else {
+            // Before Android 9 StrictMode logs under its own tag, which the emulator tests do not read.
             thread.penaltyLog()
             vm.penaltyLog()
         }
@@ -82,6 +100,7 @@ class StrictModeProvider : ContentProvider() {
         return true
     }
 
+    @RequiresApi(Build.VERSION_CODES.P)
     private fun report(violation: Violation) {
         Log.w(STRICT_MODE_TAG, strictModeReport(violation.javaClass.simpleName, violation.stackTrace), violation)
     }

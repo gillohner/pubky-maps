@@ -38,6 +38,27 @@ class StrictModeReportTest {
     }
 
     @Test
+    fun oursThroughOkioOrTheCoreIsOurs() {
+        val okio =
+            arrayOf(
+                frame("java.io.FileInputStream"),
+                frame("okio.JvmSystemFileSystem"),
+                frame("to.pubky.maps.search.RecentSearches"),
+            )
+        assertEquals(
+            "ours DiskReadViolation at to.pubky.maps.search.RecentSearches.call(File.kt:1)",
+            strictModeReport("DiskReadViolation", okio),
+        )
+        val core =
+            arrayOf(
+                frame("java.net.Socket"),
+                frame("com.sun.jna.Native"),
+                frame("to.pubky.maps.core.UniffiLib"),
+            )
+        assertEquals("ours NetworkViolation at to.pubky.maps.core.UniffiLib.call(File.kt:1)", strictModeReport("NetworkViolation", core))
+    }
+
+    @Test
     fun aLibraryCalledFromOurCodeIsTheLibrarys() {
         val stack =
             arrayOf(

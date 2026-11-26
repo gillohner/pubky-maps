@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """StrictMode's reports in an emulator test's log (debug builds, androidApp/src/debug/.../StrictModeProvider.kt).
 
 Each report is one line, "ours <kind> at <frame>" or "library <kind> at <frame>", tagged PubkyMapsStrictMode.
