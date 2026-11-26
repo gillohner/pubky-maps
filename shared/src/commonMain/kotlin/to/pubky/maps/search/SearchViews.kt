@@ -1,6 +1,7 @@
 package to.pubky.maps.search
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +17,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -38,7 +41,9 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.LinkAnnotation
@@ -51,6 +56,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import to.pubky.maps.config.AttributionLink
 import to.pubky.maps.links.GeoPoint
@@ -76,6 +82,8 @@ data class SearchActions(
     val onBack: () -> Unit = {},
     /** Opens the user's saved places and lists; null where there are none. */
     val onOpenSaved: (() -> Unit)? = null,
+    /** Removes one recent search (a long press on it); null where the history cannot be changed. */
+    val onRemoveRecent: ((RecentSearch) -> Unit)? = null,
 )
 
 /**
@@ -196,7 +204,14 @@ fun SearchList(
                     )
                 }
             }
-            items(shownRecents, key = { "recent:${it.key}" }) { entry -> RecentRow(entry, userLocation) { actions.onSelectRecent(entry) } }
+            items(shownRecents, key = { "recent:${it.key}" }) { entry ->
+                RecentRow(
+                    entry = entry,
+                    userLocation = userLocation,
+                    onClick = { actions.onSelectRecent(entry) },
+                    onRemove = actions.onRemoveRecent?.let { remove -> { remove(entry) } },
+                )
+            }
         } else {
             items(state.results, key = { "result:${it.place.uri}" }) { result ->
                 ResultRow(result, userLocation, selected = result == state.selected) { actions.onSelect(result) }
@@ -318,25 +333,78 @@ private fun ResultRow(
     )
 }
 
+/** The words of the long-press menu on a recent search, and of its TalkBack action. */
+internal const val REMOVE_RECENT = "Remove from recent searches"
+
+/** What TalkBack says a long press on a recent search does: it opens the menu. */
+internal const val RECENT_OPTIONS = "Show options"
+
+/**
+ * A past search. A long press opens a menu to remove it ([onRemove], when the history can change): the
+ * row keeps the distance as its only trailing item, as quiet as Google Maps' and CoMaps' history rows.
+ * TalkBack lists "Remove from recent searches" among the row's actions, which removes it at once.
+ */
 @Composable
 private fun RecentRow(
     entry: RecentSearch,
     userLocation: GeoPoint?,
     onClick: () -> Unit,
+    onRemove: (() -> Unit)?,
 ) {
     val place = entry.place
-    ListItem(
-        headlineContent = { Text(place?.title ?: entry.query, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        supportingContent =
-            place?.let { p ->
-                listOfNotNull(p.category, p.address).joinToString(" · ").takeIf { it.isNotEmpty() }?.let { detail ->
-                    { Text(detail, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                }
-            },
-        leadingContent = { Icon(AppIcons.History, contentDescription = null) },
-        trailingContent = distanceText(userLocation, place?.point)?.let { d -> { Text(d, style = MaterialTheme.typography.labelMedium) } },
-        modifier = Modifier.clickable(onClick = onClick),
-    )
+    var menuOpen by remember { mutableStateOf(false) }
+    Box {
+        ListItem(
+            headlineContent = { Text(place?.title ?: entry.query, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            supportingContent =
+                place?.let { p ->
+                    listOfNotNull(p.category, p.address).joinToString(" · ").takeIf { it.isNotEmpty() }?.let { detail ->
+                        { Text(detail, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    }
+                },
+            leadingContent = { Icon(AppIcons.History, contentDescription = null) },
+            trailingContent =
+                distanceText(userLocation, place?.point)?.let { d -> { Text(d, style = MaterialTheme.typography.labelMedium) } },
+            // The row the menu is for stays marked while the menu is open.
+            colors =
+                ListItemDefaults.colors(
+                    containerColor = if (menuOpen) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
+                ),
+            modifier =
+                Modifier
+                    .combinedClickable(
+                        onClick = onClick,
+                        onLongClick = onRemove?.let { { menuOpen = true } },
+                        onLongClickLabel = onRemove?.let { RECENT_OPTIONS },
+                    ).semantics {
+                        if (onRemove != null) {
+                            customActions =
+                                listOf(
+                                    CustomAccessibilityAction(REMOVE_RECENT) {
+                                        onRemove()
+                                        true
+                                    },
+                                )
+                        }
+                    },
+        )
+        if (onRemove != null) {
+            DropdownMenu(
+                expanded = menuOpen,
+                onDismissRequest = { menuOpen = false },
+                offset = DpOffset(x = 56.dp, y = 0.dp),
+            ) {
+                DropdownMenuItem(
+                    text = { Text(REMOVE_RECENT) },
+                    leadingIcon = { Icon(AppIcons.Close, contentDescription = null) },
+                    onClick = {
+                        menuOpen = false
+                        onRemove()
+                    },
+                )
+            }
+        }
+    }
 }
 
 /** "Museum · Heimplatz 1, 8001 Zürich" (or the coordinates of a typed point). */

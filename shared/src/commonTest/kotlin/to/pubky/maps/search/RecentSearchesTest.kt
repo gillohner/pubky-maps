@@ -48,6 +48,19 @@ class RecentSearchesTest {
     }
 
     @Test
+    fun removingTakesOnlyThatEntry() {
+        val list = listOf(RecentSearch("Kunsthaus", kunsthaus), RecentSearch("Zoo"), RecentSearch("kunsthaus"))
+        // A text entry goes by its text (case and accents ignored), not the place found for it.
+        assertEquals(listOf(RecentSearch("Kunsthaus", kunsthaus), RecentSearch("Zoo")), list.withRemoved(RecentSearch("KUNSTHAUS")))
+        // A place goes by the place, whatever was typed to find it.
+        assertEquals(listOf(RecentSearch("Zoo"), RecentSearch("kunsthaus")), list.withRemoved(RecentSearch("kunst", kunsthaus)))
+        assertEquals(list, list.withRemoved(RecentSearch("lugano")))
+        val memory = InMemoryRecentSearchStore(list)
+        memory.remove(RecentSearch("zoo"))
+        assertEquals(listOf("Kunsthaus", "kunsthaus"), memory.entries.value.map { it.query })
+    }
+
+    @Test
     fun keepsAtMostThirty() {
         val list = (1..40).fold(emptyList<RecentSearch>()) { acc, i -> acc.withAdded(RecentSearch("query $i")) }
         assertEquals(RecentSearchStore.MAX_ENTRIES, list.size)
@@ -118,6 +131,23 @@ class RecentSearchesTest {
                 // Nothing comes back after a restart.
                 store.add(RecentSearch("lugano"))
                 assertEquals(listOf("lugano"), store.entries.first { it.isNotEmpty() }.map { it.query })
+            }
+        }
+
+    @Test
+    fun aRemovedEntryStaysRemovedAfterARestart() =
+        runTest {
+            fileSystem.createDirectories(path.parent!!)
+            withStore { store ->
+                store.add(RecentSearch("zoo"))
+                store.add(RecentSearch("kunsthaus", kunsthaus))
+                store.add(RecentSearch("lugano"))
+                store.entries.first { it.size == 3 }
+                store.remove(RecentSearch("kunsthaus", kunsthaus))
+                store.entries.first { it.size == 2 }
+            }
+            withStore { store ->
+                assertEquals(listOf("lugano", "zoo"), store.entries.first { it.isNotEmpty() }.map { it.query })
             }
         }
 
