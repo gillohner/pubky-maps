@@ -146,10 +146,13 @@ class OfflineMapsTest {
     private fun TestScope.offlineMaps(
         store: FakeStore,
         unmetered: () -> Boolean = { true },
+        metered: () -> Boolean = { !unmetered() },
     ): OfflineMaps {
         var ids = 0
-        return OfflineMaps(store, backgroundScope, clock, { "area-${++ids}" }, unmetered).also { store.controller = it }
+        return OfflineMaps(store, backgroundScope, clock, { "area-${++ids}" }, unmetered, metered).also { store.controller = it }
     }
+
+    private enum class Network { WiFi, None, Mobile }
 
     /** The packs whose update a check started and has not finished. */
     private fun FakeStore.updating() =
@@ -293,6 +296,158 @@ class OfflineMapsTest {
             assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
             assertFalse(offline.downloading)
             assertTrue(offline.maps().single().newDataAt > 0)
+        }
+
+    @Test
+    fun anUpdateWalkingItsSecondStyleStillShowsAsUpdating() =
+        runTest(UnconfinedTestDispatcher()) {
+            val (store, offline) = readyArea()
+            advanceTimeBy(FIRST_CHECK)
+            runCurrent()
+            store.progress(light, PackProgress(PackState.Downloading, 21, 100, 500_000, 20, 400_000))
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            store.progress(light, PackProgress(PackState.Complete, 100, 100, 3_000_000, 80, 2_500_000))
+            assertEquals(listOf(light, dark), store.resumed)
+            // MapLibre still reports the dark pack Complete from before its walk: the update is not
+            // paused, and Resume would do nothing.
+            assertEquals(OfflineMapStatus.Downloading(99, update = true), offline.maps().single().status)
+            assertEquals("Updating · 99% · 3.1 MB", statusText(offline.maps().single()))
+            store.progress(dark, PackProgress(PackState.Downloading, 30, 100, 300_000, 25, 250_000))
+            assertEquals(OfflineMapStatus.Downloading(65, update = true), offline.maps().single().status)
+            store.progress(dark, PackProgress(PackState.Complete, 100, 100, 2_600_000, 80, 2_500_000))
+            assertEquals(OfflineMapStatus.Downloading(99, update = true), offline.maps().single().status)
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
+        }
+
+    /** [readyArea] on the [network] it gives at each look. */
+    private fun TestScope.readyArea(network: () -> Network): Pair<FakeStore, OfflineMaps> {
+        val store = FakeStore()
+        val offline = offlineMaps(store, unmetered = { network() == Network.WiFi }, metered = { network() == Network.Mobile })
+        offline.download(zurich, listOf(light, dark))
+        store.progress(light, PackProgress(PackState.Complete, 100, 100, 3_000_000, 80, 2_500_000))
+        store.progress(dark, PackProgress(PackState.Complete, 100, 100, 2_600_000, 80, 2_500_000))
+        store.resumed.clear()
+        store.paused.clear()
+        return store to offline
+    }
+
+    @Test
+    fun anUpdateStartedOnWiFiPausesWhenThePhoneMovesToMobileData() =
+        runTest(UnconfinedTestDispatcher()) {
+            var network = Network.WiFi
+            val (store, offline) = readyArea { network }
+            advanceTimeBy(FIRST_CHECK)
+            runCurrent()
+            store.progress(light, PackProgress(PackState.Downloading, 21, 100, 500_000, 20, 400_000))
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            assertEquals(OfflineMapStatus.Downloading(60, update = true), offline.maps().single().status)
+            advanceTimeBy(NETWORK_CHECK * 3)
+            runCurrent()
+            assertEquals(emptyList(), store.paused)
+            // A moment without a network (Wi-Fi reconnecting): the download only waits.
+            network = Network.None
+            advanceTimeBy(NETWORK_CHECK * 3)
+            runCurrent()
+            assertEquals(emptyList(), store.paused)
+
+            // On mobile data: the rest of the new release waits for Wi-Fi, as a check begun on mobile data does.
+            network = Network.Mobile
+            advanceTimeBy(NETWORK_CHECK)
+            runCurrent()
+            assertEquals(listOf(light), store.paused)
+            store.progress(light, PackProgress(PackState.Paused, 40, 100, 900_000, 35, 800_000))
+            assertEquals(OfflineMapStatus.Paused(70, update = true), offline.maps().single().status)
+            assertFalse(offline.downloading)
+            assertEquals(listOf(light, dark), store.updating())
+            // The dark style is not walked on mobile data, nor is the update at the next check.
+            assertEquals(listOf(light), store.resumed)
+            advanceTimeBy(CHECK_INTERVAL)
+            runCurrent()
+            assertEquals(listOf(light), store.resumed)
+
+            // Back on Wi-Fi, the next check goes on with it.
+            network = Network.WiFi
+            advanceTimeBy(CHECK_INTERVAL)
+            runCurrent()
+            assertEquals(listOf(light, light), store.resumed)
+        }
+
+    @Test
+    fun anUpdateWhoseSecondStyleStartsOnMobileDataWaitsForWiFi() =
+        runTest(UnconfinedTestDispatcher()) {
+            var network = Network.WiFi
+            val (store, offline) = readyArea { network }
+            advanceTimeBy(FIRST_CHECK)
+            runCurrent()
+            store.progress(light, PackProgress(PackState.Downloading, 21, 100, 500_000, 20, 400_000))
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            network = Network.Mobile
+            store.progress(light, PackProgress(PackState.Complete, 100, 100, 3_000_000, 80, 2_500_000))
+            assertEquals(listOf(light, dark), store.resumed)
+            // The dark walk still downloads after its quiet seconds: it has more new data, which waits.
+            store.progress(dark, PackProgress(PackState.Downloading, 30, 100, 300_000, 25, 250_000))
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            // The light pack rests once its walk is complete; the dark one is paused there.
+            assertEquals(listOf(light, dark), store.paused)
+            store.progress(dark, PackProgress(PackState.Paused, 30, 100, 300_000, 25, 250_000))
+            assertEquals(OfflineMapStatus.Paused(65, update = true), offline.maps().single().status)
+            assertEquals(listOf(dark), store.updating())
+        }
+
+    @Test
+    fun aCheckBegunOnMobileDataGoesOnWhenThePhoneIsOnWiFiByTheEndOfItsQuietWalk() =
+        runTest(UnconfinedTestDispatcher()) {
+            var network = Network.Mobile
+            val (store, offline) = readyArea { network }
+            advanceTimeBy(FIRST_CHECK)
+            runCurrent()
+            store.progress(light, PackProgress(PackState.Downloading, 21, 100, 500_000, 20, 400_000))
+            network = Network.WiFi
+            advanceTimeBy(QUIET_CHECK + NETWORK_CHECK * 3)
+            runCurrent()
+            assertEquals(emptyList(), store.paused)
+            assertEquals(OfflineMapStatus.Downloading(60, update = true), offline.maps().single().status)
+        }
+
+    @Test
+    fun anUpdateTheUserResumedGoesOnOnMobileData() =
+        runTest(UnconfinedTestDispatcher()) {
+            var network = Network.WiFi
+            val (store, offline) = readyArea { network }
+            advanceTimeBy(FIRST_CHECK)
+            runCurrent()
+            store.progress(light, PackProgress(PackState.Downloading, 21, 100, 500_000, 20, 400_000))
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            network = Network.Mobile
+            advanceTimeBy(NETWORK_CHECK)
+            runCurrent()
+            store.progress(light, PackProgress(PackState.Paused, 40, 100, 900_000, 35, 800_000))
+            store.paused.clear()
+
+            // The user asks for it: it downloads to the end on any network.
+            offline.resume(offline.maps().single().id)
+            store.progress(light, PackProgress(PackState.Downloading, 41, 100, 900_000, 35, 800_000))
+            advanceTimeBy(QUIET_CHECK + NETWORK_CHECK * 3)
+            runCurrent()
+            assertEquals(emptyList(), store.paused)
+            assertEquals(OfflineMapStatus.Downloading(70, update = true), offline.maps().single().status)
+            store.progress(light, PackProgress(PackState.Complete, 100, 100, 3_000_000, 80, 2_500_000))
+            store.progress(dark, PackProgress(PackState.Downloading, 30, 100, 300_000, 25, 250_000))
+            advanceTimeBy(QUIET_CHECK + NETWORK_CHECK * 3)
+            runCurrent()
+            // Only the rest of the light pack, whose walk is complete.
+            assertEquals(listOf(light), store.paused)
+            assertEquals(listOf(light, light, dark), store.resumed)
+            store.progress(dark, PackProgress(PackState.Complete, 100, 100, 2_600_000, 80, 2_500_000))
+            assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
+            assertEquals(emptyList(), store.updating())
         }
 
     /** The packs of the store, made to replace another or not. */
@@ -590,7 +745,7 @@ class OfflineMapsTest {
         runTest(UnconfinedTestDispatcher()) {
             var unmetered = false
             val store = FakeStore()
-            val offline = offlineMaps(store) { unmetered }
+            val offline = offlineMaps(store, unmetered = { unmetered })
             offline.download(zurich, listOf(light))
             store.progress(light, PackProgress(PackState.Complete, 100, 100))
             store.resumed.clear()
@@ -644,7 +799,7 @@ class OfflineMapsTest {
             PackStoreState.Ready(
                 listOf(StoredPack(Pack(light), metadata, complete, light), StoredPack(Pack(dark), metadata, complete, dark)),
             )
-        val offline = offlineMaps(store) { false }
+        val offline = offlineMaps(store, unmetered = { false })
         assertEquals(OfflineMapStatus.Paused(100, update = true), offline.maps().single().status)
         return store to offline
     }

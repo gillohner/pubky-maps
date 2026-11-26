@@ -90,7 +90,9 @@ sealed interface OfflineMapsState {
  * download one after the other, so the second finds the tiles they share in the database instead
  * of fetching them again. A download that goes over the limits of [OfflineLimits] is stopped. Ready
  * areas are checked for new map data now and then ([checkForUpdates]); while [unmetered] says the
- * phone is on a network with a data cap, a check only finds out whether there is any. [downloading]
+ * phone is on a network with a data cap, a check only finds out whether there is any; [metered] says
+ * the phone is on one now (not without a network, where a download only waits), which pauses an
+ * update the app began. [downloading]
  * is true from just before a download starts until every pack this process started is complete, stopped or
  * deleted; [OfflineMapResources] throttles requests while it is.
  */
@@ -100,6 +102,7 @@ class OfflineMaps(
     private val clock: Clock = Clock.System,
     private val newId: () -> String = { Random.nextLong().toULong().toString(radix = 36) },
     private val unmetered: () -> Boolean = { true },
+    private val metered: () -> Boolean = { !unmetered() },
 ) {
     private val started = MutableStateFlow<Set<Any>>(emptySet())
 
@@ -287,7 +290,11 @@ class OfflineMaps(
      * it since the app started. On a metered network a new release is not downloaded, as it may
      * take up to one download's 50 MB per area, unasked (Google Maps and OsmAnd update offline maps
      * on Wi-Fi): a walk that is still downloading after [QUIET_CHECK] is paused there, so the area
-     * says "Update paused" instead of Ready, and the update goes on on Wi-Fi or with Resume. An
+     * says "Update paused" instead of Ready, and the update goes on on Wi-Fi or with Resume. A
+     * check begun on Wi-Fi does the same when the phone leaves it: a walk past its quiet seconds is
+     * paused within [NETWORK_CHECK] of a look that finds the phone on a [metered] network (no network
+     * does not count: the download only waits then), and a later style's walk is paused as on
+     * mobile data, after its quiet seconds. An
      * area marked "Update paused" without known new data ([PackMetadata.newData]: the app was
      * closed during the first seconds of a walk) is walked on mobile data too, which makes it Ready
      * again when nothing changed and stores the new data when there is some. A pack left
@@ -315,7 +322,7 @@ class OfflineMaps(
                 }
             if (handles.any { it in started.value }) return@forEach
             if (map.status == OfflineMapStatus.Ready) checking.value += map.id to map.bytes
-            runInTurn(map.id, handles, check = true, probe = !wifi)
+            runInTurn(map.id, handles, check = true, wifiOnly = true)
         }
     }
 
@@ -330,15 +337,16 @@ class OfflineMaps(
      * check marks every pack it will walk ([PackMetadata.updating]) before the first starts, and
      * unmarks each once its walk is complete, so a check that stops early, also with the app, leaves
      * the area marked as not up to date. A walk still downloading after [QUIET_CHECK] also marks
-     * that the pack has new data ([PackMetadata.newData]). A [probe] pauses such a walk and ends
-     * there. A check that walked every pack and stored new map data ends by replacing the packs of
-     * the area ([replacePacks]).
+     * that the pack has new data ([PackMetadata.newData]). A [wifiOnly] check (one the app began,
+     * not the user's Resume) pauses such a walk and ends there when the phone is on a [metered]
+     * network at that point or before the walk is complete. A check that walked every
+     * pack and stored new map data ends by replacing the packs of the area ([replacePacks]).
      */
     private fun runInTurn(
         area: String,
         handles: List<Any>,
         check: Boolean = false,
-        probe: Boolean = false,
+        wifiOnly: Boolean = false,
     ) {
         endRun(area)
         // Started once it is in [runs], so a run that ends at once also leaves it.
@@ -388,20 +396,28 @@ class OfflineMaps(
                                 rest(handle)
                                 continue
                             }
+                            val onMobileData = wifiOnly && metered()
                             // Paused first, so the mark's write costs no download on mobile data.
-                            if (probe) stop(handle)
+                            if (onMobileData) stop(handle)
                             mark(handle) { it.copy(newData = true) }
-                            if (probe) return@launch
+                            if (onMobileData) return@launch
                             updating.value += area
                         }
                         // [watch] takes the pack out once it is complete or paused. MapLibre may
                         // report an update stopped at the limit complete, as it counts the old tiles.
-                        started.first { handle !in it }
+                        if (!waitFor(handle, wifiOnly)) {
+                            stop(handle)
+                            return@launch
+                        }
                         if (handle in halted || stateOf(handle) != PackState.Complete) return@launch
                         if (check) finish(handle, fetchedBefore)
                         rest(handle)
                     }
-                    if (check && newData) replacePacks(area, finished)
+                    if (check && newData) {
+                        // Every style is up to date: the area is Ready while its packs are replaced.
+                        updating.value -= area
+                        replacePacks(area, finished)
+                    }
                 } finally {
                     walking.removeAll(handles.toSet())
                     checking.value -= area
@@ -411,6 +427,25 @@ class OfflineMaps(
             }
         runs.value += area to job
         job.start()
+    }
+
+    /**
+     * Waits until [handle] no longer downloads; false when [wifiOnly] and the phone was on a
+     * [metered] network at one of the looks every [NETWORK_CHECK] before that. Android tells a
+     * move to mobile data by a callback only; a look this often costs nothing next to a download.
+     */
+    private suspend fun waitFor(
+        handle: Any,
+        wifiOnly: Boolean,
+    ): Boolean {
+        while (true) {
+            if (!wifiOnly) {
+                started.first { handle !in it }
+                return true
+            }
+            withTimeoutOrNull(NETWORK_CHECK) { started.first { handle !in it } }?.let { return true }
+            if (metered()) return false
+        }
     }
 
     private fun endRun(area: String) {
@@ -647,6 +682,12 @@ internal val CHECK_INTERVAL = 30.minutes
 internal val QUIET_CHECK = 10.seconds
 
 /**
+ * How often an update the app began looks whether the phone is still off mobile data: the most of
+ * it fetched on mobile data is what a few seconds of download take.
+ */
+internal val NETWORK_CHECK = 5.seconds
+
+/**
  * How long a pack that replaces another may take to link its tiles in the database; a dense area's
  * 3,000 tiles take seconds.
  */
@@ -682,8 +723,10 @@ internal fun visible(packs: List<StoredPack>): List<StoredPack> =
 
 /**
  * The [visible] packs grouped by area, newest first. An area in [checking] shows as it was (Ready, its size
- * before the check) unless it is in [updating]. Otherwise an area with a pack whose update has not
- * finished is never Ready ([PackMetadata.updating]). The percent is each style's share: the styles
+ * before the check) unless it is in [updating], which shows as an update downloading, below 100 %, until
+ * the walk of its last style is complete: MapLibre reports a pack the check walks next Complete from before its walk for a few
+ * seconds, and "Update paused" with Resume would be wrong then. Otherwise an area with a pack whose
+ * update has not finished is never Ready ([PackMetadata.updating]). The percent is each style's share: the styles
  * download one after the other, and one not started yet reports nothing to do.
  */
 internal fun areas(
@@ -723,11 +766,19 @@ internal fun areas(
                             OfflineMapStatus.Ready
                         }
 
+                        id in updating -> {
+                            OfflineMapStatus.Downloading(
+                                percent.coerceAtMost(99),
+                                progress.firstNotNullOfOrNull { it.error },
+                                update = true,
+                            )
+                        }
+
                         progress.any { it.state == PackState.Downloading } -> {
                             OfflineMapStatus.Downloading(
                                 percent,
                                 progress.firstNotNullOfOrNull { it.error },
-                                update = id in updating || unfinishedUpdate,
+                                update = unfinishedUpdate,
                             )
                         }
 
