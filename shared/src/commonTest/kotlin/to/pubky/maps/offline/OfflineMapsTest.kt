@@ -416,6 +416,35 @@ class OfflineMapsTest {
         }
 
     @Test
+    fun aCheckBegunWithoutANetworkThatFindsANewReleaseSaysUpdatePaused() =
+        runTest(UnconfinedTestDispatcher()) {
+            var network = Network.None
+            val (store, offline) = readyArea { network }
+            advanceTimeBy(FIRST_CHECK)
+            runCurrent()
+            // The stored style already points at a new release, so the walk waits for tiles.
+            store.progress(light, PackProgress(PackState.Downloading, 21, 100, 500_000, 20, 400_000))
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            assertEquals(listOf(light), store.paused)
+            store.progress(light, PackProgress(PackState.Paused, 21, 100, 500_000, 20, 400_000))
+            assertEquals(OfflineMapStatus.Paused(60, update = true), offline.maps().single().status)
+            // Nothing runs, so the offline place reads are not held back.
+            assertFalse(offline.downloading)
+            assertFalse(offline.fetchingChanges.first())
+            assertEquals(listOf(light, dark), store.updating())
+            advanceTimeBy(CHECK_INTERVAL)
+            runCurrent()
+            assertEquals(listOf(light), store.resumed)
+
+            // On Wi-Fi, the next check goes on with it.
+            network = Network.WiFi
+            advanceTimeBy(CHECK_INTERVAL)
+            runCurrent()
+            assertEquals(listOf(light, light), store.resumed)
+        }
+
+    @Test
     fun anUpdateTheUserResumedGoesOnOnMobileData() =
         runTest(UnconfinedTestDispatcher()) {
             var network = Network.WiFi

@@ -89,12 +89,12 @@ sealed interface OfflineMapsState {
  * light and dark both work offline), list them, resume and delete them. The styles of an area
  * download one after the other, so the second finds the tiles they share in the database instead
  * of fetching them again. A download that goes over the limits of [OfflineLimits] is stopped. Ready
- * areas are checked for new map data now and then ([checkForUpdates]); while [unmetered] says the
- * phone is on a network with a data cap, a check only finds out whether there is any; [metered] says
- * the phone is on one now (not without a network, where a download only waits), which pauses an
- * update the app began. [downloading]
- * is true from just before a download starts until every pack this process started is complete, stopped or
- * deleted; [OfflineMapResources] throttles requests while it is.
+ * areas are checked for new map data now and then ([checkForUpdates]); while [unmetered] is false
+ * (a network with a data cap, or none), a check only finds out whether there is any; [metered] says
+ * the phone is on a network with a data cap now (not without a network, where a download only
+ * waits), which pauses an update the app began once it runs. [downloading] is true from just
+ * before a download starts until every pack this process started is complete, stopped or deleted;
+ * [OfflineMapResources] throttles requests while it is.
  */
 class OfflineMaps(
     private val store: PackStore,
@@ -121,7 +121,7 @@ class OfflineMaps(
     /** Areas the user paused since the app started: a check does not resume their update. */
     private val held = mutableSetOf<String>()
 
-    /** Packs the app paused (the user, a limit, a check on mobile data) since they were last resumed. */
+    /** Packs the app paused (the user, a limit, a check off Wi-Fi) since they were last resumed. */
     private val halted = mutableSetOf<Any>()
 
     /** The download or check that runs for an area: its packs one after the other. */
@@ -287,14 +287,14 @@ class OfflineMaps(
      * downloads the area at the new addresses (within the limits, as any download), and without it
      * the area would draw no map offline. Nothing changed: the walk ends without a request. An
      * update that stopped before it finished (the app was closed) goes on, unless the user paused
-     * it since the app started. On a metered network a new release is not downloaded, as it may
+     * it since the app started. On a metered network, or without one, a new release is not downloaded, as it may
      * take up to one download's 50 MB per area, unasked (Google Maps and OsmAnd update offline maps
      * on Wi-Fi): a walk that is still downloading after [QUIET_CHECK] is paused there, so the area
      * says "Update paused" instead of Ready, and the update goes on on Wi-Fi or with Resume. A
      * check begun on Wi-Fi does the same when the phone leaves it: a walk past its quiet seconds is
      * paused within [NETWORK_CHECK] of a look that finds the phone on a [metered] network (no network
      * does not count: the download only waits then), and a later style's walk is paused as on
-     * mobile data, after its quiet seconds. An
+     * mobile data, or without a network, after its quiet seconds. An
      * area marked "Update paused" without known new data ([PackMetadata.newData]: the app was
      * closed during the first seconds of a walk) is walked on mobile data too, which makes it Ready
      * again when nothing changed and stores the new data when there is some. A pack left
@@ -338,8 +338,10 @@ class OfflineMaps(
      * unmarks each once its walk is complete, so a check that stops early, also with the app, leaves
      * the area marked as not up to date. A walk still downloading after [QUIET_CHECK] also marks
      * that the pack has new data ([PackMetadata.newData]). A [wifiOnly] check (one the app began,
-     * not the user's Resume) pauses such a walk and ends there when the phone is on a [metered]
-     * network at that point or before the walk is complete. A check that walked every
+     * not the user's Resume) pauses such a walk and ends there when the phone is not on an
+     * [unmetered] network at that point (on mobile data or without a network, so a check begun
+     * offline says "Update paused" instead of waiting for hours), or on a [metered] one before
+     * the walk is complete (a moment without a network then only waits). A check that walked every
      * pack and stored new map data ends by replacing the packs of the area ([replacePacks]).
      */
     private fun runInTurn(
@@ -396,11 +398,11 @@ class OfflineMaps(
                                 rest(handle)
                                 continue
                             }
-                            val onMobileData = wifiOnly && metered()
-                            // Paused first, so the mark's write costs no download on mobile data.
-                            if (onMobileData) stop(handle)
+                            val offWiFi = wifiOnly && !unmetered()
+                            // Paused first, so the mark's write costs no download off Wi-Fi.
+                            if (offWiFi) stop(handle)
                             mark(handle) { it.copy(newData = true) }
-                            if (onMobileData) return@launch
+                            if (offWiFi) return@launch
                             updating.value += area
                         }
                         // [watch] takes the pack out once it is complete or paused. MapLibre may
