@@ -35,10 +35,11 @@ private const val MAX_MERCATOR_LAT = 85.05112878
 /**
  * The map that a picked or linked place's page leaves in view once the page has opened ([rooms],
  * see [settled]); null when none comes within [OPEN_ROOM_WAIT_MS] (no page shows for it). The room
- * of a page that is still loading: at half a loading page is shorter than the page it becomes (its
- * stop is no taller than its content), so the place lands lower in the room the loaded page leaves,
- * in view (on a 412x915 dp phone ~80 dp above the controls) but not in its middle. Waiting for the
- * page would hold the move for as long as the network takes.
+ * of a page that is still loading: on a phone a loading page takes the heights of a long page
+ * ([to.pubky.maps.place.PlaceSheet]), so the room stays when a page of half a screen or more arrives.
+ * A shorter page shrinks once its card is in or has failed, and the place then sits above the middle
+ * of the larger room, in view. Waiting for the page would hold the move for as long as the network
+ * takes.
  */
 internal suspend fun openedRoom(rooms: Flow<DpRect?>): DpRect? =
     withTimeoutOrNull(OPEN_ROOM_WAIT_MS) { settled(rooms, OPEN_ROOM_SETTLE_MS).first() }

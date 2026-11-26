@@ -26,6 +26,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import to.pubky.maps.links.GeoPoint
+import to.pubky.maps.place.PlaceCardInfo
 import to.pubky.maps.place.PlacePageActions
 import to.pubky.maps.place.PlacePageContext
 import to.pubky.maps.place.PlacePageState
@@ -80,6 +81,27 @@ class PlaceSheetLoadingTest {
                     )
                 },
             loading = emptySet(),
+        )
+
+    /** A card with nothing to show under the header. */
+    private val card =
+        PlaceCardInfo(
+            id = "1",
+            uri = place.uri,
+            name = "Conditorei Schober",
+            type = null,
+            category = null,
+            address = null,
+            lat = 47.37,
+            lon = 8.54,
+            description = null,
+            image = null,
+            credits = emptyList(),
+            attribution = null,
+            alsoOn = emptyList(),
+            refs = listOf(place.uri),
+            collections = 0,
+            facts = emptyMap(),
         )
 
     /** Loaded with nothing to show under the header. */
@@ -147,6 +169,13 @@ class PlaceSheetLoadingTest {
     @Test
     fun aPageWhoseCardFailedIsAsTallAsItsContent() {
         showAtHalf(loading.copy(loading = loading.loading - PlacePart.Card, failed = setOf(PlacePart.Card)))
+        assertTrue("the sheet is ${sheetHeight()} tall", sheetHeight() < MaxHeight / 2 - 50.dp)
+    }
+
+    @Test
+    fun aShortPageWithItsCardAlreadyInIsAsTallAsItsContentWhileTheRestLoads() {
+        // A cached page: its card is shown while the network is asked again.
+        showAtHalf(short.copy(card = card, loading = setOf(PlacePart.Card, PlacePart.Social)))
         assertTrue("the sheet is ${sheetHeight()} tall", sheetHeight() < MaxHeight / 2 - 50.dp)
     }
 

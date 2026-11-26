@@ -83,7 +83,7 @@ fun PlaceSheet(
     // the card loads, the page's length is not known yet (a few grey lines stand for the photo, the
     // description and the details), so the sheet takes its usual heights: half stays half of the room
     // instead of growing by the card when it arrives, and the map left in view, where a picked place is
-    // centred, does not change under it. A short page shrinks once, when its card is in.
+    // centred, does not change under it. A short page shrinks once its card is in or has failed.
     val cardLoading = page.card == null && PlacePart.Card in page.loading
     var contentPx by remember { mutableIntStateOf(0) }
     val fullPx =
