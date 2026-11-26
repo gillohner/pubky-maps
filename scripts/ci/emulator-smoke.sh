@@ -102,11 +102,11 @@ check_alive() {
 
 # How long a start may take until the map has drawn its first whole view (Android's "Fully drawn",
 # see check_start_time). The budgets are for this CI emulator (software GPU, shared runner), which is
-# several times slower than a phone; the plan's target is under 1 s on a mid-range phone. The first
-# start fetches the style and tiles over the network (10.1 and 18.1 s in the first two runs, 11-26),
-# the restart has them in MapLibre's cache (6.0 and 8.1 s). Runners differ up to about 2x, so each
-# budget is over twice the slowest run: it fails a start that waits for a network timeout or got
-# several times slower, not a slow runner.
+# several times slower than a phone; the plan's target is under 1 s on a mid-range phone. On it the
+# first start, which fetches the style and tiles over the network, took 10-18 s, and the restart,
+# which has them in MapLibre's cache, 5-8 s. Runners differ up to about 2x, so each budget is over
+# twice the slowest run: it fails a start that stalls for more than about 27 s (first) or 12 s
+# (restart), or got several times slower, not a slow runner or a single short network wait.
 first_start_budget_ms=45000
 restart_budget_ms=20000
 

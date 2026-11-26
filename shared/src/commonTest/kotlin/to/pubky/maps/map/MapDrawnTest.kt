@@ -64,7 +64,7 @@ class MapDrawnTest {
         }
 
     @Test
-    fun aMapClosedBeforeItDrewIsNotReportedAsDrawn() =
+    fun streamsThatEndWithoutAnIdleMapWithItsStyleReadyAreNotDrawn() =
         runTest {
             assertFalse(awaitMapDrawn(flowOf(MapEvent.StyleLoaded, MapEvent.CameraMoved), flowOf(true)))
             assertFalse(awaitMapDrawn(flowOf(MapEvent.StyleLoaded, MapEvent.Idle), flowOf(false)))
