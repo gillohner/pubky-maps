@@ -6,6 +6,3 @@ package to.pubky.maps.account
  */
 fun shortPubkyId(publicKey: String): String =
     if (publicKey.length <= 12) "pubky$publicKey" else "pubky${publicKey.take(4)}…${publicKey.takeLast(4)}"
-
-/** A place's URI for a list: without the scheme and `www.`, so the part that differs shows first. */
-fun placeLabel(place: String): String = place.removePrefix("https://").removePrefix("http://").removePrefix("www.")

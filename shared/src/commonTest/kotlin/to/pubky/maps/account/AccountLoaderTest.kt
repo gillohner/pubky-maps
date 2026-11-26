@@ -65,7 +65,5 @@ class AccountLoaderTest {
     @Test
     fun theShortIdShowsTheStartAndTheEndOfTheKey() {
         assertEquals("pubky8pin…5ewo", shortPubkyId(USER))
-        assertEquals("openstreetmap.org/node/1", placeLabel("https://www.openstreetmap.org/node/1"))
-        assertEquals("geo:47.1,8.5", placeLabel("geo:47.1,8.5"))
     }
 }

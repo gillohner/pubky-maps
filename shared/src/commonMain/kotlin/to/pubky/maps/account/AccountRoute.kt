@@ -57,6 +57,8 @@ fun AccountRoute(
     onBack: () -> Unit,
     /** Why the app asks to sign in now, when a write waits for it. */
     reason: String? = null,
+    /** How a place (as the cache spells it) reads in a list: its name, else its link in words. */
+    placeLabel: (String) -> String,
 ) {
     val state by account.controller.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -79,5 +81,6 @@ fun AccountRoute(
         onSignOut = account.controller::signOut,
         onBack = onBack,
         reason = reason,
+        placeLabel = placeLabel,
     )
 }

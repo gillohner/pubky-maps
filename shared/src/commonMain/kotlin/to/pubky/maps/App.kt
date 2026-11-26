@@ -23,6 +23,7 @@ import kotlinx.serialization.Serializable
 import to.pubky.maps.account.AccountRoute
 import to.pubky.maps.account.AccountState
 import to.pubky.maps.account.AccountUi
+import to.pubky.maps.account.accountPlaceLabel
 import to.pubky.maps.config.AppSettings
 import to.pubky.maps.config.Service
 import to.pubky.maps.config.SettingsRepository
@@ -319,7 +320,19 @@ private fun AppNavigation(
                     back()
                 }
                 BackHandler(enabled = waiting != null) { leave() }
-                AccountRoute(account = account, onBack = leave, reason = waiting?.intent?.signInReason)
+                val controller = writes?.controller
+                val names =
+                    controller
+                        ?.own
+                        ?.collectAsStateWithLifecycle()
+                        ?.value
+                        ?.names
+                        .orEmpty()
+                val placeLabel: (String) -> String =
+                    remember(controller, names) {
+                        { place -> accountPlaceLabel(place, names, normalize = { controller?.normalize(it) ?: it }) }
+                    }
+                AccountRoute(account = account, onBack = leave, reason = waiting?.intent?.signInReason, placeLabel = placeLabel)
             }
         }
         if (writes != null) {
