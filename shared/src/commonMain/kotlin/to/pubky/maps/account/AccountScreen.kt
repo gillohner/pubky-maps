@@ -449,10 +449,10 @@ fun AccountSettingsRow(
                 Icon(AppIcons.AccountCircle, contentDescription = null)
             }
         },
-        headlineContent = { Text(headline, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        supportingContent = {
-            Text(supporting, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        },
+        // Both lines wrap like the other Settings rows, so the reason to sign in shows whole at large
+        // font sizes; the headline is capped at two lines because a profile name can be of any length.
+        headlineContent = { Text(headline, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        supportingContent = { Text(supporting) },
         modifier = modifier.clickable(onClick = onOpen),
     )
 }
