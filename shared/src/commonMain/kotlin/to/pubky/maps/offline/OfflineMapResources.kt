@@ -32,10 +32,10 @@ import kotlin.time.Instant
  * requests are a download's before it loads them, so while a download runs this provider loads
  * every http(s) resource, the map's own without a limit. Otherwise MapLibre loads them itself.
  *
- * The client is made by [createClient] on the first request this provider loads, on MapLibre's
- * request thread: the provider is set up on the main thread at app start, most starts never
- * download, and making a Ktor client there was the largest step of the app's own start (about
- * 0.3 s on CI's emulator).
+ * The client is made by [createClient] on the first request this provider loads, which MapLibre
+ * runs on a background thread: the provider is set up on the main thread at app start, most starts
+ * never download, and making a Ktor client takes about 0.3 s on CI's emulator, four times the rest
+ * of the app's Application.onCreate.
  */
 class OfflineMapResources(
     createClient: () -> HttpClient,
