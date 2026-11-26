@@ -47,7 +47,8 @@ class CategoryLabelsTest {
     fun eachValueNamesOneKindOfPlace() {
         // A tile that drops the key is looked up by the value alone.
         val values = TAG_LABELS.keys.map { it.substringAfter('/') }
-        assertEquals(values.size, values.toSet().size, values.groupBy { it }.filterValues { it.size > 1 }.keys.toString())
+        val repeated = values.filter { value -> values.count { it == value } > 1 }
+        assertEquals(emptyList(), repeated)
         assertEquals("ATM", TAG_LABELS_BY_VALUE["atm"])
     }
 
