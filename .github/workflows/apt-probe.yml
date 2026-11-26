@@ -1,0 +1,22 @@
+name: apt-probe
+on: push
+permissions: {}
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: a source that answers 403, then the step as android.yml runs it
+        run: |
+          mkdir -p /tmp/srv && cd /tmp/srv
+          python3 -c "
+          import http.server
+          class H(http.server.BaseHTTPRequestHandler):
+              def do_GET(self): self.send_response(403); self.end_headers()
+          http.server.HTTPServer(('127.0.0.1', 8765), H).serve_forever()" &
+          sleep 1
+          echo 'deb http://127.0.0.1:8765/ubuntu noble main' | sudo tee /etc/apt/sources.list.d/broken.list
+          set +e; sudo apt-get update -q > u.txt 2>&1; echo "plain update exit=$?"; grep -E '^(E|W):' u.txt; set -e
+          sudo apt-get update -q || echo '::warning::apt-get update failed for a source; installing from the lists it fetched'
+          sudo apt-get install -y -q zbar-tools dnsmasq-base
+          command -v zbarimg dnsmasq
+          if sudo apt-get install -y -q no-such-package-xyz; then echo "::error::a missing package installed"; exit 1; else echo "missing package fails: ok"; fi
