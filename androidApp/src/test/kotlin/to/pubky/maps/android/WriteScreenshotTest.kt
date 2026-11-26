@@ -312,6 +312,13 @@ class WriteScreenshotTest {
     @Test
     fun tagPageTabletDark() = capture("write-tag", Device.Tablet, dark = true) { TagPageShot() }
 
+    /** At the largest font size (200 %) "Try now" goes under the waiting note, which keeps the whole width. */
+    @Test
+    fun tagPageLargeFontPhoneLight() = capture("write-tag", Device.Phone, dark = false, largeFont = true) { TagPageShot() }
+
+    @Test
+    fun tagPageLargeFontPhoneDark() = capture("write-tag", Device.Phone, dark = true, largeFont = true) { TagPageShot() }
+
     @Composable
     private fun PostPageShot() {
         PostPage(
