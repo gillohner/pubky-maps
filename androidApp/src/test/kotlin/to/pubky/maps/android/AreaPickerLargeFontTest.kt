@@ -14,7 +14,6 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.DpRect
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -32,8 +31,8 @@ import to.pubky.maps.ui.PubkyMapsTheme
 
 /**
  * The area picker's top bar shows its whole instruction: at Android's largest font size (200 %) on a
- * phone the text wraps and the bar grows with it (a fixed-height bar cut 'the area' off), and the
- * frame starts below the bar. Native graphics, so text is measured with real fonts.
+ * phone the text wraps and the bar grows with it, so no line is cut, and the frame starts below the
+ * text. Native graphics, so text is measured with real fonts.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -82,9 +81,7 @@ class AreaPickerLargeFontTest {
 
     private fun assertFrameBelowTheText() {
         val text = compose.onNodeWithText(instruction, useUnmergedTree = true).getUnclippedBoundsInRoot()
-        val frame = frame
-        assertNotNull("the frame was measured", frame)
-        frame!!
+        val frame = checkNotNull(frame) { "the frame was measured" }
         assertTrue("frame top ${frame.top} is below the text's bottom ${text.bottom}", frame.top >= text.bottom)
     }
 
@@ -93,6 +90,8 @@ class AreaPickerLargeFontTest {
         show(fontScale = 2f)
         val text = layout()
         assertTrue("wraps at 200 %", text.lineCount > 1)
+        // A line cut by the bar's height shows as a height overflow; hasVisualOverflow also counts a width
+        // the layout reports wider than the text here, at the normal font too.
         assertFalse("no line is cut off", text.didOverflowHeight)
         assertFrameBelowTheText()
     }

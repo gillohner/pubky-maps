@@ -109,8 +109,8 @@ private fun AreaPickerControls(
             .padding(MapControlMargin),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // The bar is as tall as the search bar it replaces, and grows when a large font wraps its text
-        // (a fixed height cut 'the area' off at 200 %); the frame below takes what is left.
+        // As tall as the search bar it replaces, and taller when a large font wraps the instruction, so
+        // no line is cut; the frame below takes what is left.
         Surface(
             modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth().heightIn(min = TopControlSize),
             shape = RoundedCornerShape(TopControlSize / 2),
