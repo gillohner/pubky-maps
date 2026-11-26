@@ -37,6 +37,13 @@ fun PlacePageState.detailText(provider: LinkProvider?): String? =
         .joinToString(" · ")
         .ifEmpty { null }
 
+/**
+ * The place's coordinates as the Details section shows and copies them ("47.37786, 8.54032"); null when
+ * the page has no point that is the place (a map view, a search near a point).
+ */
+val PlacePageState.coordinatesText: String?
+    get() = place.point?.takeIf { place.pinned }?.let { "${formatCoordinate(it.lat)}, ${formatCoordinate(it.lon)}" }
+
 /** "Open · Closes 18:00", "Closed · Opens Thu 10:00", or null when the hours are not known. */
 fun openingLine(
     status: OpeningStatus,
