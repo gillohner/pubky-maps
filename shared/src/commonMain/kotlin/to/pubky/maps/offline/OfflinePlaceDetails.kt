@@ -45,6 +45,7 @@ import kotlin.math.roundToLong
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -80,10 +81,12 @@ interface OfflineDetailsStore : KeptPlaceDetails {
  * areas ([maps]) in [store], so a place page shows them without a connection when it has no Pinakes
  * card. An area's details are fetched from [source] once it is listed (the map tiles do not need to
  * be there), then again after [refresh] on a network Android does not count as metered
- * ([unmetered]), and deleted with the area. One request goes out at a time, at least [requestGap]
- * after the one before, as public Overpass servers ask. An area that fails is tried again after
- * [retry], after the others; a sync stops at the second failure (no connection fails every area
- * alike).
+ * ([unmetered]), and deleted with the area; an area deleted while it is asked about is neither asked
+ * about further nor kept. One request goes out at a time, at least [requestGap] after the one before
+ * ended (also across syncs), as public Overpass servers ask. An area that fails is tried again after
+ * [retry], then after twice as long at each failure up to [MAX_BACKOFF], so an area no server can
+ * answer does not load the shared servers every half hour; it goes after the others, and a sync
+ * stops at the second failure (no connection fails every area alike).
  */
 class OfflinePlaceDetails(
     private val maps: StateFlow<OfflineMapsState>,
@@ -100,12 +103,22 @@ class OfflinePlaceDetails(
     /** Counts the ticks of [retry], so the same list of areas is looked at again. */
     private val ticks = MutableStateFlow(0)
 
-    /** Areas whose last fetch in this process failed, with the count of failures when they did: they go after the others. */
-    private val failing = mutableMapOf<String, Int>()
+    /**
+     * Areas whose last fetch in this process failed: how many times in a row, the count of failures
+     * when it last did (they go after the others, the one that failed longest ago first), and when
+     * (epoch ms).
+     */
+    private class Failure(
+        val times: Int,
+        val order: Int,
+        val at: Long,
+    )
+
+    private val failing = mutableMapOf<String, Failure>()
     private var failureCount = 0
 
-    /** Requests of the running sync; each after the first waits [requestGap]. */
-    private var requests = 0
+    /** When the last request ended (epoch ms); the next waits [requestGap] after it. */
+    private var lastRequestAt: Long? = null
 
     fun start() {
         scope.launch {
@@ -131,28 +144,43 @@ class OfflinePlaceDetails(
         val listed = areas.map { it.first }.toSet()
         (kept.keys - listed).forEach { area -> onDisk { store.delete(area) } }
         failing.keys.retainAll(listed)
-        requests = 0
         var failures = 0
-        for ((area, bounds) in areas.sortedBy { failing[it.first] ?: -1 }) {
+        for ((area, bounds) in areas.sortedBy { failing[it.first]?.order ?: -1 }) {
             val fetchedAt = kept[area]
             val now = clock.now().toEpochMilliseconds()
             val due = fetchedAt == null || ((now - fetchedAt) >= refresh.inWholeMilliseconds && unmetered())
-            if (!due) continue
-            if (requests++ > 0) delay(requestGap)
-            when (val answer = source.detailsIn(bounds)) {
+            if (!due || backingOff(area, now)) continue
+            lastRequestAt?.let { last -> delay((last + requestGap.inWholeMilliseconds - clock.now().toEpochMilliseconds()).milliseconds) }
+            if (!stillListed(area)) continue
+            val answer = source.detailsIn(bounds)
+            lastRequestAt = clock.now().toEpochMilliseconds()
+            when (answer) {
                 is SourceAnswer.Answered -> {
-                    // An area deleted during the fetch is in the next list, which deletes it again.
-                    onDisk { store.replace(area, now, answer.value) }
+                    if (stillListed(area)) onDisk { store.replace(area, now, answer.value) }
                     failing -= area
                 }
 
                 SourceAnswer.Unreachable -> {
-                    failing[area] = failureCount++
+                    failing[area] = Failure(times = (failing[area]?.times ?: 0) + 1, order = failureCount++, at = lastRequestAt ?: now)
                     if (++failures >= 2) return
                 }
             }
         }
     }
+
+    /** [area] failed less than its backoff ago: [retry] after one failure, twice as long after each next one, at most [MAX_BACKOFF]. */
+    private fun backingOff(
+        area: String,
+        now: Long,
+    ): Boolean {
+        val failure = failing[area] ?: return false
+        val backoff = (retry * (1 shl (failure.times - 1).coerceIn(0, 20)).toDouble()).coerceAtMost(MAX_BACKOFF)
+        // A tick may come a moment early: a minute's slack keeps the first retry at the first tick.
+        return now - failure.at < (backoff - 1.minutes).inWholeMilliseconds
+    }
+
+    /** [area] is in the offline maps' list now (the user did not delete it since the sync began). */
+    private fun stillListed(area: String): Boolean = (maps.value as? OfflineMapsState.Ready)?.maps?.any { it.id == area } == true
 
     /** Runs [block] on [io]; null when the disk failed (the next tick tries again). */
     private suspend fun <T> onDisk(block: () -> T): T? =
@@ -172,6 +200,9 @@ class OfflinePlaceDetails(
 
         val RETRY = 30.minutes
 
+        /** The longest wait before an area that keeps failing is asked about again. */
+        val MAX_BACKOFF = 1.days
+
         /** Public Overpass servers are shared by everyone; areas are asked about one at a time, slowly. */
         val REQUEST_GAP = 10.seconds
     }
@@ -184,7 +215,9 @@ class OfflinePlaceDetails(
  * largest area one download may take, where JSON of all their tags is several times more). An answer
  * that does not end with the query's end line was cut off (a timeout or memory limit on the server)
  * and moves on to the next server, as does an error status; a 429 skips the server for a while
- * ([ServerFallback]).
+ * ([ServerFallback]). An empty answer moves on too, as a server may hold one region only
+ * (dresel.systems' default endpoint has Europe): an area with no details is taken as such only when
+ * every server of the list answered it empty.
  */
 class OverpassPlaceDetails(
     private val client: HttpClient,
@@ -193,24 +226,39 @@ class OverpassPlaceDetails(
 ) : PlaceDetailsSource {
     private val fallback = ServerFallback(clock)
 
-    override suspend fun detailsIn(bounds: AreaBounds): SourceAnswer<List<ElementDetails>> =
-        fallback.first(servers()) { server ->
-            val response = client.submitForm(server, parameters { append("data", overpassDetailsQuery(bounds)) })
-            if (!response.status.isSuccess()) {
-                val retryAfter =
-                    response.headers[HttpHeaders.RetryAfter]
-                        ?.trim()
-                        ?.toLongOrNull()
-                        ?.seconds
-                throw SearchHttpException(response.status.value, retryAfter)
+    override suspend fun detailsIn(bounds: AreaBounds): SourceAnswer<List<ElementDetails>> {
+        val servers = servers()
+        var empty = 0
+        val answer =
+            fallback.first(servers) { server ->
+                val response = client.submitForm(server, parameters { append("data", overpassDetailsQuery(bounds)) })
+                if (!response.status.isSuccess()) {
+                    val retryAfter =
+                        response.headers[HttpHeaders.RetryAfter]
+                            ?.trim()
+                            ?.toLongOrNull()
+                            ?.seconds
+                    throw SearchHttpException(response.status.value, retryAfter)
+                }
+                val text = response.bodyAsText()
+                val details = withContext(Dispatchers.Default) { parseOverpassDetails(text) } ?: throw OverpassCutOff()
+                if (details.isEmpty()) {
+                    empty++
+                    throw OverpassEmpty()
+                }
+                details
             }
-            val text = response.bodyAsText()
-            withContext(Dispatchers.Default) { parseOverpassDetails(text) } ?: throw OverpassCutOff()
-        }
+        // Every server answered, none with an element: the area has no details.
+        if (answer == SourceAnswer.Unreachable && empty == servers.size) return SourceAnswer.Answered(emptyList(), servers.last())
+        return answer
+    }
 }
 
 /** An Overpass answer that ended before the query's end line. */
 private class OverpassCutOff : Exception("The Overpass answer was cut off")
+
+/** A whole Overpass answer with no element: the next server may cover the area. */
+private class OverpassEmpty : Exception("The Overpass answer has no element")
 
 /** The first cell of the line the query ends with: a complete answer has it last. */
 private const val END_LINE = "end"
@@ -345,6 +393,8 @@ fun overpassHttpClient(appVersion: String): HttpClient =
         install(UserAgent) { agent = searchUserAgent(appVersion) }
         install(HttpTimeout) {
             connectTimeoutMillis = 15_000
+            // Overpass sends nothing while the query runs; the Android engine's own 100 s read timeout would cut it.
+            socketTimeoutMillis = (QUERY_TIMEOUT_S + 60) * 1_000L
             requestTimeoutMillis = (QUERY_TIMEOUT_S + 60) * 1_000L
         }
     }

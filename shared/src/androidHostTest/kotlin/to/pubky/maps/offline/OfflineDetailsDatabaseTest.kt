@@ -1,5 +1,6 @@
 package to.pubky.maps.offline
 
+import app.cash.sqldelight.db.QueryResult
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import kotlinx.coroutines.Dispatchers
 import to.pubky.maps.links.GeoPoint
@@ -96,11 +97,41 @@ class OfflineDetailsDatabaseTest {
 
         OfflinePlacesDatabase.Schema.migrate(driver, 3, OfflinePlacesDatabase.Schema.version)
 
+        val fresh = driver("fresh.db").also { OfflinePlacesDatabase.Schema.create(it) }
+        assertEquals(layout(fresh), layout(driver), "the migrated file has the tables and indexes of a new one")
         assertEquals(mapOf("a" to 5L), SqlOfflinePlaceIndex(driver, io = Dispatchers.Unconfined).areas())
         val details = SqlOfflineDetails(driver)
         assertEquals(emptyMap(), details.areas(), "no details yet: every area is fetched")
         details.replace("a", 7, listOf(ElementDetails(node(1), mapOf("wheelchair" to "yes"))))
         assertEquals(KeptDetails(mapOf("wheelchair" to "yes"), 7), details.detailsOf(node(1)))
+    }
+
+    /** Each table's columns (name, type, not null, primary key) and each index's table and columns, by name. */
+    private fun layout(driver: JdbcSqliteDriver): Map<String, List<String>> {
+        fun rows(
+            sql: String,
+            columns: Int,
+        ): List<List<String?>> =
+            driver
+                .executeQuery(null, sql, { c ->
+                    QueryResult.Value(buildList { while (c.next().value) add((0 until columns).map { c.getString(it) }) })
+                }, 0)
+                .value
+        return rows("SELECT type, name, tbl_name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'", 3).associate { (type, name, table) ->
+            val info =
+                if (type == "table") {
+                    rows("SELECT name, type, \"notnull\", pk FROM pragma_table_info('$name')", 4)
+                } else {
+                    rows("SELECT name FROM pragma_index_info('$name')", 1)
+                }
+            "$type $name" to listOf(table!!) + info.map { it.joinToString(" ") } +
+                listOfNotNull(
+                    rows(
+                        "SELECT sql FROM sqlite_master WHERE name = '$name'",
+                        1,
+                    ).single().single()?.substringAfter(" WHERE ", "")?.ifEmpty { null },
+                )
+        }
     }
 
     @Test

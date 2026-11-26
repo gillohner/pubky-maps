@@ -267,6 +267,24 @@ class PlacePageControllerTest {
         }
 
     @Test
+    fun keptTagsThePageDoesNotShowDoNotDateTheOfflineNote() =
+        runTest {
+            val pages =
+                controller(
+                    FakePlaceData().apply {
+                        pinakesDown = true
+                        nexusDown = true
+                    },
+                    details = { KeptDetails(mapOf("wheelchair" to "unknown"), fetchedAt = 5_000) },
+                )
+            pages.open(tapped)
+            advanceUntilIdle()
+            val page = pages.state.value!!
+            assertNull(page.osm)
+            assertNull(page.shownAt)
+        }
+
+    @Test
     fun aFailingDetailsLookupLeavesThePageWithoutThem() =
         runTest {
             val pages = controller(FakePlaceData().apply { pinakesDown = true }, details = { error("disk") })

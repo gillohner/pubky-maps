@@ -23,14 +23,38 @@ internal val Service.title: String
 internal val Service.description: String
     get() =
         when (this) {
-            Service.MapStyleLight -> "The look of the map and its tiles in light mode."
-            Service.MapStyleDark -> "The look of the map and its tiles in dark mode."
-            Service.Photon -> "Photon servers: addresses and places as you type."
-            Service.Pinakes -> "Pinakes servers: place details, links and what people use."
-            Service.Nexus -> "Nexus servers: tags, reviews and posts people wrote about places."
-            Service.Overpass -> "Overpass servers: opening hours, phone numbers and websites of the places in your offline maps."
-            Service.PkarrRelay -> "Pkarr relays: find the homeserver that holds someone's Pubky data."
-            Service.AuthRelay -> "Carries your sign-in from Pubky Ring to this app."
+            Service.MapStyleLight -> {
+                "The look of the map and its tiles in light mode."
+            }
+
+            Service.MapStyleDark -> {
+                "The look of the map and its tiles in dark mode."
+            }
+
+            Service.Photon -> {
+                "Photon servers: addresses and places as you type."
+            }
+
+            Service.Pinakes -> {
+                "Pinakes servers: place details, links and what people use."
+            }
+
+            Service.Nexus -> {
+                "Nexus servers: tags, reviews and posts people wrote about places."
+            }
+
+            Service.Overpass -> {
+                "Overpass servers: opening hours, phone numbers and websites of the places in your offline maps. " +
+                    "They learn which areas you keep."
+            }
+
+            Service.PkarrRelay -> {
+                "Pkarr relays: find the homeserver that holds someone's Pubky data."
+            }
+
+            Service.AuthRelay -> {
+                "Carries your sign-in from Pubky Ring to this app."
+            }
         }
 
 internal val StorageChoice.title: String

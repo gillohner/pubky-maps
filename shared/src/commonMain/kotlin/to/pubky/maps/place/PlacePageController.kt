@@ -63,7 +63,7 @@ data class PlacePageState(
     val offline: Boolean get() = failed.isNotEmpty()
 
     /** The date of the oldest saved or kept part shown (epoch ms), for the offline note; null when none is. */
-    val shownAt: Long? get() = listOfNotNull(savedAt, socialAt, keptDetails?.takeIf { card == null }?.fetchedAt).minOrNull()
+    val shownAt: Long? get() = listOfNotNull(savedAt, socialAt, keptDetails?.takeIf { card == null && osm != null }?.fetchedAt).minOrNull()
 
     /** Nexus and Pinakes answered and nobody tagged, wrote about or listed the place. */
     val nothingOnPubky: Boolean

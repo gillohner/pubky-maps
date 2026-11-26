@@ -32,10 +32,16 @@ import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
+/**
+ * Overpass' answers for the offline areas. `zurich.overpass.tsv` is lines picked from a real answer
+ * (recorded 2026-11-26 from ovp.dresel.systems for 47.03,8.03,47.73,9.05, the largest area one
+ * download may take around Zürich): plain, quoted for a comma, with doubled quotes, over two lines.
+ */
 class OverpassDetailsTest {
     private val zurich = AreaBounds(west = 8.51, south = 47.36, east = 8.56, north = 47.39)
 
@@ -164,6 +170,38 @@ class OverpassDetailsTest {
                 OverpassPlaceDetails(HttpClient(engine) { expectSuccess = false }, { listOf("https://cut.example/api/interpreter") }, clock)
             assertEquals(SourceAnswer.Unreachable, none.detailsIn(zurich))
         }
+
+    @Test
+    fun anEmptyAnswerGoesToTheNextServerAndCountsOnlyWhenEveryServerGaveIt() =
+        runTest {
+            val asked = mutableListOf<String>()
+            val endLine = "end\t1" + "\t".repeat(OsmDetails.KEYS.size) + "\n"
+            val engine =
+                MockEngine { request ->
+                    asked += request.url.host
+                    when (request.url.host) {
+                        "europe.example", "empty.example" -> respond(endLine, HttpStatusCode.OK)
+                        "down.example" -> respondError(HttpStatusCode.GatewayTimeout)
+                        else -> respond(Fixtures.read("zurich.overpass.tsv"), HttpStatusCode.OK)
+                    }
+                }
+            val client = HttpClient(engine) { expectSuccess = false }
+
+            fun overpass(vararg hosts: String) = OverpassPlaceDetails(client, { hosts.map { "https://$it/api/interpreter" } })
+
+            // A regional server (dresel.systems' Europe) has nothing for an area elsewhere.
+            val planet =
+                assertIs<SourceAnswer.Answered<List<ElementDetails>>>(overpass("europe.example", "planet.example").detailsIn(zurich))
+            assertEquals(5, planet.value.size)
+            assertEquals(listOf("europe.example", "planet.example"), asked)
+            val none = assertIs<SourceAnswer.Answered<List<ElementDetails>>>(overpass("europe.example", "empty.example").detailsIn(zurich))
+            assertEquals(emptyList(), none.value, "every server found no details: the area has none")
+            assertEquals(
+                SourceAnswer.Unreachable,
+                overpass("europe.example", "down.example").detailsIn(zurich),
+                "the server that may hold it failed",
+            )
+        }
 }
 
 /** Details of any area: one element per area, named after its west edge. */
@@ -172,8 +210,12 @@ private class FakeOverpass : PlaceDetailsSource {
     var down = false
     var clock: () -> Long = { 0 }
 
+    /** Runs while a request is out (before it answers). */
+    var whileAsked: suspend () -> Unit = {}
+
     override suspend fun detailsIn(bounds: AreaBounds): SourceAnswer<List<ElementDetails>> {
         asked += bounds to clock()
+        whileAsked()
         if (down) return SourceAnswer.Unreachable
         return SourceAnswer.Answered(
             listOf(ElementDetails(OsmId(OsmType.Node, (bounds.west * 100).toLong()), mapOf("phone" to "+41"))),
@@ -210,6 +252,7 @@ private class MemoryDetails : OfflineDetailsStore {
 class OfflinePlaceDetailsTest {
     private val zurich = AreaBounds(west = 8.51, south = 47.36, east = 8.56, north = 47.39)
     private val bern = AreaBounds(west = 7.42, south = 46.93, east = 7.47, north = 46.96)
+    private val geneva = AreaBounds(6.1, 46.18, 6.17, 46.22)
     private val start = 1_800_000_000_000
 
     private fun area(
@@ -313,7 +356,7 @@ class OfflinePlaceDetailsTest {
 
     @Test
     fun anAreaThatFailedIsTriedAgainLaterAfterTheOthersAndASyncStopsAtTheSecondFailure() =
-        keeping(area("zh", zurich), area("be", bern), area("ge", AreaBounds(6.1, 46.18, 6.17, 46.22))) { running ->
+        keeping(area("zh", zurich), area("be", bern), area("ge", geneva)) { running ->
             running.overpass.down = true
             after(15.seconds)
             assertEquals(listOf(zurich, bern), running.overpass.asked.map { it.first }, "no connection fails every area alike")
@@ -322,6 +365,49 @@ class OfflinePlaceDetailsTest {
             after(30.minutes + 20.seconds)
             assertEquals(listOf(6.1, 8.51, 7.42), running.overpass.asked.map { it.first.west }, "the areas that failed go last")
             assertEquals(setOf("zh", "be", "ge"), running.store.kept.keys)
+        }
+
+    @Test
+    fun anAreaThatKeepsFailingWaitsTwiceAsLongEachTimeUpToADay() =
+        keeping(area("zh", zurich)) { running ->
+            running.overpass.down = true
+            after(32.hours)
+            val minutes = running.overpass.asked.map { it.second / 60_000 }
+            // Failed at 0, then after 30 min, 1 h, 2 h, 4 h, 8 h, 16 h (each from the failure before).
+            assertEquals(listOf(0L, 30, 90, 210, 450, 930, 1890), minutes)
+            after(24.hours)
+            assertEquals(
+                1890L + 24 * 60,
+                running.overpass.asked
+                    .last()
+                    .second / 60_000,
+                "at most a day apart",
+            )
+            running.overpass.down = false
+            after(24.hours)
+            assertEquals(setOf("zh"), running.store.kept.keys)
+        }
+
+    @Test
+    fun anAreaDeletedWhileItIsAskedAboutIsNotKeptAndTheNextDeletedOneNotAsked() =
+        keeping(area("zh", zurich), area("be", bern), area("ge", geneva)) { running ->
+            running.overpass.whileAsked = {
+                if (running.overpass.asked.size == 1) running.maps.value = OfflineMapsState.Ready(listOf(area("ge", geneva)))
+            }
+            after(1.minutes)
+            assertEquals(listOf(8.51, 6.1), running.overpass.asked.map { it.first.west })
+            assertEquals(setOf("ge"), running.store.kept.keys)
+        }
+
+    @Test
+    fun aSyncStartedByANewAreaWaitsTheGapAfterTheLastRequest() =
+        keeping(area("zh", zurich)) { running ->
+            after(3.seconds)
+            running.maps.value = OfflineMapsState.Ready(listOf(area("zh", zurich), area("be", bern)))
+            after(1.seconds)
+            assertEquals(1, running.overpass.asked.size)
+            after(6.seconds)
+            assertEquals(listOf(0L, 10_000L), running.overpass.asked.map { it.second })
         }
 
     @Test

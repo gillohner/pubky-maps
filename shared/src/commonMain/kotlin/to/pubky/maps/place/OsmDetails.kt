@@ -10,7 +10,8 @@ enum class Wheelchair(
 }
 
 /**
- * A place's OpenStreetMap details, from the OSM tags on its Pinakes card. Only what the page shows;
+ * A place's OpenStreetMap details, from the OSM tags on its Pinakes card or those an offline area
+ * keeps for it. Only what the page shows;
  * every field is null (or empty) when OSM has none.
  */
 data class OsmDetails(

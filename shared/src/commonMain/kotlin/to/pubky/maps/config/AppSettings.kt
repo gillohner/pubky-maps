@@ -157,9 +157,9 @@ data class AppSettings(
         val list = servers[service]
         if (list.any { ServerUrl.parse(it.url) == parsed }) return AddServerResult.Refused("This server is already in the list.")
         val shownName = name.trim().ifEmpty { parsed.host }
-        // A search server is credited like a map style: Photon and Overpass servers serve OpenStreetMap.
+        // A search server is credited like a map style: Photon servers index OpenStreetMap.
         val attribution =
-            if (service.isMapStyle || service == Service.Photon || service == Service.Overpass) {
+            if (service.isMapStyle || service == Service.Photon) {
                 listOf(AttributionLink(shownName, parsed.origin), ServerDefaults.openStreetMap)
             } else {
                 emptyList()

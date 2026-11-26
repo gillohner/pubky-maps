@@ -52,16 +52,19 @@ object ServerDefaults {
                     listOf(ServerEntry("Pinakes (development)", "https://8092--main--pinakes--gil.coder.riginode.xyz")),
                 Service.Nexus to
                     listOf(ServerEntry("Nexus (development)", "https://8080--main--pubky-staging--gil.coder.riginode.xyz")),
-                // Public Overpass instances that need no key (wiki.openstreetmap.org/wiki/Overpass_API):
-                // dresel.systems asks apps to name themselves (the app's User-Agent does) and to run at
-                // most 4 queries at once; FOSSGIS' main instance allows 10,000 queries and 1 GB a day
-                // and is often at capacity; private.coffee has no rate limit. VK Maps' instance is left
-                // out: it would learn which areas the user keeps.
+                // Public Overpass instances that need no key (wiki.openstreetmap.org/wiki/Overpass_API).
+                // dresel.systems' default endpoint holds Europe only (fast for the Swiss and German
+                // areas the app starts with; elsewhere its empty answer hands over to the next server)
+                // and asks apps to name themselves (the app's User-Agent does) and to run at most 4
+                // queries at once; FOSSGIS' main instance holds the planet, allows 10,000 queries and
+                // 1 GB a day and is often at capacity; private.coffee holds the planet with no rate
+                // limit. Each server learns which areas the user keeps; VK Maps' instance is left out
+                // as an operator the user would not choose to tell that.
                 Service.Overpass to
                     listOf(
-                        ServerEntry("Overpass (dresel.systems)", "https://ovp.dresel.systems/api/interpreter", listOf(openStreetMap)),
-                        ServerEntry("Overpass (FOSSGIS)", "https://overpass-api.de/api/interpreter", listOf(openStreetMap)),
-                        ServerEntry("Overpass (private.coffee)", "https://overpass.private.coffee/api/interpreter", listOf(openStreetMap)),
+                        ServerEntry("Overpass Europe (dresel.systems)", "https://ovp.dresel.systems/api/interpreter"),
+                        ServerEntry("Overpass (FOSSGIS)", "https://overpass-api.de/api/interpreter"),
+                        ServerEntry("Overpass (private.coffee)", "https://overpass.private.coffee/api/interpreter"),
                     ),
                 // The Pubky SDK's default relays (pkarr::DEFAULT_RELAYS).
                 Service.PkarrRelay to
