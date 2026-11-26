@@ -13,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
@@ -122,6 +123,42 @@ class PlaceSheetInteractionTest {
         assertEquals(SheetStop.Full, stop)
         assertTrue("the sheet went up: $halfTop -> $fullTop", fullTop < halfTop)
         assertTrue("two frames after the release it is still on its way ($onTheWay, full at $fullTop)", onTheWay > fullTop + 1.dp)
+    }
+
+    @Test
+    fun aDragHeldStillIsReportedBeforeTheSheetLandsOnAStop() {
+        var stop by mutableStateOf(SheetStop.Peek)
+        var dragStarts = 0
+        compose.setContent {
+            PubkyMapsTheme {
+                Box(Modifier.fillMaxSize()) {
+                    PlaceSheet(
+                        page,
+                        context,
+                        actions,
+                        stop,
+                        { stop = it },
+                        maxHeight = 800.dp,
+                        modifier = Modifier.align(Alignment.BottomCenter),
+                        onDragStart = { dragStarts++ },
+                    )
+                }
+            }
+        }
+        compose.waitForIdle()
+        val title = compose.onNodeWithText("Conditorei Schober")
+        // The finger moves the sheet up and stays down: no stop yet, but the user is moving it.
+        title.performTouchInput {
+            down(center)
+            moveBy(Offset(0f, -60f))
+            moveBy(Offset(0f, -60f))
+        }
+        compose.waitForIdle()
+        assertEquals(1, dragStarts)
+        assertEquals(SheetStop.Peek, stop)
+        title.performTouchInput { up() }
+        compose.waitForIdle()
+        assertEquals(1, dragStarts)
     }
 
     @Test

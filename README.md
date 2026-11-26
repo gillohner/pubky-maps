@@ -96,7 +96,11 @@ Settings:
 **Place pages** open from a search result, a link from another app, a point of interest tapped on
 the base map (by its OpenStreetMap element) or a Pubky place on the map. On a phone the page is a
 sheet over the map (header only, half the screen, or the whole screen); on a wide screen a panel
-beside it. It shows the name, what the place is, the distance and the address, Share and Open in
+beside it. A place tapped on the map that its sheet or panel would hide moves to the middle of the
+map left in view (also under the notices below the search bar) once the sheet has opened, or, while
+the page loads, once its growing header covers it; not after the user moved the map or the
+sheet. It shows the
+name, what the place is, the distance and the address, Share and Open in
 (the apps switched on in Settings, installed ones first); the Pinakes card's photo and text with
 their credits; OpenStreetMap details from the card's facts when Pinakes serves them (opening hours with open or closed now, phone,
 website, wheelchair access, cuisine); Pubky tags with their counts and who tagged (people the user

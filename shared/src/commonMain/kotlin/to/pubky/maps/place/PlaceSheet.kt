@@ -58,6 +58,7 @@ private val HandleHeight = 20.dp
  * [maxHeight]. A taller one (a large font in split screen) scrolls with the page, as [PlacePanel]'s
  * does: kept in place it would leave the page a strip, or no room at all, and the sections could not
  * be reached. Below the top stop that page is back at its start, so the lowest stop shows the header.
+ * [onDragStart] is told when a finger starts moving the sheet, before it lands on a stop.
  */
 @Composable
 fun PlaceSheet(
@@ -70,6 +71,7 @@ fun PlaceSheet(
     modifier: Modifier = Modifier,
     /** The system bar under the sheet: it adds to every stop, and the page scrolls clear of it. */
     bottomInset: Dp = 0.dp,
+    onDragStart: () -> Unit = {},
 ) {
     val density = LocalDensity.current
     var headerPx by remember { mutableIntStateOf(0) }
@@ -105,8 +107,10 @@ fun PlaceSheet(
     val currentStop by rememberUpdatedState(stop)
     val currentStops by rememberUpdatedState(stops)
     val currentOnStopChange by rememberUpdatedState(onStopChange)
+    val currentOnDragStart by rememberUpdatedState(onDragStart)
 
     fun dragBy(delta: Float) {
+        if (dragged == null) currentOnDragStart()
         dragged = currentStops.clamp((dragged ?: resting.value) - delta)
     }
 
