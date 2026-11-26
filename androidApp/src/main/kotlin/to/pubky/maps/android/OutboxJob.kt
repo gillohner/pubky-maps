@@ -23,8 +23,11 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
-/** The one JobScheduler job of the app. */
+/** The job that sends the outbox. */
 internal const val OUTBOX_JOB_ID = 1
+
+/** The job that starts the outbox job again when the app's process died during a run of it ([guardRun]). */
+internal const val OUTBOX_GUARD_JOB_ID = 2
 
 /**
  * How long one run of the job tries to send: one minute, enough for a session restore and a few
@@ -44,13 +47,16 @@ internal val SEND_AGAIN: Duration = 30.seconds
 /** The wait before a run that could not send everything is tried again; it doubles each time. */
 private const val BACKOFF_MS = 30_000L
 
+/** When the guard job of a run is due: after the run's window, so only a run that never ended meets it. */
+internal val GUARD_DELAY: Duration = SEND_WINDOW + 30.seconds
+
 /**
  * While writes wait in the outbox ([waiting] true), a JobScheduler job is kept that Android runs as
  * soon as the phone has a network, also with the app closed and after a restart of the phone; it
  * starts the app's process, which restores the session and sends the outbox ([OutboxJobService]).
- * When nothing waits any more (sent, or signed out) the job is cancelled.
+ * When nothing waits any more (sent, or signed out) the job is cancelled, and a run's guard job too.
  *
- * JobScheduler, not WorkManager: one job needs no library, and WorkManager opens its own database
+ * JobScheduler, not WorkManager: two jobs need no library, and WorkManager opens its own database
  * at every start of the app.
  */
 internal fun followOutbox(
@@ -63,6 +69,7 @@ internal fun followOutbox(
         waiting.filterNotNull().distinctUntilChanged().collect { waits ->
             if (!waits) {
                 jobs.cancel(OUTBOX_JOB_ID)
+                jobs.cancel(OUTBOX_GUARD_JOB_ID)
             } else if (jobs.getPendingJob(OUTBOX_JOB_ID) == null) {
                 // Scheduling the job again would stop a run of it (the run that started this process).
                 scheduleOutboxJob(context)
@@ -71,13 +78,14 @@ internal fun followOutbox(
     }
 
 /**
- * Schedules the job anew: a new job starts with no failures, so its first backoff is the shortest again.
+ * Schedules the job anew: a new job starts with no failures, so its first backoff is the shortest again,
+ * and Android checks at once whether it can run.
  *
- * Expedited from Android 12 on: Android holds a regular network job of an app that is not on screen
- * back to batch it with others (on the API 35 emulator a run killed with the app closed was
- * registered again, ready with every constraint met, and not started in 5 minutes), and expedited
- * jobs are never held back so. When the app's expedited quota is used up Android refuses one, so a
- * regular job is scheduled instead; a run Android reschedules stays expedited while quota is left.
+ * Expedited from Android 12 on: Android does not hold an expedited job back for its flexible
+ * constraints (charging, idle, battery not low) or to batch it with other apps' network jobs, which
+ * can delay a regular job of a closed app by hours where they are on. When the app's expedited quota
+ * is used up Android refuses one, so a regular job is scheduled instead (and stays regular until it
+ * is scheduled anew); a run Android reschedules stays expedited while quota is left.
  */
 internal fun scheduleOutboxJob(context: Context) {
     val jobs = context.getSystemService(JobScheduler::class.java) ?: return
@@ -115,6 +123,32 @@ internal fun rescheduleAfterStop(
     return false
 }
 
+/**
+ * A run's guard: due after [GUARD_DELAY] (latest one minute later), with no other constraint, so the
+ * timer alone makes Android run it.
+ */
+internal fun guardJob(context: Context): JobInfo =
+    JobInfo
+        .Builder(OUTBOX_GUARD_JOB_ID, ComponentName(context, OutboxJobService::class.java))
+        .setMinimumLatency(GUARD_DELAY.inWholeMilliseconds)
+        .setOverrideDeadline((GUARD_DELAY + 1.minutes).inWholeMilliseconds)
+        .build()
+
+/**
+ * The guard job is due, so a run of the outbox job started more than [GUARD_DELAY] ago never ended:
+ * its process died ([runGoing] false: no run in this process). Android registers such a run again
+ * with no backoff and every constraint met, but nothing makes it look at the job again (on the API 35
+ * emulator it stayed ready and not started for more than 5 minutes), so the job is scheduled anew,
+ * which Android checks at once. With no outbox job (sent, signed out) there is nothing to do.
+ */
+internal fun guardRun(
+    context: Context,
+    runGoing: Boolean,
+) {
+    val jobs = context.getSystemService(JobScheduler::class.java) ?: return
+    if (!runGoing && jobs.getPendingJob(OUTBOX_JOB_ID) != null) scheduleOutboxJob(context)
+}
+
 internal fun outboxJob(
     context: Context,
     expedited: Boolean,
@@ -149,9 +183,10 @@ internal suspend fun sendWaiting(
     } ?: false
 
 /**
- * One run of the job: sends what waits ([sendWaiting]), then tells Android whether to run it again
- * after its backoff ([finish] true: something still waits) and gives a write made as the run ended
- * a job again ([afterRun]).
+ * One run of the job: sends what waits ([sendWaiting]) while its guard job is scheduled (cancelled
+ * when the run ends or is stopped; due only if the process dies first, [guardRun]), then tells
+ * Android whether to run it again after its backoff ([finish] true: something still waits) and gives
+ * a write made as the run ended a job again ([afterRun]).
  */
 internal suspend fun runOutbox(
     context: Context,
@@ -160,7 +195,14 @@ internal suspend fun runOutbox(
     finish: (reschedule: Boolean) -> Unit,
     window: Duration = SEND_WINDOW,
 ) {
-    val sent = sendWaiting(waiting, window, sendNow = sendNow)
+    val jobs = context.getSystemService(JobScheduler::class.java)
+    jobs?.schedule(guardJob(context))
+    val sent =
+        try {
+            sendWaiting(waiting, window, sendNow = sendNow)
+        } finally {
+            jobs?.cancel(OUTBOX_GUARD_JOB_ID)
+        }
     finish(!sent)
     afterRun(context, sent, waitsNow = waiting.value == true)
 }
@@ -176,6 +218,7 @@ internal fun connectivityLost(stopReason: Int?): Boolean =
  * Runs when the phone has a network while writes wait. Starting the process restores the session
  * and builds the outbox ([PubkyMapsApplication.onCreate]); the run then waits until it is sent, and
  * Android runs it again later (after [BACKOFF_MS], doubling) when the homeserver could not be reached.
+ * Also runs a run's guard job ([OUTBOX_GUARD_JOB_ID], [guardRun]).
  * A run that starts while the app is open also asks the account and the outbox to try now, which
  * starts both their own waits between retries over (the account's session restore and the outbox's
  * resend timer; at most twice a run).
@@ -190,6 +233,10 @@ class OutboxJobService : JobService() {
     private var run: Job? = null
 
     override fun onStartJob(params: JobParameters): Boolean {
+        if (params.jobId == OUTBOX_GUARD_JOB_ID) {
+            guardRun(this, runGoing = run?.isActive == true)
+            return false
+        }
         val app = application as PubkyMapsApplication
         run =
             scope.launch {
@@ -208,6 +255,7 @@ class OutboxJobService : JobService() {
 
     /** Android stopped the run (the network went, or it needed the resources). */
     override fun onStopJob(params: JobParameters): Boolean {
+        if (params.jobId == OUTBOX_GUARD_JOB_ID) return false
         run?.cancel()
         return rescheduleAfterStop(
             this,

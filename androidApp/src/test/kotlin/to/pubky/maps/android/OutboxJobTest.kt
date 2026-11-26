@@ -137,7 +137,7 @@ class OutboxJobTest {
             advanceTimeBy(SEND_WINDOW + 1.seconds)
 
             assertEquals("jobFinished(reschedule = true)", listOf(true), finished)
-            assertNull("Android runs the same job again after its backoff", jobs.getPendingJob(OUTBOX_JOB_ID))
+            assertNull("no new job: Android reschedules this one after its backoff", jobs.getPendingJob(OUTBOX_JOB_ID))
         }
 
     @Test
@@ -155,6 +155,79 @@ class OutboxJobTest {
 
             assertEquals(listOf(false), finished)
             assertNotNull("the finished job is gone, so a new one is scheduled", jobs.getPendingJob(OUTBOX_JOB_ID))
+        }
+
+    @Test
+    fun aRunKeepsAGuardJobUntilItEnds() =
+        runTest {
+            waiting.value = true
+            launch { runOutbox(context, waiting, sendNow = {}, finish = {}) }
+            runCurrent()
+
+            val guard = jobs.getPendingJob(OUTBOX_GUARD_JOB_ID)
+            assertNotNull("due only if the process dies during the run", guard)
+            assertEquals(GUARD_DELAY.inWholeMilliseconds, guard!!.minLatencyMillis)
+            assertTrue("after the run's window", GUARD_DELAY > SEND_WINDOW)
+            assertEquals("the timer alone runs it", JobInfo.NETWORK_TYPE_NONE, guard.networkType)
+
+            advanceTimeBy(SEND_WINDOW + 1.seconds)
+            assertNull("the run ended", jobs.getPendingJob(OUTBOX_GUARD_JOB_ID))
+        }
+
+    @Test
+    fun aStoppedRunCancelsItsGuardJob() =
+        runTest {
+            waiting.value = true
+            val run = launch { runOutbox(context, waiting, sendNow = {}, finish = {}) }
+            runCurrent()
+            assertNotNull(jobs.getPendingJob(OUTBOX_GUARD_JOB_ID))
+
+            run.cancel()
+            runCurrent()
+
+            assertNull(jobs.getPendingJob(OUTBOX_GUARD_JOB_ID))
+        }
+
+    @Test
+    fun aDueGuardSchedulesTheOutboxJobAnewWhenItsRunDied() {
+        val leftByTheDeadRun =
+            JobInfo
+                .Builder(OUTBOX_JOB_ID, ComponentName(context, OutboxJobService::class.java))
+                .setExtras(PersistableBundle().apply { putString("run", "registered again after the process died") })
+                .build()
+        jobs.schedule(leftByTheDeadRun)
+
+        guardRun(context, runGoing = false)
+
+        val job = jobs.getPendingJob(OUTBOX_JOB_ID)
+        assertNull("a new job, which Android checks at once", job!!.extras.getString("run"))
+        assertTrue(job.isExpedited)
+    }
+
+    @Test
+    fun aDueGuardLeavesARunOfThisProcessAndAMissingJobAlone() {
+        guardRun(context, runGoing = false)
+        assertNull("sent or signed out: no job to start", jobs.getPendingJob(OUTBOX_JOB_ID))
+
+        val running =
+            JobInfo
+                .Builder(OUTBOX_JOB_ID, ComponentName(context, OutboxJobService::class.java))
+                .setExtras(PersistableBundle().apply { putString("run", "the one running") })
+                .build()
+        jobs.schedule(running)
+        guardRun(context, runGoing = true)
+        assertEquals("scheduling it again would stop it", "the one running", jobs.getPendingJob(OUTBOX_JOB_ID)!!.extras.getString("run"))
+    }
+
+    @Test
+    fun nothingWaitingCancelsTheGuardJobToo() =
+        runTest(UnconfinedTestDispatcher()) {
+            jobs.schedule(guardJob(context))
+            followOutbox(context, waiting, backgroundScope)
+
+            waiting.value = false
+
+            assertNull(jobs.getPendingJob(OUTBOX_GUARD_JOB_ID))
         }
 
     @Test
