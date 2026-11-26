@@ -258,9 +258,12 @@ screenshots search with its pins, and the update probe screenshots each step of 
 ## Emulator tests in CI
 
 - Smoke test (`scripts/ci/emulator-smoke.sh`): the map draws, Settings opens, back returns, and
-  after a map link moved the map to Zürich the next start opens it there. The
-  app calls `reportFullyDrawn` once the map has drawn its first whole view (MapLibre idle with a
-  style from the list); the test reads Android's "Displayed" and "Fully drawn" times of the first
+  after a map link moved the map to Zürich the next start opens it there; a pan followed at once
+  by a theme switch or by Back still stores the new view; for the theme switch the view must be
+  first written within 1 s of MainActivity's destroy, itself within 1 s of the lift, so it was
+  stored on leaving and not by either map's 1 s rest. The app calls `reportFullyDrawn` once the
+  map has drawn its first whole view (MapLibre idle with a style from the list); the test reads
+  Android's "Displayed" and "Fully drawn" times of the first
   start and of a restart (`scripts/ci/start_time.py`) and fails when the map took longer than the
   budget set in `emulator-smoke.sh`.
 - Offline maps (`scripts/ci/emulator-offline.sh`, two tiny styles served on the runner): an area

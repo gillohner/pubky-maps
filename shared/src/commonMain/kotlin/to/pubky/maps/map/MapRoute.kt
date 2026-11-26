@@ -154,7 +154,7 @@ fun MapRoute(
     onMapDrawn: () -> Unit = {},
     /** Where the map opens: where the user left it at the last start; null for the whole world. */
     startView: MapView? = null,
-    /** Called with each view the camera rests at, to open there at the next start. */
+    /** Called with each view the camera rests at, and the view when the map leaves the screen, to open there at the next start. */
     onViewRested: (MapView) -> Unit = {},
 ) {
     val dark = isSystemInDarkTheme()
@@ -255,10 +255,10 @@ fun MapRoute(
         if (awaitMapDrawn(mapState.events, styleReady)) mapDrawn()
     }
 
-    // The next start opens where the camera last rested.
+    // The next start opens where the camera last rested, or where it was when the map left the screen.
     val viewRested by rememberUpdatedState(onViewRested)
     LaunchedEffect(mapState) {
-        restingViews(snapshotFlow { if (mapState.isCameraMoving) null else mapState.cameraPosition }).collect { viewRested(it) }
+        saveRestingViews(snapshotFlow { if (mapState.isCameraMoving) null else mapState.cameraPosition }) { viewRested(it) }
     }
 
     val snackbarHostState = remember { SnackbarHostState() }

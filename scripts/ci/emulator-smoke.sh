@@ -3,9 +3,10 @@
 # and hold the start time to a budget, open Settings and each settings page, switch "Follow local
 # rules" off and check it stays off after a restart (a second start held to a budget), open the
 # open-source licences and swipe to their end, then go back with the system back button; move the
-# map with a link and check that the next start opens it there. Fails on a crash or when the app is
-# not in front. Screenshots, the UI dumps, the start times and the log go
-# to <out dir>.
+# map with a link and check that the next start opens it there, then pan it and switch the theme or
+# press Back at once and check that the panned view is stored. Fails on a crash or when the app is
+# not in front.
+# Screenshots, the UI dumps, the start times and the log go to <out dir>.
 # Usage: emulator-smoke.sh <apk> <out dir>
 set -euo pipefail
 
@@ -14,6 +15,8 @@ out=$2
 pkg=to.pubky.maps
 here=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$out"
+# The theme-switch step below leaves the emulator in the light theme the next tests expect.
+trap 'adb shell cmd uimode night no > /dev/null 2>&1 || true' EXIT
 
 fail() {
     echo "::error::$*"
@@ -91,12 +94,16 @@ wait_for() {
     return 1
 }
 
-check_alive() {
+check_no_crash() {
     adb logcat -d -b crash > "$out/crash.txt" || true
     # A Java crash names the process; a native one (MapLibre) shows it in the tombstone header.
     if grep -qE "Process: $pkg|>>> $pkg <<<" "$out/crash.txt"; then
         fail "the app crashed ($1); see crash.txt"
     fi
+}
+
+check_alive() {
+    check_no_crash "$1"
     adb shell dumpsys activity activities | grep -E "topResumedActivity|mResumedActivity" > "$out/resumed.txt" || true
     grep -q "$pkg/" "$out/resumed.txt" || fail "the app is not the resumed activity ($1): $(cat "$out/resumed.txt")"
 }
@@ -277,6 +284,8 @@ check_alive "back to the map"
 # the app stores the view; after a restart the stored view is still Zürich (a map that opened at
 # the whole world would store that once its camera rested). The file is read through run-as, so
 # only on a debug APK; release.yml's run on the published release APK skips this part.
+# expect_view NAME [LAT_FROM LAT_TO]: the stored view is at Zürich's longitude and zoom 14, with
+# its latitude in the range (Zürich's 47.37 by default); a copy of the file is kept as NAME.
 expect_view() {
     adb shell run-as "$pkg" cat no_backup/map-view.json > "$out/map-view-$1.json" 2> /dev/null || true
     python3 -I -c "
@@ -285,9 +294,42 @@ try:
     view = json.load(open(sys.argv[1], encoding='utf-8')).get('view') or {}
 except ValueError:
     view = {}
-ok = abs(view.get('lat', 0) - 47.37) < 0.01 and abs(view.get('lon', 0) - 8.54) < 0.01 and abs(view.get('zoom', 0) - 14) < 0.5
+lat_from, lat_to = float(sys.argv[3]), float(sys.argv[4])
+ok = lat_from <= view.get('lat', 0) <= lat_to and abs(view.get('lon', 0) - 8.54) < 0.01 and abs(view.get('zoom', 0) - 14) < 0.5
 print(sys.argv[2] + ':', view)
-sys.exit(0 if ok else 1)" "$out/map-view-$1.json" "$1"
+sys.exit(0 if ok else 1)" "$out/map-view-$1.json" "$1" "${2:-47.36}" "${3:-47.38}"
+}
+# The latitude of the view kept as map-view-NAME.json.
+view_lat() {
+    python3 -I -c "import json, sys; print(json.load(open(sys.argv[1], encoding='utf-8'))['view']['lat'])" "$out/map-view-$1.json"
+}
+# The latitude range of a pan's view: 0.005-0.1 degrees south of LAT (a pan that flings goes further).
+south_of() { python3 -I -c "import sys; lat = float(sys.argv[1]); print(lat - 0.1, lat - 0.005)" "$1"; }
+# "MS EPOCH": milliseconds from the log line "lift NAME" to the next destroy of MainActivity, and
+# the destroy's time in seconds since 1970; nothing before that destroy.
+lift_to_destroy() {
+    adb logcat -d -v epoch -b main -b events > "$out/logcat-$1.txt" || true
+    awk -v tag="lift $1" 'index($0, "PubkyMapsSmoke") && index($0, tag) { up = $1 }
+        up && /wm_on_destroy_called.*MainActivity/ { printf "%d %.3f\n", ($1 - up) * 1000, $1; exit }' "$out/logcat-$1.txt"
+}
+# The stored view's write time as stat prints it, or nothing.
+written_at() { adb shell run-as "$pkg" stat -c %y no_backup/map-view.json 2> /dev/null || true; }
+# The time of the first write of the stored view after the one at BEFORE, waiting up to SECONDS.
+first_write_after() {
+    local deadline=$((SECONDS + $2)) at
+    while ((SECONDS < deadline)); do
+        at=$(written_at)
+        if [ -n "$at" ] && [ "$at" != "$1" ]; then echo "$at"; return; fi
+    done
+}
+# Milliseconds from EPOCH (seconds since 1970) to the write time AT (as stat prints it).
+ms_after() {
+    python3 -I -c "
+import datetime, sys
+day, time, zone = sys.argv[1].split()
+whole, _, frac = time.partition('.')
+at = datetime.datetime.strptime(day + ' ' + whole + ' ' + zone, '%Y-%m-%d %H:%M:%S %z').timestamp()
+print(round((at + float('0.' + (frac or '0')) - float(sys.argv[2])) * 1000))" "$1" "$2"
 }
 check_reopened_view() {
     started=$(adb shell am start -W -a android.intent.action.VIEW -d "'geo:47.37,8.54?z=14'" -p "$pkg" 2>&1) || true
@@ -308,6 +350,84 @@ check_reopened_view() {
     screenshot map-reopened
     check_alive "map reopened"
     expect_view reopened || fail "the map did not open where it was left (stored view changed); see map-view-reopened.json"
+    # A pan, then the map leaves the screen at once, before its camera has rested for 1 s: it stores
+    # the last view it showed. Each pan moves the finger up by 1,200 px (about 460 dp, about 0.013
+    # degrees of latitude at zoom 14), so the map shows a view further south; the finger rests before
+    # it lifts (each input call takes a few hundred ms), so the map does not fling on. A first pan
+    # must be stored after its rest: it shows that gestures reach the camera, and gives the
+    # software-drawn map time to draw (it can stall for 8 s after a start, and a pan in a stall may
+    # not reach the camera before it leaves).
+    # The "lift" line is logged just before the finger lifts, so the camera's rest starts after it.
+    pan_up() {
+        adb shell "input motionevent DOWN 540 1800; input motionevent MOVE 540 1400; input motionevent MOVE 540 1000; input motionevent MOVE 540 600"
+        adb shell "log -t PubkyMapsSmoke 'lift $1'; input motionevent UP 540 600; $2"
+    }
+    pan_up first ""
+    stored=false
+    for _ in $(seq 1 15); do
+        sleep 2
+        if expect_view rested 47.35 47.365; then stored=true; break; fi
+    done
+    $stored || fail "the view after a pan was not stored once the camera rested; see map-view-rested.json"
+    last=$(view_lat rested)
+    sleep 5
+    # A theme switch right after a pan: Android recreates MainActivity. The new map opens at the
+    # panned camera (the map keeps it in its saved state) and would store it after its own 1 s rest,
+    # so the view alone does not show the save on leaving; the file's write time does. A try shows
+    # it when the old activity was destroyed less than 1 s after the lift (its rest cannot have
+    # ended) and the view was first written less than 1 s after that destroy (the new map's rest
+    # ends later). The switch waits 250 ms after the lift for the map to report its camera still: a
+    # map that leaves while its camera moves stores nothing on leaving (on CI about half the tries
+    # without the wait), and the new map's rest then stores the view. A try that does not show it
+    # is tried again; each pans further south.
+    proved=false
+    for try in 1 2 3 4 5; do
+        if ((try % 2)); then night=yes; else night=no; fi
+        before=$(written_at)
+        pan_up "switch-$try" "sleep 0.25; cmd uimode night $night"
+        # Polled at once: the new map may write the view again after its rest (its camera comes back
+        # from the saved state a few bits apart), so only the first write tells when it was stored.
+        written=$(first_write_after "$before" 6 || true)
+        destroy=""
+        for _ in $(seq 1 15); do
+            sleep 1
+            destroy=$(lift_to_destroy "switch-$try")
+            [ -z "$destroy" ] || break
+        done
+        [ -n "$destroy" ] || fail "MainActivity was not recreated after a theme switch"
+        wait_for "Show my location" 60 > /dev/null || fail "the map did not come back after a theme switch"
+        check_alive "theme switch right after a pan"
+        # The new map draws before the next pan (and has rested long since).
+        sleep 8
+        read -r lift_ms destroyed_at <<< "$destroy"
+        write_ms=""
+        if [ -n "$written" ]; then write_ms=$(ms_after "$written" "$destroyed_at"); fi
+        echo "theme switch $try: lift to destroy $lift_ms ms, destroy to the view's first write ${write_ms:-unknown} ms"
+        range=$(south_of "$last")
+        moved=false
+        if expect_view "switched-$try" $range; then moved=true; fi
+        last=$(view_lat "switched-$try" 2> /dev/null || echo "$last")
+        if $moved && ((lift_ms < 1000 && ${write_ms:-1000} < 1000)); then proved=true; break; fi
+    done
+    $proved || fail "no theme switch right after a pan first wrote the view within 1 s of the destroy in 5 tries; see map-view-switched-*.json"
+    if [ "$night" = yes ]; then
+        adb shell cmd uimode night no
+        sleep 3
+        wait_for "Show my location" 60 > /dev/null || fail "the map did not come back after the theme switched back"
+        sleep 8
+    fi
+    # Back right after a pan, the case the user meets. This start has no launcher intent, so Back
+    # finishes the activity (from the launcher, Android 12+ only moves the task back and the rest
+    # still runs). Back destroys the activity 0.9-1.5 s after the lift on CI, so a rest can end
+    # first: this checks that Back stores the view, the theme switch above that the save on leaving
+    # does it.
+    pan_up back "input keyevent KEYCODE_BACK"
+    sleep 3
+    check_no_crash "back right after a pan"
+    destroy=$(lift_to_destroy back)
+    lift_ms=${destroy%% *}
+    echo "back: lift to destroy ${lift_ms:-unknown} ms"
+    expect_view panned $(south_of "$last") || fail "the view at Back right after a pan was not stored; see map-view-panned.json"
 }
 if adb shell run-as "$pkg" true > /dev/null 2>&1; then
     check_reopened_view
