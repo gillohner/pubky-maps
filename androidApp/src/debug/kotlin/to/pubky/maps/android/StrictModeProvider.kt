@@ -79,10 +79,11 @@ internal fun strictModeReport(
 }
 
 /**
- * Debug builds only: StrictMode reports disk access and custom slow calls on the main thread and
- * leaked resources to the log (a leak is seen only when the garbage collector runs). The emulator
- * tests read the log and fail on a report about our code (an ANR waiting to happen on a slow phone).
- * Release builds do not have it.
+ * Debug builds only: StrictMode reports disk access, unbuffered I/O, custom slow calls and resource
+ * mismatches on the main thread, and leaked resources and content URIs shared without permission, to
+ * the log (a leak is seen only when the garbage collector runs). The emulator tests read the log and
+ * fail on a report about our code (an ANR waiting to happen on a slow phone). Release builds do not
+ * have it.
  *
  * Both policies start from the ones the platform set before any provider runs, and keep its two death
  * penalties: network on the main thread and a file:// URI handed to another app crash the debug app

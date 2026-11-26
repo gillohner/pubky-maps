@@ -3,8 +3,8 @@
 
 Each report is one line, "<owner> <kind> at <frame>", tagged PubkyMapsStrictMode; owner is "ours",
 "app-folder" (our code only looked up one of the app's private folders) or "library". A report about our
-code fails the test: the main thread waited on disk or network there, or a resource leaked. The other
-reports are listed and do not fail it.
+code fails the test: the main thread waited on disk there, or a resource leaked. The other reports are
+listed and do not fail it. Network on the main thread is not reported: it crashes the app.
 
 Usage: strict_mode.py <logcat.txt>
 """
