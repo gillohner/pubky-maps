@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListLayoutInfo
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -33,7 +35,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -58,6 +62,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.filterNotNull
 import to.pubky.maps.config.AttributionLink
 import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.place.PlaceSource
@@ -164,7 +169,9 @@ fun SearchBar(
 
 /**
  * The list under the bar: recent searches while the text is short, else the results with a line on
- * what is missing. [userLocation] gives each result its distance.
+ * what is missing. [userLocation] gives each result its distance. [onFirstRowEnd], when given, hears
+ * how far (in pixels, from the list's top) the first result reaches, with the lines above it, each
+ * time it is laid out with the list at its top (the first row of any kind while there is no result).
  */
 @Composable
 fun SearchList(
@@ -175,9 +182,18 @@ fun SearchList(
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(0.dp),
     credits: List<AttributionLink> = emptyList(),
+    onFirstRowEnd: ((Int) -> Unit)? = null,
 ) {
     val shownRecents = recentsFor(state, recents)
-    LazyColumn(modifier = modifier, contentPadding = contentPadding) {
+    val listState = rememberLazyListState()
+    if (onFirstRowEnd != null) {
+        val report by rememberUpdatedState(onFirstRowEnd)
+        val firstKey = if (shownRecents == null) state.results.firstOrNull()?.let { resultKey(it) } else null
+        LaunchedEffect(listState, firstKey) {
+            snapshotFlow { firstRowEnd(listState.layoutInfo, firstKey) }.filterNotNull().collect { report(it) }
+        }
+    }
+    LazyColumn(modifier = modifier, state = listState, contentPadding = contentPadding) {
         if (state.searching) {
             item(key = "progress") { LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) }
         }
@@ -213,13 +229,33 @@ fun SearchList(
                 )
             }
         } else {
-            items(state.results, key = { "result:${it.place.uri}" }) { result ->
+            items(state.results, key = ::resultKey) { result ->
                 ResultRow(result, userLocation, selected = result == state.selected) { actions.onSelect(result) }
             }
             // The list may cover the map and its credits: the results' sources are named under them.
             if (state.results.isNotEmpty() && credits.isNotEmpty()) item(key = "credits") { CreditsLine(credits) }
         }
     }
+}
+
+private fun resultKey(result: SearchResult): String = "result:${result.place.uri}"
+
+/**
+ * Where the row with [key] (else the list's first row) ends, from the list's top, or null while the
+ * list is scrolled away from its top. While that row is not laid out yet (the rows above it fill a
+ * low sheet), a pixel past the last row laid out: a sheet grown to that lays out the next row, and so
+ * reaches the one with [key].
+ */
+private fun firstRowEnd(
+    layout: LazyListLayoutInfo,
+    key: String?,
+): Int? {
+    val shown = layout.visibleItemsInfo
+    val top = shown.firstOrNull() ?: return null
+    if (top.index != 0 || top.offset != 0) return null
+    val row = if (key == null) top else shown.firstOrNull { it.key == key }
+    val end = (row ?: shown.last()).let { it.offset + it.size - layout.viewportStartOffset }
+    return if (row == null) end + 1 else end
 }
 
 /** The sources of the results, each a link (Photon, OpenStreetMap). */

@@ -11,13 +11,18 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -41,8 +46,11 @@ import kotlin.math.roundToInt
 /** How much of the results list shows: its first row, half the screen, or all of it. */
 enum class SheetHeight { Peek, Half, Full }
 
-/** The handle and the first row: what the sheet keeps on screen when pulled down. */
-private val PeekHeight = 120.dp
+/** The strip at the top of the sheet that holds the drag handle. */
+private val HandleHeight = 24.dp
+
+/** The lowest height until the first row has been measured: the handle and a row at the normal font size. */
+private val FallbackPeekHeight = 120.dp
 
 /** A release faster than this (about a flick) goes on to the next height; a slower one to the nearest. */
 private val FlingVelocity = 400.dp
@@ -57,26 +65,37 @@ private val FlingVelocity = 400.dp
  * [topSpace]; at full height, or while the sheet is dragged that far, it is not there at all (not
  * drawn, not touchable, not read by TalkBack), so it never covers the search bar or Settings.
  * [topSpace] is left free for the search bar.
+ *
+ * The lowest height shows the handle and the whole first row, as Google Maps' collapsed results
+ * show one whole result, above the navigation bar ([bottomInset], which the list stays above at
+ * every height): [content] reports how far its first
+ * row reaches from its top (it grows with the font size and a long name or address), and the
+ * sheet's lowest height follows it, never above half the screen.
  */
 @Composable
 internal fun ResultsSheet(
     height: Dp,
     topSpace: Dp,
+    bottomInset: Dp,
     above: @Composable () -> Unit,
     modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
+    content: @Composable (onFirstRowEnd: (Int) -> Unit) -> Unit,
 ) {
     val density = LocalDensity.current
+    var firstRowEnd by remember { mutableIntStateOf(0) }
     val anchors =
         with(density) {
             val total = height.toPx()
+            val peek = if (firstRowEnd > 0) HandleHeight.toPx() + firstRowEnd else FallbackPeekHeight.toPx()
             DraggableAnchors {
                 SheetHeight.Full at topSpace.toPx()
                 SheetHeight.Half at total / 2
-                SheetHeight.Peek at total - PeekHeight.toPx()
+                SheetHeight.Peek at total - (peek + bottomInset.toPx()).coerceAtMost(total / 2)
             }
         }
-    val state = remember(anchors) { AnchoredDraggableState(SheetHeight.Half, anchors) }
+    val state = remember { AnchoredDraggableState(SheetHeight.Half, anchors) }
+    // New heights (a measured first row, a turned screen) keep the sheet at the height it is at.
+    SideEffect { state.updateAnchors(anchors, state.targetValue) }
     val listDrag = remember(state, density) { ListDragsSheet(state, density) }
     val scope = rememberCoroutineScope()
     val step: () -> Unit = {
@@ -102,7 +121,7 @@ internal fun ResultsSheet(
                             Box(
                                 Modifier
                                     .fillMaxWidth()
-                                    .height(24.dp)
+                                    .height(HandleHeight)
                                     .anchoredDraggable(state, Orientation.Vertical)
                                     .clickable(onClick = step)
                                     .semantics {
@@ -123,7 +142,9 @@ internal fun ResultsSheet(
                                         ),
                                 )
                             }
-                            Box(Modifier.nestedScroll(listDrag)) { content() }
+                            // The list ends above the navigation bar, so at the lowest height nothing of the
+                            // second row shows behind the bar; the sheet's own colour fills under it.
+                            Box(Modifier.padding(bottom = bottomInset).nestedScroll(listDrag)) { content { firstRowEnd = it } }
                         }
                     }
                 },
