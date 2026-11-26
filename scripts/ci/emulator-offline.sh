@@ -7,7 +7,8 @@
 # moves its tiles to a new release and the app, started far from the area, updates the area by
 # itself. With the server gone the area draws in light and dark (the fixture's water colour, not the
 # bare background), also after three theme switches in one process (which count MainActivity's
-# instances for StrictMode). Delete removes it.
+# instances for StrictMode), and search, whose servers are gone too, finds the area's places in the
+# offline maps. Delete removes it.
 # Usage: emulator-offline.sh <apk> <out dir>
 set -euo pipefail
 
@@ -37,7 +38,9 @@ adb reverse "tcp:$port" "tcp:$port"
 cat > "$out/settings.json" <<JSON
 {"schemaVersion": 1, "servers": {
   "map_style_light": [{"name": "Fixture light", "url": "http://127.0.0.1:$port/light.json"}],
-  "map_style_dark": [{"name": "Fixture dark", "url": "http://127.0.0.1:$port/dark.json"}]}}
+  "map_style_dark": [{"name": "Fixture dark", "url": "http://127.0.0.1:$port/dark.json"}],
+  "photon": [{"name": "Fixture Photon", "url": "http://127.0.0.1:$port/photon"}],
+  "pinakes": [{"name": "Fixture Pinakes", "url": "http://127.0.0.1:$port/pinakes"}]}}
 JSON
 adb push "$out/settings.json" /data/local/tmp/pubky-maps-settings.json > /dev/null
 adb shell chmod 644 /data/local/tmp/pubky-maps-settings.json
@@ -221,6 +224,19 @@ sleep 5
 adb shell cmd uimode night no
 expect_water offline-light-recreated-again "#3c78d8"
 check_alive "offline map drawn without a connection"
+
+# Without any server, search answers from the places in the area's tiles (by the bakery's word:
+# the fixture's town labels are places too, and could fill the list for "fixture").
+open_at "$zurich"
+xy=$(wait_for "Search here" 30) || fail "no search bar without a connection"
+adb shell input tap $xy
+adb shell input text bakery
+wait_for "Fixture Bakery" 30 > /dev/null || fail "search without a connection did not find the offline area's places"
+wait_for "Search is offline: these places are from your offline maps. Addresses need a connection." 5 > /dev/null ||
+    fail "search does not say its results come from the offline maps"
+screenshot offline-search
+check_alive "search in the offline maps"
+open_at "$zurich"
 open_offline_maps
 wait_ready offline-final 20 || fail "the offline map is not Ready on the list"
 
@@ -243,4 +259,4 @@ check_alive "offline map deleted"
 
 # This also fails on a leaked activity of ours, counted by the theme switches above.
 check_strict_mode "offline maps"
-echo "an area downloads, updates to new tiles, draws without a connection in light and dark, and deletes"
+echo "an area downloads, updates to new tiles, draws and is searched without a connection in light and dark, and deletes"

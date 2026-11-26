@@ -95,6 +95,7 @@ import to.pubky.maps.search.SearchArea
 import to.pubky.maps.search.SearchMode
 import to.pubky.maps.search.SearchServices
 import to.pubky.maps.search.SearchState
+import to.pubky.maps.search.SourceState
 import to.pubky.maps.search.distanceMeters
 import to.pubky.maps.search.distanceText
 import to.pubky.maps.status.ServicePart
@@ -295,7 +296,17 @@ fun MapRoute(
     val mapSearch =
         if (search != null && searchState != null) {
             rememberMapSearch(search, searchState, recents, mapState, locationState, onClosePlace, onOpenSaved)
-                .copy(credits = servers.searchAttribution())
+                .copy(
+                    // Places from the offline maps are the map's own data: its credits name them.
+                    credits =
+                        if (searchState.offlineMaps ==
+                            SourceState.Answered
+                        ) {
+                            servers.mapAttribution()
+                        } else {
+                            servers.searchAttribution()
+                        },
+                )
         } else {
             null
         }

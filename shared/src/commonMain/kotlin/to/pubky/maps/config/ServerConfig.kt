@@ -67,6 +67,10 @@ data class ServerLists(
                 ServerDefaults.openStreetMap
         ).distinct()
 
+    /** The credits of the map styles of both themes, with OpenStreetMap's, each once. */
+    fun mapAttribution(): List<AttributionLink> =
+        ((get(Service.MapStyleLight) + get(Service.MapStyleDark)).flatMap { it.attribution } + ServerDefaults.openStreetMap).distinct()
+
     /** The credits of the search servers (Photon's data is OpenStreetMap's), each once. */
     fun searchAttribution(): List<AttributionLink> = get(Service.Photon).flatMap { it.attribution }.distinct()
 }

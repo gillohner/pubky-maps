@@ -45,6 +45,15 @@ people referenced on Pubky) are fetched from Pinakes as soon as the area is in t
 Pinakes cannot be reached, the map shows them in the downloaded areas. These requests tell Pinakes
 which areas are downloaded (the area widened to a 1/16° grid), also while the user looks elsewhere.
 
+**Search without a connection:** once an area is ready, and again after an update, the app reads
+the named places of its zoom 14 tiles (points of interest, towns and districts, streets, peaks,
+lakes) into its own database (`no_backup/offline-places.db`), from a copy of MapLibre's database
+taken while no download runs (MapLibre's own SQLite writes the file; a second SQLite in the process
+must not open it). When Photon cannot be reached, search answers from these places: every typed
+word starts a word of the name or the category, nearest first, merged with Pinakes when it answers.
+The list says the places are from the offline maps and that addresses need a connection, and the
+map's credits stand under them. Deleting an area deletes its places.
+
 Settings:
 
 - **Account:** sign in with [Pubky Ring](https://github.com/pubky/pubky-ring). It shows the user's
@@ -251,7 +260,8 @@ screenshots search with its pins, and the update probe screenshots each step of 
 - Offline maps (`scripts/ci/emulator-offline.sh`, two tiny styles served on the runner): an area
   downloads from Settings → Offline maps until Ready, with at most 4 tile requests at a time, the
   app's User-Agent and no tile twice; after the server moves its tiles to a new release the app
-  updates the area by itself; with the server gone the area draws in light and dark; it deletes.
+  updates the area by itself; with the server gone the area draws in light and dark, and search
+  (its servers gone too) finds the bakery each fixture tile holds; it deletes.
 - Sign-in probe (`scripts/ci/sign-in-probe.py`): Pubky Ring cannot run in CI, so a fixture relay on
   the runner stands in for the sign-in relay. The probe opens Settings → Account, starts a sign-in,
   reads the QR code, checks the link and that the app listens on the relay, then opens Ring's return

@@ -152,6 +152,12 @@ sqldelight {
             packageName.set("to.pubky.maps.offline.pubky.db")
             srcDirs.setFrom("src/commonMain/sqldelight-offline-pubky")
         }
+        // The places of the offline areas, for search without a connection: built again from the
+        // map tiles on the phone, so in its own file that can be deleted with no loss.
+        create("OfflinePlacesDatabase") {
+            packageName.set("to.pubky.maps.offline.db")
+            srcDirs.setFrom("src/commonMain/sqldelight-offline")
+        }
     }
 }
 

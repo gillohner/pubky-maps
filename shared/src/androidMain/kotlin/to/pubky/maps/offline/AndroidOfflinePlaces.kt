@@ -1,0 +1,145 @@
+package to.pubky.maps.offline
+
+import android.content.Context
+import app.cash.sqldelight.db.AfterVersion
+import app.cash.sqldelight.db.QueryResult
+import app.cash.sqldelight.db.SqlDriver
+import app.cash.sqldelight.db.SqlSchema
+import app.cash.sqldelight.driver.android.AndroidSqliteDriver
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import to.pubky.maps.offline.db.OfflinePlacesDatabase
+import java.io.ByteArrayInputStream
+import java.io.File
+import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.nio.file.attribute.BasicFileAttributes
+import java.util.zip.GZIPInputStream
+import java.util.zip.InflaterInputStream
+
+/** The places of the offline areas, in the no-backup folder (they are built again from the tiles). */
+fun androidOfflinePlaceIndex(context: Context): SqlOfflinePlaceIndex =
+    SqlOfflinePlaceIndex(
+        AndroidSqliteDriver(OfflinePlacesDatabase.Schema, context, File(context.noBackupFilesDir, "offline-places.db").path),
+    )
+
+/**
+ * Starts keeping [index] in step with [maps], reading the tiles from MapLibre's database
+ * (`no_backup/maplibre.db`, see [configureMapRuntime]) through a copy in the cache folder.
+ */
+fun startOfflinePlaceIndexer(
+    context: Context,
+    scope: CoroutineScope,
+    maps: OfflineMaps,
+    index: SqlOfflinePlaceIndex,
+) {
+    val tiles =
+        MapLibreDatabaseCopy(
+            context = context,
+            database = File(context.noBackupFilesDir, "maplibre.db"),
+            copy = File(context.cacheDir, "maplibre-copy.db"),
+        )
+    OfflinePlaceIndexer(maps.state, index, tiles, scope).start()
+}
+
+/**
+ * Reads MapLibre's offline database through a copy of its file. MapLibre has its own SQLite inside
+ * its native library; a second SQLite in the same process opening the same file does not see the
+ * first one's locks (POSIX locks are per process) and could take a write in progress for a crashed
+ * one and roll it back. A plain copy only reads the file. It counts only if the file had no journal
+ * (no write in progress) and the same size and time before and after, else the read is tried later.
+ */
+internal class MapLibreDatabaseCopy(
+    private val context: Context,
+    private val database: File,
+    private val copy: File,
+    private val io: CoroutineDispatcher = Dispatchers.IO,
+) : AreaTiles {
+    override suspend fun <T> open(read: (TilePlaces) -> T): T? =
+        withContext(io) {
+            try {
+                // A copy left by a process that died, with its journal, must not meet the new one.
+                deleteCopy()
+                if (!copyUnchanged(database, copy)) return@withContext null
+                val driver = openCopy()
+                try {
+                    read(MapLibreTiles(driver, ::inflateZlibOrGzip))
+                } finally {
+                    driver.close()
+                }
+            } finally {
+                deleteCopy()
+            }
+        }
+
+    private fun openCopy(): SqlDriver = AndroidSqliteDriver(MapLibreLayout, context, copy.path)
+
+    private fun deleteCopy() {
+        for (suffix in listOf("", "-journal", "-wal", "-shm")) File(copy.path + suffix).delete()
+    }
+}
+
+/**
+ * Copies [database] to [copy] when no write runs on it; false when one does (its rollback journal
+ * exists, or its size or time changed during the copy), when it is missing, or when there is no room
+ * for the copy and what SQLite may need to open it.
+ */
+internal fun copyUnchanged(
+    database: File,
+    copy: File,
+): Boolean {
+    if (!database.isFile) return false
+    val before = stamp(database) ?: return false
+    if (copy.absoluteFile.parentFile
+            ?.usableSpace
+            ?.let { it < 2 * before.first } != false
+    ) {
+        return false
+    }
+    try {
+        Files.copy(database.toPath(), copy.toPath(), StandardCopyOption.REPLACE_EXISTING)
+    } catch (e: IOException) {
+        return false
+    }
+    return stamp(database) == before
+}
+
+/** Size and modification time of [database], or null while its rollback journal says a write runs. */
+private fun stamp(database: File): Pair<Long, Any>? {
+    if (File(database.path + "-journal").exists()) return null
+    val attributes =
+        try {
+            Files.readAttributes(database.toPath(), BasicFileAttributes::class.java)
+        } catch (e: IOException) {
+            return null
+        }
+    return attributes.size() to attributes.lastModifiedTime()
+}
+
+/**
+ * MapLibre's layout as the copy's schema: a copy is never created or migrated here, so a database
+ * of another version fails to open (the read is tried later) instead of being changed.
+ */
+private object MapLibreLayout : SqlSchema<QueryResult.Value<Unit>> {
+    override val version: Long = MapLibreTiles.SCHEMA_VERSION
+
+    override fun create(driver: SqlDriver): QueryResult.Value<Unit> =
+        throw MapLibreTiles.UnknownLayout("The copy of MapLibre's database is empty")
+
+    override fun migrate(
+        driver: SqlDriver,
+        oldVersion: Long,
+        newVersion: Long,
+        vararg callbacks: AfterVersion,
+    ): QueryResult.Value<Unit> = throw MapLibreTiles.UnknownLayout("MapLibre's offline database has version $oldVersion")
+}
+
+/** Unpacks zlib data (MapLibre's compressed tiles) or gzip data (a tile as some servers send it). */
+internal fun inflateZlibOrGzip(bytes: ByteArray): ByteArray {
+    val input = ByteArrayInputStream(bytes)
+    val gzip = bytes.size >= 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()
+    return (if (gzip) GZIPInputStream(input) else InflaterInputStream(input)).use { it.readBytes() }
+}

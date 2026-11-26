@@ -299,8 +299,20 @@ internal fun recentsFor(
 /** One line on what the list lacks: offline, one source missing, or nothing found. */
 internal fun statusLine(state: SearchState): String? =
     when {
+        state.offline && state.offlineMaps == SourceState.Answered -> {
+            if (state.results.isEmpty() && state.resultsAreCurrent) {
+                "Search is offline, and nothing in your offline maps matches “${state.query.trim()}”."
+            } else {
+                "Search is offline: these places are from your offline maps. Addresses need a connection."
+            }
+        }
+
         state.offline -> {
             "Search is offline: neither Photon nor Pinakes is answering. Check your connection or the server lists in Settings."
+        }
+
+        state.photon == SourceState.Unreachable && state.offlineMaps == SourceState.Answered -> {
+            "Photon is not answering: places and streets come from your offline maps, addresses are missing."
         }
 
         state.photon == SourceState.Unreachable -> {
