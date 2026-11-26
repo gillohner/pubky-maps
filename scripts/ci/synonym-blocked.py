@@ -14,9 +14,9 @@ that the block works, then:
 - the session cannot be restored, so the banner names the missing part ("Can't reach your
   homeserver") while the map stays usable;
 - Settings and the Account page show the cached name, tags and saved place;
-- (`synonym` case) a place saved now waits in the outbox, which keeps a JobScheduler job; with the
-  app closed (off screen, its process killed) Android runs the job again and starts the app's
-  process for it (OutboxJobService), as it does for a closed app whose job is due.
+- (`synonym` case) a place saved in airplane mode waits in the outbox, which keeps a JobScheduler
+  job; with the app closed (off screen, its process killed) and the network back, Android starts the
+  app's process for that job (OutboxJobService).
 
 Usage: synonym-blocked.py <apk> <session fixture json> <synonym|openfreemap> <out dir>
 """
@@ -139,8 +139,19 @@ def app_pid(dev):
     return dev.shell(f"pidof {PKG}").strip()
 
 
+def airplane(dev, on):
+    dev.shell(f"cmd connectivity airplane-mode {'enable' if on else 'disable'}")
+    want = "1" if on else "0"
+    deadline = time.time() + 30
+    while time.time() < deadline and dev.shell("settings get global airplane_mode_on").strip() != want:
+        time.sleep(1)
+    if dev.shell("settings get global airplane_mode_on").strip() != want:
+        dev.fail(f"airplane mode did not turn {'on' if on else 'off'}")
+
+
 def outbox_wakes_the_closed_app(dev):
-    """A write that cannot be sent keeps a job; Android runs it, and so starts the app, with the app closed."""
+    """A write made without a network keeps a job; when the network is back, Android starts the closed app for it."""
+    airplane(dev, True)
     # To the app itself: on this image Google Maps also opens geo: links, so a plain VIEW asks which app.
     started = dev.adb("shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", f"'{WAITING_PLACE}'",
                       "-p", PKG, check=False)
@@ -157,7 +168,7 @@ def outbox_wakes_the_closed_app(dev):
         jobs = dev.shell(f"dumpsys jobscheduler {PKG}", timeout=60)
     (dev.out / "jobs.txt").write_text(jobs)
     if not REGISTERED.search(jobs):
-        dev.fail("a write waits for the homeserver but no outbox job is registered (jobs.txt)")
+        dev.fail("a write waits for a connection but no outbox job is registered (jobs.txt)")
     log("the waiting write keeps an outbox job")
 
     # Closed: off the screen, then the process killed (as Android does to a background app).
@@ -168,17 +179,25 @@ def outbox_wakes_the_closed_app(dev):
         dev.fail("the app's process is not running before it is killed")
     starts_before = len(STARTED.findall(dev.shell(f"dumpsys jobscheduler {PKG}", timeout=60)))
     dev.shell(f"run-as {PKG} kill {before}")
-    # A killed run of the job is run again after its backoff (30 s, doubling); a job that had not run
-    # yet, or whose run had ended, runs when its backoff is over.
-    deadline = time.time() + 240
+    deadline = time.time() + 20
+    while time.time() < deadline and app_pid(dev):
+        time.sleep(1)
+    if app_pid(dev):
+        dev.fail(f"the app's process {before} did not end")
+    log("the app is closed; the network comes back")
+
+    airplane(dev, False)
+    deadline = time.time() + 180
     after = ""
     while time.time() < deadline:
         after = app_pid(dev)
-        if after and after != before:
+        if after:
             break
         time.sleep(3)
-    if not after or after == before:
-        dev.fail(f"the app was not started again for its waiting write (pid before {before}, after {after!r})")
+    jobs = dev.shell(f"dumpsys jobscheduler {PKG}", timeout=60)
+    (dev.out / "jobs-after.txt").write_text(jobs)
+    if not after:
+        dev.fail("with the network back, the closed app was not started for its waiting write (jobs-after.txt)")
     # ActivityManager names why it started the process: "Start proc <pid>:<pkg>/... for service {<job
     # service>}", and the events log "am_proc_start: [<user>,<pid>,<uid>,<pkg>,service,{<job service>}]".
     log_lines = dev.adb("logcat", "-d", "-b", "all", check=False, timeout=120).splitlines()
@@ -187,18 +206,13 @@ def outbox_wakes_the_closed_app(dev):
     (dev.out / "outbox-start.txt").write_text("\n".join(reasons) + "\n")
     if not reasons:
         dev.fail(f"process {after} was not started for the outbox job (outbox-start.txt, logcat.txt)")
-    log(f"killed with a write waiting, the app was started again (pid {before} -> {after}) for its outbox job")
-    jobs = dev.shell(f"dumpsys jobscheduler {PKG}", timeout=60)
-    (dev.out / "jobs-after.txt").write_text(jobs)
     if len(STARTED.findall(jobs)) <= starts_before:
-        dev.fail(f"no new run of the outbox job after the kill ({starts_before} before; jobs-after.txt)")
-    if not REGISTERED.search(jobs):
-        dev.fail("the outbox job is gone while the write still waits (jobs-after.txt)")
+        dev.fail(f"no new run of the outbox job after the network came back ({starts_before} before; jobs-after.txt)")
+    log(f"with the network back, Android started the closed app (pid {before} -> {after}) for its outbox job")
     dev.start_app()
     if dev.wait_for("Show my location", 60) is None:
         dev.fail("the map screen did not appear after the outbox job ran")
     dev.check_alive("map after the outbox job")
-
 
 if __name__ == "__main__":
     try:
