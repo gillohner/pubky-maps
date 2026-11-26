@@ -25,6 +25,7 @@ import to.pubky.maps.account.AccountScreen
 import to.pubky.maps.account.AccountState
 import to.pubky.maps.account.AccountUser
 import to.pubky.maps.account.Connection
+import to.pubky.maps.account.accountPlaceLabel
 import to.pubky.maps.cache.CachedAccount
 import to.pubky.maps.cache.CachedBookmark
 import to.pubky.maps.cache.CachedTag
@@ -176,6 +177,13 @@ class ScreenshotTest {
                 ),
         )
 
+    /** Names the app stored for two of the places; the relation and the geo point have none. */
+    private val placeNames =
+        mapOf(
+            "https://www.openstreetmap.org/node/2405123" to "Café Henrici",
+            "https://www.openstreetmap.org/way/48210334" to "Lindenhof",
+        )
+
     @Composable
     private fun Account(state: AccountState) {
         AccountScreen(
@@ -187,16 +195,9 @@ class ScreenshotTest {
             onRefresh = {},
             onSignOut = {},
             onBack = {},
-            placeName = placeNames::get,
+            placeLabel = { place -> accountPlaceLabel(place, placeNames, normalize = { it }) },
         )
     }
-
-    /** Names the app stored for two of the places; the relation and the geo point have none. */
-    private val placeNames =
-        mapOf(
-            "https://www.openstreetmap.org/node/2405123" to "Café Henrici",
-            "https://www.openstreetmap.org/way/48210334" to "Lindenhof",
-        )
 
     private val signedOut = AccountState.SignedOut()
     private val signedIn = AccountState.SignedIn(user, cached, Connection.Online)

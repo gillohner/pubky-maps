@@ -13,6 +13,7 @@ import to.pubky.maps.account.AccountScreen
 import to.pubky.maps.account.AccountState
 import to.pubky.maps.account.AccountUser
 import to.pubky.maps.account.Connection
+import to.pubky.maps.account.accountPlaceLabel
 import to.pubky.maps.cache.CachedAccount
 import to.pubky.maps.cache.CachedBookmark
 import to.pubky.maps.cache.CachedTag
@@ -21,7 +22,7 @@ import to.pubky.maps.ui.PubkyMapsTheme
 /** The account page lists the user's tags and saved places by the places' names, never by a raw link. */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w412dp-h915dp")
-class AccountPlacesTest {
+class AccountPageTest {
     @get:Rule
     val compose = createComposeRule()
 
@@ -58,7 +59,7 @@ class AccountPlacesTest {
                     onRefresh = {},
                     onSignOut = {},
                     onBack = {},
-                    placeName = names::get,
+                    placeLabel = { place -> accountPlaceLabel(place, names, normalize = { it }) },
                 )
             }
         }

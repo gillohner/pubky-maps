@@ -36,6 +36,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -77,8 +78,8 @@ fun AccountScreen(
     onBack: () -> Unit,
     /** Why the app asks to sign in now ("Sign in to tag this place."), shown above the sign-in. */
     reason: String? = null,
-    /** The name the app knows for a place (as the cache spells it), or null. */
-    placeName: (String) -> String? = { null },
+    /** How a place (as the cache spells it) reads in a list: its name, else its link in words. */
+    placeLabel: (String) -> String = ::placeText,
 ) {
     Scaffold(
         topBar = {
@@ -115,7 +116,7 @@ fun AccountScreen(
                     AccountState.Loading -> Loading()
                     is AccountState.SignedOut -> SignedOut(state, onSignIn, reason)
                     is AccountState.SigningIn -> SigningIn(state, ringOnThisPhone, onOpenRing, onCancelSignIn)
-                    is AccountState.SignedIn -> SignedIn(state, onSignOut, placeName)
+                    is AccountState.SignedIn -> SignedIn(state, onSignOut, placeLabel)
                     is AccountState.Unavailable -> Paragraph(state.reason)
                 }
             }
@@ -254,10 +255,21 @@ private fun GetRing() {
 private fun SignedIn(
     state: AccountState.SignedIn,
     onSignOut: () -> Unit,
-    placeName: (String) -> String?,
+    placeLabel: (String) -> String,
 ) {
-    // A place reads as its name, as on the Saved page; one whose name is not known as its link in words.
-    val place: (String) -> String = { placeName(it) ?: placeText(it) }
+    // Only the rows shown are named; naming a place may ask the core to spell it.
+    val tags =
+        remember(state.cached.tags, placeLabel) {
+            state.cached.tags
+                .take(LISTED_ITEMS)
+                .map { it.label to placeLabel(it.place) }
+        }
+    val saved =
+        remember(state.cached.bookmarks, placeLabel) {
+            state.cached.bookmarks
+                .take(LISTED_ITEMS)
+                .map { placeLabel(it.place) to null }
+        }
     var confirmSignOut by rememberSaveable { mutableStateOf(false) }
     if (state.refreshing || state.signingOut) {
         LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -286,13 +298,13 @@ private fun SignedIn(
         title = "Your tags",
         count = state.cached.tags.size,
         empty = "No tags yet.",
-        items = state.cached.tags.map { it.label to place(it.place) },
+        items = tags,
     )
     ItemSection(
         title = "Saved places",
         count = state.cached.bookmarks.size,
         empty = "No saved places yet.",
-        items = state.cached.bookmarks.map { place(it.place) to null },
+        items = saved,
     )
     OutlinedButton(
         onClick = { confirmSignOut = true },
