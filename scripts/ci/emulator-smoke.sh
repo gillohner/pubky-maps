@@ -3,9 +3,9 @@
 # and hold the start time to a budget, open Settings and each settings page, switch "Follow local
 # rules" off and check it stays off after a restart (a second start held to a budget), open the
 # open-source licences and swipe to their end, then go back with the system back button; move the
-# map with a link and check that the next start opens it there, then pan it and switch the theme or
-# press Back at once and check that the panned view is stored. Fails on a crash or when the app is
-# not in front.
+# map with a link and check that the next start opens it there, then switch the theme during a pan
+# or press Back right after one and check that the panned view is stored. Fails on a crash or when
+# the app is not in front.
 # Screenshots, the UI dumps, the start times and the log go to <out dir>.
 # Usage: emulator-smoke.sh <apk> <out dir>
 set -euo pipefail
@@ -305,11 +305,11 @@ view_lat() {
 }
 # The latitude range of a pan's view: 0.005-0.1 degrees south of LAT (a pan that flings goes further).
 south_of() { python3 -I -c "import sys; lat = float(sys.argv[1]); print(lat - 0.1, lat - 0.005)" "$1"; }
-# "MS EPOCH": milliseconds from the log line "lift NAME" to the next destroy of MainActivity, and
-# the destroy's time in seconds since 1970; nothing before that destroy.
+# "MS EPOCH": milliseconds from the log line "lift NAME" (or "WORD NAME") to the next destroy of
+# MainActivity, and the destroy's time in seconds since 1970; nothing before that destroy.
 lift_to_destroy() {
     adb logcat -d -v epoch -b main -b events > "$out/logcat-$1.txt" || true
-    awk -v tag="lift $1" 'index($0, "PubkyMapsSmoke") && index($0, tag) { up = $1 }
+    awk -v tag="${2:-lift} $1" 'index($0, "PubkyMapsSmoke") && index($0, tag) { up = $1 }
         up && /wm_on_destroy_called.*MainActivity/ { printf "%d %.3f\n", ($1 - up) * 1000, $1; exit }' "$out/logcat-$1.txt"
 }
 # The stored view's write time as stat prints it, or nothing.
@@ -360,8 +360,11 @@ check_reopened_view() {
     # leaves). That pan flings too when it lands in the stall (2 and 4 pans' worth in runs
     # 45879166390 and 45879110548, each with an 8 s frame at the lift), so its range is south_of's.
     # The "lift" line is logged just before the finger lifts, so the camera's rest starts after it.
-    pan_up() {
+    pan_down() {
         adb shell "input motionevent DOWN 540 1800; input motionevent MOVE 540 1400; input motionevent MOVE 540 1000; input motionevent MOVE 540 600"
+    }
+    pan_up() {
+        pan_down
         adb shell "log -t PubkyMapsSmoke 'lift $1'; input motionevent UP 540 600; $2"
     }
     pan_up first ""
@@ -374,45 +377,47 @@ check_reopened_view() {
     $stored || fail "the view after a pan was not stored once the camera rested; see map-view-rested.json"
     last=$(view_lat rested)
     sleep 5
-    # A theme switch right after a pan: Android recreates MainActivity. The new map opens at the
-    # panned camera (the map keeps it in its saved state) and would store it after its own 1 s rest,
-    # so the view alone does not show the save on leaving; the file's write time does. A try shows
-    # it when the old activity was destroyed less than 1 s after the lift (its rest cannot have
-    # ended) and the view was first written less than 1 s after that destroy (the new map's rest
-    # ends later). The switch waits 250 ms after the lift for the map to report its camera still: a
-    # map that leaves while its camera moves stores nothing on leaving (on CI about half the tries
-    # without the wait), and the new map's rest then stores the view. A try that does not show it
-    # is tried again; each pans further south.
+    # A theme switch during a pan, the finger still down: Android recreates MainActivity while the
+    # map reports its camera as moving, as it does for a moment after the finger lifts (longer when
+    # it flings or a frame stalls), and the map that leaves must still store where the user's
+    # gesture had it. The new map opens at the panned camera (the map keeps it in its saved state) and would
+    # store it after its own 1 s rest, so the view alone does not show the save on leaving; the
+    # file's write time does. A try shows it when the view was first written less than 1 s after
+    # the destroy (the new map's rest ends later). The finger lifts once that write is seen, in the
+    # new activity, which never had it down. A try that does not show it is tried again; each pans
+    # further south.
     proved=false
     for try in 1 2 3 4 5; do
         if ((try % 2)); then night=yes; else night=no; fi
         before=$(written_at)
-        pan_up "switch-$try" "sleep 0.25; cmd uimode night $night"
+        pan_down
+        adb shell "log -t PubkyMapsSmoke 'switch switch-$try'; cmd uimode night $night"
         # Polled at once: the new map may write the view again after its rest (its camera comes back
         # from the saved state a few bits apart), so only the first write tells when it was stored.
         written=$(first_write_after "$before" 6 || true)
+        adb shell input motionevent UP 540 600
         destroy=""
         for _ in $(seq 1 15); do
             sleep 1
-            destroy=$(lift_to_destroy "switch-$try")
+            destroy=$(lift_to_destroy "switch-$try" switch)
             [ -z "$destroy" ] || break
         done
         [ -n "$destroy" ] || fail "MainActivity was not recreated after a theme switch"
         wait_for "Show my location" 60 > /dev/null || fail "the map did not come back after a theme switch"
-        check_alive "theme switch right after a pan"
+        check_alive "theme switch during a pan"
         # The new map draws before the next pan (and has rested long since).
         sleep 8
-        read -r lift_ms destroyed_at <<< "$destroy"
+        read -r switch_ms destroyed_at <<< "$destroy"
         write_ms=""
         if [ -n "$written" ]; then write_ms=$(ms_after "$written" "$destroyed_at"); fi
-        echo "theme switch $try: lift to destroy $lift_ms ms, destroy to the view's first write ${write_ms:-unknown} ms"
+        echo "theme switch $try: switch to destroy $switch_ms ms, destroy to the view's first write ${write_ms:-unknown} ms"
         range=$(south_of "$last")
         moved=false
         if expect_view "switched-$try" $range; then moved=true; fi
         last=$(view_lat "switched-$try" 2> /dev/null || echo "$last")
-        if $moved && ((lift_ms < 1000 && ${write_ms:-1000} < 1000)); then proved=true; break; fi
+        if $moved && ((${write_ms:-1000} < 1000)); then proved=true; break; fi
     done
-    $proved || fail "no theme switch right after a pan first wrote the view within 1 s of the destroy in 5 tries; see map-view-switched-*.json"
+    $proved || fail "no theme switch during a pan first wrote the view within 1 s of the destroy in 5 tries; see map-view-switched-*.json"
     if [ "$night" = yes ]; then
         adb shell cmd uimode night no
         sleep 3
@@ -422,8 +427,8 @@ check_reopened_view() {
     # Back right after a pan, the case the user meets. This start has no launcher intent, so Back
     # finishes the activity (from the launcher, Android 12+ only moves the task back and the rest
     # still runs). Back destroys the activity 0.9-1.5 s after the lift on CI, so a rest can end
-    # first: this checks that Back stores the view, the theme switch above that the save on leaving
-    # does it.
+    # first, and the camera may still be moving (a fling, a frame stall): this checks that Back
+    # stores the view, the theme switch above that the save on leaving does it.
     pan_up back "input keyevent KEYCODE_BACK"
     sleep 3
     check_no_crash "back right after a pan"
