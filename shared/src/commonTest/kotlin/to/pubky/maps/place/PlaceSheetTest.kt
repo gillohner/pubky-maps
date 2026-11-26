@@ -33,8 +33,15 @@ class PlaceSheetTest {
 
     @Test
     fun aTapOnTheHandleStepsUpThenBack() {
-        assertEquals(SheetStop.Half, SheetStops.afterTap(SheetStop.Peek))
-        assertEquals(SheetStop.Full, SheetStops.afterTap(SheetStop.Half))
-        assertEquals(SheetStop.Half, SheetStops.afterTap(SheetStop.Full))
+        assertEquals(SheetStop.Half, stops.afterTap(SheetStop.Peek))
+        assertEquals(SheetStop.Full, stops.afterTap(SheetStop.Half))
+        assertEquals(SheetStop.Half, stops.afterTap(SheetStop.Full))
+    }
+
+    @Test
+    fun whereHalfIsNoTallerThanTheLowestStopATapThereGoesToTheTop() {
+        val short = SheetStops(peek = 300f, half = 200f, full = 400f)
+        assertEquals(SheetStop.Full, short.afterTap(SheetStop.Peek))
+        assertEquals(SheetStop.Half, short.afterTap(SheetStop.Full))
     }
 }
