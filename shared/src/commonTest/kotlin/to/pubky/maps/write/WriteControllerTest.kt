@@ -15,6 +15,7 @@ import to.pubky.maps.account.AccountUser
 import to.pubky.maps.account.Connection
 import to.pubky.maps.account.CoreFailure
 import to.pubky.maps.cache.CachedAccount
+import to.pubky.maps.cache.CachedBookmark
 import to.pubky.maps.cache.CachedTag
 import to.pubky.maps.config.AppSettings
 import to.pubky.maps.config.DataKind
@@ -366,15 +367,72 @@ class WriteControllerTest {
                     .point,
             )
 
-            // The next start reads the stored point for the bookmark the cache now has.
+            // The next start reads the stored point and name for the bookmark the cache now has.
             val next = controller()
             runCurrent()
             assertEquals(
-                SCHOBER,
+                SavedEntry(OSM, Kept.Private, "Conditorei Schober", point = SCHOBER),
                 next.own.value.saved
-                    .single()
-                    .point,
+                    .single(),
             )
+        }
+
+    @Test
+    fun aSavedPlaceWithNoNameOrPointKeepsThoseItsPageShows() =
+        runTest {
+            // Saved and tagged on another device: the homeserver's bookmark and tag alone.
+            val tagged = "https://www.openstreetmap.org/node/2"
+            account.value =
+                AccountState.SignedIn(
+                    AccountUser(ME, "Ada"),
+                    CachedAccount(ME, "Ada", 500, listOf(CachedTag("/t/1", tagged, "view", 1)), listOf(CachedBookmark("/b/1", OSM))),
+                    Connection.Online,
+                )
+            val writer = controller()
+            assertEquals(listOf(SavedEntry(OSM, Kept.Private, null)), writer.own.value.saved)
+
+            writer.remember(target, setOf(OSM))
+            writer.remember(WriteTarget(tagged, "Lindenhof", GeoPoint(47.373, 8.541)), setOf(tagged))
+            writer.remember(WriteTarget(GOOGLE, "Not mine", SCHOBER), setOf(GOOGLE))
+            runCurrent()
+
+            assertEquals(listOf(SavedEntry(OSM, Kept.Private, "Conditorei Schober", point = SCHOBER)), writer.own.value.saved)
+            assertEquals("Lindenhof", writer.own.value.names[tagged], "the Account page names the tagged place")
+            assertEquals(mapOf(OSM to "Conditorei Schober", tagged to "Lindenhof"), store.names, "a place not the user's keeps nothing")
+            assertEquals(mapOf(OSM to SCHOBER), store.points(), "only saved places keep a point")
+            assertEquals(emptyList(), sent, "nothing goes to the homeserver")
+
+            // A name and point already kept stay.
+            writer.remember(WriteTarget(OSM, "Schober", GeoPoint(47.0, 8.0)), setOf(OSM))
+            runCurrent()
+            assertEquals(
+                SavedEntry(OSM, Kept.Private, "Conditorei Schober", point = SCHOBER),
+                writer.own.value.saved
+                    .single(),
+            )
+
+            val next = controller()
+            runCurrent()
+            assertEquals(
+                SavedEntry(OSM, Kept.Private, "Conditorei Schober", point = SCHOBER),
+                next.own.value.saved
+                    .single(),
+            )
+        }
+
+    @Test
+    fun aPlaceSavedOnThePhoneWithNoPointKeepsTheOneItsPageShows() =
+        runTest {
+            phone.data = PhoneData(saved = listOf(PhoneSaved(OSM, "Schober", 7L)))
+            account.value = AccountState.SignedOut()
+            val writer = controller()
+
+            writer.remember(target, setOf(OSM))
+            runCurrent()
+
+            assertEquals(listOf(PhoneSaved(OSM, "Schober", 7L, SCHOBER)), phone.data.saved, "its own name and save time stay")
+            assertEquals(listOf(SavedEntry(OSM, Kept.Phone, "Schober", point = SCHOBER)), writer.own.value.saved)
+            assertEquals(emptyMap(), store.names, "signed out, the account's store keeps nothing")
         }
 
     @Test

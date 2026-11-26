@@ -24,6 +24,7 @@ class OwnDataTest {
         lists: List<OwnList> = emptyList(),
         phone: PhoneData = PhoneData(),
         points: Map<String, GeoPoint> = emptyMap(),
+        labels: Map<String, String> = mapOf(OSM to "Schober"),
     ) = ownData(
         viewer = ME,
         cached = cached,
@@ -31,7 +32,7 @@ class OwnDataTest {
         phone = phone,
         queue = queue.mapIndexed { i, op -> QueuedOp(i.toLong(), op) },
         confirmed = confirmed,
-        labels = mapOf(OSM to "Schober"),
+        labels = labels,
         points = points,
         normalize = { it.replace("https://osm.org/", "https://www.openstreetmap.org/") },
     )
@@ -55,6 +56,21 @@ class OwnDataTest {
         // A refresh that began after the write read it from the homeserver (or saw it gone).
         val later = CachedAccount(ME, null, 300, emptyList(), emptyList())
         assertEquals(emptyList(), data(later, confirmed = listOf(tag)).tags)
+    }
+
+    @Test
+    fun aSavedPlaceIsNamedByANameKeptUnderAnotherSpellingOfItsLink() {
+        // Saved from an osm.org link: the name was kept as the link was written, the homeserver's bookmark
+        // comes back as the core spells it.
+        val cached = CachedAccount(ME, null, 100, emptyList(), listOf(CachedBookmark("/b/1", OSM)))
+        val labels = mapOf("https://osm.org/node/1" to "Schober")
+
+        val own = data(cached, labels = labels)
+        assertEquals(listOf(SavedEntry(OSM, Kept.Private, "Schober")), own.saved)
+        assertEquals("Schober", own.names[OSM])
+
+        val pending = data(queue = listOf(WriteOp.Save(OSM)), labels = labels)
+        assertEquals("Schober", pending.saved.single().name, "a save still to be sent, spelled by the core")
     }
 
     @Test

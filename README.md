@@ -108,9 +108,11 @@ user's collections (read from their homeserver, public or private, or kept on th
 places each. Save keeps the place privately on the homeserver or on the phone only, per the
 setting; the **Saved** screen (from the search page) lists saved places and lists, and the map
 shows each saved place as a purple bookmark badge that opens it. The homeserver's bookmark holds
-only the link, so the place's point is kept on the phone with the save; a `geo:` link names its
-own, and other places saved before this, on another device or before the last sign-out have no badge. Public writes
-show a Public badge first. A write shows at once and goes into an outbox on the phone, sent in
+only the link, so the place's name and point are kept on the phone with the save (by the link as
+the core spells it); a `geo:` link names its own point. A saved or tagged place the phone knows no
+name or point for (saved on another device, or before the last sign-out) keeps those its page shows
+when the user opens it, and from then on has its name on the Saved and Account pages and its badge
+on the map. Public writes show a Public badge first. A write shows at once and goes into an outbox on the phone, sent in
 order; one without a connection waits and is retried, and goes out as soon as the phone is online
 again (the homeserver is tried again then, not only on a timer), also with the app closed: while
 writes wait, a JobScheduler job (`OutboxJobService`, expedited from Android 12 on, kept over a

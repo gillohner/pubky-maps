@@ -345,6 +345,57 @@ class WriteController(
             }
         }
 
+    /**
+     * The page of the place whose links are [links] shows it as [target]: a place the user saved or
+     * tagged that has no name or no point on this phone (saved on another device, or before the last
+     * sign-out) keeps [target]'s, so the Saved and Account pages name it and the map shows its badge.
+     * Points are kept for saved places only; a name or point already kept stays; other places keep
+     * nothing.
+     */
+    fun remember(
+        target: WriteTarget,
+        links: Set<String>,
+    ) = enqueue {
+        val own = mutableOwn.value
+        val mine = own.forPlace(links)
+        val name = target.name
+        val point = target.point
+        var changed = false
+        mine.saved.filter { it.kept == Kept.Phone }.forEach { entry ->
+            val kept = phoneData.saved.firstOrNull { normalize(it.place) == entry.place } ?: return@forEach
+            val filled = kept.copy(name = kept.name ?: name, point = kept.point ?: entry.point ?: point)
+            if (filled != kept) {
+                io { phone.save(filled) }
+                phoneData = phoneData.copy(saved = phoneData.saved.map { if (it == kept) filled else it })
+                changed = true
+            }
+        }
+        if (viewer != null) {
+            val homeSaved = mine.saved.filter { it.kept != Kept.Phone }
+            val unnamed =
+                homeSaved.filter { it.name == null }.map { it.place } +
+                    mine.tags
+                        .orEmpty()
+                        .map { it.place }
+                        .filter { it !in own.names }
+            if (name != null) {
+                unnamed.distinct().forEach { place ->
+                    io { store.putLabel(place, name) }
+                    labels = labels + (place to name)
+                    changed = true
+                }
+            }
+            if (point != null) {
+                homeSaved.filter { it.point == null }.map { it.place }.distinct().forEach { place ->
+                    io { store.putPoint(place, point) }
+                    points = points + (place to point)
+                    changed = true
+                }
+            }
+        }
+        if (changed) publish()
+    }
+
     /** Removes every saved copy of the place whose links are [links] (on this phone and on the homeserver). */
     fun unsave(
         target: WriteTarget,
@@ -493,14 +544,14 @@ class WriteController(
         }
         val queued = io { store.enqueue(op) }
         queue = queue + queued
-        val name = target.name
-        if (name != null && labels[target.uri] != name) {
-            io { store.putLabel(target.uri, name) }
-            labels = labels + (target.uri to name)
-        }
-        // By the core's spelling: the homeserver's bookmark comes back spelled so, not as the link was opened.
-        val point = target.point
+        // By the core's spelling: the homeserver's copy comes back spelled so, not as the link was opened.
         val place = normalize(target.uri)
+        val name = target.name
+        if (name != null && labels[place] != name) {
+            io { store.putLabel(place, name) }
+            labels = labels + (place to name)
+        }
+        val point = target.point
         if (point != null && points[place] != point) {
             io { store.putPoint(place, point) }
             points = points + (place to point)

@@ -750,6 +750,7 @@ private fun rememberPlacePage(
             distance = distanceText(userLocation, shown.place.point ?: page.card?.point),
             provider = shown.provider,
         )
+    if (writes != null && own != null) RememberOwnPlace(page, own, writes)
     val actions =
         PlacePageActions(
             onClose = shown.onClose,
@@ -775,6 +776,32 @@ private fun rememberPlacePage(
  */
 internal val PlacePageState.placePoint: GeoPoint? get() = place.point?.takeIf { place.pinned } ?: card?.point
 
+/** The page's place as the user's writes name it: its link, its name, where it is. */
+private val PlacePageState.writeTarget: WriteTarget get() = WriteTarget(place.uri, card?.name ?: place.name, placePoint)
+
+/** Every link of [page]'s place, spelled as the core stores places: the keys of the user's own data about it. */
+private fun ownLinks(
+    page: PlacePageState,
+    writes: WriteController,
+): Set<String> = PlacePageController.placeLinks(page.place, page.card).map(writes::normalize).toSet()
+
+/**
+ * A place the user saved or tagged keeps the name and point its page shows, when the phone has none
+ * for it ([WriteController.remember] decides); asked again when the page or the user's entries for it
+ * change, so a page whose card loads later gives its name then.
+ */
+@Composable
+private fun RememberOwnPlace(
+    page: PlacePageState,
+    own: OwnData,
+    writes: WriteController,
+) {
+    val target = page.writeTarget
+    val links = ownLinks(page, writes)
+    val mine = own.forPlace(links)
+    LaunchedEffect(writes, target, links, mine.saved, mine.tags) { writes.remember(target, links) }
+}
+
 /** The place page's writes: what the user has about [page]'s place (by every link of it) and what they can do. */
 internal fun placeWriteActions(
     page: PlacePageState,
@@ -783,9 +810,9 @@ internal fun placeWriteActions(
     onWrite: (WriteTarget, WriteIntent) -> Unit,
     publicTagsExplained: Boolean,
 ): PlaceWriteActions {
-    val links = PlacePageController.placeLinks(page.place, page.card).map(writes::normalize).toSet()
+    val links = ownLinks(page, writes)
     val ownPlace = own.forPlace(links)
-    val target = WriteTarget(page.place.uri, page.card?.name ?: page.place.name, page.placePoint)
+    val target = page.writeTarget
 
     fun open(intent: WriteIntent) = if (writes.needsSignIn(intent)) writes.signInFirst(target, intent) else onWrite(target, intent)
     return PlaceWriteActions(
