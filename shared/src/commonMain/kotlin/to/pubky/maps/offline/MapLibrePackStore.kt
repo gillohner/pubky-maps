@@ -64,6 +64,11 @@ class MapLibrePackStore(
             metadata.encode(),
         )
 
+    override suspend fun createLike(
+        handle: Any,
+        metadata: PackMetadata,
+    ): Any = storage().create((handle as OfflinePack).definition, metadata.encode())
+
     override fun resume(handle: Any) = storage().resume(handle as OfflinePack)
 
     override fun pause(handle: Any) = storage().pause(handle as OfflinePack)
@@ -82,7 +87,7 @@ class MapLibrePackStore(
  */
 private fun OfflinePack.stored(): Flow<StoredPack> =
     combine(metadata, downloadProgress.scan(PackProgress()) { last, next -> next.applyTo(last) }.drop(1)) { bytes, progress ->
-        StoredPack(this, PackMetadata.decode(bytes), progress)
+        StoredPack(this, PackMetadata.decode(bytes), progress, definition.styleUrl)
     }
 
 internal fun DownloadProgress.applyTo(last: PackProgress): PackProgress =

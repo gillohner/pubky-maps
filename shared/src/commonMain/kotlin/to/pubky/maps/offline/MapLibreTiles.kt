@@ -24,8 +24,9 @@ class MapLibreTiles(
     /**
      * The places in [area]'s tiles of zoom [OfflineLimits.MAX_ZOOM] (the deepest of the map's vector
      * tiles, which holds every named place), the newest tiles first; null when MapLibre has no pack
-     * of [area]. MapLibre keeps the tiles of the releases before linked to a pack after an update, so
-     * only the newest tile of each source at each place is read ([newestOfEachSource]): a shop that
+     * of [area]. MapLibre keeps the tiles of the releases before linked to a pack after an update
+     * until the app has replaced the pack ([OfflineMaps]; one that failed keeps them), so only the
+     * newest tile of each source at each place is read ([newestOfEachSource]): a shop that
      * closed or a street renamed since is not found. The tiles are read one at a time as the sequence
      * is walked.
      */

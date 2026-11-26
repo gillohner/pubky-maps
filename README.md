@@ -31,8 +31,12 @@ fetched once. The list shows each area's progress and size; a download paused or
 during resumes from there, and an area deletes. 20 seconds after the start and every 30 minutes the
 app walks each ready area again: unchanged, this costs no request; when the map server has moved
 its tiles to a new release (OpenFreeMap does with each one), the area downloads again at the new
-addresses, within the same limits, and shows "Updating"; the old release's tiles stay with the area
-until it is deleted. On a network Android counts as metered the walk stops after 10 seconds when it
+addresses, within the same limits, and shows "Updating". MapLibre keeps every tile a pack ever
+stored linked to it, so once an update has walked every style the app makes a new pack of each style
+from the tiles now on the phone (without fetching them again) and deletes the old one: the old
+release's tiles drop to MapLibre's map cache, whose least used tiles go once it is over its size
+limit, instead of staying with the area until it is deleted. A new pack left by an app closed in between is deleted, or takes the old one's place, at
+the next check. On a network Android counts as metered the walk stops after 10 seconds when it
 finds a new release (Google Maps and OsmAnd update offline maps on Wi-Fi). An update that stops
 before it finishes leaves the area marked "Update paused" (MapLibre would call it complete, as it
 counts the old release's tiles too); Resume goes on with it, and so does the next check on Wi-Fi
@@ -49,7 +53,8 @@ which areas are downloaded (the area widened to a 1/16° grid), also while the u
 tiles (the area's `newDataAt`, kept with its places), the app reads the named places of its zoom 14
 tiles (points of interest, towns and districts, streets, peaks, lakes) into its own database
 (`no_backup/offline-places.db`). It reads only the newest tile of each source at each place, as the
-release before's tiles stay linked to the area, from a copy of MapLibre's database taken while no
+release before's tiles stay linked to an area whose packs could not be replaced, from a copy of
+MapLibre's database taken while no
 download or update check fetches tiles (MapLibre's own SQLite writes the file; a second SQLite in the
 process must not open it); a copy taken during a write is refused and taken again later. When Photon cannot be reached, search answers from these places: every typed word starts a word
 of the name or the category, looked up by the rarest of them, nearest first (a place named exactly as
@@ -269,7 +274,8 @@ screenshots search with its pins, and the update probe screenshots each step of 
 - Offline maps (`scripts/ci/emulator-offline.sh`, two tiny styles served on the runner): an area
   downloads from Settings → Offline maps until Ready, with at most 4 tile requests at a time, the
   app's User-Agent and no tile twice; after the server moves its tiles to a new release the app
-  updates the area by itself; with the server gone the area draws in light and dark, and search
+  updates the area by itself, and no tile of the old release is linked to it afterwards (read from a
+  copy of MapLibre's database); with the server gone the area draws in light and dark, and search
   (its servers gone too) finds the bakery each fixture tile holds; it deletes.
 - Sign-in probe (`scripts/ci/sign-in-probe.py`): Pubky Ring cannot run in CI, so a fixture relay on
   the runner stands in for the sign-in relay. The probe opens Settings → Account, starts a sign-in,

@@ -4,6 +4,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,6 +18,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.random.Random
@@ -103,6 +106,9 @@ class OfflineMaps(
     /** Packs paused by the app that MapLibre may not have paused yet. */
     private val stopping = MutableStateFlow<Set<Any>>(emptySet())
 
+    /** The packs this process made to replace another ([replace]). */
+    private val replacements = mutableListOf<Any>()
+
     /** Areas deleted in this process, so a style still being created for one is not downloaded. */
     private val deleted = mutableSetOf<String>()
 
@@ -162,13 +168,19 @@ class OfflineMaps(
             }
         }.stateIn(scope, SharingStarted.Eagerly, OfflineMapsState.Loading)
 
-    private var packs: List<StoredPack> = emptyList()
+    /** Every pack of the store, also those still [PackMetadata.replacing] another. */
+    private val listed = MutableStateFlow<List<StoredPack>>(emptyList())
+
+    private val packs: List<StoredPack> get() = listed.value
+
+    /** The packs that make up the areas ([visible]). */
+    private val areaPacks: List<StoredPack> get() = visible(packs)
 
     init {
         scope.launch {
             store.state.collect { state ->
                 if (state !is PackStoreState.Ready) return@collect
-                packs = state.packs
+                listed.value = state.packs
                 state.packs.forEach { watch(it) }
             }
         }
@@ -250,7 +262,7 @@ class OfflineMaps(
     fun resume(id: String) {
         _problem.value = null
         held -= id
-        val area = packs.filter { it.areaId == id }
+        val area = areaPacks.filter { it.areaId == id }
         val unfinished = unfinished(area)
         stopping.value -= unfinished.toSet()
         runInTurn(id, unfinished, check = area.any { it.metadata?.updating == true })
@@ -278,12 +290,20 @@ class OfflineMaps(
      * says "Update paused" instead of Ready, and the update goes on on Wi-Fi or with Resume. An
      * area marked "Update paused" without known new data ([PackMetadata.newData]: the app was
      * closed during the first seconds of a walk) is walked on mobile data too, which makes it Ready
-     * again when nothing changed and stores the new data when there is some.
+     * again when nothing changed and stores the new data when there is some. A pack left
+     * [PackMetadata.replacing] another by a process that ended is settled instead ([settle]).
      */
     internal fun checkForUpdates() {
+        val leftovers =
+            packs.filter { pack ->
+                pack.metadata?.replacing == true && pack.areaId !in runs.value && replacements.none { it === pack.handle }
+            }
+        if (leftovers.isNotEmpty()) scope.launch { leftovers.forEach { settle(it) } }
+        val settling = leftovers.map { it.areaId }.toSet()
         val wifi = unmetered()
-        areas(packs).filter { it.id !in runs.value && it.id !in held }.forEach { map ->
-            val area = packs.filter { it.areaId == map.id }
+        // An area being settled is checked the next time, so the two do not write its packs at once.
+        areas(packs).filter { it.id !in runs.value && it.id !in held && it.id !in settling }.forEach { map ->
+            val area = areaPacks.filter { it.areaId == map.id }
             val handles =
                 when {
                     map.status == OfflineMapStatus.Ready -> area.map { it.handle }
@@ -311,7 +331,8 @@ class OfflineMaps(
      * unmarks each once its walk is complete, so a check that stops early, also with the app, leaves
      * the area marked as not up to date. A walk still downloading after [QUIET_CHECK] also marks
      * that the pack has new data ([PackMetadata.newData]). A [probe] pauses such a walk and ends
-     * there.
+     * there. A check that walked every pack and stored new map data ends by replacing the packs of
+     * the area ([replacePacks]).
      */
     private fun runInTurn(
         area: String,
@@ -329,6 +350,23 @@ class OfflineMaps(
                     // update: it ends with new map data all the same.
                     val leftOpen = handles.filter { handle -> packs.any { it.handle === handle && it.metadata?.updating == true } }
                     if (check) handles.forEach { mark(it) { m -> m.copy(updating = true) } }
+                    // What each finished walk stored, as the store may list it a moment later.
+                    val finished = mutableMapOf<Any, PackMetadata>()
+                    var newData = false
+
+                    suspend fun finish(
+                        handle: Any,
+                        fetchedBefore: Long,
+                    ) {
+                        val before = packs.firstOrNull { it.handle === handle }?.metadata
+                        val marked =
+                            mark(handle) {
+                                done(it, fetches.value != fetchedBefore || handle in leftOpen, clock.now().toEpochMilliseconds())
+                            }
+                                ?: return
+                        finished[handle] = marked
+                        if (marked.newDataAt != before?.newDataAt) newData = true
+                    }
                     for (handle in handles) {
                         val fetchedBefore = fetches.value
                         if (check) walking += handle
@@ -346,9 +384,7 @@ class OfflineMaps(
                             walking -= handle
                             if (stateOf(handle) == PackState.Complete) {
                                 started.value -= handle
-                                mark(
-                                    handle,
-                                ) { done(it, fetches.value != fetchedBefore || handle in leftOpen, clock.now().toEpochMilliseconds()) }
+                                finish(handle, fetchedBefore)
                                 rest(handle)
                                 continue
                             }
@@ -362,13 +398,10 @@ class OfflineMaps(
                         // report an update stopped at the limit complete, as it counts the old tiles.
                         started.first { handle !in it }
                         if (handle in halted || stateOf(handle) != PackState.Complete) return@launch
-                        if (check) {
-                            mark(
-                                handle,
-                            ) { done(it, fetches.value != fetchedBefore || handle in leftOpen, clock.now().toEpochMilliseconds()) }
-                        }
+                        if (check) finish(handle, fetchedBefore)
                         rest(handle)
                     }
+                    if (check && newData) replacePacks(area, finished)
                 } finally {
                     walking.removeAll(handles.toSet())
                     checking.value -= area
@@ -396,33 +429,145 @@ class OfflineMaps(
 
     /**
      * Stores what a check knows of [handle] ([PackMetadata.updating], [PackMetadata.newData]), if it
-     * is not stored so already.
+     * is not stored so already, and returns the pack's metadata from now on; null when it has none or
+     * the store refused it.
      */
     private suspend fun mark(
         handle: Any,
         change: (PackMetadata) -> PackMetadata,
-    ) {
-        val metadata = packs.firstOrNull { it.handle === handle }?.metadata ?: return
+    ): PackMetadata? {
+        val metadata = packs.firstOrNull { it.handle === handle }?.metadata ?: return null
         val marked = change(metadata)
-        if (marked == metadata) return
-        try {
+        if (marked == metadata) return marked
+        return try {
             store.setMetadata(handle, marked)
+            marked
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
             // Unmarked, the area shows as the store reports it, as before the mark existed.
+            null
+        }
+    }
+
+    /**
+     * Replaces each pack of [area] by a new pack of the same style and bounds. MapLibre keeps every
+     * tile a pack ever stored linked to it, so after an update the release before's tiles (up to one
+     * download's 50 MB per release) would stay until the area is deleted. The new pack links the
+     * tiles the update left in the database, which are all there, without asking for them again
+     * (only for a resource the server had none of, which MapLibre does not store); deleting the old
+     * one then leaves the old release's tiles to MapLibre's map cache, which drops the least used
+     * once it is over its size limit (MapLibre counts the freed space at the next start), and MapLibre
+     * compacts its database after each delete. [finished] has the metadata a check just stored, which
+     * the store may not list yet. A replacement that fails keeps the old pack; the next update tries
+     * again.
+     */
+    private suspend fun replacePacks(
+        area: String,
+        finished: Map<Any, PackMetadata>,
+    ) {
+        for (old in areaPacks.filter { it.areaId == area }) {
+            val metadata = finished[old.handle] ?: old.metadata ?: continue
+            if (!replace(area, old.handle, metadata.copy(replacing = false))) return
+        }
+    }
+
+    /** Replaces the pack [old] of [area], whose metadata is [metadata]; false when it is kept. */
+    private suspend fun replace(
+        area: String,
+        old: Any,
+        metadata: PackMetadata,
+    ): Boolean {
+        var new: Any? = null
+        // Once the old pack's delete has begun, it may be gone even when the call failed: the new
+        // pack then stays, still marked, for the next start's [settle], which sees what is stored.
+        var oldGoing = false
+        try {
+            // Not cut off: MapLibre would create the pack all the same, with no one to delete it.
+            val handle = withContext(NonCancellable) { store.createLike(old, metadata.copy(replacing = true)) }
+            new = handle
+            replacements += handle
+            createdFor.getOrPut(area) { mutableListOf() } += handle
+            started.value += handle
+            store.resume(handle)
+            // A pack reports no tiles before its walk has begun.
+            withTimeoutOrNull(REPLACE_TIMEOUT) {
+                listed.first { list ->
+                    list.any { it.handle === handle && it.progress.state == PackState.Complete && it.progress.completedTiles > 0 }
+                }
+            } ?: return false
+            rest(handle)
+            oldGoing = true
+            withContext(NonCancellable) {
+                store.pause(old)
+                store.delete(old)
+            }
+            createdFor[area]?.removeAll { it === old }
+            // Unmarked, the pack still takes the old one's place: [visible] and the next check's [settle].
+            mark(handle) { metadata }
+            return true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return false
+        } finally {
+            new?.let { handle ->
+                started.value -= handle
+                stopping.value -= handle
+                halted -= handle
+                // A deleted area's packs go with it: [delete] waits for this run and deletes them.
+                if (area !in deleted) {
+                    createdFor[area]?.removeAll { it === handle }
+                    if (!oldGoing) {
+                        withContext(NonCancellable) {
+                            runCatching {
+                                store.pause(handle)
+                                store.delete(handle)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Settles a pack [PackMetadata.replacing] another that a process before this one left (or one
+     * of this process, after the next start): when the pack it was to replace is still there, it
+     * goes (that one has every tile it has); otherwise the old one was deleted already, and this one
+     * takes its place.
+     */
+    private suspend fun settle(pack: StoredPack) {
+        // One of this process stays as it is: the store's list of its old pack may be out of date.
+        if (replacements.any { it === pack.handle }) return
+        val metadata = pack.metadata ?: return
+        val replaced = packs.any { it !== pack && it.areaId == pack.areaId && it.style == pack.style && it.metadata?.replacing != true }
+        runCatching {
+            if (replaced) {
+                store.pause(pack.handle)
+                store.delete(pack.handle)
+            } else {
+                store.setMetadata(pack.handle, metadata.copy(replacing = false))
+            }
         }
     }
 
     private fun stateOf(handle: Any): PackState? = packs.firstOrNull { it.handle === handle }?.progress?.state
 
     fun delete(id: String) {
+        val run = runs.value[id]
         endRun(id)
-        val listed = packs.filter { it.areaId == id }.map { it.handle }
-        val area = listed + createdFor.remove(id).orEmpty().filter { handle -> listed.none { it === handle } }
+
+        fun packsOfArea(): List<Any> {
+            val listed = packs.filter { it.areaId == id }.map { it.handle }
+            return listed + createdFor.remove(id).orEmpty().filter { handle -> listed.none { it === handle } }
+        }
+        val now = if (run == null) packsOfArea() else emptyList()
         deleted += id
         _problem.value = null
         scope.launch {
+            // A run (a replacement in it) may create and delete packs until it has ended.
+            val area = if (run == null) now else run.join().let { packsOfArea() }
             area.forEach { handle ->
                 try {
                     store.pause(handle)
@@ -502,6 +647,12 @@ internal val CHECK_INTERVAL = 30.minutes
 internal val QUIET_CHECK = 10.seconds
 
 /**
+ * How long a pack that replaces another may take to link its tiles in the database; a dense area's
+ * 3,000 tiles take seconds.
+ */
+internal val REPLACE_TIMEOUT = 2.minutes
+
+/**
  * A check's walk of a pack finished: the pack is up to date. When the walk [fetched] tiles (or
  * finished an update an earlier run left open), or an earlier walk of this update found new data,
  * the pack has new map data from now on.
@@ -520,7 +671,17 @@ private fun done(
 private val StoredPack.areaId: String get() = metadata?.area ?: "pack-${handle.hashCode()}"
 
 /**
- * The packs grouped by area, newest first. An area in [checking] shows as it was (Ready, its size
+ * The packs that make up the areas: a pack [PackMetadata.replacing] another of its style in its
+ * area is left out until that one is gone.
+ */
+internal fun visible(packs: List<StoredPack>): List<StoredPack> =
+    packs.filter { pack ->
+        pack.metadata?.replacing != true ||
+            packs.none { it !== pack && it.areaId == pack.areaId && it.style == pack.style && it.metadata?.replacing != true }
+    }
+
+/**
+ * The [visible] packs grouped by area, newest first. An area in [checking] shows as it was (Ready, its size
  * before the check) unless it is in [updating]. Otherwise an area with a pack whose update has not
  * finished is never Ready ([PackMetadata.updating]). The percent is each style's share: the styles
  * download one after the other, and one not started yet reports nothing to do.
@@ -530,7 +691,7 @@ internal fun areas(
     checking: Map<String, Long> = emptyMap(),
     updating: Set<String> = emptySet(),
 ): List<OfflineMap> =
-    packs
+    visible(packs)
         .groupBy { it.areaId }
         .map { (id, area) ->
             val first = area.first().metadata
