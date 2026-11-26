@@ -79,9 +79,15 @@ fun PlaceSheet(
     val maxPx = with(density) { maxHeight.toPx() }
     val insetPx = with(density) { bottomInset.toPx() }
     val peekPx = ((if (headerPx > 0) headerPx + handlePx else with(density) { 180.dp.toPx() }) + insetPx).coerceAtMost(maxPx)
-    // The top stop is no taller than the page: a short page leaves no empty sheet under its end.
+    // The top stop is no taller than the page: a short page leaves no empty sheet under its end. While
+    // the card loads, the page's length is not known yet (a few grey lines stand for the photo, the
+    // description and the details), so the sheet takes its usual heights: half stays half of the room
+    // instead of growing by the card when it arrives, and the map left in view, where a picked place is
+    // centred, does not change under it. A short page shrinks once, when its card is in.
+    val cardLoading = page.card == null && PlacePart.Card in page.loading
     var contentPx by remember { mutableIntStateOf(0) }
-    val fullPx = if (contentPx > 0 && headerPx > 0) (headerPx + handlePx + contentPx).coerceAtMost(maxPx) else maxPx
+    val fullPx =
+        if (!cardLoading && contentPx > 0 && headerPx > 0) (headerPx + handlePx + contentPx).coerceAtMost(maxPx) else maxPx
     val stops = SheetStops(peek = peekPx, half = (maxPx * 0.5f).coerceAtMost(fullPx), full = fullPx)
     // headerPx is the header's own height in both places, so moving it does not change the answer.
     val headerScrolls = headerPx > 0 && headerPx + handlePx > maxPx * 0.5f
