@@ -5,7 +5,8 @@
 # and the dark style until the list says Ready, with the app's User-Agent, never more than 4 tile
 # requests at once and no tile twice. Then the server moves its tiles to a new release and the app,
 # started far from the area, updates the area by itself. With the server gone the area draws in
-# light and dark (the fixture's water colour, not the bare background). Delete removes it.
+# light and dark (the fixture's water colour, not the bare background), also after three theme
+# switches in one process (which count MainActivity's instances for StrictMode). Delete removes it.
 # Usage: emulator-offline.sh <apk> <out dir>
 set -euo pipefail
 
@@ -201,7 +202,16 @@ adb shell cmd uimode night yes
 open_at "$zurich"
 wait_for "Settings" 30 > /dev/null || fail "the map screen did not appear offline (dark)"
 expect_water offline-dark "#1c4587"
+# Three theme switches in this one process, each with the map drawn after it. A switch recreates
+# MainActivity, and Android counts its instances when the old one is destroyed: the old one still
+# counts then, so only an earlier one that is still in memory (a leak) goes over the limit. That
+# needs a second recreation in the same process; open_at's force-stop would start the count afresh.
 adb shell cmd uimode night no
+expect_water offline-light-recreated "#3c78d8"
+adb shell cmd uimode night yes
+expect_water offline-dark-recreated "#1c4587"
+adb shell cmd uimode night no
+expect_water offline-light-recreated-again "#3c78d8"
 check_alive "offline map drawn without a connection"
 open_offline_maps
 wait_ready offline-final 20 || fail "the offline map is not Ready on the list"
@@ -223,6 +233,6 @@ adb shell input tap $xy
 wait_for "No offline maps yet." 20 > /dev/null || fail "the offline map was not deleted"
 check_alive "offline map deleted"
 
-# The theme switches above recreate MainActivity, so this also fails on a leaked activity of ours.
+# This also fails on a leaked activity of ours, counted by the theme switches above.
 check_strict_mode "offline maps"
 echo "an area downloads, updates to new tiles, draws without a connection in light and dark, and deletes"
