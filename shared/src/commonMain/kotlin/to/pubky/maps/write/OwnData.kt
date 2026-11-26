@@ -120,8 +120,8 @@ data class PhoneSaved(
  * The user's own data: [cached] (the homeserver's copy on this phone) with [confirmed] writes the
  * cache does not reflect yet (made after it was read) and the [queue] still to be sent applied on
  * top, in order, so a write shows at once and disappears again when it is dropped. Places are
- * compared as [normalize] spells them. [labels] and [points] are the names and points stored for
- * the places the user wrote about, by place as the write had it.
+ * compared as [normalize] spells them. [labels] are the names stored for the places the user wrote
+ * about (by place as the write had it), [points] where they are (by place as the core spells it).
  */
 internal fun ownData(
     viewer: String?,
@@ -152,7 +152,7 @@ internal fun ownData(
         cached.bookmarks.forEach { bookmark ->
             val place = normalize(bookmark.place)
             saved["home|$place"] =
-                SavedEntry(place, Kept.Private, labels[bookmark.place] ?: labels[place], point = pointOf(bookmark.place, place, points))
+                SavedEntry(place, Kept.Private, labels[bookmark.place] ?: labels[place], point = pointOf(place, points))
         }
         lists.forEach { ownLists[it.uri] = it.copy(items = it.items.map(normalize)) }
         val readAt = cached.refreshedAt ?: 0
@@ -221,7 +221,7 @@ private fun apply(
 
         is WriteOp.Save -> {
             saved["home|$place"] =
-                SavedEntry(place, Kept.Private, labels[op.place] ?: labels[place], pending, pointOf(op.place, place, points))
+                SavedEntry(place, Kept.Private, labels[op.place] ?: labels[place], pending, pointOf(place, points))
         }
 
         is WriteOp.Unsave -> {
@@ -242,12 +242,11 @@ private fun apply(
     }
 }
 
-/** Where the place [written] (spelled [place] by the core) is: the point stored for it, else its `geo:` link's. */
+/** Where the place [place] (as the core spells it) is: the point stored for it, else its `geo:` link's. */
 private fun pointOf(
-    written: String,
     place: String,
     points: Map<String, GeoPoint>,
-): GeoPoint? = points[written] ?: points[place] ?: geoLinkPoint(place)
+): GeoPoint? = points[place] ?: geoLinkPoint(place)
 
 /** The point a `geo:` link names ("geo:47.37,8.54"); null for any other link, or a `geo:` search without one. */
 private fun geoLinkPoint(place: String): GeoPoint? =

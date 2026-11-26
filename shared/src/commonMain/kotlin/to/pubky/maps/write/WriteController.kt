@@ -498,10 +498,12 @@ class WriteController(
             io { store.putLabel(target.uri, name) }
             labels = labels + (target.uri to name)
         }
+        // By the core's spelling: the homeserver's bookmark comes back spelled so, not as the link was opened.
         val point = target.point
-        if (point != null && points[target.uri] != point) {
-            io { store.putPoint(target.uri, point) }
-            points = points + (target.uri to point)
+        val place = normalize(target.uri)
+        if (point != null && points[place] != point) {
+            io { store.putPoint(place, point) }
+            points = points + (place to point)
         }
         publish()
         return true

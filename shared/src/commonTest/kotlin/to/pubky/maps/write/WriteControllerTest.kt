@@ -353,9 +353,11 @@ class WriteControllerTest {
             val writer = controller()
             runCurrent()
 
-            writer.save(target)
+            // Opened from a link the core spells otherwise; the homeserver's bookmark comes back as the core spells it.
+            writer.save(WriteTarget("https://osm.org/node/270803095", "Conditorei Schober", SCHOBER))
             runCurrent()
 
+            assertEquals(listOf(OSM), cached.bookmarks.map { it.place })
             assertEquals(mapOf(OSM to SCHOBER), store.points())
             assertEquals(
                 SCHOBER,

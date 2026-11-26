@@ -49,7 +49,7 @@ interface WriteStore {
         name: String,
     )
 
-    /** Where the places the user wrote about are, by place as the write had it. */
+    /** Where the places the user wrote about are, by place as the core spells it. */
     fun points(): Map<String, GeoPoint>
 
     fun putPoint(

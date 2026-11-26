@@ -158,10 +158,13 @@ class SqlWriteStoreTest {
             "CREATE TABLE place_label (place TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL)",
             "INSERT INTO place_label VALUES ('geo:1,2', 'Bench')",
         ).forEach { driver.execute(null, it, 0) }
+        // The outbox is the same in both versions: a write waiting before the update.
+        SqlWriteStore(driver).enqueue(tag)
 
         CacheDatabase.Schema.migrate(driver, 2, CacheDatabase.Schema.version)
 
         val store = SqlWriteStore(driver)
+        assertEquals(tag, store.queue().single().op)
         assertEquals(mapOf("geo:1,2" to "Bench"), store.labels())
         assertEquals(emptyMap(), store.points())
         store.putPoint("geo:1,2", GeoPoint(1.0, 2.0))

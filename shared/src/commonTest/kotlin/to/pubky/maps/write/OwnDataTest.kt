@@ -87,7 +87,7 @@ class OwnDataTest {
                 null,
                 100,
                 emptyList(),
-                listOf(CachedBookmark("/b/1", "https://osm.org/node/1"), CachedBookmark("/b/2", "https://www.openstreetmap.org/way/7")),
+                listOf(CachedBookmark("/b/1", OSM), CachedBookmark("/b/2", "https://www.openstreetmap.org/way/7")),
             )
         val phone =
             PhoneData(
@@ -102,15 +102,15 @@ class OwnDataTest {
         val own =
             data(
                 cached,
-                // A point is stored by place as the write had it, which may differ from the core's spelling.
-                queue = listOf(WriteOp.Save("geo:46.9,7.4"), WriteOp.Save(GOOGLE)),
+                // A queued save is written as the link was opened; its point is stored as the core spells it.
+                queue = listOf(WriteOp.Save("geo:46.9,7.4"), WriteOp.Save("https://osm.org/node/2")),
                 phone = phone,
-                points = mapOf("https://osm.org/node/1" to kunsthaus, GOOGLE to lake),
+                points = mapOf(OSM to kunsthaus, "https://www.openstreetmap.org/node/2" to lake),
             )
 
         val points = own.saved.associate { it.place to it.point }
-        assertEquals(kunsthaus, points[OSM], "stored with the save, under the link as it was written")
-        assertEquals(lake, points[GOOGLE], "a queued save shows its pin at once")
+        assertEquals(kunsthaus, points[OSM], "stored with the save")
+        assertEquals(lake, points["https://www.openstreetmap.org/node/2"], "a queued save shows its pin at once")
         assertEquals(GeoPoint(46.9, 7.4), points["geo:46.9,7.4"], "a geo: link carries its point")
         assertEquals(lake, points["https://www.openstreetmap.org/node/5"], "kept on the phone with its point")
         assertEquals(GeoPoint(47.1, 8.5), points["geo:47.1,8.5?z=17"])

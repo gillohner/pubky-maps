@@ -54,9 +54,10 @@ internal fun SavedEntry.toPlaceRef(): PlaceRef =
     PlaceRef(uri = place, name = name, point = point, osm = osmIdFromUrl(place), source = PlaceSource.Map)
 
 /**
- * The user's saved places on the map, as Google Maps, CoMaps and OsmAnd draw theirs: a round purple
- * badge with a bookmark, centred on the place. Like search pins they carry no text and never push the
- * map's own labels away (the place's name stays readable beside the badge). Tapping one opens its place.
+ * The user's saved places on the map, as Google Maps, CoMaps and OsmAnd show theirs with a coloured
+ * icon: a round purple badge with a bookmark, centred on the place. Like search pins they carry no
+ * text and never push the map's own labels away (the place's name stays readable beside the badge).
+ * Tapping one opens its place.
  */
 @Composable
 internal fun SavedPins(
