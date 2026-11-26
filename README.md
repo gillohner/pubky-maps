@@ -26,10 +26,11 @@ tiles, with at most 4 requests at a time and the app's User-Agent (OpenFreeMap's
 downloads, applied to every map server); the picker refuses a larger area and a download that grows
 past the limit stops. The two styles download one after the other, so the tiles they share are
 fetched once. The list shows each area's progress and size; a download paused or the app was closed
-during resumes from there, and an area deletes. A minute after the start and every 30 minutes the
+during resumes from there, and an area deletes. 20 seconds after the start and every 30 minutes the
 app walks each ready area again: unchanged, this costs no request; when the map server has moved
 its tiles to a new release (OpenFreeMap does with each one), the area downloads again at the new
-addresses, within the same limits, and shows "Updating". MapLibre keeps the offline maps and the map
+addresses, within the same limits, and shows "Updating"; the old release's tiles stay with the area
+until it is deleted. MapLibre keeps the offline maps and the map
 cache in one database in the no-backup folder.
 
 Settings:

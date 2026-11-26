@@ -105,7 +105,7 @@ class OfflineMaps(
     /** Checked areas that are fetching new map data: they show as updating. */
     private val updating = MutableStateFlow<Set<String>>(emptySet())
 
-    /** Read on MapLibre's threads for every request: a plain read of the current packs. */
+    /** Read on MapLibre's threads for every request: a plain read of the packs downloading or being checked. */
     val downloading: Boolean get() = started.value.isNotEmpty()
 
     private val _picking = MutableStateFlow(false)
@@ -261,6 +261,7 @@ class OfflineMaps(
                             walking -= handle
                             if (stateOf(handle) == PackState.Complete) {
                                 started.value -= handle
+                                rest(handle)
                                 continue
                             }
                             updating.value += area
@@ -268,6 +269,7 @@ class OfflineMaps(
                         // [watch] takes the pack out once it is complete or paused.
                         started.first { handle !in it }
                         if (stateOf(handle) != PackState.Complete) return@launch
+                        rest(handle)
                     }
                 } finally {
                     walking.removeAll(handles.toSet())
@@ -278,6 +280,14 @@ class OfflineMaps(
             }
         runs[area] = job
         job.start()
+    }
+
+    /**
+     * Sets a complete pack inactive. MapLibre keeps a pack active after it completes and ignores a
+     * resume of an active pack, so without this the next check would not walk it.
+     */
+    private fun rest(handle: Any) {
+        runCatching { store.pause(handle) }
     }
 
     private fun stateOf(handle: Any): PackState? = packs.firstOrNull { it.handle === handle }?.progress?.state
@@ -349,8 +359,11 @@ internal fun overLimit(progress: PackProgress): Boolean =
 /** About the largest vector tile of a dense city at zoom 14. */
 private const val LARGEST_TILE_BYTES = 500_000L
 
-/** The first check for new map data, after the map has loaded its style (and so refreshed its copies). */
-internal val FIRST_CHECK = 1.minutes
+/**
+ * The first check for new map data: soon after the map has loaded its style (and so refreshed its
+ * copies), so a phone that goes offline right after the start rarely misses a new release.
+ */
+internal val FIRST_CHECK = 20.seconds
 
 /** OpenFreeMap lets a map keep its sources for an hour; checking twice as often finds a change in time. */
 internal val CHECK_INTERVAL = 30.minutes
@@ -375,15 +388,17 @@ internal fun areas(
         .map { (id, area) ->
             val first = area.first().metadata
             val progress = area.map { it.progress }
-            val done =
-                progress.sumOf {
-                    when {
-                        it.state == PackState.Complete -> 1.0
-                        it.requiredResources > 0 -> it.completedResources.toDouble() / it.requiredResources
-                        else -> 0.0
-                    }
-                }
-            val percent = (100 * done / progress.size).toInt().coerceIn(0, 100)
+            val percent =
+                progress
+                    .sumOf {
+                        when {
+                            it.state == PackState.Complete -> 100L
+                            it.requiredResources > 0 -> 100 * it.completedResources / it.requiredResources
+                            else -> 0L
+                        }
+                    }.div(progress.size)
+                    .toInt()
+                    .coerceIn(0, 100)
             val before = checking[id]
             OfflineMap(
                 id = id,

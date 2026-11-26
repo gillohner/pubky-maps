@@ -173,6 +173,7 @@ class OfflineMapsTest {
         store.progress(light, PackProgress(PackState.Complete, 100, 100, 3_000_000, 80, 2_500_000))
         store.progress(dark, PackProgress(PackState.Complete, 100, 100, 2_600_000, 80, 2_500_000))
         assertFalse(offline.downloading)
+        assertEquals(listOf(light, dark), store.paused)
         store.resumed.clear()
         return store to offline
     }
@@ -202,8 +203,9 @@ class OfflineMapsTest {
             assertFalse(offline.downloading)
             assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
 
-            // And again later.
-            advanceTimeBy(CHECK_INTERVAL)
+            // And again later: MapLibre walks only a pack that is not active, so each rests once complete.
+            assertEquals(listOf(light, dark, light, dark), store.paused)
+            advanceTimeBy(CHECK_INTERVAL - QUIET_CHECK * 2)
             runCurrent()
             assertEquals(listOf(light, dark, light), store.resumed)
         }

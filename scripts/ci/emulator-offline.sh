@@ -22,7 +22,7 @@ source "$here/emulator-lib.sh"
 
 python3 -I "$here/offline_fixture_server.py" "$port" "$log" &
 server=$!
-trap 'kill $server 2> /dev/null || true' EXIT
+trap 'kill $server 2> /dev/null || true; adb shell cmd uimode night no > /dev/null 2>&1 || true' EXIT
 for _ in $(seq 1 20); do
     curl -fsS "http://127.0.0.1:$port/light.json" > /dev/null 2>&1 && break
     sleep 0.5
@@ -130,14 +130,17 @@ cp "$log" "$out/download.jsonl"
 
 # The server publishes a new release of its map data at new tile addresses. The app starts on the
 # other side of the world, so the map itself fetches none of the area's new tiles: only the app's
-# check for updates (a minute after the start) can.
+# check for updates (20 s after the start) can.
 curl -fsS "http://127.0.0.1:$port/release/2" > /dev/null
 : > "$log"
 open_at "-33.8688,151.2093?z=16"
+# Exit 3: not yet. The map's flight to Sydney may fetch a low-zoom tile of the area itself (MapLibre's
+# own client); it counts, while the limits are checked on the app's requests.
 updated=""
-deadline=$((SECONDS + 180))
+deadline=$((SECONDS + 150))
 while ((SECONDS < deadline)); do
-    if python3 -I - "$out/download.jsonl" "$log" <<'PY'
+    rc=0
+    python3 -I - "$out/download.jsonl" "$log" <<'PY' || rc=$?
 import collections, json, sys
 def tiles(path):
     lines = [json.loads(line) for line in open(path, encoding="utf-8") if line.strip()]
@@ -146,17 +149,19 @@ before = {tuple(line["path"].split("/")[3:]) for line in tiles(sys.argv[1])}
 now = [line for line in tiles(sys.argv[2]) if tuple(line["path"].split("/")[3:]) in before]
 got = {tuple(line["path"].split("/")[3:]) for line in now if line["path"].startswith("/tiles/2/")}
 if not before <= got:
-    sys.exit(1)
-assert all(line["ua"].startswith("PubkyMaps/") for line in now), "the update did not use the app's User-Agent"
-assert max(line["open"] for line in now) <= 4, "the update sent more than 4 tile requests at once"
-twice = [p for p, n in collections.Counter(line["path"] for line in now).items() if n > 1]
+    sys.exit(3)
+app = [line for line in now if line["ua"].startswith("PubkyMaps/")]
+assert app, "the app fetched none of the area's new tiles"
+assert max(line["open"] for line in app) <= 4, "the update sent more than 4 tile requests at once"
+twice = [p for p, n in collections.Counter(line["path"] for line in app).items() if n > 1]
 assert not twice, f"the update requested tiles more than once: {twice}"
-print(f"the update fetched the area's {len(got)} tiles of the new release")
+print(f"the area's {len(got)} tiles of the new release are on the phone, {len(app)} fetched by the update")
 PY
-    then
+    if ((rc == 0)); then
         updated=1
         break
     fi
+    ((rc == 3)) || fail "the update did not keep to the limits"
     sleep 5
 done
 cp "$log" "$out/update.jsonl"
