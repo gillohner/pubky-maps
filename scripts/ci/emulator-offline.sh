@@ -50,12 +50,22 @@ adb shell run-as "$pkg" rm -f no_backup/maplibre.db no_backup/maplibre.db-journa
 adb logcat -c || true
 adb logcat -b crash -c || true
 
+# When the app last started (open_at); long before the script's start until it does.
+app_started=-1000
+
 # Starts the app afresh on a map link, from the whole world (not where the last start left the map).
+# A Ready area's check starts 20 s after a start and walks each of its two styles for 10 s; a stop
+# during a walk leaves the area "Update paused" until a later start walks it again (without a server,
+# not at once). So a stop waits for a check that has started to end, whatever the steps since the
+# start took (a run of theme switches, a search).
 open_at() {
+    local age=$((SECONDS - app_started))
+    if ((age >= 15 && age < 45)); then sleep $((45 - age)); fi
     adb shell am force-stop "$pkg"
     adb shell run-as "$pkg" rm -f no_backup/map-view.json
     local started
     started=$(adb shell am start -W -a android.intent.action.VIEW -d "'geo:$1'" -p "$pkg" 2>&1) || true
+    app_started=$SECONDS
     if grep -q "Error" <<< "$started"; then fail "the link did not reach the app: $started"; fi
     sleep 5
 }
