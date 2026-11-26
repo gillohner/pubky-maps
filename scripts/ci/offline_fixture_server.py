@@ -80,25 +80,24 @@ def water_tile() -> bytes:
 
 
 def place_layer() -> bytes:
-    """OpenMapTiles' place layer: one city named "Fixture Town" at 8 x 8 points over the tile, so a few
-    of them are in the frame at every zoom the area picker shows."""
+    """OpenMapTiles' place layer: a city named "Fixture Town" at each of 8 x 8 points over the tile, so
+    a few of them are in the frame at every zoom the area picker shows. Each is a feature of its own,
+    as a town's label is."""
     keys = [b"name", b"class"]
     values = [b"Fixture Town", b"city"]
     step = 4096 // 8
-    geometry = [1 | 64 << 3]
-    x = y = 0
+    features = b""
     for row in range(8):
         for column in range(8):
-            to_x, to_y = step // 2 + column * step, step // 2 + row * step
-            geometry += [zigzag(to_x - x), zigzag(to_y - y)]
-            x, y = to_x, to_y
-    feature = (
-        varint(1 << 3) + varint(1)
-        + field(2, b"".join(varint(v) for v in (0, 0, 1, 1)))
-        + varint(3 << 3) + varint(1)
-        + field(4, b"".join(varint(v) for v in geometry))
-    )
-    layer = varint(15 << 3) + varint(2) + field(1, b"place") + field(2, feature)
+            geometry = [1 | 1 << 3, zigzag(step // 2 + column * step), zigzag(step // 2 + row * step)]
+            features += field(
+                2,
+                varint(1 << 3) + varint(1 + row * 8 + column)
+                + field(2, b"".join(varint(v) for v in (0, 0, 1, 1)))
+                + varint(3 << 3) + varint(1)
+                + field(4, b"".join(varint(v) for v in geometry)),
+            )
+    layer = varint(15 << 3) + varint(2) + field(1, b"place") + features
     layer += b"".join(field(3, key) for key in keys) + b"".join(field(4, field(1, value)) for value in values)
     return field(3, layer + varint(5 << 3) + varint(4096))
 
