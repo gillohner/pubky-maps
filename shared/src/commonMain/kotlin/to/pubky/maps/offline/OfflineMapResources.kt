@@ -31,12 +31,18 @@ import kotlin.time.Instant
  * the app's User-Agent. MapLibre's own client sends up to 20 at once and cannot be told which
  * requests are a download's before it loads them, so while a download runs this provider loads
  * every http(s) resource, the map's own without a limit. Otherwise MapLibre loads them itself.
+ *
+ * The client is made by [createClient] on the first request this provider loads, which MapLibre
+ * runs on a background thread: the provider is set up on the main thread at app start and most
+ * starts never download, so a client made with the provider would be main-thread work at every
+ * start for nothing.
  */
 class OfflineMapResources(
-    private val client: HttpClient,
+    createClient: () -> HttpClient,
     private val downloading: () -> Boolean,
     private val clock: Clock = Clock.System,
 ) : MapResourceProvider {
+    private val client by lazy(createClient)
     private val downloads = Semaphore(OfflineLimits.PARALLEL_REQUESTS)
 
     override fun accepts(request: MapResourceRequest): Boolean = accepts(request.url)

@@ -37,14 +37,31 @@ class OfflineMapResourcesTest {
     private fun resources(
         downloading: Boolean = true,
         engine: MockEngine,
+        onClientMade: () -> Unit = {},
     ) = OfflineMapResources(
-        HttpClient(engine) {
-            expectSuccess = false
-            install(UserAgent) { agent = "PubkyMaps/1.0" }
+        {
+            onClientMade()
+            HttpClient(engine) {
+                expectSuccess = false
+                install(UserAgent) { agent = "PubkyMaps/1.0" }
+            }
         },
         downloading = { downloading },
         clock = clock,
     )
+
+    @Test
+    fun theClientIsMadeByTheFirstRequestNotAtStart() =
+        runTest {
+            var made = 0
+            val resources = resources(engine = MockEngine { respond("") }, onClientMade = { made++ })
+            // Set up at app start and asked about every request of the map: no client yet.
+            assertTrue(resources.accepts(tile))
+            assertEquals(0, made)
+            resources.load(offline = true, url = tile)
+            resources.load(offline = false, url = tile)
+            assertEquals(1, made)
+        }
 
     @Test
     fun takesOverRequestsOnlyWhileADownloadRuns() {
