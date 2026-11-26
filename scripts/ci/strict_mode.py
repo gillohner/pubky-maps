@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """StrictMode's reports in an emulator test's log (debug builds, androidApp/src/debug/.../StrictModeProvider.kt).
 
-Each report is one line, "ours <kind> at <frame>" or "library <kind> at <frame>", tagged PubkyMapsStrictMode.
-A report about our code fails the test: the main thread waited on disk or network there, or a resource leaked.
-Library reports are listed and do not fail it.
+Each report is one line, "<owner> <kind> at <frame>", tagged PubkyMapsStrictMode; owner is "ours",
+"app-folder" (our code only looked up one of the app's private folders) or "library". A report about our
+code fails the test: the main thread waited on disk or network there, or a resource leaked. The other
+reports are listed and do not fail it.
 
 Usage: strict_mode.py <logcat.txt>
 """
@@ -11,7 +12,7 @@ import collections
 import re
 import sys
 
-REPORT = re.compile(r"PubkyMapsStrictMode: (ours|library) (\S+) at (.+?)\s*$")
+REPORT = re.compile(r"PubkyMapsStrictMode: (ours|app-folder|library) (\S+) at (.+?)\s*$")
 
 
 def reports(logcat):

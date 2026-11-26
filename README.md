@@ -215,7 +215,8 @@ screenshots search with its pins, and the update probe screenshots each step of 
   network access on the main thread and each leaked resource (seen when the garbage collector runs),
   blamed on the first frame outside Android, Java, Kotlin, AndroidX, okio and JNA. Every emulator
   test above reads the log at its end (`scripts/ci/strict_mode.py`), lists the reports and fails on
-  one that blames our code; reports about a library are listed only.
+  one that blames our code; reports about a library, and our lookups of the app's private folders
+  (`filesDir`, `noBackupFilesDir`: a microsecond check that the folder exists), are listed only.
 
 ## Data sources and attribution
 

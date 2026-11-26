@@ -59,6 +59,23 @@ class StrictModeReportTest {
     }
 
     @Test
+    fun aLookupOfTheAppsPrivateFolderIsNotHeldAgainstUs() {
+        val stack =
+            arrayOf(
+                frame("libcore.io.BlockGuardOs"),
+                frame("java.io.File"),
+                StackTraceElement("android.app.ContextImpl", "ensurePrivateDirExists", "ContextImpl.java", 819),
+                StackTraceElement("android.app.ContextImpl", "getNoBackupFilesDir", "ContextImpl.java", 883),
+                frame("android.content.ContextWrapper"),
+                frame("to.pubky.maps.android.AccountKt"),
+            )
+        assertEquals(
+            "app-folder DiskReadViolation at to.pubky.maps.android.AccountKt.call(File.kt:1)",
+            strictModeReport("DiskReadViolation", stack),
+        )
+    }
+
+    @Test
     fun aLibraryCalledFromOurCodeIsTheLibrarys() {
         val stack =
             arrayOf(

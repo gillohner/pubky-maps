@@ -49,15 +49,29 @@ internal fun blamedFrame(stack: Array<StackTraceElement>): StackTraceElement? =
     stack.firstOrNull { frame -> platformPackages.none { frame.className.startsWith(it) } }
 
 /**
- * One log line for a violation: "ours" when the app's own code made the call, "library" when a
- * library did (MapLibre, Ktor, ...), then the kind and the blamed frame.
+ * Context's lookup of the app's private folders (`filesDir`, `noBackupFilesDir`, ...): a check that
+ * the folder exists, and on the first start its mkdir. It takes microseconds and every Android app
+ * makes it on the main thread, so it is listed but not held against our code.
+ */
+private fun isPrivateFolderLookup(frame: StackTraceElement): Boolean =
+    frame.className == "android.app.ContextImpl" && frame.methodName in setOf("ensurePrivateDirExists", "getDataDir")
+
+/**
+ * One log line for a violation: "ours" when the app's own code made the call, "app-folder" when
+ * that call was only a lookup of the app's private folders, "library" when a library made it
+ * (MapLibre, Ktor, ...); then the kind and the blamed frame.
  */
 internal fun strictModeReport(
     kind: String,
     stack: Array<StackTraceElement>,
 ): String {
     val frame = blamedFrame(stack)
-    val owner = if (frame?.className?.startsWith("to.pubky.maps.") == true) "ours" else "library"
+    val owner =
+        when {
+            frame?.className?.startsWith("to.pubky.maps.") != true -> "library"
+            stack.any(::isPrivateFolderLookup) -> "app-folder"
+            else -> "ours"
+        }
     return "$owner $kind at ${frame ?: "the platform"}"
 }
 
