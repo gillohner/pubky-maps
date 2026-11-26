@@ -302,6 +302,13 @@ private fun StatusLine(
     }
 }
 
+/**
+ * A search result: its name, then its kind and address. At normal size a usual name and address
+ * take one line each. They may wrap (name to 2 lines, kind and address to 3) so that at Android's
+ * largest font a row still names the place and its town in full, as Google Maps' and OsmAnd's result
+ * rows grow: the kind fills the first line and the address needs two more at 200 % beside the
+ * distance. The caps keep one long name or address from filling the list.
+ */
 @Composable
 private fun ResultRow(
     result: SearchResult,
@@ -311,10 +318,10 @@ private fun ResultRow(
 ) {
     val place = result.place
     ListItem(
-        headlineContent = { Text(place.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        headlineContent = { Text(place.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
         supportingContent =
             resultDetail(result).takeIf { it.isNotEmpty() }?.let { detail ->
-                { Text(detail, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+                { Text(detail, maxLines = 3, overflow = TextOverflow.Ellipsis) }
             },
         leadingContent = { Icon(result.kind.icon, contentDescription = null) },
         trailingContent = {
@@ -342,6 +349,8 @@ internal const val RECENT_OPTIONS = "Show options"
 /**
  * A past search. A long press opens a menu to remove it ([onRemove], when the history can change): the
  * row keeps the distance as its only trailing item, as quiet as Google Maps' and CoMaps' history rows.
+ * Its name and its kind and address stay on one line each, also at a large font: a recent search is a
+ * place the user picked before and knows by name, and short rows keep more of the history in view.
  * TalkBack lists "Remove from recent searches" among the row's actions, which removes it at once.
  */
 @Composable
