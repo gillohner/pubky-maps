@@ -155,6 +155,7 @@ class ScreenshotTest {
                 ),
             account = account,
             recentSearchCount = 12,
+            offlineMaps = "2 areas on this phone.",
         )
     }
 

@@ -53,6 +53,7 @@ class MainActivity : ComponentActivity() {
                 search = app.search,
                 places = app.places,
                 writes = WriteUi(app.writes, AndroidPhotoInput),
+                offline = app.offlineMaps,
             )
         }
     }

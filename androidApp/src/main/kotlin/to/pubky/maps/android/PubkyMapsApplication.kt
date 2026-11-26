@@ -22,6 +22,9 @@ import to.pubky.maps.config.androidSettingsRepository
 import to.pubky.maps.links.CoreMapLinks
 import to.pubky.maps.links.LinkedPlaces
 import to.pubky.maps.links.MapLinks
+import to.pubky.maps.offline.OfflineMaps
+import to.pubky.maps.offline.androidOfflineMaps
+import to.pubky.maps.offline.configureMapRuntime
 import to.pubky.maps.place.PlaceServices
 import to.pubky.maps.place.androidPlaceServices
 import to.pubky.maps.search.SearchServices
@@ -110,12 +113,22 @@ class PubkyMapsApplication : Application() {
     lateinit var account: AccountUi
         private set
 
+    /** Set once [offlineMaps] exists; MapLibre's threads read it for every request. */
+    @Volatile
+    private var offlineStarted: OfflineMaps? = null
+
+    /** The offline maps; made by the first screen that needs them, as MapLibre starts with the map. */
+    val offlineMaps: OfflineMaps by lazy {
+        androidOfflineMaps(this, CoroutineScope(scope.coroutineContext + Dispatchers.Main.immediate)).also { offlineStarted = it }
+    }
+
     /** The user's writes about places (tags, posts, photos, lists, saved places) and their outbox. */
     lateinit var writes: WriteController
         private set
 
     override fun onCreate() {
         super.onCreate()
+        configureMapRuntime(this, BuildConfig.VERSION_NAME) { offlineStarted?.downloading == true }
         updates = startUpdater(this, serverConfigRepository)
         // Restores a stored session in the background; the map never waits for it.
         val (started, cacheDriver) = startAccount(this, scope, serviceHealth, core)

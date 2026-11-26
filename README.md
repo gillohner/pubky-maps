@@ -19,6 +19,15 @@ searches stay on the phone (Settings → Privacy → Clear search history). Eith
 holds back the other; with both unreachable the list and the map's degraded line say search is
 offline, and Search asks again. Photon is credited under the results and in Settings → Map data.
 
+**Offline maps** (Settings → Offline maps): Download an area opens a frame over the map; the map
+in the frame downloads in the style on screen and the other theme's first style, so it shows light
+and dark without a connection. One download may take at most 3,000 tiles (zoom 0 to 14) and 50 MB of
+tiles, with at most 4 requests at a time and the app's User-Agent (OpenFreeMap's terms for offline
+downloads, applied to every map server); the picker refuses a larger area and a download that grows
+past the limit stops. The list shows each area's progress and size; a download the app was closed
+during resumes from there, and an area deletes. MapLibre keeps the offline maps and the map cache in
+one database in the no-backup folder.
+
 Settings:
 
 - **Account:** sign in with [Pubky Ring](https://github.com/pubky/pubky-ring). It shows the user's
@@ -206,6 +215,9 @@ screenshots search with its pins, and the update probe screenshots each step of 
 ## Emulator tests in CI
 
 - Smoke test (`scripts/ci/emulator-smoke.sh`): the map draws, Settings opens, back returns.
+- Offline maps (`scripts/ci/emulator-offline.sh`, two tiny styles served on the runner): an area
+  downloads from Settings → Offline maps until Ready, with at most 4 tile requests at a time and the
+  app's User-Agent, and deletes.
 - Sign-in probe (`scripts/ci/sign-in-probe.py`): Pubky Ring cannot run in CI, so a fixture relay on
   the runner stands in for the sign-in relay. The probe opens Settings → Account, starts a sign-in,
   reads the QR code, checks the link and that the app listens on the relay, then opens Ring's return
