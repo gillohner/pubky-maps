@@ -1,5 +1,6 @@
--- The Pubky places of each offline area (the places people referenced on Pubky, from Pinakes), so
--- the map's Pubky places layer shows them without a connection. Public data only.
+-- The Pubky places of each offline area (the places people referenced on Pubky, from Pinakes) and
+-- their tags and counts (from Nexus), so the map's Pubky places layer and the place page show them
+-- without a connection. Public data only: read with no viewer.
 
 CREATE TABLE area (
     -- The offline area's id (OfflineMap.id).
@@ -10,7 +11,10 @@ CREATE TABLE area (
     west REAL NOT NULL,
     south REAL NOT NULL,
     east REAL NOT NULL,
-    north REAL NOT NULL
+    north REAL NOT NULL,
+    -- When Nexus last answered for its places, epoch milliseconds: the date of its tags. Null
+    -- before it first did; before fetched_at when it did not answer for the places now kept.
+    social_at INTEGER
 );
 
 CREATE TABLE area_place (
@@ -28,11 +32,67 @@ CREATE TABLE area_place (
 
 CREATE INDEX area_place_lat ON area_place(lat);
 
+-- The links Nexus is asked about for an area's places (a place's uri and the links people
+-- referenced for it), so a page finds a place by any of them and Nexus can be asked again alone.
+CREATE TABLE area_link (
+    area TEXT NOT NULL,
+    link TEXT NOT NULL,
+    -- The place's uri, as in area_place.
+    place TEXT NOT NULL,
+    -- The order they were kept in.
+    seq INTEGER NOT NULL,
+    PRIMARY KEY (area, link)
+);
+
+CREATE INDEX area_link_link ON area_link(link);
+
+-- Nexus' tags and counts of a kept place, merged over its links; only places Nexus knows.
+CREATE TABLE area_social (
+    area TEXT NOT NULL,
+    -- The place's uri, as in area_place.
+    place TEXT NOT NULL,
+    -- A PlaceSocial as JSON.
+    social TEXT NOT NULL,
+    PRIMARY KEY (area, place)
+);
+
+
 areas:
-SELECT id, fetched_at FROM area;
+SELECT id, fetched_at, social_at FROM area;
+
+socialAt:
+SELECT social_at FROM area WHERE id = ?;
 
 putArea:
-INSERT OR REPLACE INTO area(id, fetched_at, west, south, east, north) VALUES (?, ?, ?, ?, ?, ?);
+INSERT OR REPLACE INTO area(id, fetched_at, west, south, east, north, social_at) VALUES (?, ?, ?, ?, ?, ?, ?);
+
+setSocialAt:
+UPDATE area SET social_at = ? WHERE id = ?;
+
+putLink:
+INSERT OR REPLACE INTO area_link(area, link, place, seq) VALUES (?, ?, ?, ?);
+
+links:
+SELECT link, place FROM area_link WHERE area = ? ORDER BY seq;
+
+deleteLinks:
+DELETE FROM area_link WHERE area = ?;
+
+putSocial:
+INSERT OR REPLACE INTO area_social(area, place, social) VALUES (?, ?, ?);
+
+deleteSocial:
+DELETE FROM area_social WHERE area = ?;
+
+-- The tags of the place of one of the links asked for, from the area whose tags are newest.
+socialOf:
+SELECT s.social, a.social_at
+FROM area_link l
+JOIN area_social s ON s.area = l.area AND s.place = l.place
+JOIN area a ON a.id = l.area
+WHERE l.link IN ? AND a.social_at IS NOT NULL
+ORDER BY a.social_at DESC
+LIMIT 1;
 
 putPlace:
 INSERT OR REPLACE INTO area_place(area, uri, name, lat, lon, type, category) VALUES (?, ?, ?, ?, ?, ?, ?);

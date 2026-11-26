@@ -362,10 +362,14 @@ data class MapPlace(
     val category: String?,
 )
 
-/** One page of places in an area; [cursor] is the next page, null on the last. */
+/**
+ * One page of places in an area; [cursor] is the next page, null on the last. [refs] holds, by a
+ * place's uri, the other links people referenced for the same place (as on its card).
+ */
 data class MapPlacesPage(
     val places: List<MapPlace>,
     val cursor: String?,
+    val refs: Map<String, List<String>> = emptyMap(),
 )
 
 /** Reads a Pinakes search answer (`GET /v1/search?bbox=…&type=Place`); cards without a point are dropped. */
@@ -377,7 +381,9 @@ fun parseMapPlaces(json: String): MapPlacesPage {
             if (geoPointOrNull(point.lat, point.lon) == null) return@mapNotNull null
             MapPlace(card.uri, card.name?.trim()?.ifEmpty { null }, point.lat, point.lon, card.type, card.category)
         }
-    return MapPlacesPage(places, page.cursor)
+    val kept = places.mapTo(HashSet()) { it.uri }
+    val refs = page.items.filter { it.uri in kept && it.refs.isNotEmpty() }.associate { it.uri to it.refs }
+    return MapPlacesPage(places, page.cursor, refs)
 }
 
 @Serializable
@@ -393,4 +399,5 @@ private data class PinakesSearchCard(
     val type: String? = null,
     val category: String? = null,
     val point: PinakesPoint? = null,
+    val refs: List<String> = emptyList(),
 )

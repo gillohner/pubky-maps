@@ -12,6 +12,7 @@ import to.pubky.maps.links.OsmType
 import to.pubky.maps.offline.KeptPubkyPlaces
 import to.pubky.maps.place.CollectionRefs
 import to.pubky.maps.place.GeoBox
+import to.pubky.maps.place.KeptSocial
 import to.pubky.maps.place.MapPlace
 import to.pubky.maps.place.MapPlacesPage
 import to.pubky.maps.place.PlaceCardInfo
@@ -104,6 +105,8 @@ private class KeptArea(
         if (!overlaps) return null
         return places.filter { it.lat in box.south..box.north && it.lon in box.west..box.east }.take(limit.toInt())
     }
+
+    override fun socialOf(uris: List<String>): KeptSocial? = error("not used")
 }
 
 class MapPlacesLayerTest {

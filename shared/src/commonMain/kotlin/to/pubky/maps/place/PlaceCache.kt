@@ -48,3 +48,15 @@ class SqlPlaceCache(
         const val KEPT = 300L
     }
 }
+
+/** Tags and counts of places kept for the offline areas, for pages Nexus cannot answer. Calls block on disk. */
+fun interface KeptPlaceSocial {
+    /** What is kept for one of [uris], from the area fetched last that has one; null when no kept area does. */
+    fun socialOf(uris: List<String>): KeptSocial?
+}
+
+/** A kept place's tags and counts (read with no viewer: none is the user's), fetched at [fetchedAt] (epoch ms). */
+data class KeptSocial(
+    val social: PlaceSocial,
+    val fetchedAt: Long,
+)

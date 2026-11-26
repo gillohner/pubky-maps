@@ -254,7 +254,7 @@ private fun OfflineNote(
     context: PlacePageContext,
 ) {
     if (!page.offline) return
-    val saved = page.savedAt?.let { Instant.fromEpochMilliseconds(it).toLocalDateTime(context.timeZone) }
+    val saved = page.shownAt?.let { Instant.fromEpochMilliseconds(it).toLocalDateTime(context.timeZone) }
     val text =
         when {
             saved != null -> "Offline: showing what was saved on ${savedText(saved)}."

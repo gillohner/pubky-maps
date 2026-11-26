@@ -19,7 +19,8 @@ import java.io.File
  * the place cache in the no-backup folder (never in an Android backup), and the Pubky places layer.
  * [viewer] is the signed-in user's pubky id, null when signed out; [health] gets the layer's Pinakes
  * outages for the map's degraded line; the layer shows the Pubky places of the offline areas
- * ([offline]) when Pinakes cannot be reached. Create it once per process.
+ * ([offline]) when Pinakes cannot be reached, and a page their tags when Nexus cannot. Create it
+ * once per process.
  */
 fun androidPlaceServices(
     context: Context,
@@ -41,7 +42,7 @@ fun androidPlaceServices(
     // State lives on the main thread; requests run on Ktor's own threads, the cache on IO.
     val main = CoroutineScope(scope.coroutineContext + Dispatchers.Main.immediate)
     return PlaceServices(
-        pages = PlacePageController(data, SqlPlaceCache(driver), main, viewer = viewer),
+        pages = PlacePageController(data, SqlPlaceCache(driver), main, kept = offline, viewer = viewer),
         layer = MapPlacesLayer(data, main, health = health, offline = offline),
         data = data,
     )
