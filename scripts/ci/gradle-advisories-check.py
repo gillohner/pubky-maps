@@ -2,8 +2,9 @@
 """Checks scripts/ci/gradle-advisories.py against a fake OSV: an advisory of a shipped library fails,
 an ignored one (by id or alias) and a withdrawn one do not, a stale ignore fails, page tokens and more
 than one batch are followed, an answer with too few results is refused, and the lists and ignores
-are read strictly; a 429/5xx, a lost connection or a cut-off answer is retried (a 4xx is not)
-and an empty library list fails. CI: android.yml, build job.
+are read strictly (the repository's ignore file too, whatever entries it holds); a 429/5xx, a lost
+connection or a cut-off answer is retried (a 4xx is not) and an empty library list fails.
+CI: android.yml, build job.
 
 Usage: gradle-advisories-check.py
 """
@@ -175,13 +176,43 @@ with tempfile.TemporaryDirectory() as d:
         expect(adv.main(["gradle-advisories.py", str(empty)]), 1, "an empty library list fails")
 
 expect(adv.ignores('[[ignore]]\nid = "GHSA-1"\nreason = "why"\n'), {"GHSA-1": "why"}, "ignores()")
-expect(adv.ignores(Path(adv.IGNORES).read_text()), {}, "the repository's ignore file reads")
+expect(adv.ignores('[[ignore]]\nid = "GHSA-1"\nreason = "a"\n[[ignore]]\nid = "CVE-2"\nreason = "b"\n'),
+       {"GHSA-1": "a", "CVE-2": "b"}, "ignores() with two entries")
+
+
+def ignore_file_problem(path):
+    """Why the ignore file at `path` does not read as the real check reads it, or None. Any entries it
+    holds are fine here (the real check says whether they still match), and so is no file (no ignores)."""
+    if not path.exists():
+        return None
+    try:
+        adv.ignores(path.read_text())
+    except (ValueError, adv.tomllib.TOMLDecodeError) as e:
+        return f"{path.name} does not read: {e}"
+    return None
+
+
+expect(ignore_file_problem(Path(adv.IGNORES)), None, "the repository's ignore file")
+with tempfile.TemporaryDirectory() as d:
+    file = Path(d) / "advisory-ignores.toml"
+    expect(ignore_file_problem(file), None, "no ignore file")
+    file.write_text('# What each ignore is for.\n#\n# [[ignore]]\n# id = "GHSA-xxxx"\n# reason = "<why>"\n\n'
+                    '[[ignore]]\nid = "GHSA-1"\nreason = "a"\n# why the next one waits\n'
+                    '[[ignore]]\nid = "CVE-2"\nreason = "b"\n')
+    expect(ignore_file_problem(file), None, "an ignore file with real entries")
+    file.write_text('[[ignore]]\nid = "GHSA-1"\n')
+    expect(ignore_file_problem(file), "advisory-ignores.toml does not read: ignore GHSA-1 has no reason",
+           "an ignore file with an entry without a reason")
 for bad, what in (('[[ignore]]\nid = "GHSA-1"\n', "no reason"),
                   ('[[ignore]]\nid = "GHSA-1"\nreason = " "\n', "blank reason"),
                   ('[[ignore]]\nreason = "why"\n', "no id"),
                   ('[[ignore]]\nid = "GHSA-1"\nreason = "a"\n[[ignore]]\nid = "GHSA-1"\nreason = "b"\n', "twice"),
                   ('[[ignore]]\nid = "GHSA-1"\nreason = "a"\nuntil = "x"\n', "unknown key"),
-                  ('[[ignores]]\nid = "GHSA-1"\nreason = "a"\n', "unknown table")):
+                  ('[[ignores]]\nid = "GHSA-1"\nreason = "a"\n', "unknown table"),
+                  ('[ignore]\nid = "GHSA-1"\nreason = "a"\n', "one [ignore] table"),
+                  ('ignore = "GHSA-1"\n', "a value"),
+                  ('ignore = ["GHSA-1"]\n', "an array of values"),
+                  ('[[ignore]]\nid = " GHSA-1"\nreason = "a"\n', "spaces around the id")):
     refuses(adv.ignores, bad, f"ignores with {what}")
 
 for f in failures:
