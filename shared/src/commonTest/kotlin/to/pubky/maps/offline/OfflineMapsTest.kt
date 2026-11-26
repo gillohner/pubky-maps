@@ -2,6 +2,7 @@ package to.pubky.maps.offline
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -30,6 +31,7 @@ class OfflineMapsTest {
         val resumed = ArrayList<String>()
         val paused = ArrayList<String>()
         var failCreate: String? = null
+        var failDelete = false
         val deleted = ArrayList<String>()
 
         /** Runs while the pack of a style is being created. */
@@ -67,6 +69,7 @@ class OfflineMapsTest {
         }
 
         override suspend fun delete(handle: Any) {
+            if (failDelete) error("disk full")
             deleted += (handle as Pack).styleUrl
             packs.value = PackStoreState.Ready(ready.filter { it.handle !== handle })
         }
@@ -598,6 +601,23 @@ class OfflineMapsTest {
             assertEquals(listOf(light), store.deleted)
             assertEquals(emptyList(), offline.maps())
             assertFalse(offline.downloading)
+        }
+
+    @Test
+    fun aDeleteThatFailsStillEndsTheThrottleOnceThePackIsPaused() =
+        runTest(UnconfinedTestDispatcher()) {
+            val store = FakeStore()
+            val offline = offlineMaps(store)
+            offline.download(zurich, listOf(light, dark))
+            store.progress(light, PackProgress(PackState.Downloading, 10, 100, 100_000, 10, 100_000))
+            store.failDelete = true
+            offline.delete("area-1")
+            assertEquals("Couldn't delete the offline map: disk full", offline.problem.value)
+            // Paused, not deleted: its requests may still be on their way until MapLibre says so.
+            assertTrue(offline.downloading)
+            store.progress(light, PackProgress(PackState.Paused, 10, 100, 100_000, 10, 100_000))
+            assertFalse(offline.downloading)
+            assertFalse(offline.fetchingChanges.first())
         }
 
     @Test

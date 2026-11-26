@@ -423,16 +423,21 @@ class OfflineMaps(
         deleted += id
         _problem.value = null
         scope.launch {
-            try {
-                area.forEach { handle ->
+            area.forEach { handle ->
+                try {
                     store.pause(handle)
                     store.delete(handle)
-                    // Only now: until the pack is gone, its requests may still be on their way.
-                    started.value -= handle
-                    stopping.value -= handle
+                } catch (e: Exception) {
+                    _problem.value = "Couldn't delete the offline map: ${e.message ?: "the offline storage failed"}"
+                    // The pack stays: it leaves [started] as a paused one does, once it no longer
+                    // downloads, so the throttle and the place reads ([fetchingChanges]) end with it.
+                    if (handle !in started.value) return@forEach
+                    stopping.value += handle
+                    if (stateOf(handle) == PackState.Downloading) return@forEach
                 }
-            } catch (e: Exception) {
-                _problem.value = "Couldn't delete the offline map: ${e.message ?: "the offline storage failed"}"
+                // Only now: until the pack is gone or paused, its requests may still be on their way.
+                started.value -= handle
+                stopping.value -= handle
             }
         }
     }
