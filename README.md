@@ -299,10 +299,11 @@ screenshots search with its pins, and the update probe screenshots each step of 
   host run by Synonym (`*.pubky.app`, `*.pubky.org`, `*.synonym.to`) and our development hosts. With a
   seeded signed-in account the app must start, draw the map, show the cached profile and tags, and
   name the missing homeserver in its banner; a place saved in airplane mode waits, and with the app
-  closed Android starts it for the outbox job, again after its process is killed during a run (on the
-  API 35 emulator Android sometimes restarts the job service at once and otherwise leaves it to the
-  run's guard job; both pass, `scripts/ci/synonym-blocked-check.py` checks how the test reads the
-  job states); a second run also blocks the first map style and the map must draw from the next one.
+  closed Android starts it for the outbox job, again after its process is killed during a run (the
+  run counts as ended by the kill whichever way JobScheduler noticed the dead process; on the API 35
+  emulator Android sometimes restarts the job service at once and otherwise leaves it to the run's
+  guard job; both pass, `scripts/ci/synonym-blocked-check.py` checks how the test reads the job
+  states); a second run also blocks the first map style and the map must draw from the next one.
 - StrictMode: debug builds turn it on before the app starts
   (`androidApp/src/debug/.../StrictModeProvider.kt`), on top of the platform's own policies, so
   network on the main thread and a file:// URI handed to another app still crash the debug app as

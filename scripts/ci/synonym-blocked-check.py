@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Checks how scripts/ci/synonym-blocked.py reads `dumpsys jobscheduler` after it killed the app during a
-run of the outbox job (rerun_after_kill), on excerpts of the dumps of run 45837259115: Android restarted
-the crashed job service at once on attempt 1 and the run's guard job ran on attempt 2; both count, a
-restart whose run has not set its own guard yet waits, and no start since the kill waits.
+run of the outbox job, on excerpts of real dumps. How the job ran again (rerun_after_kill), run
+45837259115: Android restarted the crashed job service at once on attempt 1 and the run's guard job ran
+on attempt 2; both count, a restart whose run has not set its own guard yet waits, and no start since
+the kill waits. That the kill ended a run (died_since), runs 45837259115 and 45874052666: a STOP naming
+a dead process counts whichever way Android noticed it, other stops and stops before the kill do not.
 CI: android.yml, build job.
 
 Usage: synonym-blocked-check.py
@@ -85,6 +87,30 @@ second = dump([job(1, "b7bfa85", "5s"), job(2, "4632718", "39s")],
               killed_run + [entry("-40s", "START", 1), entry("-6s", "STOP", 1, " stopped by the system"),
                             entry("-5s", "START", 1)])
 expect(blocked.rerun_after_kill(second, 40.5), None, "a guard from before the latest start")
+
+# That the kill ended a run. Run 45837259115: Android's service connection saw the process die.
+expect(blocked.died_since(waiting, 30.4), ["unexpectedly disconnected"], "died: unexpectedly disconnected")
+# Run 45874052666, jobs-retry-after.txt (about 82 s after the kill): Android met the dead process first
+# when it told the run of a network change; then the guard ran and scheduled job 1 anew.
+network = dump([job(1, "db7f313", "1s216ms"), job(2, "dbf84e", "1s210ms")],
+               [entry("-1m32s540ms", "START", 1),
+                entry("-1m21s550ms", "STOP", 1, " host crashed when trying to inform of network change"),
+                entry("-1s778ms", "START", 2), entry("-1s219ms", "START", 1),
+                entry("-1s217ms", "STOP", 2, " onStartJob returned false")])
+expect(blocked.died_since(network, 81.6), ["host crashed when trying to inform of network change"],
+       "died: host crashed when informed of a network change")
+expect(blocked.rerun_after_kill(network, 81.6), "guard", "the guard job ran (run 45874052666)")
+# A STOP from before the kill, and runs that ended on their own, do not count.
+expect(blocked.died_since(network, 81.5), [], "died: a STOP before the kill")
+expect(blocked.died_since(dump([], [entry("-6s", "STOP", 1, " stopped by the system"),
+                                    entry("-1s", "STOP", 2, " onStartJob returned false")]), 7.0),
+       [], "died: runs that ended on their own")
+expect(blocked.died_since(dump([], [entry("-2s", "STOP", 2, " unexpectedly disconnected")]), 3.0), [],
+       "died: the guard's own stop")
+# Made up: the other two ways Android 15 ends a run whose process died.
+expect(blocked.died_since(dump([], [entry("-2s", "STOP", 1, " binding died"),
+                                    entry("-1s", "STOP", 1, " host crashed when trying to stop")]), 3.0),
+       ["binding died", "host crashed when trying to stop"], "died: binding died, host crashed when stopped")
 
 for age, want in (("172ms", 0.172), ("30s523ms", 30.523), ("2m12s915ms", 132.915), ("1h0m1s", 3601.0),
                   ("1d0h0m0s0ms", 86400.0)):
