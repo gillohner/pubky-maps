@@ -376,12 +376,15 @@ check_reopened_view() {
     # so the view alone does not show the save on leaving; the file's write time does. A try shows
     # it when the old activity was destroyed less than 1 s after the lift (its rest cannot have
     # ended) and the view was first written less than 1 s after that destroy (the new map's rest
-    # ends later). A slower try is tried again; each pans further south.
+    # ends later). The switch waits 250 ms after the lift for the map to report its camera still: a
+    # map that leaves while its camera moves stores nothing on leaving (on CI about half the tries
+    # without the wait), and the new map's rest then stores the view. A try that does not show it
+    # is tried again; each pans further south.
     proved=false
-    for try in 1 2 3; do
+    for try in 1 2 3 4 5; do
         if ((try % 2)); then night=yes; else night=no; fi
         before=$(written_at)
-        pan_up "switch-$try" "cmd uimode night $night"
+        pan_up "switch-$try" "sleep 0.25; cmd uimode night $night"
         # Polled at once: the new map may write the view again after its rest (its camera comes back
         # from the saved state a few bits apart), so only the first write tells when it was stored.
         written=$(first_write_after "$before" 6 || true)
@@ -406,7 +409,7 @@ check_reopened_view() {
             if ((lift_ms < 1000 && ${write_ms:-1000} < 1000)); then proved=true; break; fi
         fi
     done
-    $proved || fail "no theme switch right after a pan first wrote the view within 1 s of the destroy in 3 tries; see map-view-switched-*.json"
+    $proved || fail "no theme switch right after a pan first wrote the view within 1 s of the destroy in 5 tries; see map-view-switched-*.json"
     if [ "$night" = yes ]; then
         adb shell cmd uimode night no
         sleep 3
@@ -415,7 +418,7 @@ check_reopened_view() {
     fi
     # Back right after a pan, the case the user meets. This start has no launcher intent, so Back
     # finishes the activity (from the launcher, Android 12+ only moves the task back and the rest
-    # still runs). Back destroys the activity 1.0-1.5 s after the lift on CI, so a rest can end
+    # still runs). Back destroys the activity 0.9-1.5 s after the lift on CI, so a rest can end
     # first: this checks that Back stores the view, the theme switch above that the save on leaving
     # does it.
     pan_up back "input keyevent KEYCODE_BACK"
