@@ -121,7 +121,8 @@ data class PhoneSaved(
  * cache does not reflect yet (made after it was read) and the [queue] still to be sent applied on
  * top, in order, so a write shows at once and disappears again when it is dropped. Places are
  * compared as [normalize] spells them. [labels] are the names stored for the places the user wrote
- * about (by place as the write had it), [points] where they are (by place as the core spells it).
+ * about (by place; a stored place may be spelled otherwise than the core spells it, so they are
+ * compared by [normalize]), [points] where they are (by place as the core spells it).
  */
 internal fun ownData(
     viewer: String?,
@@ -139,6 +140,7 @@ internal fun ownData(
     val saved = LinkedHashMap<String, SavedEntry>()
     val ownLists = LinkedHashMap<String, OwnList>()
     val posts = mutableListOf<OwnPost>()
+    val named = labels.mapKeys { normalize(it.key) }
     phone.saved.forEach {
         val place = normalize(it.place)
         saved["phone|$place"] = SavedEntry(place, Kept.Phone, it.name, point = it.point ?: geoLinkPoint(it.place))
@@ -152,7 +154,7 @@ internal fun ownData(
         cached.bookmarks.forEach { bookmark ->
             val place = normalize(bookmark.place)
             saved["home|$place"] =
-                SavedEntry(place, Kept.Private, labels[bookmark.place] ?: labels[place], point = pointOf(place, points))
+                SavedEntry(place, Kept.Private, named[place], point = pointOf(place, points))
         }
         lists.forEach { ownLists[it.uri] = it.copy(items = it.items.map(normalize)) }
         val readAt = cached.refreshedAt ?: 0
@@ -173,7 +175,7 @@ internal fun ownData(
                 op is WriteOp.CreateList || op is WriteOp.EditList -> {}
 
                 !reflected -> {
-                    apply(op, pending = false, tags, saved, ownLists, labels, points, normalize)
+                    apply(op, pending = false, tags, saved, ownLists, named, points, normalize)
                 }
             }
         }
@@ -181,7 +183,7 @@ internal fun ownData(
             when (op) {
                 is WriteOp.Post -> posts += OwnPost(normalize(op.place), op.text, op.at, uri = null)
                 is WriteOp.Photo -> posts += OwnPost(normalize(op.place), op.caption.orEmpty(), op.at, uri = null, photoFile = op.file)
-                else -> apply(op, pending = true, tags, saved, ownLists, labels, points, normalize)
+                else -> apply(op, pending = true, tags, saved, ownLists, named, points, normalize)
             }
         }
     }
@@ -195,7 +197,7 @@ internal fun ownData(
         pending = if (signedIn) queue.size else 0,
         names =
             phone.saved.mapNotNull { saved -> saved.name?.let { normalize(saved.place) to it } }.toMap() +
-                (if (signedIn) labels.mapKeys { normalize(it.key) } else emptyMap()),
+                (if (signedIn) named else emptyMap()),
     )
 }
 
@@ -205,7 +207,8 @@ private fun apply(
     tags: MutableMap<Pair<String, String>, OwnTag>,
     saved: MutableMap<String, SavedEntry>,
     lists: MutableMap<String, OwnList>,
-    labels: Map<String, String>,
+    /** Names by place as the core spells it. */
+    named: Map<String, String>,
     points: Map<String, GeoPoint>,
     normalize: (String) -> String,
 ) {
@@ -221,7 +224,7 @@ private fun apply(
 
         is WriteOp.Save -> {
             saved["home|$place"] =
-                SavedEntry(place, Kept.Private, labels[op.place] ?: labels[place], pending, pointOf(place, points))
+                SavedEntry(place, Kept.Private, named[place], pending, pointOf(place, points))
         }
 
         is WriteOp.Unsave -> {
