@@ -306,8 +306,9 @@ fun MapScreen(
 
 /**
  * Where the map left in view starts, under a safe area of [safeTop]: under the search bar, or under
- * the notices below it when they are [bannersHeight] tall (each of them reaches across the map
- * beside a panel too, as wide as a phone).
+ * the notices below it when they are [bannersHeight] tall. Across the room's whole width, though the
+ * notices are narrower on a wide screen: simpler than cutting out their shape, and it costs at most
+ * their height.
  */
 internal fun uncoveredMapTop(
     safeTop: Dp,

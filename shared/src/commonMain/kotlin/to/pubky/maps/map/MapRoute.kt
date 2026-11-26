@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -357,8 +358,10 @@ fun MapRoute(
     // A place tapped on the map opens its sheet or panel over the map, maybe over the place: once the
     // sheet has opened, a place it hides moves to the middle of the map left in view, as in Google
     // Maps (keepTappedInView). Once per tap and map size (saved, see keptInViewKey); not after the user
-    // moved the map. Search picks and links centre the map themselves.
+    // moved the map or dragged the sheet. Search picks and links centre the map themselves.
     var keptInView by rememberSaveable { mutableStateOf<String?>(null) }
+    // The open place's uri and the stop its sheet is at (rememberPlacePage reports it).
+    var pageStop by remember { mutableStateOf<Pair<String, SheetStop>?>(null) }
     LaunchedEffect(tapped == null) { if (tapped == null) keptInView = null }
     val tappedShown = tapped?.takeIf { shown?.place?.uri == it.uri }
     LaunchedEffect(tappedShown) {
@@ -371,12 +374,16 @@ fun MapRoute(
             rooms = snapshotFlow { uncoveredMap },
             pageDone = pages.state.map { page -> page?.place?.uri == place.uri && page.loading.isEmpty() },
             userMoved = snapshotFlow { mapState.isCameraMoving && mapState.cameraMoveReason == CameraMoveReason.Gesture },
+            sheetStops = snapshotFlow { pageStop }.mapNotNull { it?.takeIf { (uri) -> uri == place.uri }?.second },
             map = mapState.keepInViewMap(),
             kept = { keptInView },
             onKept = { keptInView = it },
         )
     }
-    val placePage = places?.let { rememberPlacePage(it, shown, mapSearch?.userLocation, onSharePlace, openIn, writes, onWrite) }
+    val placePage =
+        places?.let {
+            rememberPlacePage(it, shown, mapSearch?.userLocation, onSharePlace, openIn, writes, onWrite) { stop -> pageStop = stop }
+        }
     // The area on screen goes offline in the style on screen and the other theme's of the same server.
     val areaPicker =
         offline?.let {
@@ -733,7 +740,7 @@ private fun JsonObject?.strings(): Map<String, String> =
 
 /**
  * The place page of [shown] for the map screen: its state from [places], the sheet's stop (saved per
- * place), the clock, and its actions. Null when no place is open.
+ * place, told to [onStop] with the place's uri), the clock, and its actions. Null when no place is open.
  */
 @Composable
 private fun rememberPlacePage(
@@ -744,6 +751,7 @@ private fun rememberPlacePage(
     openIn: OpenInApps?,
     writes: WriteController?,
     onWrite: (WriteTarget, WriteIntent) -> Unit,
+    onStop: (Pair<String, SheetStop>) -> Unit,
 ): PlacePageSlot? {
     LaunchedEffect(shown?.place) {
         val place = shown?.place
@@ -760,6 +768,7 @@ private fun rememberPlacePage(
         }
     }
     if (shown == null) return null
+    SideEffect { onStop(shown.place.uri to stop) }
     SystemBack { shown.onClose() }
     val page = pageState?.takeIf { it.place.uri == shown.place.uri } ?: PlacePageState(shown.place)
     // Built once per place and point (it asks the core and the package manager), not per recomposition.
@@ -1036,7 +1045,7 @@ private fun rememberMyLocationAction(
 private fun MapState.keepInViewMap(): KeepInViewMap =
     object : KeepInViewMap {
         override val size: DpSize? get() = viewport?.size
-        override val moving: Boolean get() = isCameraMoving
+        override val moving: Flow<Boolean> = snapshotFlow { isCameraMoving }
 
         override fun screenPoint(point: GeoPoint): DpOffset? =
             screenLocationFromPosition(Position(longitude = point.lon, latitude = point.lat))

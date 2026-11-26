@@ -12,12 +12,13 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import to.pubky.maps.links.GeoPoint
+import to.pubky.maps.place.SheetStop
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import to.pubky.maps.links.GeoPoint
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class KeepInViewTest {
@@ -127,7 +128,7 @@ class KeepInViewTest {
         var at: DpOffset?,
         override var size: DpSize? = DpSize(412.dp, 915.dp),
     ) : KeepInViewMap {
-        override var moving = false
+        override val moving = MutableStateFlow(false)
         val centred = mutableListOf<DpOffset>()
 
         override fun screenPoint(point: GeoPoint) = at
@@ -148,6 +149,7 @@ class KeepInViewTest {
         val rooms = MutableStateFlow<DpRect?>(null)
         val done = MutableStateFlow(false)
         val userMoved = MutableStateFlow(false)
+        val stop = MutableStateFlow(SheetStop.Peek)
         val job =
             scope.launch {
                 keepTappedInView(
@@ -156,6 +158,7 @@ class KeepInViewTest {
                     rooms = rooms,
                     pageDone = done,
                     userMoved = userMoved,
+                    sheetStops = stop,
                     map = map,
                     kept = { kept },
                     onKept = { kept = it },
@@ -239,15 +242,14 @@ class KeepInViewTest {
     @Test
     fun aRoomSeenWhileTheCameraMovesIsLeftAlone() =
         runTest {
-            val map = FakeMap(at = DpOffset(300.dp, 800.dp)).apply { moving = true }
+            val map = FakeMap(at = DpOffset(300.dp, 800.dp)).apply { moving.value = true }
             val tap = Tap(this, map)
             tap.rooms.value = phone
             settle()
             assertTrue(map.centred.isEmpty())
             assertNull(tap.kept)
-            // The fling ends and the sheet settles again: now it moves.
-            map.moving = false
-            tap.rooms.value = phoneAfterCard
+            // The fling ends, the room unchanged: the place is judged now.
+            map.moving.value = false
             settle()
             assertEquals(1, map.centred.size)
             tap.job.cancel()
@@ -282,5 +284,21 @@ class KeepInViewTest {
             settle()
             assertEquals(1, map.centred.size)
             again.job.cancel()
+        }
+
+    @Test
+    fun aSheetDraggedWhileThePageLoadsMovesNothing() =
+        runTest {
+            val tap = Tap(this, FakeMap(at = DpOffset(200.dp, 550.dp)))
+            tap.rooms.value = phone
+            settle()
+            // The user pulls the sheet up to half before the page has loaded: its room is theirs.
+            tap.stop.value = SheetStop.Half
+            runCurrent()
+            tap.rooms.value = phone.copy(bottom = 457.dp)
+            settle()
+            assertTrue(tap.map.centred.isEmpty())
+            assertEquals(keptInViewKey("https://www.openstreetmap.org/node/1", DpSize(412.dp, 915.dp)), tap.kept)
+            tap.job.cancel()
         }
 }

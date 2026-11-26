@@ -11,10 +11,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.launch
 import to.pubky.maps.links.GeoPoint
+import to.pubky.maps.place.SheetStop
 
 /**
  * How close to the edge of the uncovered map a place still counts as in view: its pin (a 24 dp dot)
@@ -86,8 +88,8 @@ internal interface KeepInViewMap {
     /** The map's size on the screen; null before it is laid out. */
     val size: DpSize?
 
-    /** The camera is moving (our own pan, a fling): a room seen meanwhile is left alone. */
-    val moving: Boolean
+    /** Whether the camera is moving (our own pan, a fling): the room is judged once it rests. */
+    val moving: Flow<Boolean>
 
     /** Where [point] is on the screen; null when it cannot be projected. */
     fun screenPoint(point: GeoPoint): DpOffset?
@@ -98,15 +100,16 @@ internal interface KeepInViewMap {
 
 /**
  * Keeps the place [uri] tapped at [point] in view while its sheet or panel opens: each time the map
- * left in view ([rooms], see [settled]) has settled, a place it hides moves to its middle, once per
- * place and map size ([kept] and [onKept], see [keptInViewKey]); nothing once [userMoved] the map
- * (where the user put the map is theirs).
+ * left in view ([rooms], see [settled]) has settled with the camera at rest, a place it hides moves
+ * to its middle, once per place and map size ([kept] and [onKept], see [keptInViewKey]). Nothing
+ * moves once [userMoved] the map (where the user put the map is theirs) or once the sheet left the
+ * stop it opened at ([sheetStops]; the tap counts as kept then): the room the user dragged the sheet
+ * to is theirs too, as in Google Maps.
  *
  * The sheet's lowest height is its header, which grows when the place's card or a part's failure
  * arrives, mostly after the first room has settled. So a room that shows the place counts as final
- * only once [pageDone] (every part of the page answered or failed): before that, a later, smaller
- * room is checked again. After it, dragging the sheet over the place moves nothing, as in Google Maps.
- * Runs until cancelled (the place closes or another is tapped).
+ * only once [pageDone] (every part of the page answered or failed): until then a later, smaller room
+ * is checked again. Runs until cancelled (the place closes or another is tapped).
  */
 internal suspend fun keepTappedInView(
     uri: String,
@@ -114,6 +117,7 @@ internal suspend fun keepTappedInView(
     rooms: Flow<DpRect?>,
     pageDone: Flow<Boolean>,
     userMoved: Flow<Boolean>,
+    sheetStops: Flow<SheetStop>,
     map: KeepInViewMap,
     kept: () -> String?,
     onKept: (String) -> Unit,
@@ -124,11 +128,18 @@ internal suspend fun keepTappedInView(
             userMoved.first { it }
             moved = true
         }
-        val roomsAndDone = combine(rooms, pageDone) { room, done -> room?.let { it to done } }.distinctUntilChanged()
-        settled(roomsAndDone).collect { (room, done) ->
+        launch {
+            sheetStops.distinctUntilChanged().drop(1).first()
+            moved = true
+            map.size?.let { onKept(keptInViewKey(uri, it)) }
+        }
+        val resting =
+            combine(rooms, pageDone, map.moving) { room, done, moving -> room?.takeUnless { moving }?.let { it to done } }
+                .distinctUntilChanged()
+        settled(resting).collect { (room, done) ->
             val size = map.size ?: return@collect
             val key = keptInViewKey(uri, size)
-            if (moved || kept() == key || map.moving) return@collect
+            if (moved || kept() == key) return@collect
             val centre = keepInViewCentre(map.screenPoint(point), room, size)
             if (centre != null) {
                 onKept(key)
