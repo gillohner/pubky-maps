@@ -40,8 +40,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,10 +54,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onLongClick
@@ -587,7 +591,7 @@ private fun DetailRow(
 @Composable
 private fun CoordinatesRow(coordinates: String) {
     val copy = rememberCopyText()
-    var copied by rememberCopiedFlag()
+    val mark = rememberCopiedMark()
     Row(
         modifier =
             Modifier
@@ -595,7 +599,7 @@ private fun CoordinatesRow(coordinates: String) {
                 .heightIn(min = 48.dp)
                 .clickable(onClickLabel = "Copy coordinates") {
                     copy(coordinates)
-                    copied = true
+                    mark.copied()
                 }.padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -603,7 +607,7 @@ private fun CoordinatesRow(coordinates: String) {
         Spacer(Modifier.width(16.dp))
         Text(coordinates, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Spacer(Modifier.width(8.dp))
-        if (copied) {
+        if (mark.shown) {
             CopiedText("Copied")
         } else {
             Icon(PlaceIcons.ContentCopy, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -623,7 +627,8 @@ private fun DetailLine(
     address: String?,
 ) {
     val copy = rememberCopyText()
-    var copied by rememberCopiedFlag()
+    val mark = rememberCopiedMark()
+    val haptics = LocalHapticFeedback.current
     val style = MaterialTheme.typography.bodyMedium
     val color = MaterialTheme.colorScheme.onSurfaceVariant
     if (address == null) {
@@ -632,21 +637,32 @@ private fun DetailLine(
     }
     val copyAddress = {
         copy(address)
-        copied = true
+        mark.copied()
     }
     Box(
         Modifier
-            .pointerInput(address) { detectTapGestures(onLongPress = { copyAddress() }) }
-            .semantics(mergeDescendants = true) {
+            .pointerInput(address) {
+                detectTapGestures(
+                    onLongPress = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        copyAddress()
+                    },
+                )
+            }.semantics(mergeDescendants = true) {
                 onLongClick("Copy address") {
                     copyAddress()
                     true
                 }
             },
     ) {
-        // Both texts are laid out so the line keeps its height while it says "Address copied".
-        Text(text, style = style, color = if (copied) Color.Transparent else color)
-        if (copied) CopiedText("Address copied")
+        // The line stays laid out, hidden from sight and TalkBack, so it keeps its height while it says
+        // "Address copied".
+        if (mark.shown) {
+            Text(text, style = style, color = Color.Transparent, modifier = Modifier.clearAndSetSemantics {})
+            CopiedText("Address copied")
+        } else {
+            Text(text, style = style, color = color)
+        }
     }
 }
 
@@ -660,18 +676,32 @@ private fun CopiedText(text: String) {
     )
 }
 
-/** True for two seconds after it is set: how long a row says it copied. */
-@Composable
-private fun rememberCopiedFlag(): MutableState<Boolean> {
-    val copied = remember { mutableStateOf(false) }
-    LaunchedEffect(copied.value) {
-        if (copied.value) {
-            delay(2.seconds)
-            copied.value = false
+/** Whether a row says it copied: for two seconds after its last copy. */
+@Stable
+private class CopiedMark {
+    private var copies by mutableIntStateOf(0)
+    var shown by mutableStateOf(false)
+        private set
+
+    fun copied() {
+        copies++
+        shown = true
+    }
+
+    @Composable
+    fun Timer() {
+        // Keyed on the count, so a second copy within the two seconds starts them again.
+        LaunchedEffect(copies) {
+            if (shown) {
+                delay(2.seconds)
+                shown = false
+            }
         }
     }
-    return copied
 }
+
+@Composable
+private fun rememberCopiedMark(): CopiedMark = remember { CopiedMark() }.also { it.Timer() }
 
 /**
  * Puts plain text on the clipboard. The newer `LocalClipboard` takes a platform `ClipEntry` that common

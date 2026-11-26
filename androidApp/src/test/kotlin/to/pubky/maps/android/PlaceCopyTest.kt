@@ -13,7 +13,6 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import kotlinx.datetime.LocalDate
@@ -100,7 +99,7 @@ class PlaceCopyTest {
 
     @Test
     fun aTapOnTheCoordinatesCopiesThemAndSaysSoForAMoment() {
-        compose.onNodeWithText("47.3701, 8.5481").performScrollTo().performClick()
+        compose.onNodeWithText("47.3701, 8.5481").performClick()
         frames()
 
         assertEquals("47.3701, 8.5481", clipText)
@@ -123,7 +122,7 @@ class PlaceCopyTest {
         val line =
             compose.onNode(
                 SemanticsMatcher("long press copies the address") {
-                    it.config.getOrNull(SemanticsActions.OnLongClick)?.label == "Copy address"
+                    it.config.getOrElseNullable(SemanticsActions.OnLongClick) { null }?.label == "Copy address"
                 },
             )
         line.performSemanticsAction(SemanticsActions.OnLongClick)
