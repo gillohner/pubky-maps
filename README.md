@@ -20,17 +20,20 @@ holds back the other; with both unreachable the list and the map's degraded line
 offline, and Search asks again. Photon is credited under the results and in Settings → Map data.
 
 **Offline maps** (Settings → Offline maps): Download an area opens a frame over the map; the map
-in the frame downloads in the style on screen and the other theme's first style, so it shows light
-and dark without a connection. One download may take at most 3,000 tiles (zoom 0 to 14) and 50 MB of
+in the frame downloads in the style on screen and the other theme's style of the same server, so it
+shows light and dark without a connection. One download may take at most 3,000 tiles (zoom 0 to 14) and 50 MB of
 tiles, with at most 4 requests at a time and the app's User-Agent (OpenFreeMap's terms for offline
 downloads, applied to every map server); the picker refuses a larger area and a download that grows
 past the limit stops. The two styles download one after the other, so the tiles they share are
 fetched once. The list shows each area's progress and size; a download paused or the app was closed
-during resumes from there, and an area deletes. 20 seconds after the start and every 30 minutes the
-app walks each ready area again: unchanged, this costs no request; when the map server has moved
+during resumes from there, and an area deletes. 20 seconds after the start and every 30 minutes, on
+a network Android does not count as metered (Wi-Fi, as Google Maps and OsmAnd update offline maps),
+the app walks each ready area again: unchanged, this costs no request; when the map server has moved
 its tiles to a new release (OpenFreeMap does with each one), the area downloads again at the new
 addresses, within the same limits, and shows "Updating"; the old release's tiles stay with the area
-until it is deleted. MapLibre keeps the offline maps and the map
+until it is deleted. An update that stops before it finishes leaves the area marked "Update
+paused" (MapLibre would call it complete, as it counts the old release's tiles too); the next check
+goes on with it unless the user paused it, and Resume does at once. MapLibre keeps the offline maps and the map
 cache in one database in the no-backup folder.
 
 Settings:

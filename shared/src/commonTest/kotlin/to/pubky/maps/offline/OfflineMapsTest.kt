@@ -100,10 +100,17 @@ class OfflineMapsTest {
             override fun now() = Instant.fromEpochMilliseconds(millis++)
         }
 
-    private fun TestScope.offlineMaps(store: FakeStore): OfflineMaps {
+    private fun TestScope.offlineMaps(
+        store: FakeStore,
+        unmetered: () -> Boolean = { true },
+    ): OfflineMaps {
         var ids = 0
-        return OfflineMaps(store, backgroundScope, clock) { "area-${++ids}" }.also { store.controller = it }
+        return OfflineMaps(store, backgroundScope, clock, { "area-${++ids}" }, unmetered).also { store.controller = it }
     }
+
+    /** The packs whose update a check started and has not finished. */
+    private fun FakeStore.updating() =
+        (packs.value as PackStoreState.Ready).packs.filter { it.metadata?.updating == true }.map { (it.handle as Pack).styleUrl }
 
     private fun OfflineMaps.maps() = (state.value as OfflineMapsState.Ready).maps
 
@@ -203,6 +210,8 @@ class OfflineMapsTest {
             assertFalse(offline.downloading)
             assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
 
+            assertEquals(emptyList(), store.updating())
+
             // And again later: MapLibre walks only a pack that is not active, so each rests once complete.
             assertEquals(listOf(light, dark, light, dark), store.paused)
             advanceTimeBy(CHECK_INTERVAL - QUIET_CHECK * 2)
@@ -235,19 +244,93 @@ class OfflineMapsTest {
         }
 
     @Test
-    fun aPausedUpdateEndsTheCheck() =
+    fun aPausedUpdateIsNotReadyUntilItIsResumedAndFinished() =
         runTest(UnconfinedTestDispatcher()) {
             val (store, offline) = readyArea()
             advanceTimeBy(FIRST_CHECK)
             runCurrent()
+            // Both styles are marked before the first walk starts.
+            assertEquals(listOf(light, dark), store.updating())
+            assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
             store.progress(light, PackProgress(PackState.Downloading, 21, 100))
             advanceTimeBy(QUIET_CHECK)
             runCurrent()
             offline.pause("area-1")
-            store.progress(light, PackProgress(PackState.Paused, 21, 100))
-            assertEquals(OfflineMapStatus.Paused(60), offline.maps().single().status)
+            // MapLibre counts the release before's tiles too, so it reports a paused update complete.
+            store.progress(light, PackProgress(PackState.Complete, 100, 100, 3_000_000, 80, 2_500_000))
+            assertEquals(OfflineMapStatus.Paused(100, update = true), offline.maps().single().status)
+            assertEquals(
+                "Update paused. Until it finishes, parts of this map may not show without a connection.",
+                statusText(offline.maps().single()),
+            )
             assertFalse(offline.downloading)
-            advanceTimeBy(QUIET_CHECK * 3)
+            // The user paused it: later checks leave it.
+            advanceTimeBy(CHECK_INTERVAL)
+            runCurrent()
+            assertEquals(listOf(light), store.resumed)
+
+            // Resume walks both styles again, also the one MapLibre says is complete.
+            offline.resume("area-1")
+            assertEquals(listOf(light, light), store.resumed)
+            store.progress(light, PackProgress(PackState.Downloading, 30, 100))
+            assertEquals(OfflineMapStatus.Downloading(65, update = true), offline.maps().single().status)
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            store.progress(light, PackProgress(PackState.Complete, 100, 100, 3_000_000, 80, 2_500_000))
+            assertEquals(listOf(dark), store.updating())
+            assertEquals(listOf(light, light, dark), store.resumed)
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            assertEquals(emptyList(), store.updating())
+            assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
+            assertFalse(offline.downloading)
+        }
+
+    @Test
+    fun anUpdateTheAppWasClosedDuringGoesOnAtTheFirstCheck() =
+        runTest(UnconfinedTestDispatcher()) {
+            val store = FakeStore()
+            val metadata = PackMetadata("area-1", "Map", 1, 8.448, 47.32, 8.625, 47.435, updating = true)
+            val complete = PackProgress(PackState.Complete, 100, 100, 3_000_000, 80, 2_500_000)
+            store.packs.value =
+                PackStoreState.Ready(
+                    listOf(
+                        StoredPack(Pack(light), metadata, complete),
+                        StoredPack(Pack(dark), metadata.copy(updating = false), complete),
+                    ),
+                )
+            val offline = offlineMaps(store)
+            assertEquals(OfflineMapStatus.Paused(100, update = true), offline.maps().single().status)
+
+            advanceTimeBy(FIRST_CHECK)
+            runCurrent()
+            // Only the style whose update did not finish.
+            assertEquals(listOf(light), store.resumed)
+            store.progress(light, PackProgress(PackState.Downloading, 50, 100))
+            assertEquals(OfflineMapStatus.Downloading(75, update = true), offline.maps().single().status)
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            store.progress(light, complete)
+            assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
+            assertEquals(listOf(light), store.resumed)
+            assertFalse(offline.downloading)
+        }
+
+    @Test
+    fun readyAreasAreCheckedOnlyOnANetworkWithoutADataCap() =
+        runTest(UnconfinedTestDispatcher()) {
+            var unmetered = false
+            val store = FakeStore()
+            val offline = offlineMaps(store) { unmetered }
+            offline.download(zurich, listOf(light))
+            store.progress(light, PackProgress(PackState.Complete, 100, 100))
+            store.resumed.clear()
+            advanceTimeBy(FIRST_CHECK + CHECK_INTERVAL)
+            runCurrent()
+            assertEquals(emptyList(), store.resumed)
+
+            unmetered = true
+            advanceTimeBy(CHECK_INTERVAL)
             runCurrent()
             assertEquals(listOf(light), store.resumed)
         }
@@ -397,6 +480,10 @@ class OfflineMapsTest {
             text(OfflineMapStatus.Downloading(42, "No connection")),
         )
         assertEquals("Paused at 64%", text(OfflineMapStatus.Paused(64)))
+        assertEquals(
+            "Update paused. Until it finishes, parts of this map may not show without a connection.",
+            text(OfflineMapStatus.Paused(64, update = true)),
+        )
         val two = OfflineMapsState.Ready(List(2) { OfflineMap("$it", "Map", 1, OfflineMapStatus.Ready, 0) })
         assertEquals("2 areas on this phone.", offlineMapsSummary(two))
     }
@@ -427,7 +514,7 @@ class OfflineMapsTest {
 
     @Test
     fun metadataSurvivesTheDatabaseAndForeignBytesAreNotOurs() {
-        val metadata = PackMetadata("a", "Map", 1, 8.0, 47.0, 9.0, 48.0, stopped = true)
+        val metadata = PackMetadata("a", "Map", 1, 8.0, 47.0, 9.0, 48.0, stopped = true, updating = true)
         assertEquals(metadata, PackMetadata.decode(metadata.encode()))
         assertNull(PackMetadata.decode("Seattle".encodeToByteArray()))
         assertNull(PackMetadata.decode(null))

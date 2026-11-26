@@ -1,6 +1,7 @@
 package to.pubky.maps.offline
 
 import android.content.Context
+import android.net.ConnectivityManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.io.files.Path
 import org.maplibre.compose.map.DefaultMapRuntime
@@ -27,12 +28,19 @@ fun configureMapRuntime(
     }
 }
 
-/** The offline maps of the process, in MapLibre's database; created once, after [configureMapRuntime]. */
+/**
+ * The offline maps of the process, in MapLibre's database; created once, after [configureMapRuntime].
+ * They check for new map data only on a network Android does not count as metered (no network
+ * counts as metered).
+ */
 fun androidOfflineMaps(
     context: Context,
     scope: CoroutineScope,
-): OfflineMaps =
-    OfflineMaps(
-        MapLibrePackStore({ DefaultMapRuntime.instance.offlineStorage }, context.resources.displayMetrics.density),
-        scope,
+): OfflineMaps {
+    val connectivity = context.getSystemService(ConnectivityManager::class.java)
+    return OfflineMaps(
+        store = MapLibrePackStore({ DefaultMapRuntime.instance.offlineStorage }, context.resources.displayMetrics.density),
+        scope = scope,
+        unmetered = { connectivity?.isActiveNetworkMetered == false },
     )
+}

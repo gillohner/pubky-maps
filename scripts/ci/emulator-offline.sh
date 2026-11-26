@@ -132,6 +132,8 @@ cp "$log" "$out/download.jsonl"
 # other side of the world, so the map itself fetches none of the area's new tiles: only the app's
 # check for updates (20 s after the start) can.
 curl -fsS "http://127.0.0.1:$port/release/2" > /dev/null
+# The app checks only on a network without a data cap (the emulator's Wi-Fi).
+adb shell dumpsys connectivity | grep -m 2 -E "NOT_METERED|Active default network" || echo "no unmetered network reported"
 : > "$log"
 open_at "-33.8688,151.2093?z=16"
 # Exit 3: not yet. The map's flight to Sydney may fetch a low-zoom tile of the area itself (MapLibre's

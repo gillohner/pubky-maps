@@ -297,13 +297,13 @@ fun MapRoute(
     val held = !layerMayAsk(shown?.place?.source, movedSinceShown)
     SideEffect { layerHeld.value = held }
     val placePage = places?.let { rememberPlacePage(it, shown, mapSearch?.userLocation, onSharePlace, openIn, writes, onWrite) }
-    // The area on screen goes offline in the style on screen and in the other theme's first style.
+    // The area on screen goes offline in the style on screen and the other theme's of the same server.
     val areaPicker =
         offline?.let {
             rememberAreaPicker(
                 offline = it,
                 mapState = mapState,
-                styleUrls = listOfNotNull(fallback.current?.url, servers.mapStyles(!dark).firstOrNull()?.url),
+                styleUrls = listOfNotNull(fallback.current?.url, fallback.otherTheme(servers.mapStyles(!dark))?.url),
                 onDownloadStarted = onDownloadStarted,
             )
         }

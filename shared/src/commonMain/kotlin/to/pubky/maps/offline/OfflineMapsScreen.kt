@@ -161,7 +161,11 @@ internal fun statusText(map: OfflineMap): String {
         }
 
         is OfflineMapStatus.Paused -> {
-            "Paused at ${status.percent}%"
+            if (status.update) {
+                "Update paused. Until it finishes, parts of this map may not show without a connection."
+            } else {
+                "Paused at ${status.percent}%"
+            }
         }
 
         OfflineMapStatus.TooLarge -> {

@@ -75,6 +75,13 @@ data class PackMetadata(
     val north: Double,
     /** The app stopped the download at the limit of one download ([OfflineLimits]). */
     val stopped: Boolean = false,
+    /**
+     * A check for new map data walks the pack and has not finished. MapLibre reports a pack that is
+     * not downloading as complete once as many tiles are linked to it as its sources need, and the
+     * tiles of the release before stay linked: without this mark, an update that stopped half way
+     * would look complete while the area lacks the new release's tiles.
+     */
+    val updating: Boolean = false,
 ) {
     fun encode(): ByteArray = json.encodeToString(serializer(), this).encodeToByteArray()
 

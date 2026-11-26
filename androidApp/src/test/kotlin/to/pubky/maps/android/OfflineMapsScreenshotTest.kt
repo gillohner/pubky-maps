@@ -134,6 +134,20 @@ class OfflineMapsScreenshotTest {
     fun offlineMapsEmptyPhoneLight() =
         capture("offline-maps-empty", Device.Phone, dark = false) { List(OfflineMapsState.Ready(emptyList())) }
 
+    /** An update that stopped half way (paused, or the app was closed) beside a ready area. */
+    @Test
+    fun offlineMapsUpdatePausedPhoneLight() =
+        capture("offline-maps-update-paused", Device.Phone, dark = false) {
+            List(
+                OfflineMapsState.Ready(
+                    listOf(
+                        OfflineMap("b", "Map around 47.37° N, 8.54° E", 2, OfflineMapStatus.Paused(100, update = true), 18_400_000),
+                        OfflineMap("a", "Map around 46.95° N, 7.45° E", 1, OfflineMapStatus.Ready, 6_300_000),
+                    ),
+                ),
+            )
+        }
+
     @Test
     fun areaPickerPhoneLight() = capture("area-picker", Device.Phone, dark = false) { Picker(fits = true) }
 
