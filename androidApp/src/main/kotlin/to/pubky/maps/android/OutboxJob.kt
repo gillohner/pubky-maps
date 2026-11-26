@@ -212,7 +212,8 @@ internal suspend fun runOutbox(
  * Android 12, which does not tell; most stops of a network job are the network going).
  */
 internal fun connectivityLost(stopReason: Int?): Boolean =
-    stopReason == null || stopReason == JobParameters.STOP_REASON_CONSTRAINT_CONNECTIVITY
+    stopReason == null ||
+        (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && stopReason == JobParameters.STOP_REASON_CONSTRAINT_CONNECTIVITY)
 
 /**
  * Runs when the phone has a network while writes wait. Starting the process restores the session

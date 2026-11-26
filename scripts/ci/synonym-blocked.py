@@ -255,7 +255,13 @@ def outbox_retries_the_closed_app(dev):
         dev.fail("no run of the outbox job is going while the write waits (jobs-retry-before.txt)")
     if "expeditedQuotaApproved: true" not in jobs:
         dev.fail("the outbox job is not an expedited one (jobs-retry-before.txt)")
+    # Off the screen first: a process that dies on top makes JobScheduler look at the app's jobs again
+    # (its state changes), one that dies in the background, as Android kills it, does not.
     dev.shell("input keyevent KEYCODE_HOME")
+    deadline = time.time() + 15
+    while time.time() < deadline and PKG in dev.shell("dumpsys activity activities | grep -i resumedactivity"):
+        time.sleep(1)
+    time.sleep(2)
     before = app_pid(dev)
     if not before:
         dev.fail("the app's process is not running before it is killed again")
@@ -266,6 +272,13 @@ def outbox_retries_the_closed_app(dev):
         time.sleep(1)
     if app_pid(dev) == before:
         dev.fail(f"the app's process {before} did not end")
+    # ActivityManager names the state the process died in: "Process <pkg> (pid <pid>) has died: prcl TRNB".
+    died_as = [line for line in dev.adb("logcat", "-d", "-b", "all", "-s", "ActivityManager:I", check=False,
+                                        timeout=120).splitlines()
+               if f"Process {PKG} (pid {before}) has died" in line]
+    (dev.out / "outbox-killed.txt").write_text("\n".join(died_as) + "\n")
+    if not died_as or " TOP" in died_as[-1]:
+        dev.fail(f"the app was not killed in the background (outbox-killed.txt: {died_as[-1:]})")
     log("the app is closed during a run of its outbox job, while its write still cannot be sent")
     # Android starts the app again for the run's guard job (after 90 s), which schedules the outbox job
     # anew; the job's state is kept every 30 s, so a missed run can be read from the artifacts.
