@@ -158,7 +158,7 @@ class SearchScreenshotTest {
                     8.5476,
                     OsmId(OsmType.Node, 7),
                     PlaceSource.Photon,
-                    "Books shop",
+                    "Bookshop",
                     "Heimplatz 1, 8001 Zürich",
                 ),
                 photonRank = 3,

@@ -350,7 +350,7 @@ private val LANDMARK_SCHEMA_TYPES =
         "CollegeOrUniversity",
     )
 
-/** A short label for a place's OSM tag ("Museum", "Bus stop", "Street"). */
+/** A short label for a place's OSM tag ("Museum", "Bus stop", "Street", "Bakery"; see [TAG_LABELS]). */
 internal fun categoryOf(
     key: String?,
     value: String?,
@@ -360,6 +360,7 @@ internal fun categoryOf(
     return when {
         key == "highway" && photonType == "street" -> "Street"
         key == "place" -> humanize(value)
+        "$key/$value" in TAG_LABELS -> TAG_LABELS.getValue("$key/$value")
         key == "building" && value == "yes" -> "Building"
         key == "shop" && value == "yes" -> "Shop"
         key == "shop" -> "${humanize(value)} shop"
