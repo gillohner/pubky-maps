@@ -312,14 +312,24 @@ lift_to_destroy() {
     awk -v tag="lift $1" 'index($0, "PubkyMapsSmoke") && index($0, tag) { up = $1 }
         up && /wm_on_destroy_called.*MainActivity/ { printf "%d %.3f\n", ($1 - up) * 1000, $1; exit }' "$out/logcat-$1.txt"
 }
-# Milliseconds from EPOCH (seconds since 1970) to the last write of the stored view.
-written_after() {
-    adb shell run-as "$pkg" stat -c %y no_backup/map-view.json | python3 -I -c "
+# The stored view's write time as stat prints it, or nothing.
+written_at() { adb shell run-as "$pkg" stat -c %y no_backup/map-view.json 2> /dev/null || true; }
+# The time of the first write of the stored view after the one at BEFORE, waiting up to SECONDS.
+first_write_after() {
+    local deadline=$((SECONDS + $2)) at
+    while ((SECONDS < deadline)); do
+        at=$(written_at)
+        if [ -n "$at" ] && [ "$at" != "$1" ]; then echo "$at"; return; fi
+    done
+}
+# Milliseconds from EPOCH (seconds since 1970) to the write time AT (as stat prints it).
+ms_after() {
+    python3 -I -c "
 import datetime, sys
-day, time, zone = sys.stdin.read().split()
+day, time, zone = sys.argv[1].split()
 whole, _, frac = time.partition('.')
 at = datetime.datetime.strptime(day + ' ' + whole + ' ' + zone, '%Y-%m-%d %H:%M:%S %z').timestamp()
-print(round((at + float('0.' + (frac or '0')) - float(sys.argv[1])) * 1000))" "$1"
+print(round((at + float('0.' + (frac or '0')) - float(sys.argv[2])) * 1000))" "$1" "$2"
 }
 check_reopened_view() {
     started=$(adb shell am start -W -a android.intent.action.VIEW -d "'geo:47.37,8.54?z=14'" -p "$pkg" 2>&1) || true
@@ -365,12 +375,16 @@ check_reopened_view() {
     # panned camera (the map keeps it in its saved state) and would store it after its own 1 s rest,
     # so the view alone does not show the save on leaving; the file's write time does. A try shows
     # it when the old activity was destroyed less than 1 s after the lift (its rest cannot have
-    # ended) and the panned view was written less than 1 s after that destroy (the new map's rest
+    # ended) and the view was first written less than 1 s after that destroy (the new map's rest
     # ends later). A slower try is tried again; each pans further south.
     proved=false
     for try in 1 2 3; do
         if ((try % 2)); then night=yes; else night=no; fi
+        before=$(written_at)
         pan_up "switch-$try" "cmd uimode night $night"
+        # Polled at once: the new map may write the view again after its rest (its camera comes back
+        # from the saved state a few bits apart), so only the first write tells when it was stored.
+        written=$(first_write_after "$before" 6 || true)
         destroy=""
         for _ in $(seq 1 15); do
             sleep 1
@@ -383,15 +397,16 @@ check_reopened_view() {
         # The new map draws before the next pan (and has rested long since).
         sleep 8
         read -r lift_ms destroyed_at <<< "$destroy"
-        write_ms=$(written_after "$destroyed_at" || true)
-        echo "theme switch $try: lift to destroy $lift_ms ms, destroy to the view's write ${write_ms:-unknown} ms"
+        write_ms=""
+        if [ -n "$written" ]; then write_ms=$(ms_after "$written" "$destroyed_at"); fi
+        echo "theme switch $try: lift to destroy $lift_ms ms, destroy to the view's first write ${write_ms:-unknown} ms"
         range=$(south_of "$last")
         if expect_view "switched-$try" $range; then
             last=$(view_lat "switched-$try")
             if ((lift_ms < 1000 && ${write_ms:-1000} < 1000)); then proved=true; break; fi
         fi
     done
-    $proved || fail "no theme switch right after a pan stored the panned view within 1 s of the destroy in 3 tries; see map-view-switched-*.json"
+    $proved || fail "no theme switch right after a pan first wrote the view within 1 s of the destroy in 3 tries; see map-view-switched-*.json"
     if [ "$night" = yes ]; then
         adb shell cmd uimode night no
         sleep 3
