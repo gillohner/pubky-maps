@@ -2,6 +2,8 @@ package to.pubky.maps.place
 
 import app.cash.sqldelight.db.SqlDriver
 import kotlinx.serialization.SerializationException
+import to.pubky.maps.links.GeoPoint
+import to.pubky.maps.links.OsmId
 import to.pubky.maps.place.db.PlaceCacheDatabase
 import to.pubky.maps.search.SearchJson
 
@@ -47,6 +49,23 @@ class SqlPlaceCache(
         /** About 2 to 10 KB each. */
         const val KEPT = 300L
     }
+}
+
+/**
+ * Where a place lies by the offline areas' map labels, "Hottingen, Zürich", for a page with no
+ * address. Calls block on disk.
+ */
+fun interface OfflineLocality {
+    /**
+     * The district and town of the place [osm] named [name] at [point]: the one an offline area
+     * stored for the element, else the one its labels give the point; null when no offline area
+     * covers it or no label reaches it.
+     */
+    fun localityOf(
+        osm: OsmId?,
+        point: GeoPoint,
+        name: String?,
+    ): String?
 }
 
 /** Tags and counts of places kept for the offline areas, for pages Nexus cannot answer. Calls block on disk. */

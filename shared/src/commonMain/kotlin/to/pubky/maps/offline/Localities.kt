@@ -39,6 +39,22 @@ internal class Localities(
         lon: Double,
     ): String? = name(lat, lon, own = null, withDistrict = true)
 
+    /**
+     * The district and settlement of a place named [name] at [lat], [lon], which may be a label
+     * (a town's page opened from its relation, which the tiles do not have): a settlement's label
+     * of that name within its reach makes it the settlement (null, as [of] gives), a district's the
+     * district (its settlement only); a label of its name never names it.
+     */
+    fun named(
+        name: String?,
+        lat: Double,
+        lon: Double,
+    ): String? {
+        val own = name?.let(::normalizeForMatch)?.ifEmpty { null } ?: return at(lat, lon)
+        if (settlements.has(lat, lon, own)) return null
+        return name(lat, lon, own, withDistrict = !districts.has(lat, lon, own))
+    }
+
     private fun name(
         lat: Double,
         lon: Double,
@@ -98,6 +114,16 @@ internal class Localities(
             return best
         }
 
+        /** True when a label named [match] reaches [lat], [lon]. */
+        fun has(
+            lat: Double,
+            lon: Double,
+            match: String,
+        ): Boolean =
+            cells[key(floor(lat / CELL_DEGREES).toInt(), floor(lon / CELL_DEGREES).toInt())].orEmpty().any {
+                it.match == match && metersBetween(lat, lon, it.lat, it.lon) <= it.reach
+            }
+
         private fun key(
             row: Int,
             column: Int,
@@ -107,6 +133,9 @@ internal class Localities(
     companion object {
         /** True when a label of [kind] names the places around it (a town, a district). */
         fun names(kind: String): Boolean = kind in REACH
+
+        /** The farthest any label names a place, in meters: a point's labels lie within it. */
+        val MAX_REACH_METERS: Double get() = REACH.values.max()
 
         /** How far a settlement's label names the places around it, in meters. */
         private val SETTLEMENT_REACH = mapOf("city" to 12_000.0, "town" to 5_000.0, "village" to 2_000.0)

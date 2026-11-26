@@ -48,6 +48,11 @@ data class PlacePageState(
     val socialAt: Long? = null,
     /** The signed-in user's pubky id when the page was opened; null when signed out. */
     val viewer: String? = null,
+    /**
+     * The district and town the offline areas give the place ("Hottingen, Zürich"), when it was
+     * opened without an address or a locality; null when no area covers it.
+     */
+    val locality: String? = null,
 ) {
     /** Some part could not be loaded: the page shows saved data, or less. */
     val offline: Boolean get() = failed.isNotEmpty()
@@ -83,7 +88,9 @@ data class PlacePageState(
  * tags and posts from Nexus for every link of the card, and the lists holding it. What was shown is
  * saved in [cache] and shown first the next time, so a place reopens offline. When Nexus does not
  * answer, the tags kept for the offline areas ([kept]) are shown if they are newer than the cache's,
- * so a place of a downloaded area shows its tags offline also when its page was never opened.
+ * so a place of a downloaded area shows its tags offline also when its page was never opened. A
+ * place opened with a point but no address gets its district and town from the offline areas
+ * ([localities]), so its page says where it is with no connection too.
  */
 class PlacePageController(
     private val data: PlaceData,
@@ -94,6 +101,7 @@ class PlacePageController(
     private val viewer: () -> String? = { null },
     private val clock: Clock = Clock.System,
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    private val localities: OfflineLocality? = null,
 ) {
     private val _state = MutableStateFlow<PlacePageState?>(null)
 
@@ -102,6 +110,7 @@ class PlacePageController(
 
     private var job: Job? = null
     private var moreJob: Job? = null
+    private var localityJob: Job? = null
 
     /** Per Nexus resource: how many replies it has and how many were loaded. */
     private val replyPages = mutableMapOf<String, ReplyPage>()
@@ -111,15 +120,24 @@ class PlacePageController(
         val loaded: Int,
     )
 
-    /** Opens the page of [place]; the same place again keeps what is loaded. */
+    /**
+     * Opens the page of [place]; the same place again keeps what is loaded, its district and town
+     * too (a search result's, when the same place is then tapped on the map).
+     */
     fun open(place: PlaceRef) {
         val current = _state.value
         if (current != null && current.place.uri == place.uri) {
-            if (current.place != place) _state.value = current.copy(place = place)
+            if (current.place != place) {
+                val locality = current.locality ?: current.place.locality
+                _state.value = current.copy(place = place, locality = locality)
+                if (locality == null && localityJob?.isActive != true) localityJob = scope.launch { loadLocality(place) }
+            }
             return
         }
         job?.cancel()
         moreJob?.cancel()
+        localityJob?.cancel()
+        localityJob = null
         replyPages.clear()
         _state.value = PlacePageState(place, viewer = viewer())
         job = scope.launch { load(place) }
@@ -129,7 +147,9 @@ class PlacePageController(
     fun close() {
         job?.cancel()
         moreJob?.cancel()
+        localityJob?.cancel()
         job = null
+        localityJob = null
         _state.value = null
     }
 
@@ -152,10 +172,23 @@ class PlacePageController(
             }
     }
 
+    /**
+     * The district and town of a pinned place opened without them or an address (a map tap, a Pubky
+     * pin, a saved place, a link), from the phone alone: also for typed coordinates.
+     */
+    private suspend fun loadLocality(place: PlaceRef) {
+        val localities = localities ?: return
+        val point = place.point?.takeIf { place.pinned && place.address == null && place.locality == null } ?: return
+        val locality = withContext(io) { runCatching { localities.localityOf(place.osm, point, place.name) }.getOrNull() } ?: return
+        update(place) { it.copy(locality = locality) }
+    }
+
     private suspend fun load(place: PlaceRef) {
-        // Coordinates the user typed never leave the phone (search's rule): no source is asked.
+        // Coordinates the user typed never leave the phone (search's rule): no source is asked; the
+        // offline areas are on the phone.
         if (place.source == PlaceSource.Coordinates) {
             update(place) { it.copy(loading = emptySet()) }
+            loadLocality(place)
             return
         }
         val viewer = viewer()
@@ -175,6 +208,8 @@ class PlacePageController(
                 )
             }
         }
+        // After the cache, so a saved street address is not replaced by the district and town for a moment.
+        if (cached?.card?.address == null) localityJob = scope.launch { loadLocality(place) }
         val card =
             when (val answer = data.card(listOfNotNull(place.uri, place.osm?.url))) {
                 is SourceAnswer.Answered -> {

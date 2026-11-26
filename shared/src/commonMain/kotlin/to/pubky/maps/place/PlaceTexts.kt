@@ -27,9 +27,9 @@ val PlacePageState.title: String get() = card?.name ?: place.title
 
 /**
  * The address line: the opener's (Photon's is the most complete), else the card's, else the
- * district and town the offline map gave the place.
+ * district and town the offline map gave the place (with its search result, else for its point).
  */
-val PlacePageState.address: String? get() = streetAddress ?: place.locality
+val PlacePageState.address: String? get() = streetAddress ?: place.locality ?: locality
 
 /** The postal address alone, which a long press on the line copies: not the district and town. */
 val PlacePageState.streetAddress: String? get() = place.address ?: card?.address
