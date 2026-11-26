@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.launch
 import to.pubky.maps.links.GeoPoint
+import kotlin.math.abs
 
 /**
  * How close to the edge of the uncovered map a place still counts as in view: its pin (a 24 dp dot)
@@ -81,6 +82,17 @@ internal fun <T : Any> settled(rooms: Flow<T?>): Flow<T> =
         emit(room)
     }
 
+/**
+ * Whether [other] is the same view: a camera restored after Settings or a recreated activity comes
+ * back from the native map through a projection and a logarithm, a few last bits off.
+ */
+internal fun MapView.sameAs(other: MapView): Boolean =
+    abs(lat - other.lat) < 1e-7 &&
+        abs(lon - other.lon) < 1e-7 &&
+        abs(zoom - other.zoom) < 1e-6 &&
+        abs(bearing - other.bearing) < 1e-6 &&
+        abs(pitch - other.pitch) < 1e-6
+
 /** The map a tapped place is kept in view on: MapLibre's camera in [MapRoute], a fake in tests. */
 internal interface KeepInViewMap {
     /** The map's size on the screen; null before it is laid out. */
@@ -88,6 +100,12 @@ internal interface KeepInViewMap {
 
     /** Whether the camera is moving (our own pan, a fling): the room is judged once it rests. */
     val moving: Flow<Boolean>
+
+    /**
+     * Where the camera is: a change that [keepTappedInView] did not make is the user's (My location, a
+     * cluster's zoom). Not the place's point on the screen, which a rotation or a fold moves too.
+     */
+    val camera: MapView
 
     /** Where [point] is on the screen; null when it cannot be projected. */
     fun screenPoint(point: GeoPoint): DpOffset?
@@ -100,9 +118,10 @@ internal interface KeepInViewMap {
  * Keeps the place [uri] tapped at [point] in view while its sheet or panel opens: each time the map
  * left in view ([rooms], see [settled]) has settled with the camera at rest, a place it hides moves
  * to its middle, once per place and map size ([kept] and [onKept], see [keptInViewKey]). Nothing
- * moves once [userMoved] the map or the sheet (a drag, also one held still, a tap on its handle):
- * where the user put them is theirs, as in Google Maps. The tap counts as kept then, also after a
- * return from Settings.
+ * moves once [userMoved] the map or the sheet (a drag, also one held still, a tap on its handle) or
+ * the camera rests somewhere this did not move it (a tap on My location or on a cluster): where the
+ * user put them is theirs, as in Google Maps. The tap counts as kept then, also after a return from
+ * Settings.
  *
  * The sheet's lowest height is its header, which grows when the place's card or a part's failure
  * arrives, mostly after the first room has settled. So a room that shows the place counts as final
@@ -121,15 +140,24 @@ internal suspend fun keepTappedInView(
 ): Unit =
     coroutineScope {
         var moved = false
-        launch {
-            userMoved.first { it }
+
+        fun userMovedIt() {
             moved = true
             map.size?.let { onKept(keptInViewKey(uri, it)) }
         }
+        launch {
+            userMoved.first { it }
+            userMovedIt()
+        }
+        // Where the camera rests as this left it: at the tap (taken at the first rest when it was
+        // still moving then), then after each of our own pans.
+        var ours: MapView? = if (map.moving.first()) null else map.camera
         val resting =
             combine(rooms, pageDone, map.moving) { room, done, moving -> room?.takeUnless { moving }?.let { it to done } }
                 .distinctUntilChanged()
         settled(resting).collect { (room, done) ->
+            val rested = ours ?: map.camera.also { ours = it }
+            if (!moved && !map.camera.sameAs(rested)) userMovedIt()
             val size = map.size ?: return@collect
             val key = keptInViewKey(uri, size)
             if (moved || kept() == key) return@collect
@@ -137,6 +165,8 @@ internal suspend fun keepTappedInView(
             if (centre != null) {
                 onKept(key)
                 map.centreOn(centre)
+                map.moving.first { !it }
+                ours = map.camera
             } else if (done) {
                 onKept(key)
             }

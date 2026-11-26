@@ -128,6 +128,7 @@ class KeepInViewTest {
         override var size: DpSize? = DpSize(412.dp, 915.dp),
     ) : KeepInViewMap {
         override val moving = MutableStateFlow(false)
+        override var camera = MapView(lat = 47.37, lon = 8.54, zoom = 16.0)
         val centred = mutableListOf<DpOffset>()
 
         override fun screenPoint(point: GeoPoint) = at
@@ -136,6 +137,7 @@ class KeepInViewTest {
             centred += centre
             // The place is now in the middle of the map (the pan is not undone by a later room).
             at = centre
+            camera = camera.copy(lat = camera.lat - 0.001)
         }
     }
 
@@ -304,5 +306,74 @@ class KeepInViewTest {
             settle()
             assertTrue(tap.map.centred.isEmpty())
             back.job.cancel()
+        }
+
+    @Test
+    fun aCameraMoveTheUserAskedForWhileThePageLoadsStays() =
+        runTest {
+            val tap = Tap(this, FakeMap(at = DpOffset(200.dp, 300.dp)))
+            tap.rooms.value = phone
+            settle()
+            // Still loading; the user taps My location (or a cluster): the camera flies there, the place off screen.
+            tap.map.moving.value = true
+            runCurrent()
+            tap.map.camera = MapView(lat = 47.40, lon = 8.50, zoom = 17.0)
+            tap.map.at = DpOffset(900.dp, -400.dp)
+            tap.map.moving.value = false
+            settle()
+            tap.rooms.value = phoneAfterCard
+            tap.done.value = true
+            settle()
+            assertTrue(tap.map.centred.isEmpty())
+            assertEquals(keptInViewKey("https://www.openstreetmap.org/node/1", DpSize(412.dp, 915.dp)), tap.kept)
+            tap.job.cancel()
+        }
+
+    @Test
+    fun ourOwnPanIsNotTheUsersSoARotationIsCheckedAgain() =
+        runTest {
+            val map = FakeMap(at = DpOffset(300.dp, 800.dp))
+            val tap = Tap(this, map)
+            tap.rooms.value = phone
+            settle()
+            assertEquals(1, map.centred.size)
+            // Turned to landscape: the camera stays where our pan left it, the new layout hides the place.
+            map.size = DpSize(915.dp, 412.dp)
+            map.at = DpOffset(450.dp, 380.dp)
+            tap.rooms.value = DpRect(0.dp, 72.dp, 915.dp, 300.dp)
+            settle()
+            assertEquals(2, map.centred.size)
+            tap.job.cancel()
+        }
+
+    @Test
+    fun aCameraRestoredAFewBitsOffIsNotAMove() =
+        runTest {
+            val tap = Tap(this, FakeMap(at = DpOffset(200.dp, 550.dp)))
+            runCurrent()
+            // Back from Settings: the native map gives the saved camera back through its projection.
+            tap.map.camera = tap.map.camera.let { it.copy(lat = it.lat + 1e-12, zoom = it.zoom - 1e-12) }
+            tap.rooms.value = phone
+            settle()
+            tap.rooms.value = phoneAfterCard
+            tap.done.value = true
+            settle()
+            assertEquals(1, tap.map.centred.size)
+            tap.job.cancel()
+        }
+
+    @Test
+    fun aMoveUnderWayAtTheTapIsNotTheUsersOnceItRests() =
+        runTest {
+            val map = FakeMap(at = DpOffset(300.dp, 800.dp)).apply { moving.value = true }
+            val tap = Tap(this, map)
+            runCurrent()
+            // The move ends a little further on: where it rests is where the tap's page opened.
+            map.camera = map.camera.copy(lon = map.camera.lon + 0.0001)
+            map.moving.value = false
+            tap.rooms.value = phone
+            settle()
+            assertEquals(1, map.centred.size)
+            tap.job.cancel()
         }
 }

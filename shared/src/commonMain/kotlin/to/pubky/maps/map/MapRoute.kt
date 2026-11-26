@@ -1057,6 +1057,7 @@ private fun MapState.keepInViewMap(): KeepInViewMap =
     object : KeepInViewMap {
         override val size: DpSize? get() = viewport?.size
         override val moving: Flow<Boolean> = snapshotFlow { isCameraMoving }
+        override val camera: MapView get() = MapView.of(cameraPosition)
 
         override fun screenPoint(point: GeoPoint): DpOffset? =
             screenLocationFromPosition(Position(longitude = point.lon, latitude = point.lat))
