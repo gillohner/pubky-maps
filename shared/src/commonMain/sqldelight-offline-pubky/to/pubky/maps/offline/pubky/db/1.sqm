@@ -1,0 +1,24 @@
+-- Version 2: the tags and counts of the kept places and the links they are asked by. Areas kept
+-- before have no tags (social_at null), and their places' own uris as links, so Nexus is asked
+-- about them at the next look.
+
+ALTER TABLE area ADD COLUMN social_at INTEGER;
+
+CREATE TABLE area_link (
+    area TEXT NOT NULL,
+    link TEXT NOT NULL,
+    place TEXT NOT NULL,
+    seq INTEGER NOT NULL,
+    PRIMARY KEY (area, link)
+);
+
+CREATE INDEX area_link_link ON area_link(link);
+
+CREATE TABLE area_social (
+    area TEXT NOT NULL,
+    place TEXT NOT NULL,
+    social TEXT NOT NULL,
+    PRIMARY KEY (area, place)
+);
+
+INSERT INTO area_link(area, link, place, seq) SELECT area, uri, uri, rowid FROM area_place;

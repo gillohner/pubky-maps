@@ -146,8 +146,9 @@ sqldelight {
             packageName.set("to.pubky.maps.write.db")
             srcDirs.setFrom("src/commonMain/sqldelight-phone")
         }
-        // The Pubky places of the offline areas, for the map's Pubky places layer without a
-        // connection: fetched again from Pinakes, so in its own file that can be deleted with no loss.
+        // The Pubky places of the offline areas and their tags, for the map's Pubky places layer and
+        // place pages without a connection: fetched again from Pinakes and Nexus, so in its own file
+        // that can be deleted with no loss.
         create("OfflinePubkyDatabase") {
             packageName.set("to.pubky.maps.offline.pubky.db")
             srcDirs.setFrom("src/commonMain/sqldelight-offline-pubky")

@@ -42,8 +42,12 @@ again when nothing changed. MapLibre keeps the offline maps and the map
 cache in one database in the no-backup folder. The map's Pubky places of each area (the places
 people referenced on Pubky) are fetched from Pinakes as soon as the area is in the list, at most
 10,000 per area, and fetched again once a day on a network Android does not count as metered; when
-Pinakes cannot be reached, the map shows them in the downloaded areas. These requests tell Pinakes
-which areas are downloaded (the area widened to a 1/16° grid), also while the user looks elsewhere.
+Pinakes cannot be reached, the map shows them in the downloaded areas. Their tags and counts come
+from Nexus with them (no viewer, at most 20 requests of 100 links per area; when Nexus did not
+answer, only Nexus is asked again, every 15 minutes, and the old tags keep their date); when Nexus
+cannot be reached, a place page shows them (if newer than what the page saved) with the date they
+were fetched, also for a place never opened before. These requests tell Pinakes which areas are downloaded (the
+area widened to a 1/16° grid) and Nexus which places are in them, also while the user looks elsewhere.
 
 **Search without a connection:** once an area is ready, and again after every update that fetched
 tiles (the area's `newDataAt`, kept with its places), the app reads the named places of its zoom 14
@@ -154,8 +158,9 @@ the link text. The link the user had stays the place's URI.
   opening hours parsed by osm-opening-hours. The map's Pubky places layer (`map/MapPlacesLayer.kt`)
   asks Pinakes for the view grown by half and widened to a 1/16° grid, at most 1,000 places, and
   MapLibre clusters them. `offline/OfflinePubkyPlaces.kt` keeps the layer's places of each offline
-  area (the area widened to the same grid) in `offline-pubky-places.db` (never in a backup), which
-  the layer reads when every Pinakes server fails. The
+  area (the area widened to the same grid) and Nexus' tags of them in `offline-pubky-places.db`
+  (never in a backup), which the layer reads when every Pinakes server fails, and a place page when
+  every Nexus server does. The
   readers are tested against recorded answers (`shared/src/commonTest/fixtures/place/`, refreshed by
   `scripts/place/record-fixtures.py`).
 - Settings are one JSON file with a schema version, written by AndroidX DataStore

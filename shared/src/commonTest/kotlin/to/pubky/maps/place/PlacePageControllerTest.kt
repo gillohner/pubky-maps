@@ -139,10 +139,12 @@ class PlacePageControllerTest {
         data: PlaceData,
         cache: PlaceCache? = null,
         viewer: String? = null,
+        kept: KeptPlaceSocial? = null,
     ) = PlacePageController(
         data = data,
         cache = cache,
         scope = this,
+        kept = kept,
         viewer = { viewer },
         io = StandardTestDispatcher(testScheduler),
     )
@@ -289,6 +291,103 @@ class PlacePageControllerTest {
                     .lists
                     .any { it.mine },
             )
+        }
+
+    /** Tags kept for an offline area holding the Schober, fetched at [fetchedAt]; records the links asked about. */
+    private class KeptSchober(
+        val fetchedAt: Long,
+    ) : KeptPlaceSocial {
+        val asked = mutableListOf<List<String>>()
+
+        override fun socialOf(uris: List<String>): KeptSocial? {
+            asked += uris
+            if (FakePlaceData.SCHOBER !in uris) return null
+            val tag = PlaceTag(label = "kept", count = 2, taggers = listOf(PlaceFixtures.TESTER, "someoneelse"), mine = false)
+            return KeptSocial(PlaceSocial(listOf(tag), resourceIds = listOf("r"), replyCount = 1, embedCount = 0), fetchedAt)
+        }
+    }
+
+    @Test
+    fun withoutNexusAPlaceOfAnOfflineAreaShowsItsKeptTagsAlsoWhenNeverOpened() =
+        runTest {
+            val data =
+                FakePlaceData().apply {
+                    pinakesDown = true
+                    nexusDown = true
+                }
+            val kept = KeptSchober(fetchedAt = 1_000)
+            val pages = controller(data, MemoryPlaceCache(), viewer = PlaceFixtures.TESTER, kept = kept)
+            pages.open(schober)
+            advanceUntilIdle()
+            val page = pages.state.value!!
+            assertTrue(page.offline)
+            assertNull(page.card)
+            assertEquals(listOf("kept"), page.tags.map { it.label })
+            // Read with no viewer; the signed-in user is one of its taggers, so it is theirs.
+            assertTrue(page.tags.single().mine)
+            // "Offline: showing what was saved on" the day the area's tags were fetched.
+            assertEquals(1_000, page.savedAt)
+            // The links of the place as opened (its OSM element is the same link here).
+            assertEquals(listOf(FakePlaceData.SCHOBER), kept.asked.single())
+        }
+
+    @Test
+    fun keptTagsAreShownOnlyWhenNexusDoesNotAnswerAndTheCacheIsOlder() =
+        runTest {
+            val cache = MemoryPlaceCache()
+            val online = KeptSchober(fetchedAt = Long.MAX_VALUE)
+            val first = controller(FakePlaceData(), cache, kept = online)
+            first.open(schober)
+            advanceUntilIdle()
+            // Nexus answered: nothing kept is read.
+            assertTrue(online.asked.isEmpty())
+            assertEquals(
+                4,
+                first.state.value!!
+                    .tags.size,
+            )
+            val saved = assertNotNull(cache.saved[FakePlaceData.SCHOBER])
+
+            val down =
+                FakePlaceData().apply {
+                    pinakesDown = true
+                    nexusDown = true
+                }
+            // The page saved after the area's tags were fetched: the saved page.
+            val newerCache = controller(down, cache, kept = KeptSchober(fetchedAt = saved.savedAt - 1)).also { it.open(schober) }
+            advanceUntilIdle()
+            assertEquals(
+                4,
+                newerCache.state.value!!
+                    .tags.size,
+            )
+            assertEquals(saved.savedAt, newerCache.state.value!!.savedAt)
+
+            // The area's tags are newer: they replace the saved ones; the card and posts stay the saved ones,
+            // and the page names the older date.
+            val newerKept = controller(down, cache, kept = KeptSchober(fetchedAt = saved.savedAt + 1)).also { it.open(schober) }
+            advanceUntilIdle()
+            val page = newerKept.state.value!!
+            assertEquals(listOf("kept"), page.tags.map { it.label })
+            assertFalse(page.tags.single().mine)
+            assertEquals("Conditorei schober", page.card?.name)
+            assertEquals(1, page.posts.size)
+            assertEquals(saved.savedAt, page.savedAt)
+        }
+
+    @Test
+    fun aPageSavedWithKeptTagsKeepsTheirDate() =
+        runTest {
+            val cache = MemoryPlaceCache()
+            // Pinakes answers, Nexus does not: the card is new, the tags are the area's.
+            val pages = controller(FakePlaceData().apply { nexusDown = true }, cache, kept = KeptSchober(fetchedAt = 1_000))
+            pages.open(schober)
+            advanceUntilIdle()
+            val saved = assertNotNull(cache.saved[FakePlaceData.SCHOBER])
+            assertEquals("Conditorei schober", saved.card?.name)
+            assertEquals(listOf("kept"), saved.social?.tags?.map { it.label })
+            // Not "saved today": the next offline open names the tags' date, and newer kept tags still win.
+            assertEquals(1_000, saved.savedAt)
         }
 
     @Test

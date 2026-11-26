@@ -12,17 +12,26 @@ import kotlinx.coroutines.test.runTest
 import to.pubky.maps.map.MapPlacesLayer
 import to.pubky.maps.place.CollectionRefs
 import to.pubky.maps.place.GeoBox
+import to.pubky.maps.place.KeptSocial
 import to.pubky.maps.place.MapPlace
 import to.pubky.maps.place.MapPlacesPage
 import to.pubky.maps.place.PlaceCardInfo
 import to.pubky.maps.place.PlaceData
+import to.pubky.maps.place.PlaceFixtures
 import to.pubky.maps.place.PlaceList
 import to.pubky.maps.place.PlacePerson
 import to.pubky.maps.place.PlacePost
+import to.pubky.maps.place.PlaceSocial
+import to.pubky.maps.place.PlaceTag
 import to.pubky.maps.place.ResourceView
+import to.pubky.maps.place.ViewTag
+import to.pubky.maps.place.mergeResourceViews
+import to.pubky.maps.place.parseMapPlaces
+import to.pubky.maps.place.parseNexusResourceViews
 import to.pubky.maps.search.SourceAnswer
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration
@@ -45,6 +54,13 @@ private class PinakesPlaces : PlaceData {
     /** Runs before each answer. */
     var onAsk: () -> Unit = {}
 
+    /** Other links people referenced for each place. */
+    var refsPerPlace = 0
+
+    /** What Nexus was asked: the links, and for whom. */
+    val askedViews = mutableListOf<Pair<List<String>, String?>>()
+    var nexusDown = false
+
     override suspend fun placesIn(
         bbox: GeoBox,
         cursor: String?,
@@ -57,7 +73,8 @@ private class PinakesPlaces : PlaceData {
             (0 until perPage).map { i ->
                 MapPlace("geo:${bbox.south},${bbox.west};p=$page;i=$i", "Place $page.$i", bbox.south, bbox.west, "Cafe", "amenity/cafe")
             }
-        return SourceAnswer.Answered(MapPlacesPage(places, (page + 1).takeIf { it < pages }?.toString()), "p")
+        val refs = places.associate { place -> place.uri to (1..refsPerPlace).map { "${place.uri};ref=$it" } }
+        return SourceAnswer.Answered(MapPlacesPage(places, (page + 1).takeIf { it < pages }?.toString(), refs), "p")
     }
 
     override suspend fun card(uris: List<String>): SourceAnswer<PlaceCardInfo?> = error("not used")
@@ -67,10 +84,27 @@ private class PinakesPlaces : PlaceData {
         viewer: String?,
     ): SourceAnswer<CollectionRefs> = error("not used")
 
+    /** Nexus knows the first place of each page, and each link of it has a tag "cosy" by one person. */
     override suspend fun views(
         uris: List<String>,
         viewer: String?,
-    ): SourceAnswer<List<ResourceView>> = error("not used")
+    ): SourceAnswer<List<ResourceView>> {
+        askedViews += uris to viewer
+        if (nexusDown) return SourceAnswer.Unreachable
+        val known = uris.filter { it.substringBefore(";ref=").endsWith(";i=0") }
+        return SourceAnswer.Answered(
+            known.map { uri ->
+                ResourceView(
+                    id = "id:$uri",
+                    uri = uri,
+                    tags = listOf(ViewTag("cosy", listOf("person:$uri"), 1, null)),
+                    replies = 1,
+                    embeds = 0,
+                )
+            },
+            "n",
+        )
+    }
 
     override suspend fun posts(
         resourceId: String,
@@ -91,18 +125,23 @@ private class PinakesPlaces : PlaceData {
 }
 
 private class MemoryStore : OfflinePubkyStore {
-    class Kept(
+    data class Kept(
         val box: GeoBox,
         val fetchedAt: Long,
         val places: List<MapPlace>,
-    )
+        val links: Map<String, String>,
+        val social: Map<String, PlaceSocial> = emptyMap(),
+        val socialAt: Long? = null,
+    ) {
+        val socialFetched: Boolean get() = !KeptArea(fetchedAt, socialAt).socialMissing
+    }
 
     val kept = mutableMapOf<String, Kept>()
     var broken = false
 
-    override fun areas(): Map<String, Long> {
+    override fun areas(): Map<String, KeptArea> {
         if (broken) error("disk")
-        return kept.mapValues { it.value.fetchedAt }
+        return kept.mapValues { KeptArea(it.value.fetchedAt, it.value.socialAt) }
     }
 
     override fun replace(
@@ -110,8 +149,20 @@ private class MemoryStore : OfflinePubkyStore {
         box: GeoBox,
         fetchedAt: Long,
         places: List<MapPlace>,
+        links: Map<String, String>,
     ) {
-        kept[area] = Kept(box, fetchedAt, places)
+        val old = kept[area]
+        kept[area] = Kept(box, fetchedAt, places, links, old?.social.orEmpty(), old?.socialAt)
+    }
+
+    override fun links(area: String): Map<String, String> = kept[area]?.links.orEmpty()
+
+    override fun replaceSocial(
+        area: String,
+        fetchedAt: Long,
+        social: Map<String, PlaceSocial>,
+    ) {
+        kept[area] = kept.getValue(area).copy(social = social, socialAt = fetchedAt)
     }
 
     override fun delete(area: String) {
@@ -122,6 +173,8 @@ private class MemoryStore : OfflinePubkyStore {
         box: GeoBox,
         limit: Long,
     ): List<MapPlace>? = error("not used")
+
+    override fun socialOf(uris: List<String>): KeptSocial? = error("not used")
 }
 
 private class TestClock(
@@ -204,6 +257,9 @@ class OfflinePubkyPlacesTest {
             assertEquals(19, running.data.asked.size)
             after(1.5.seconds)
             assertEquals(20, running.data.asked.size)
+            // Then Nexus, 1.5 s later: 60 places in one request.
+            after(1.5.seconds)
+            assertEquals(1, running.data.askedViews.size)
             assertEquals(
                 60,
                 running.store.kept
@@ -310,6 +366,241 @@ class OfflinePubkyPlacesTest {
             running.store.broken = false
             after(OfflinePubkyPlaces.RETRY)
             assertEquals(setOf("zh"), running.store.kept.keys)
+        }
+
+    @Test
+    fun theTagsOfAnAreasPlacesComeFromNexusWithNoViewerAWholePlaceARequest() =
+        keeping(area("zh", zurich)) { running ->
+            running.data.pages = 2
+            running.data.perPage = 30
+            running.data.refsPerPlace = 3
+            after(10.seconds)
+            // 60 places of 4 links each: 25 places a request, in 3 requests after the 2 pages, 1.5 s apart.
+            assertEquals(listOf(100, 100, 40), running.data.askedViews.map { it.first.size })
+            assertTrue(running.data.askedViews.all { it.second == null })
+            val kept = running.store.kept.getValue("zh")
+            assertTrue(kept.socialFetched)
+            // Only the places Nexus knows, each merged over its links as the place page merges them.
+            val first = "geo:47.3125,8.5;p=0;i=0"
+            assertEquals(setOf(first, "geo:47.3125,8.5;p=1;i=0"), kept.social.keys)
+            val cosy =
+                kept.social
+                    .getValue(first)
+                    .tags
+                    .single()
+            assertEquals(
+                PlaceTag(
+                    "cosy",
+                    count = 4,
+                    taggers =
+                        (
+                            listOf(first) +
+                                (1..3).map {
+                                    "$first;ref=$it"
+                                }
+                        ).map { "person:$it" },
+                    mine = false,
+                ),
+                cosy,
+            )
+            assertEquals(4, kept.social.getValue(first).replyCount)
+        }
+
+    @Test
+    fun withoutNexusThePlacesAreKeptAndOnlyNexusIsAskedAgainAtTheNextTryOnAnyNetwork() =
+        keeping(area("zh", zurich), unmetered = false) { running ->
+            running.data.nexusDown = true
+            running.data.refsPerPlace = 1
+            after(5.seconds)
+            val kept = running.store.kept.getValue("zh")
+            assertEquals(3, kept.places.size)
+            assertFalse(kept.socialFetched)
+            assertEquals(1, running.data.asked.size)
+            after(OfflinePubkyPlaces.RETRY)
+            // Still down: one Nexus request a try, Pinakes is not asked again.
+            assertEquals(1, running.data.asked.size)
+            assertEquals(2, running.data.askedViews.size)
+            running.data.nexusDown = false
+            after(OfflinePubkyPlaces.RETRY)
+            assertEquals(1, running.data.asked.size)
+            // The kept places' links, as at the fetch.
+            assertEquals(
+                running.data.askedViews
+                    .first()
+                    .first,
+                running.data.askedViews
+                    .last()
+                    .first,
+            )
+            val again = running.store.kept.getValue("zh")
+            assertTrue(again.socialFetched)
+            assertEquals(1, again.social.size)
+            assertEquals(1_800_000_000_000 + 2 * OfflinePubkyPlaces.RETRY.inWholeMilliseconds, again.socialAt)
+            after(OfflinePubkyPlaces.RETRY)
+            assertEquals(3, running.data.askedViews.size)
+        }
+
+    @Test
+    fun aRefreshWithoutNexusKeepsTheOldTagsWithTheirDate() =
+        keeping(area("zh", zurich)) { running ->
+            after(5.seconds)
+            val first = running.store.kept.getValue("zh")
+            // Dated when Nexus answered, 1.5 s after the page of places.
+            assertEquals(first.fetchedAt + 1_500, first.socialAt)
+            assertEquals(1, first.social.size)
+            running.data.nexusDown = true
+            after(1.days)
+            val refreshed = running.store.kept.getValue("zh")
+            assertTrue(refreshed.fetchedAt > first.fetchedAt)
+            assertEquals(first.socialAt, refreshed.socialAt)
+            assertEquals(first.social, refreshed.social)
+            assertFalse(refreshed.socialFetched)
+        }
+
+    @Test
+    fun withoutNexusASyncStopsAtItsSecondFailure() =
+        keeping(area("zh", zurich), area("be", bern), area("ge", AreaBounds(6.1, 46.18, 6.16, 46.22))) { running ->
+            running.data.nexusDown = true
+            after(10.seconds)
+            assertEquals(2, running.data.askedViews.size)
+            assertEquals(setOf("zh", "be"), running.store.kept.keys)
+        }
+
+    @Test
+    fun nexusIsAskedAtMostTwentyTimesAnArea() =
+        keeping(area("zh", zurich)) { running ->
+            running.data.perPage = 500
+            running.data.pages = 5
+            running.data.refsPerPlace = 1
+            after(2.minutes)
+            // 2,500 places of 2 links: 50 a request, the first 1,000 of them asked about, so of the
+            // places Nexus knows (the first of each page of 500) those of pages 0 and 1.
+            assertEquals(OfflinePubkyPlaces.MAX_SOCIAL_REQUESTS, running.data.askedViews.size)
+            assertEquals(
+                2,
+                running.store.kept
+                    .getValue("zh")
+                    .social.size,
+            )
+            assertEquals(
+                2_500,
+                running.store.kept
+                    .getValue("zh")
+                    .places.size,
+            )
+        }
+
+    @Test
+    fun anAreaKeptWithoutTagsHasThemFetchedAtOnce() =
+        keeping(area("zh", zurich), unmetered = false) { running ->
+            // As an area kept by the version before the tags, just now: kept before the first look.
+            val place = MapPlace("geo:47.3125,8.5;p=0;i=0", "Place", 47.3125, 8.5, null, null)
+            running.store.kept["zh"] =
+                MemoryStore.Kept(GeoBox(8.5, 47.3125, 8.5625, 47.4375), 1_800_000_000_000, listOf(place), mapOf(place.uri to place.uri))
+            after(5.seconds)
+            // Only Nexus, about the kept places.
+            assertTrue(running.data.asked.isEmpty())
+            assertEquals(
+                listOf(place.uri),
+                running.data.askedViews
+                    .single()
+                    .first,
+            )
+            val kept = running.store.kept.getValue("zh")
+            assertTrue(kept.socialFetched)
+            assertEquals(setOf(place.uri), kept.social.keys)
+        }
+
+    @Test
+    fun socialBatchesKeepAPlacesLinksTogetherAndAskALinkOnce() {
+        fun place(uri: String) = MapPlace(uri, null, 0.0, 0.0, null, null)
+        val links =
+            OfflinePubkyPlaces.socialLinks(
+                listOf(place("a"), place("b"), place("c"), place("d")),
+                mapOf(
+                    "a" to (1..60).map { "a$it" } + "d",
+                    "b" to (1..50).map { "b$it" } + "a1",
+                    "c" to (1..200).map { "c$it" },
+                ),
+            )
+        // "a1" is a's, once; "d" is d's own uri, not a ref of a; c is cut at 100 links.
+        assertEquals("a", links["a1"])
+        assertEquals("d", links["d"])
+        assertEquals(100, links.values.count { it == "c" })
+        val batches = OfflinePubkyPlaces.socialBatches(links)
+        assertEquals(listOf(61, 51, 100, 1), batches.map { it.size })
+        assertEquals(setOf("c"), batches[2].values.toSet())
+    }
+
+    @Test
+    fun spellingsOfOneLinkHaveOneKey() {
+        val key = OfflinePubkyPlaces.linkKey("https://www.openstreetmap.org/node/270803095")
+        assertEquals("openstreetmap.org/node/270803095", key)
+        assertEquals(key, OfflinePubkyPlaces.linkKey("http://openstreetmap.org/node/270803095/"))
+        assertEquals(key, OfflinePubkyPlaces.linkKey("https://WWW.OpenStreetMap.org/node/270803095"))
+        assertEquals("geo:47.1,8.5", OfflinePubkyPlaces.linkKey("geo:47.1,8.5"))
+    }
+
+    @Test
+    fun theRecordedZurichPlacesGetTheirRecordedTags() =
+        runTest {
+            // Pinakes' recorded places of Zürich and Nexus' recorded views, with a Nexus that spells
+            // one link its own way (no www.): matched to its place all the same.
+            val page = parseMapPlaces(PlaceFixtures.read("pinakes-bbox-zurich.json"))
+            val links = OfflinePubkyPlaces.socialLinks(page.places, page.refs)
+            val views = parseNexusResourceViews(PlaceFixtures.read("nexus-by-ids-zurich.json"))
+            val kunsthaus = "https://www.openstreetmap.org/relation/3768127"
+            val schober = "https://www.openstreetmap.org/node/270803095"
+            val store = MemoryStore()
+            val data =
+                object : PlaceData by PinakesPlaces() {
+                    override suspend fun placesIn(
+                        bbox: GeoBox,
+                        cursor: String?,
+                    ) = SourceAnswer.Answered(page, "p")
+
+                    override suspend fun views(
+                        uris: List<String>,
+                        viewer: String?,
+                    ): SourceAnswer<List<ResourceView>> =
+                        SourceAnswer.Answered(
+                            views.filter { it.uri in uris }.map {
+                                if (it.uri ==
+                                    kunsthaus
+                                ) {
+                                    it.copy(uri = "https://openstreetmap.org/relation/3768127")
+                                } else {
+                                    it
+                                }
+                            },
+                            "n",
+                        )
+                }
+            val job = Job()
+            OfflinePubkyPlaces(
+                maps = MutableStateFlow(OfflineMapsState.Ready(listOf(area("zh", zurich)))),
+                data = data,
+                store = store,
+                scope = CoroutineScope(coroutineContext + job),
+                unmetered = { true },
+                clock = TestClock(this),
+                io = StandardTestDispatcher(testScheduler),
+            ).start()
+            advanceTimeBy(10.seconds)
+            runCurrent()
+            job.cancel()
+            assertTrue(links.size > page.places.size)
+            val social = store.kept.getValue("zh").social
+            assertTrue(social.keys.containsAll(listOf(kunsthaus, schober)))
+            assertEquals(mergeResourceViews(views.filter { it.uri == schober }), social.getValue(schober))
+            assertEquals(
+                listOf("art", "museum"),
+                social
+                    .getValue(kunsthaus)
+                    .tags
+                    .map { it.label }
+                    .sorted(),
+            )
         }
 
     @Test

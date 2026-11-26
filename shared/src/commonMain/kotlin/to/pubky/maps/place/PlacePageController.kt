@@ -73,12 +73,15 @@ data class PlacePageState(
  * Loads place pages: one at a time, the newest [open] replacing any page still loading. Each part
  * loads on its own and never waits for a part that does not need it: the card from Pinakes, then
  * tags and posts from Nexus for every link of the card, and the lists holding it. What was shown is
- * saved in [cache] and shown first the next time, so a place reopens offline.
+ * saved in [cache] and shown first the next time, so a place reopens offline. When Nexus does not
+ * answer, the tags kept for the offline areas ([kept]) are shown if they are newer than the cache's,
+ * so a place of a downloaded area shows its tags offline also when its page was never opened.
  */
 class PlacePageController(
     private val data: PlaceData,
     private val cache: PlaceCache?,
     private val scope: CoroutineScope,
+    private val kept: KeptPlaceSocial? = null,
     /** The signed-in user's pubky id, for their own tags and lists and friends first; null when signed out. */
     private val viewer: () -> String? = { null },
     private val clock: Clock = Clock.System,
@@ -195,8 +198,13 @@ class PlacePageController(
                 }
 
                 SourceAnswer.Unreachable -> {
+                    val keptSocial = kept?.let { withContext(io) { runCatching { it.socialOf(placeLinks(place, card)) }.getOrNull() } }
                     update(place) {
+                        val newer = keptSocial?.takeIf { k -> it.social == null || (it.savedAt ?: 0) < k.fetchedAt }
                         it.copy(
+                            social = newer?.social?.forViewer(viewer) ?: it.social,
+                            // The page names the date of the oldest part it shows.
+                            savedAt = newer?.let { k -> minOf(it.savedAt ?: k.fetchedAt, k.fetchedAt) } ?: it.savedAt,
                             loading = it.loading - PlacePart.Social - PlacePart.Posts,
                             failed = it.failed + PlacePart.Social + PlacePart.Posts,
                         )
@@ -329,11 +337,19 @@ class PlacePageController(
                 posts = page.posts.take(POSTS_PAGE),
                 photos = page.photos,
                 lists = page.lists,
-                savedAt = clock.now().toEpochMilliseconds(),
+                // A part that failed shows what was saved or kept: the copy is as old as the oldest part.
+                savedAt = page.savedAt?.takeIf { page.failed.isNotEmpty() } ?: clock.now().toEpochMilliseconds(),
                 viewer = page.viewer,
             )
         cache?.let { withContext(io) { runCatching { it.write(snapshot) } } }
     }
+
+    /**
+     * Kept tags were read with no viewer: the [viewer]'s own are the ones they are listed under. Nexus
+     * lists a few taggers per label, so on a label more people used the user's own can show as not theirs.
+     */
+    private fun PlaceSocial.forViewer(viewer: String?): PlaceSocial =
+        if (viewer == null) this else copy(tags = tags.map { it.copy(mine = it.mine || viewer in it.taggers) })
 
     /** Applies [change] to the page of [place], if it is still the open one. */
     private fun update(
