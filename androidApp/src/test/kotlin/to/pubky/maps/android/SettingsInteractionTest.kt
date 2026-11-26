@@ -44,7 +44,6 @@ private const val CURSOR_TOLERANCE = 0.001f
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [36])
 @OptIn(ExperimentalRoborazziApi::class)
 class SettingsInteractionTest {
     @get:Rule

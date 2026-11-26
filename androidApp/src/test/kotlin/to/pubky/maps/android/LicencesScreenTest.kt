@@ -16,7 +16,7 @@ import to.pubky.maps.ui.PubkyMapsTheme
 
 /** The licence screen with the real list this build ships, scrolled from the first entry to the last. */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [36], qualifiers = "w412dp-h915dp-notnight-mdpi")
+@Config(qualifiers = "w412dp-h915dp-notnight-mdpi")
 class LicencesScreenTest {
     @get:Rule
     val compose = createComposeRule()

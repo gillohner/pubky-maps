@@ -19,7 +19,6 @@ import com.github.takahirom.roborazzi.uiMode
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import to.pubky.maps.config.ServerDefaults
 import to.pubky.maps.links.GeoPoint
@@ -36,7 +35,6 @@ import to.pubky.maps.ui.PubkyMapsTheme
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [36])
 @OptIn(ExperimentalRoborazziApi::class)
 class LinkedPlaceScreenshotTest {
     private enum class Device(

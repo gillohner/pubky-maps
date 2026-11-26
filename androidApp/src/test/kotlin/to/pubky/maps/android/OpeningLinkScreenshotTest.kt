@@ -25,7 +25,6 @@ private const val TABLET_DARK = "w1280dp-h800dp-night-mdpi"
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [36])
 class OpeningLinkScreenshotTest {
     @get:Rule
     val compose = createComposeRule()

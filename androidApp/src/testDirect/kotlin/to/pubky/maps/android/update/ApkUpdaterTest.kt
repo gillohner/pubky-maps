@@ -18,7 +18,6 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
-import org.robolectric.annotation.Config
 import to.pubky.maps.config.InMemoryServerConfigRepository
 import to.pubky.maps.config.ServerDefaults
 import to.pubky.maps.update.InstalledBuild
@@ -36,7 +35,6 @@ import java.security.MessageDigest
  * SignedFeedTest's; here every feed counts as signed.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [36])
 @OptIn(ExperimentalCoroutinesApi::class)
 class ApkUpdaterTest {
     private val app: Application = RuntimeEnvironment.getApplication()

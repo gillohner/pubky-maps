@@ -22,7 +22,7 @@ import to.pubky.maps.ui.PubkyMapsTheme
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [36], qualifiers = "w412dp-h2300dp")
+@Config(qualifiers = "w412dp-h2300dp")
 class PlaceFailedImagesScreenshotTest {
     @get:Rule
     val compose = createComposeRule()

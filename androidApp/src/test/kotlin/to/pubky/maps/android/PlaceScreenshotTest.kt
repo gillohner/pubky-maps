@@ -25,7 +25,6 @@ import kotlinx.datetime.TimeZone
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import to.pubky.maps.config.OpenInApp
 import to.pubky.maps.config.ServerDefaults
@@ -65,7 +64,6 @@ import to.pubky.maps.ui.PubkyMapsTheme
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [36])
 @OptIn(ExperimentalRoborazziApi::class)
 class PlaceScreenshotTest {
     private enum class Device(
