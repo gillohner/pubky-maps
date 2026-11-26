@@ -242,7 +242,10 @@ class OfflineMaps(
      * it since the app started. On a metered network a new release is not downloaded, as it may
      * take up to one download's 50 MB per area, unasked (Google Maps and OsmAnd update offline maps
      * on Wi-Fi): a walk that is still downloading after [QUIET_CHECK] is paused there, so the area
-     * says "Update paused" instead of Ready, and the update goes on on Wi-Fi or with Resume.
+     * says "Update paused" instead of Ready, and the update goes on on Wi-Fi or with Resume. An
+     * area marked "Update paused" without known new data ([PackMetadata.newData]: the app was
+     * closed during the first seconds of a check) is walked on mobile data too, which makes it
+     * Ready again when nothing changed.
      */
     internal fun checkForUpdates() {
         val wifi = unmetered()
@@ -251,7 +254,10 @@ class OfflineMaps(
             val handles =
                 when {
                     map.status == OfflineMapStatus.Ready -> area.map { it.handle }
-                    wifi && (map.status as? OfflineMapStatus.Paused)?.update == true -> unfinished(area)
+
+                    (map.status as? OfflineMapStatus.Paused)?.update == true &&
+                        (wifi || area.none { it.metadata?.newData == true }) -> unfinished(area)
+
                     else -> return@forEach
                 }
             if (handles.any { it in started.value }) return@forEach
@@ -284,7 +290,7 @@ class OfflineMaps(
         val job =
             scope.launch(start = CoroutineStart.LAZY) {
                 try {
-                    if (check) handles.forEach { mark(it, updating = true) }
+                    if (check) handles.forEach { mark(it) { m -> m.copy(updating = true) } }
                     for (handle in handles) {
                         if (check) walking += handle
                         halted -= handle
@@ -301,10 +307,11 @@ class OfflineMaps(
                             walking -= handle
                             if (stateOf(handle) == PackState.Complete) {
                                 started.value -= handle
-                                mark(handle, updating = false)
+                                mark(handle, done)
                                 rest(handle)
                                 continue
                             }
+                            mark(handle) { it.copy(newData = true) }
                             if (probe) {
                                 stop(handle)
                                 return@launch
@@ -315,7 +322,7 @@ class OfflineMaps(
                         // report an update stopped at the limit complete, as it counts the old tiles.
                         started.first { handle !in it }
                         if (handle in halted || stateOf(handle) != PackState.Complete) return@launch
-                        if (check) mark(handle, updating = false)
+                        if (check) mark(handle, done)
                         rest(handle)
                     }
                 } finally {
@@ -337,15 +344,19 @@ class OfflineMaps(
         runCatching { store.pause(handle) }
     }
 
-    /** Stores whether a check walks [handle] and has not finished, if it is not stored so already. */
+    /**
+     * Stores what a check knows of [handle] ([PackMetadata.updating], [PackMetadata.newData]), if it
+     * is not stored so already.
+     */
     private suspend fun mark(
         handle: Any,
-        updating: Boolean,
+        change: (PackMetadata) -> PackMetadata,
     ) {
         val metadata = packs.firstOrNull { it.handle === handle }?.metadata ?: return
-        if (metadata.updating == updating) return
+        val marked = change(metadata)
+        if (marked == metadata) return
         try {
-            store.setMetadata(handle, metadata.copy(updating = updating))
+            store.setMetadata(handle, marked)
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
@@ -434,6 +445,9 @@ internal val CHECK_INTERVAL = 30.minutes
 
 /** Long enough for MapLibre to walk a complete pack in its database and report it. */
 internal val QUIET_CHECK = 10.seconds
+
+/** A check's walk of a pack finished: the pack is up to date. */
+private val done: (PackMetadata) -> PackMetadata = { it.copy(updating = false, newData = false) }
 
 private val StoredPack.areaId: String get() = metadata?.area ?: "pack-${handle.hashCode()}"
 

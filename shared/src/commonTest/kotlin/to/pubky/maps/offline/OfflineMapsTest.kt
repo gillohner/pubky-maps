@@ -343,6 +343,15 @@ class OfflineMapsTest {
             advanceTimeBy(QUIET_CHECK)
             runCurrent()
             assertEquals(listOf(light, light), store.paused)
+            assertEquals(
+                true,
+                store.packs.value
+                    .let { it as PackStoreState.Ready }
+                    .packs
+                    .single()
+                    .metadata
+                    ?.newData,
+            )
             store.progress(light, PackProgress(PackState.Complete, 100, 100))
             assertEquals(OfflineMapStatus.Paused(100, update = true), offline.maps().single().status)
             assertFalse(offline.downloading)
@@ -355,6 +364,47 @@ class OfflineMapsTest {
             advanceTimeBy(CHECK_INTERVAL)
             runCurrent()
             assertEquals(listOf(light, light, light), store.resumed)
+        }
+
+    @Test
+    fun onMobileDataAMarkLeftWhenTheAppWasClosedIsCheckedAgain() =
+        runTest(UnconfinedTestDispatcher()) {
+            val store = FakeStore()
+            // The app was closed during the first seconds of a check: the mark says nothing yet.
+            val metadata = PackMetadata("area-1", "Map", 1, 8.448, 47.32, 8.625, 47.435, updating = true)
+            val complete = PackProgress(PackState.Complete, 100, 100, 3_000_000, 80, 2_500_000)
+            store.packs.value =
+                PackStoreState.Ready(
+                    listOf(
+                        StoredPack(Pack(light), metadata, complete),
+                        StoredPack(Pack(dark), metadata.copy(updating = false), complete),
+                    ),
+                )
+            val offline = offlineMaps(store) { false }
+            assertEquals(OfflineMapStatus.Paused(100, update = true), offline.maps().single().status)
+
+            advanceTimeBy(FIRST_CHECK)
+            runCurrent()
+            assertEquals(listOf(light), store.resumed)
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            // Nothing changed: Ready again, without waiting for Wi-Fi.
+            assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
+            assertEquals(emptyList(), store.updating())
+            assertFalse(offline.downloading)
+        }
+
+    @Test
+    fun onMobileDataAnUpdateWithKnownNewDataWaitsForWiFi() =
+        runTest(UnconfinedTestDispatcher()) {
+            val store = FakeStore()
+            val metadata = PackMetadata("area-1", "Map", 1, 8.448, 47.32, 8.625, 47.435, updating = true, newData = true)
+            store.packs.value =
+                PackStoreState.Ready(listOf(StoredPack(Pack(light), metadata, PackProgress(PackState.Complete, 100, 100))))
+            offlineMaps(store) { false }
+            advanceTimeBy(FIRST_CHECK + CHECK_INTERVAL)
+            runCurrent()
+            assertEquals(emptyList(), store.resumed)
         }
 
     @Test

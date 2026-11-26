@@ -34,7 +34,9 @@ until it is deleted. On a network Android counts as metered the walk stops after
 finds a new release (Google Maps and OsmAnd update offline maps on Wi-Fi). An update that stops
 before it finishes leaves the area marked "Update paused" (MapLibre would call it complete, as it
 counts the old release's tiles too); Resume goes on with it, and so does the next check on Wi-Fi
-unless the user paused it since the app started. MapLibre keeps the offline maps and the map
+unless the user paused it since the app started. A mark left by an app closed in the first seconds
+of a check, before it found new data, is walked again on mobile data too and clears when nothing
+changed. MapLibre keeps the offline maps and the map
 cache in one database in the no-backup folder.
 
 Settings:

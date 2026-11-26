@@ -82,6 +82,12 @@ data class PackMetadata(
      * would look complete while the area lacks the new release's tiles.
      */
     val updating: Boolean = false,
+    /**
+     * A check's walk of the pack was still downloading after [QUIET_CHECK]: the map server has new
+     * data for it. Without it, an [updating] mark may also be one a check left when the app was
+     * closed before it could tell, which a walk on mobile data clears when nothing changed.
+     */
+    val newData: Boolean = false,
 ) {
     fun encode(): ByteArray = json.encodeToString(serializer(), this).encodeToByteArray()
 
