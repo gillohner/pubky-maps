@@ -206,10 +206,14 @@ expect_water offline-dark "#1c4587"
 # MainActivity, and Android counts its instances when the old one is destroyed: the old one still
 # counts then, so only an earlier one that is still in memory (a leak) goes over the limit. That
 # needs a second recreation in the same process; open_at's force-stop would start the count afresh.
+# The 5 s after a redraw let the old activity's teardown (MapLibre's render thread) finish, so only
+# an activity still held seconds after its destroy counts.
 adb shell cmd uimode night no
 expect_water offline-light-recreated "#3c78d8"
+sleep 5
 adb shell cmd uimode night yes
 expect_water offline-dark-recreated "#1c4587"
+sleep 5
 adb shell cmd uimode night no
 expect_water offline-light-recreated-again "#3c78d8"
 check_alive "offline map drawn without a connection"
