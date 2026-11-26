@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!-- Debug builds only: turns StrictMode on before the app starts (a provider is created
+             before Application.onCreate). The emulator tests fail on what it reports about our code. -->
+        <provider
+            android:name=".android.StrictModeProvider"
+            android:authorities="${applicationId}.strictmode"
+            android:exported="false"
+            android:initOrder="1000" />
+    </application>
+
+</manifest>

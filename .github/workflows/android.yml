@@ -13,6 +13,8 @@ name: android
 # When the app, the core or CI changed, synonym-blocked runs the app with every Synonym host
 # unreachable (scripts/ci/synonym-blocked.py): the map, the cached account and the degraded banner,
 # and a second time with the first map style blocked too.
+# Each of these tests on the debug APK fails when StrictMode caught our code on the main thread
+# reading disk or the network, or leaking a resource (scripts/ci/strict_mode.py).
 # When the updater or the release changed (and on every push to main), update-apks builds two signed
 # release APKs N and N+1 with a throwaway key and checks that the .aab has no updater, and
 # update-probe has the emulator update N to N+1 from inside the app and refuse tampered ones

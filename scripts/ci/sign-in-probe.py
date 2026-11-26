@@ -187,7 +187,7 @@ def main():
     left = dev.shell(f"run-as {PKG} ls no_backup/secrets").split()
     if "pending-sign-in.bin" in left:
         dev.fail("the sign-in's stored state is still there after the cancel")
-    dev.save_logcat()
+    dev.check_strict_mode("sign-in probe")
     (Path(out) / "fixture-relay.json").write_text(json.dumps([{"method": r["method"], "path": r["path"]} for r in relay.snapshot()], indent=1))
     log("sign-in probe passed")
 

@@ -99,6 +99,8 @@ adb shell chmod 644 /data/local/tmp/pubky-maps-settings.json
 adb shell run-as "$pkg" mkdir -p files/datastore
 adb shell run-as "$pkg" cp /data/local/tmp/pubky-maps-settings.json files/datastore/settings.json
 adb shell run-as "$pkg" rm -f no_backup/recent-searches.json
+# A log buffer large enough to keep StrictMode's reports from the start until the end.
+adb logcat -G 16M || true
 adb logcat -c || true
 adb logcat -b crash -c || true
 
@@ -188,4 +190,5 @@ sleep 1
 check_alive "end"
 
 adb logcat -d > "$out/logcat.txt"
+python3 -I "$here/strict_mode.py" "$out/logcat.txt" || fail "StrictMode caught our code (search)"
 echo "search test passed"

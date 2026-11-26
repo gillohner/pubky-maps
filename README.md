@@ -210,6 +210,11 @@ screenshots search with its pins, and the update probe screenshots each step of 
   seeded signed-in account the app must start, draw the map, show the cached profile and tags, and
   name the missing homeserver in its banner; a second run also blocks the first map style and the map
   must draw from the next one.
+- StrictMode: debug builds turn it on before the app starts
+  (`androidApp/src/debug/.../StrictModeProvider.kt`) and log each disk or network access on the main
+  thread and each leaked resource, blamed on the first frame outside Android, Java, Kotlin and
+  AndroidX. Every emulator test above reads the log at its end (`scripts/ci/strict_mode.py`), lists
+  the reports and fails on one that blames our code; reports about a library are listed only.
 
 ## Data sources and attribution
 

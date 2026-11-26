@@ -17,6 +17,8 @@ A change is done when all of these pass on its head commit:
   when the app, the core or CI changed, the Synonym-blocked test (`scripts/ci/synonym-blocked.py`);
   and, when the updater or the release changed, the update probe (`scripts/ci/update-probe.py`): two signed release builds, a
   tampered feed and a tampered APK refused, the real update installed from inside the app.
+  Each emulator test on the debug APK also fails when StrictMode caught our code reading disk or the
+  network on the main thread or leaking a resource (`scripts/ci/strict_mode.py`).
 
 Every behaviour gets a test: logic in JVM unit tests (`shared/src/commonTest`), Android-side code
 and real calls into the Rust core in host tests (`shared/src/androidHostTest`, which load a build of

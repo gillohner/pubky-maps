@@ -9,6 +9,8 @@ import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+import strict_mode
+
 PKG = "to.pubky.maps"
 ACTIVITY = f"{PKG}/.android.MainActivity"
 HERE = Path(__file__).resolve().parent
@@ -43,11 +45,20 @@ class Device:
         self.adb("install", "-r", str(apk), timeout=600)
 
     def clear_logs(self):
+        # Large enough to keep StrictMode's reports from the start until the end.
+        self.adb("logcat", "-G", "16M", check=False)
         self.adb("logcat", "-c", check=False)
         self.adb("logcat", "-b", "crash", "-c", check=False)
 
     def save_logcat(self, name="logcat.txt"):
         (self.out / name).write_text(self.adb("logcat", "-d", check=False, timeout=120))
+
+    def check_strict_mode(self, step):
+        """Saves the log and fails when StrictMode caught our code (strict_mode.py)."""
+        self.save_logcat()
+        error = strict_mode.check((self.out / "logcat.txt").read_text())
+        if error:
+            self.fail(f"{error} ({step})")
 
     def fail(self, msg):
         self.save_logcat()
