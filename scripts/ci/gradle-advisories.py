@@ -47,10 +47,16 @@ def ignores(text):
     unknown = set(data) - {"ignore"}
     if unknown:
         raise ValueError(f"unknown keys {sorted(unknown)}; only [[ignore]] tables")
-    for entry in data.get("ignore", []):
+    entries = data.get("ignore", [])
+    if not isinstance(entries, list) or not all(isinstance(e, dict) for e in entries):
+        raise ValueError("ignore must be [[ignore]] tables (an array of tables), not a value or one [ignore] table")
+    for entry in entries:
         advisory, reason = entry.get("id"), entry.get("reason")
         if not isinstance(advisory, str) or not advisory.strip():
             raise ValueError(f"an ignore without an id: {entry}")
+        if advisory != advisory.strip():
+            # OSV ids have no spaces; a padded one would never match and only fail as a stale ignore.
+            raise ValueError(f"ignore id {advisory!r} has spaces around it")
         if not isinstance(reason, str) or not reason.strip():
             raise ValueError(f"ignore {advisory} has no reason")
         if set(entry) - {"id", "reason"}:
