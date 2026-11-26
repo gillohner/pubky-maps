@@ -159,6 +159,9 @@ fun PlaceSheet(
         Column(Modifier.fillMaxSize()) {
             Column(
                 Modifier
+                    // Measured at its own height, not the sheet's: the peek is set from this size, so a
+                    // header measured inside a shorter sheet would keep the peek too short to show it.
+                    .wrapContentHeight(Alignment.Top, unbounded = true)
                     .draggable(
                         state = dragState,
                         orientation = Orientation.Vertical,
