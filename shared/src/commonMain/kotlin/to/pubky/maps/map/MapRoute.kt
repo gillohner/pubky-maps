@@ -428,7 +428,9 @@ private fun rememberAreaPicker(
     if (!picking) return null
     var frame by remember { mutableStateOf<DpRect?>(null) }
     val area by produceState<AreaBounds?>(null, mapState) {
-        snapshotFlow { if (mapState.isCameraMoving) null else mapState.cameraPosition to frame }
+        // The viewport changes with every camera move and arrives once the map (attached again on
+        // the way back from Settings) can convert screen points.
+        snapshotFlow { if (mapState.isCameraMoving) null else mapState.viewport?.let { it to frame } }
             .collect { resting -> value = resting?.second?.let { mapState.areaIn(it) } }
     }
     return AreaPickerUi(
