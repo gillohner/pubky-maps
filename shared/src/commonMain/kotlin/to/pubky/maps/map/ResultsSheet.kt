@@ -202,7 +202,8 @@ private suspend fun keepListStartAtPeek(
             val peek = state.anchors.positionOf(SheetHeight.Peek)
             // NaN (never near) while there is no lowest height or no offset yet.
             val atPeek = abs(state.offset - peek) < 1f
-            Triple(atPeek, list.firstVisibleItemIndex, list.layoutInfo.visibleItemsInfo.firstOrNull()?.key)
+            val rows = list.layoutInfo.visibleItemsInfo
+            Triple(atPeek, list.firstVisibleItemIndex, rows.firstOrNull()?.key)
         }
     shown.collect { (atPeek, index, key) ->
         val scrolled = index != 0 || list.firstVisibleItemScrollOffset != 0
