@@ -1,0 +1,7 @@
+# Advisories that scripts/ci/gradle-advisories.py does not fail on: each names the advisory (its OSV or
+# GHSA id, or a CVE alias) and why it cannot happen in the app, or what it waits for. An ignore that
+# matches no shipped library any more fails the check, so it goes once its cause is gone.
+#
+# [[ignore]]
+# id = "GHSA-xxxx-xxxx-xxxx"
+# reason = "<library> <version>: <why the app is not affected, or what it waits for>"

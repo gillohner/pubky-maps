@@ -1,5 +1,9 @@
 import com.android.build.api.variant.HasHostTestsBuilder
 import com.android.build.api.variant.HostTestBuilder
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.artifacts.result.ResolvedComponentResult
+import org.gradle.api.artifacts.result.ResolvedDependencyResult
+import org.gradle.api.artifacts.result.UnresolvedDependencyResult
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import javax.inject.Inject
 
@@ -195,6 +199,60 @@ val listRustLicences =
         script.set(root.file("scripts/rust-licences.py"))
         outputDir.set(layout.buildDirectory.dir("generated/rustLicences"))
     }
+
+/**
+ * Writes build/shippedLibraries/libraries.txt: every Maven library (group:name:version) of the release
+ * APK and bundle of both flavours, as Gradle resolved them, for the advisory check
+ * (scripts/ci/gradle-advisories.py). Test, lint and build-tool libraries are not shipped and not listed.
+ */
+abstract class ListShippedLibraries : DefaultTask() {
+    @get:Input
+    abstract val libraries: SetProperty<String>
+
+    @get:OutputFile
+    abstract val output: RegularFileProperty
+
+    @TaskAction
+    fun list() {
+        output.get().asFile.writeText(libraries.get().sorted().joinToString("\n", postfix = "\n"))
+    }
+}
+
+/**
+ * The group:name:version of every library in the resolved graph under [root]. A dependency that did
+ * not resolve (a 404 or 429 from the repository) fails, as the graph would otherwise lose it and
+ * everything under it, and the advisory check would pass on part of the libraries.
+ */
+fun mavenLibraries(root: ResolvedComponentResult): Set<String> {
+    val seen = mutableSetOf(root)
+    val queue = ArrayDeque(listOf(root))
+    val unresolved = mutableListOf<String>()
+    while (queue.isNotEmpty()) {
+        for (dependency in queue.removeFirst().dependencies) {
+            when (dependency) {
+                is ResolvedDependencyResult -> if (seen.add(dependency.selected)) queue.add(dependency.selected)
+                is UnresolvedDependencyResult -> unresolved.add("${dependency.attempted}: ${dependency.failure.message}")
+            }
+        }
+    }
+    if (unresolved.isNotEmpty()) throw GradleException("dependencies did not resolve:\n" + unresolved.joinToString("\n"))
+    return seen
+        .mapNotNull { it.id as? ModuleComponentIdentifier }
+        .map { "${it.group}:${it.module}:${it.version}" }
+        .toSet()
+}
+
+tasks.register<ListShippedLibraries>("listShippedLibraries") {
+    for (name in listOf("directReleaseRuntimeClasspath", "storeReleaseRuntimeClasspath")) {
+        libraries.addAll(
+            configurations.named(name).flatMap {
+                it.incoming.resolutionResult.rootComponent
+                    .map(::mavenLibraries)
+            },
+        )
+    }
+    output.set(layout.buildDirectory.file("shippedLibraries/libraries.txt"))
+}
 
 androidComponents {
     onVariants { variant ->
