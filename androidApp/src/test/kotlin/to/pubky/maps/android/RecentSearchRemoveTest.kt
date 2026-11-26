@@ -16,6 +16,7 @@ import androidx.compose.ui.test.performTouchInput
 import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
 import com.github.takahirom.roborazzi.captureScreenRoboImage
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -149,7 +150,7 @@ class RecentSearchRemoveTest {
         compose.onNodeWithText("zoo").performTouchInput { longClick() }
         compose.onNodeWithText("Remove from recent searches").assertDoesNotExist()
         val config = compose.onNode(hasClickAction().and(hasText("zoo"))).fetchSemanticsNode().config
-        assertEquals(null, config.getOrNull(SemanticsActions.CustomActions))
+        assertFalse("no remove action for TalkBack either", SemanticsActions.CustomActions in config)
         assertEquals(3, store.entries.value.size)
     }
 }
