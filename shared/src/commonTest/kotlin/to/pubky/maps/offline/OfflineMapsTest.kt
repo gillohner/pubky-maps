@@ -248,7 +248,8 @@ class OfflineMapsTest {
             val offline = offlineMaps(store)
             store.whileCreating = { if (it == dark) offline.delete("area-1") }
             offline.download(zurich, listOf(light, dark))
-            assertEquals(listOf(light, dark), store.deleted)
+            assertEquals(setOf(light, dark), store.deleted.toSet())
+            assertEquals(2, store.deleted.size)
             assertEquals(listOf(light), store.resumed)
             assertEquals(emptyList(), offline.maps())
             assertFalse(offline.downloading)

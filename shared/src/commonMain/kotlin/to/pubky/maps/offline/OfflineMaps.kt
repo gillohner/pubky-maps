@@ -74,6 +74,9 @@ class OfflineMaps(
     /** Areas deleted in this process, so a style still being created for one is not downloaded. */
     private val deleted = mutableSetOf<String>()
 
+    /** The packs each download of this process created, which the store may not list yet. */
+    private val createdFor = mutableMapOf<String, MutableList<Any>>()
+
     /** Read on MapLibre's threads for every request: a plain read of the current packs. */
     val downloading: Boolean get() = started.value.isNotEmpty()
 
@@ -144,6 +147,7 @@ class OfflineMaps(
                 styleUrls.distinct().forEach { url ->
                     val handle = store.create(url, bounds, OfflineLimits.MAX_ZOOM, metadata)
                     created += handle
+                    createdFor.getOrPut(metadata.area) { mutableListOf() } += handle
                     // Deleted while this style was being created: it goes too.
                     if (metadata.area in deleted) {
                         store.delete(handle)
@@ -155,6 +159,7 @@ class OfflineMaps(
             } catch (e: Exception) {
                 _problem.value = "Couldn't start the download: ${e.message ?: "the offline storage failed"}"
                 // Half an area would not show in both themes: the styles already created go.
+                createdFor.remove(metadata.area)
                 created.forEach { handle ->
                     runCatching {
                         store.pause(handle)
@@ -184,17 +189,18 @@ class OfflineMaps(
     }
 
     fun delete(id: String) {
-        val area = packs.filter { it.areaId == id }
+        val listed = packs.filter { it.areaId == id }.map { it.handle }
+        val area = listed + createdFor.remove(id).orEmpty().filter { handle -> listed.none { it === handle } }
         deleted += id
         _problem.value = null
         scope.launch {
             try {
-                area.forEach {
-                    store.pause(it.handle)
-                    store.delete(it.handle)
+                area.forEach { handle ->
+                    store.pause(handle)
+                    store.delete(handle)
                     // Only now: until the pack is gone, its requests may still be on their way.
-                    started.value -= it.handle
-                    stopping.value -= it.handle
+                    started.value -= handle
+                    stopping.value -= handle
                 }
             } catch (e: Exception) {
                 _problem.value = "Couldn't delete the offline map: ${e.message ?: "the offline storage failed"}"
