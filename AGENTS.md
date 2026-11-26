@@ -10,7 +10,9 @@ A change is done when all of these pass on its head commit:
   ktlint (Kotlin official style; run `./gradlew ktlintFormat` first).
 - `./gradlew verifyRoborazziDirectDebug`: the screens match the reference screenshots.
 - `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test` when
-  `core/` changed (CI: `.github/workflows/core.yml`).
+  `core/` changed (CI: `.github/workflows/core.yml`); `cargo deny check --deny advisory-not-detected
+  advisories` when the crate graph or `deny.toml` changed (CI: `.github/workflows/advisories.yml`,
+  also every Monday on main).
 - CI (`.github/workflows/android.yml`) green, including the emulator smoke test that installs the
   debug APK, waits for the map to draw (within the start-time budget of `scripts/ci/emulator-smoke.sh`),
   opens Settings and goes back, then the sign-in probe

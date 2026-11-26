@@ -1,0 +1,37 @@
+# Security advisories (RustSec) of the crates the Rust core ships in the app:
+# `cargo deny check advisories` (workflow advisories.yml; core/README.md "Advisories").
+
+[graph]
+# The app's libraries only: the core for its two Android ABIs, without dev dependencies (the test
+# homeserver and relay of `pubky-testnet`) and without the host tool `uniffi-bindgen`.
+targets = ["aarch64-linux-android", "x86_64-linux-android"]
+exclude-dev = true
+exclude = ["uniffi-bindgen"]
+
+[advisories]
+version = 2
+# Any vulnerability or unsound crate in the graph fails; an unmaintained or yanked one fails only
+# where the core depends on it itself (a transitive one goes when its dependent moves on).
+unsound = "all"
+unmaintained = "workspace"
+yanked = "deny"
+# Each one: the crate that pins it, why the core cannot raise it, and why its fault cannot happen in
+# the app. All of them come with `pubky 0.10`, which `pubky-social-specs` 1.0.0-rc.2 (its latest
+# release) still depends on beside the core's `pubky 0.18`. An ignore that matches nothing any more
+# fails the check (`-D advisory-not-detected`), so it goes as soon as that is fixed.
+ignore = [
+  # lru 0.16.4 <- mainline 7 <- pkarr 7 <- pubky 0.10.
+  { id = "RUSTSEC-2026-0253", reason = "lru 0.16 from mainline 7 (pubky 0.10); the fault needs a key whose Drop panics, mainline's keys are [u8; 20] ids" },
+  # heapless 0.7.17 <- postcard 1.2 (default feature heapless-cas) <- pubky-common 0.10 <- pubky 0.10.
+  # postcard uses heapless only for its heapless::Vec<u8> output, which pubky-common never asks for
+  # (to_allocvec, from_bytes); nothing in the graph uses the types these advisories are about.
+  { id = "RUSTSEC-2026-0574", reason = "heapless 0.7 from postcard (pubky 0.10): SortedLinkedList is not used" },
+  { id = "RUSTSEC-2026-0575", reason = "heapless 0.7 from postcard (pubky 0.10): spsc is not used" },
+  { id = "RUSTSEC-2026-0576", reason = "heapless 0.7 from postcard (pubky 0.10): IndexMap is not used" },
+  { id = "RUSTSEC-2026-0577", reason = "heapless 0.7 from postcard (pubky 0.10): its Vec<u8> output is not used, nor Deque, HistoryBuf, IndexMap" },
+  { id = "RUSTSEC-2026-0578", reason = "heapless 0.7 from postcard (pubky 0.10): SortedLinkedList is not used" },
+  { id = "RUSTSEC-2026-0579", reason = "heapless 0.7 from postcard (pubky 0.10): Deque is not used" },
+  { id = "RUSTSEC-2026-0580", reason = "heapless 0.7 from postcard (pubky 0.10): the pool is not used" },
+  { id = "RUSTSEC-2026-0581", reason = "heapless 0.7 from postcard (pubky 0.10): Deque is not used" },
+  { id = "RUSTSEC-2026-0582", reason = "heapless 0.7 from postcard (pubky 0.10): IndexMap is not used" },
+]
