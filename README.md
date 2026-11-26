@@ -179,6 +179,11 @@ The app has two flavours: `direct`, the APK published on GitHub, with the in-app
 `store`, the bundle for app stores, which update the app themselves (no updater, no
 `REQUEST_INSTALL_PACKAGES`). Release builds are shrunk with R8 and signed outside Gradle.
 
+A Kotlin compiler warning in non-test code (a deprecated call, a check that is always true) fails
+the build, including the generated SQLDelight code and core bindings; warnings in test code do not
+(`build.gradle.kts`). On Linux this covers the Android code; the iOS compiles have the same rule but
+run only on macOS.
+
 The iOS targets compile only on macOS; on Linux Gradle skips them.
 
 ## Run

@@ -22,9 +22,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.DpRect
@@ -98,6 +96,7 @@ import to.pubky.maps.search.SearchState
 import to.pubky.maps.search.distanceMeters
 import to.pubky.maps.search.distanceText
 import to.pubky.maps.status.ServicePart
+import to.pubky.maps.ui.SystemBack
 import to.pubky.maps.ui.rememberSafeLinkOpener
 import to.pubky.maps.write.OwnData
 import to.pubky.maps.write.WriteController
@@ -307,7 +306,7 @@ fun MapRoute(
     val shown: ShownPlace? =
         when {
             places == null -> null
-            selected != null && search != null -> ShownPlace(selected.place, SheetStop.Half, search.controller::closeCard)
+            selected != null -> ShownPlace(selected.place, SheetStop.Half, search.controller::closeCard)
             linkedPlace.opening -> null
             place != null && !place.viewOnly -> ShownPlace(place, SheetStop.Half, onClosePlace, linkedPlace.provider)
             tapped != null -> tapped?.let { ShownPlace(it, SheetStop.Peek, onClose = { tapped = null }) }
@@ -439,7 +438,6 @@ fun MapRoute(
  * whenever the camera rests (and unknown while it moves, so Download never takes an area the frame
  * has left), back closes the picker, Download starts the download in [styleUrls].
  */
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun rememberAreaPicker(
     offline: OfflineMaps,
@@ -448,7 +446,7 @@ private fun rememberAreaPicker(
     onDownloadStarted: () -> Unit,
 ): AreaPickerUi? {
     val picking by offline.picking.collectAsStateWithLifecycle()
-    BackHandler(enabled = picking) { offline.stopPicking() }
+    SystemBack(enabled = picking) { offline.stopPicking() }
     if (!picking) return null
     var frame by remember { mutableStateOf<DpRect?>(null) }
     val area by produceState<AreaBounds?>(null, mapState) {
@@ -492,7 +490,6 @@ private fun MapState.areaIn(frame: DpRect): AreaBounds? =
  * Search on the live map: asks around the map's centre, moves the map to a picked result and fits
  * it to the results of a search, and takes the back action while search is open.
  */
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun rememberMapSearch(
     search: SearchServices,
@@ -505,7 +502,7 @@ private fun rememberMapSearch(
 ): MapSearch {
     val controller = search.controller
 
-    BackHandler(enabled = state.mode != SearchMode.Idle) { controller.back() }
+    SystemBack(enabled = state.mode != SearchMode.Idle) { controller.back() }
 
     // Search takes the bottom of the screen: a place opened from a link makes way.
     val searching = state.mode != SearchMode.Idle
@@ -626,7 +623,6 @@ private suspend fun MapState.tappedPoi(offset: DpOffset): PlaceRef? {
  * The place page of [shown] for the map screen: its state from [places], the sheet's stop (saved per
  * place), the clock, and its actions. Null when no place is open.
  */
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun rememberPlacePage(
     places: PlaceServices,
@@ -652,7 +648,7 @@ private fun rememberPlacePage(
         }
     }
     if (shown == null) return null
-    BackHandler { shown.onClose() }
+    SystemBack { shown.onClose() }
     val page = pageState?.takeIf { it.place.uri == shown.place.uri } ?: PlacePageState(shown.place)
     // Built once per place and point (it asks the core and the package manager), not per recomposition.
     val openInPlace = page.place.copy(point = page.place.point ?: page.card?.point)

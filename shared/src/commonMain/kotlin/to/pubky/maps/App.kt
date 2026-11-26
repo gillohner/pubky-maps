@@ -6,8 +6,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.ui.backhandler.BackHandler
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -51,6 +49,7 @@ import to.pubky.maps.settings.ServersScreen
 import to.pubky.maps.settings.SettingsScreen
 import to.pubky.maps.settings.StoredOnlineScreen
 import to.pubky.maps.ui.PubkyMapsTheme
+import to.pubky.maps.ui.SystemBack
 import to.pubky.maps.update.UpdateController
 import to.pubky.maps.update.UpdateDialogHost
 import to.pubky.maps.update.UpdatesUiState
@@ -183,7 +182,6 @@ fun App(
 
 private fun NavController.open(destination: Any) = navigate(destination) { launchSingleTop = true }
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun AppNavigation(
     appInfo: AppInfo,
@@ -379,7 +377,7 @@ private fun AppNavigation(
                     writes?.controller?.leftSignIn()
                     back()
                 }
-                BackHandler(enabled = waiting != null) { leave() }
+                SystemBack(enabled = waiting != null) { leave() }
                 val controller = writes?.controller
                 val names =
                     controller
