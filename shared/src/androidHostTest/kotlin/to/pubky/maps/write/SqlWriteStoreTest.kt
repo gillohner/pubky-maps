@@ -212,6 +212,13 @@ class SqlWriteStoreTest {
         val phone = SqlPhoneStore(driver)
         assertEquals(listOf(PhoneSaved("https://www.openstreetmap.org/node/1", "Schober", 10)), phone.read().saved)
         phone.save(PhoneSaved("geo:3,4", null, 20, GeoPoint(3.0, 4.0)))
-        assertEquals(GeoPoint(3.0, 4.0), phone.read().saved.first().point)
+        assertEquals(
+            GeoPoint(3.0, 4.0),
+            phone
+                .read()
+                .saved
+                .first()
+                .point,
+        )
     }
 }
