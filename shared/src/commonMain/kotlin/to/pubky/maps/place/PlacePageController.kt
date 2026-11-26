@@ -39,13 +39,21 @@ data class PlacePageState(
     val lists: List<PlaceList> = emptyList(),
     val loading: Set<PlacePart> = PlacePart.entries.toSet(),
     val failed: Set<PlacePart> = emptySet(),
-    /** When the cached copy shown was saved (epoch ms); null when nothing came from the cache. */
+    /** When the cached card, posts and lists shown were fetched (epoch ms); null when nothing came from the cache. */
     val savedAt: Long? = null,
+    /**
+     * When the tags shown were fetched (epoch ms), when they came from the cache or the offline areas;
+     * null when Nexus gave them now or none are shown.
+     */
+    val socialAt: Long? = null,
     /** The signed-in user's pubky id when the page was opened; null when signed out. */
     val viewer: String? = null,
 ) {
     /** Some part could not be loaded: the page shows saved data, or less. */
     val offline: Boolean get() = failed.isNotEmpty()
+
+    /** The date of the oldest saved or kept part shown (epoch ms), for the offline note; null when none is. */
+    val shownAt: Long? get() = listOfNotNull(savedAt, socialAt).minOrNull()
 
     /** Nexus and Pinakes answered and nobody tagged, wrote about or listed the place. */
     val nothingOnPubky: Boolean
@@ -162,7 +170,8 @@ class PlacePageController(
                     posts = cached.posts,
                     photos = cached.photos,
                     lists = cached.lists,
-                    savedAt = cached.savedAt,
+                    savedAt = cached.contentAt ?: cached.savedAt,
+                    socialAt = cached.social?.let { cached.socialAt ?: cached.savedAt },
                 )
             }
         }
@@ -200,11 +209,10 @@ class PlacePageController(
                 SourceAnswer.Unreachable -> {
                     val keptSocial = kept?.let { withContext(io) { runCatching { it.socialOf(placeLinks(place, card)) }.getOrNull() } }
                     update(place) {
-                        val newer = keptSocial?.takeIf { k -> it.social == null || (it.savedAt ?: 0) < k.fetchedAt }
+                        val newer = keptSocial?.takeIf { k -> it.social == null || (it.socialAt ?: 0) < k.fetchedAt }
                         it.copy(
                             social = newer?.social?.forViewer(viewer) ?: it.social,
-                            // The page names the date of the oldest part it shows.
-                            savedAt = newer?.let { k -> minOf(it.savedAt ?: k.fetchedAt, k.fetchedAt) } ?: it.savedAt,
+                            socialAt = newer?.fetchedAt ?: it.socialAt,
                             loading = it.loading - PlacePart.Social - PlacePart.Posts,
                             failed = it.failed + PlacePart.Social + PlacePart.Posts,
                         )
@@ -213,7 +221,7 @@ class PlacePageController(
                 }
             }
         val social = mergeResourceViews(views)
-        update(place) { it.copy(social = social, loading = it.loading - PlacePart.Social) }
+        update(place) { it.copy(social = social, socialAt = null, loading = it.loading - PlacePart.Social) }
         views.filter { it.replies > 0 }.forEach { replyPages[it.id] = ReplyPage(total = it.replies, loaded = 0) }
 
         val (replies, embeds) =
@@ -328,6 +336,7 @@ class PlacePageController(
         val page = _state.value?.takeIf { it.place.uri == place.uri } ?: return
         // Nothing new to keep when every part failed.
         if (page.failed.containsAll(listOf(PlacePart.Card, PlacePart.Social))) return
+        val now = clock.now().toEpochMilliseconds()
         val snapshot =
             PlaceSnapshot(
                 uri = place.uri,
@@ -337,8 +346,11 @@ class PlacePageController(
                 posts = page.posts.take(POSTS_PAGE),
                 photos = page.photos,
                 lists = page.lists,
-                // A part that failed shows what was saved or kept: the copy is as old as the oldest part.
-                savedAt = page.savedAt?.takeIf { page.failed.isNotEmpty() } ?: clock.now().toEpochMilliseconds(),
+                // The cache keeps the newest; the parts shown from a saved or kept copy keep their dates, for
+                // the offline note, and the tags' also to be compared with kept ones.
+                savedAt = now,
+                contentAt = page.savedAt?.takeIf { page.failed.any { it != PlacePart.Social } } ?: now,
+                socialAt = page.social?.let { page.socialAt ?: now },
                 viewer = page.viewer,
             )
         cache?.let { withContext(io) { runCatching { it.write(snapshot) } } }

@@ -142,8 +142,19 @@ data class PlaceSnapshot(
     val posts: List<PlacePost> = emptyList(),
     val photos: List<PlacePhoto> = emptyList(),
     val lists: List<PlaceList> = emptyList(),
-    /** When it was saved, epoch milliseconds. */
+    /** When it was saved, epoch milliseconds: the cache keeps the newest. */
     val savedAt: Long = 0,
+    /**
+     * How old its card, posts and lists are (epoch ms): the date of the saved copy they came from when
+     * a part failed, else [savedAt]; null in copies saved before this field: [savedAt].
+     */
+    val contentAt: Long? = null,
+    /**
+     * When its tags and counts were fetched (epoch ms): [savedAt] when Nexus gave them, older when the
+     * page showed saved or kept ones; null when it has no tags, or in copies saved before this field
+     * ([savedAt]).
+     */
+    val socialAt: Long? = null,
     /**
      * Whose page it was (the signed-in user's pubky id, null signed out): their own tags and lists and
      * whom they follow are true only for them.

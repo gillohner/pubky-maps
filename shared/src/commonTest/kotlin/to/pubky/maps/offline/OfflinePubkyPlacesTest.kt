@@ -458,12 +458,29 @@ class OfflinePubkyPlacesTest {
         }
 
     @Test
-    fun withoutNexusASyncStopsAtItsSecondFailure() =
+    fun withoutNexusASyncAsksItNoMoreAfterItsSecondFailureButKeepsEveryAreasPlaces() =
         keeping(area("zh", zurich), area("be", bern), area("ge", AreaBounds(6.1, 46.18, 6.16, 46.22))) { running ->
             running.data.nexusDown = true
             after(10.seconds)
             assertEquals(2, running.data.askedViews.size)
-            assertEquals(setOf("zh", "be"), running.store.kept.keys)
+            // Pinakes answers: every area has its pins at once, Nexus or not.
+            assertEquals(3, running.data.asked.size)
+            assertEquals(setOf("zh", "be", "ge"), running.store.kept.keys)
+            assertTrue(
+                running.store.kept.values
+                    .none { it.socialFetched },
+            )
+            after(OfflinePubkyPlaces.RETRY)
+            // The next try asks Nexus only (twice again, still down), Pinakes not.
+            assertEquals(3, running.data.asked.size)
+            assertEquals(4, running.data.askedViews.size)
+            running.data.nexusDown = false
+            after(OfflinePubkyPlaces.RETRY)
+            assertTrue(
+                running.store.kept.values
+                    .all { it.socialFetched },
+            )
+            assertEquals(7, running.data.askedViews.size)
         }
 
     @Test

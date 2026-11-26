@@ -108,7 +108,8 @@ interface OfflinePubkyStore : KeptPubkyPlaces {
  * between areas, so many areas stay far below Pinakes' 120 requests a minute next to the layer and
  * search (a 429 puts the server on hold for them too). An area that fails is tried again after
  * [retry], after the others on later tries, the one that failed longest ago first; a sync stops at
- * its second failure (no connection fails every area alike).
+ * Pinakes' second failure and asks Nexus no more after its second, but still fetches the places of
+ * the other areas (no connection fails every area alike).
  */
 class OfflinePubkyPlaces(
     private val maps: StateFlow<OfflineMapsState>,
@@ -157,12 +158,15 @@ class OfflinePubkyPlaces(
         (kept.keys - listed).forEach { area -> onDisk { store.delete(area) } }
         failing.keys.retainAll(listed)
         requests = 0
-        var failures = 0
+        var placeFailures = 0
+        var socialFailures = 0
         for ((area, bounds) in areas.sortedBy { failing[it.first] ?: -1 }) {
             val now = clock.now().toEpochMilliseconds()
             val keptArea = kept[area]
             val placesDue = keptArea == null || ((now - keptArea.fetchedAt).milliseconds >= refresh && unmetered())
-            if (!placesDue && !keptArea.socialMissing) continue
+            // After Nexus' second failure in this sync only the places are fetched: the tags wait for the next try.
+            val socialDue = socialFailures < 2
+            if (!placesDue && !(keptArea.socialMissing && socialDue)) continue
             val links =
                 if (placesDue) {
                     val box = GeoBox(bounds.west, bounds.south, bounds.east, bounds.north).snappedOutward(MapPlacesLayer.GRID_DEGREES)
@@ -175,13 +179,19 @@ class OfflinePubkyPlaces(
                 } else {
                     onDisk { store.links(area) }
                 }
-            val social = links?.let { socialOf(it) }
-            if (social != null) onDisk { store.replaceSocial(area, clock.now().toEpochMilliseconds(), social) }
-            if (social == null) {
+            if (links == null) {
                 failing[area] = failureCount++
-                if (++failures >= 2) return
+                if (++placeFailures >= 2) return
                 continue
             }
+            if (!socialDue) continue
+            val social = socialOf(links)
+            if (social == null) {
+                failing[area] = failureCount++
+                socialFailures++
+                continue
+            }
+            onDisk { store.replaceSocial(area, clock.now().toEpochMilliseconds(), social) }
             failing -= area
         }
     }

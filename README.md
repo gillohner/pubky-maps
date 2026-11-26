@@ -45,9 +45,10 @@ people referenced on Pubky) are fetched from Pinakes as soon as the area is in t
 Pinakes cannot be reached, the map shows them in the downloaded areas. Their tags and counts come
 from Nexus with them (no viewer, at most 20 requests of 100 links per area; when Nexus did not
 answer, only Nexus is asked again, every 15 minutes, and the old tags keep their date); when Nexus
-cannot be reached, a place page shows them (if newer than what the page saved) with the date they
-were fetched, also for a place never opened before. These requests tell Pinakes which areas are downloaded (the
-area widened to a 1/16° grid) and Nexus which places are in them, also while the user looks elsewhere.
+cannot be reached, a place page shows them (if newer than the tags the page saved) with the date
+they were fetched, also for a place never opened before. These requests tell Pinakes which areas
+are downloaded (the area widened to a 1/16° grid) and Nexus which places are in them, also while the
+user looks elsewhere.
 
 **Search without a connection:** once an area is ready, and again after every update that fetched
 tiles (the area's `newDataAt`, kept with its places), the app reads the named places of its zoom 14

@@ -8,7 +8,10 @@ import to.pubky.maps.offline.pubky.db.OfflinePubkyDatabase
 import to.pubky.maps.place.PlaceData
 import java.io.File
 
-/** Where the Pubky places of the offline areas are kept: their own file in the no-backup folder (never in an Android backup). */
+/**
+ * Where the Pubky places of the offline areas and their tags and counts are kept: their own file in
+ * the no-backup folder (never in an Android backup).
+ */
 fun androidOfflinePubkyStore(context: Context): SqlOfflinePubkyStore =
     SqlOfflinePubkyStore(
         AndroidSqliteDriver(OfflinePubkyDatabase.Schema, context, File(context.noBackupFilesDir, "offline-pubky-places.db").path),
@@ -16,7 +19,9 @@ fun androidOfflinePubkyStore(context: Context): SqlOfflinePubkyStore =
 
 /**
  * Keeps the Pubky places of [maps]' areas in [store] for the life of the process, fetched from
- * Pinakes through [data]; refreshed only on a network Android does not count as metered.
+ * Pinakes through [data], with their tags and counts from Nexus. The places and tags are refreshed
+ * only on a network Android does not count as metered; tags Nexus did not give are asked again on
+ * any network.
  */
 fun startOfflinePubkyPlaces(
     context: Context,

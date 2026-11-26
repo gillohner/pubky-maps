@@ -14,11 +14,16 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 /** Answers from the recorded fixtures; each source can be made unreachable or held back. */
-private class FakePlaceData : PlaceData {
+internal class FakePlaceData : PlaceData {
     var pinakesDown = false
     var nexusDown = false
+
+    /** Only Nexus' posts (replies and photos) do not answer. */
+    var postsDown = false
     var cardGate: CompletableDeferred<Unit>? = null
     val viewers = mutableListOf<String?>()
     val askedLinks = mutableListOf<List<String>>()
@@ -87,12 +92,16 @@ private class FakePlaceData : PlaceData {
         skip: Int,
         limit: Int,
     ): SourceAnswer<List<PlacePost>> =
-        nexus {
-            if (embeds) {
-                parseNexusPosts(PlaceFixtures.read("nexus-embeds-schober.json"), PlaceFixtures.NEXUS)
-            } else {
-                replyPages += skip
-                replies.drop(skip).take(limit)
+        if (postsDown) {
+            SourceAnswer.Unreachable
+        } else {
+            nexus {
+                if (embeds) {
+                    parseNexusPosts(PlaceFixtures.read("nexus-embeds-schober.json"), PlaceFixtures.NEXUS)
+                } else {
+                    replyPages += skip
+                    replies.drop(skip).take(limit)
+                }
             }
         }
 
@@ -112,6 +121,20 @@ private class FakePlaceData : PlaceData {
 
     companion object {
         const val SCHOBER = "https://www.openstreetmap.org/node/270803095"
+    }
+}
+
+/** Tags kept for an offline area holding the Schober, fetched at [fetchedAt]; records the links asked about. */
+internal class KeptSchober(
+    val fetchedAt: Long,
+) : KeptPlaceSocial {
+    val asked = mutableListOf<List<String>>()
+
+    override fun socialOf(uris: List<String>): KeptSocial? {
+        asked += uris
+        if (FakePlaceData.SCHOBER !in uris) return null
+        val tag = PlaceTag(label = "kept", count = 2, taggers = listOf(PlaceFixtures.TESTER, "someoneelse"), mine = false)
+        return KeptSocial(PlaceSocial(listOf(tag), resourceIds = listOf("r"), replyCount = 1, embedCount = 0), fetchedAt)
     }
 }
 
@@ -140,12 +163,14 @@ class PlacePageControllerTest {
         cache: PlaceCache? = null,
         viewer: String? = null,
         kept: KeptPlaceSocial? = null,
+        clock: Clock = Clock.System,
     ) = PlacePageController(
         data = data,
         cache = cache,
         scope = this,
         kept = kept,
         viewer = { viewer },
+        clock = clock,
         io = StandardTestDispatcher(testScheduler),
     )
 
@@ -293,20 +318,6 @@ class PlacePageControllerTest {
             )
         }
 
-    /** Tags kept for an offline area holding the Schober, fetched at [fetchedAt]; records the links asked about. */
-    private class KeptSchober(
-        val fetchedAt: Long,
-    ) : KeptPlaceSocial {
-        val asked = mutableListOf<List<String>>()
-
-        override fun socialOf(uris: List<String>): KeptSocial? {
-            asked += uris
-            if (FakePlaceData.SCHOBER !in uris) return null
-            val tag = PlaceTag(label = "kept", count = 2, taggers = listOf(PlaceFixtures.TESTER, "someoneelse"), mine = false)
-            return KeptSocial(PlaceSocial(listOf(tag), resourceIds = listOf("r"), replyCount = 1, embedCount = 0), fetchedAt)
-        }
-    }
-
     @Test
     fun withoutNexusAPlaceOfAnOfflineAreaShowsItsKeptTagsAlsoWhenNeverOpened() =
         runTest {
@@ -326,7 +337,8 @@ class PlacePageControllerTest {
             // Read with no viewer; the signed-in user is one of its taggers, so it is theirs.
             assertTrue(page.tags.single().mine)
             // "Offline: showing what was saved on" the day the area's tags were fetched.
-            assertEquals(1_000, page.savedAt)
+            assertNull(page.savedAt)
+            assertEquals(1_000, page.shownAt)
             // The links of the place as opened (its OSM element is the same link here).
             assertEquals(listOf(FakePlaceData.SCHOBER), kept.asked.single())
         }
@@ -372,7 +384,7 @@ class PlacePageControllerTest {
             assertFalse(page.tags.single().mine)
             assertEquals("Conditorei schober", page.card?.name)
             assertEquals(1, page.posts.size)
-            assertEquals(saved.savedAt, page.savedAt)
+            assertEquals(saved.savedAt, page.shownAt)
         }
 
     @Test
@@ -380,14 +392,83 @@ class PlacePageControllerTest {
         runTest {
             val cache = MemoryPlaceCache()
             // Pinakes answers, Nexus does not: the card is new, the tags are the area's.
-            val pages = controller(FakePlaceData().apply { nexusDown = true }, cache, kept = KeptSchober(fetchedAt = 1_000))
+            val pages =
+                controller(FakePlaceData().apply { nexusDown = true }, cache, kept = KeptSchober(fetchedAt = 1_000), clock = at(5_000))
             pages.open(schober)
             advanceUntilIdle()
             val saved = assertNotNull(cache.saved[FakePlaceData.SCHOBER])
             assertEquals("Conditorei schober", saved.card?.name)
             assertEquals(listOf("kept"), saved.social?.tags?.map { it.label })
-            // Not "saved today": the next offline open names the tags' date, and newer kept tags still win.
-            assertEquals(1_000, saved.savedAt)
+            // The copy is as new as its card (the cache keeps the newest), its tags keep their date: the
+            // next offline open names it, and newer kept tags still win.
+            assertEquals(5_000, saved.savedAt)
+            assertEquals(1_000, saved.socialAt)
+            val offline =
+                FakePlaceData().apply {
+                    pinakesDown = true
+                    nexusDown = true
+                }
+            val again = controller(offline, cache, kept = KeptSchober(fetchedAt = 1_001), clock = at(6_000)).also { it.open(schober) }
+            advanceUntilIdle()
+            assertEquals(1_001, again.state.value!!.shownAt)
+        }
+
+    @Test
+    fun aCardSavedEarlierKeepsItsDateWhenThePageIsSavedAgainWithoutPinakes() =
+        runTest {
+            val cache = MemoryPlaceCache()
+            controller(FakePlaceData().apply { nexusDown = true }, cache, clock = at(1_000)).open(schober)
+            advanceUntilIdle()
+            // No tags were shown: none has a date.
+            assertNull(assertNotNull(cache.saved[FakePlaceData.SCHOBER]).socialAt)
+            controller(FakePlaceData(), cache, clock = at(2_000)).open(schober)
+            advanceUntilIdle()
+            // Later Pinakes is down: the card shown is the one of 2,000, the tags are new.
+            controller(FakePlaceData().apply { pinakesDown = true }, cache, clock = at(3_000)).open(schober)
+            advanceUntilIdle()
+            val saved = assertNotNull(cache.saved[FakePlaceData.SCHOBER])
+            assertEquals(3_000, saved.savedAt)
+            assertEquals(2_000, saved.contentAt)
+            assertEquals(3_000, saved.socialAt)
+            val down =
+                FakePlaceData().apply {
+                    pinakesDown = true
+                    nexusDown = true
+                }
+            val offline = controller(down, cache, clock = at(4_000)).also { it.open(schober) }
+            advanceUntilIdle()
+            assertEquals(2_000, offline.state.value!!.shownAt)
+        }
+
+    @Test
+    fun tagsFetchedAgainAreNotReplacedByOlderKeptOnesWhenAnotherPartFailed() =
+        runTest {
+            val cache = MemoryPlaceCache()
+            controller(FakePlaceData(), cache, clock = at(1_000)).open(schober)
+            advanceUntilIdle()
+            // Opened again later: the tags load, only the posts do not.
+            controller(FakePlaceData().apply { postsDown = true }, cache, clock = at(3_000)).open(schober)
+            advanceUntilIdle()
+            val saved = assertNotNull(cache.saved[FakePlaceData.SCHOBER])
+            assertEquals(3_000, saved.savedAt)
+            assertEquals(3_000, saved.socialAt)
+
+            // Offline, with an area's tags fetched between the two opens: the newer saved tags stay.
+            val down =
+                FakePlaceData().apply {
+                    pinakesDown = true
+                    nexusDown = true
+                }
+            val page = controller(down, cache, kept = KeptSchober(fetchedAt = 2_000)).also { it.open(schober) }
+            advanceUntilIdle()
+            assertEquals(
+                4,
+                page.state.value!!
+                    .tags.size,
+            )
+            // The note names the posts' date: they are the ones saved at 1,000.
+            assertEquals(1_000, saved.contentAt)
+            assertEquals(1_000, page.state.value!!.shownAt)
         }
 
     @Test
@@ -458,5 +539,10 @@ class PlacePageControllerTest {
                     .place.uri,
             )
             assertNull(pages.state.value!!.card)
+        }
+
+    private fun at(ms: Long) =
+        object : Clock {
+            override fun now() = Instant.fromEpochMilliseconds(ms)
         }
 }
