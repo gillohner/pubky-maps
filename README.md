@@ -93,7 +93,11 @@ places each. Save keeps the place privately on the homeserver or on the phone on
 setting; the **Saved** screen (from the search page) lists saved places and lists. Public writes
 show a Public badge first. A write shows at once and goes into an outbox on the phone, sent in
 order; one without a connection waits and is retried, and goes out as soon as the phone is online
-again (the homeserver is tried again then, not only on a timer); one the homeserver refuses is
+again (the homeserver is tried again then, not only on a timer), also with the app closed: while
+writes wait, a JobScheduler job (`OutboxJobService`, expedited from Android 12 on, kept over a
+restart of the phone) has Android start the app when the phone has a network, and tries for one
+minute per run, again after a backoff while the homeserver cannot be reached (and, through a
+short guard job, also when the app's process dies during a run); one the homeserver refuses is
 taken back with a message.
 
 The map also shows the places people referenced on Pubky (from zoom 12, from Pinakes, clustered).
