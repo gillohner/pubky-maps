@@ -366,26 +366,28 @@ class OfflineMapsTest {
             assertEquals(listOf(light, light, light), store.resumed)
         }
 
+    /** An area whose check the app was closed during, before it could tell whether there is new data. */
+    private fun TestScope.markedArea(): Pair<FakeStore, OfflineMaps> {
+        val store = FakeStore()
+        val metadata = PackMetadata("area-1", "Map", 1, 8.448, 47.32, 8.625, 47.435, updating = true)
+        val complete = PackProgress(PackState.Complete, 100, 100, 3_000_000, 80, 2_500_000)
+        store.packs.value =
+            PackStoreState.Ready(listOf(StoredPack(Pack(light), metadata, complete), StoredPack(Pack(dark), metadata, complete)))
+        val offline = offlineMaps(store) { false }
+        assertEquals(OfflineMapStatus.Paused(100, update = true), offline.maps().single().status)
+        return store to offline
+    }
+
     @Test
     fun onMobileDataAMarkLeftWhenTheAppWasClosedIsCheckedAgain() =
         runTest(UnconfinedTestDispatcher()) {
-            val store = FakeStore()
-            // The app was closed during the first seconds of a check: the mark says nothing yet.
-            val metadata = PackMetadata("area-1", "Map", 1, 8.448, 47.32, 8.625, 47.435, updating = true)
-            val complete = PackProgress(PackState.Complete, 100, 100, 3_000_000, 80, 2_500_000)
-            store.packs.value =
-                PackStoreState.Ready(
-                    listOf(
-                        StoredPack(Pack(light), metadata, complete),
-                        StoredPack(Pack(dark), metadata.copy(updating = false), complete),
-                    ),
-                )
-            val offline = offlineMaps(store) { false }
-            assertEquals(OfflineMapStatus.Paused(100, update = true), offline.maps().single().status)
-
+            val (store, offline) = markedArea()
             advanceTimeBy(FIRST_CHECK)
             runCurrent()
             assertEquals(listOf(light), store.resumed)
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            assertEquals(listOf(light, dark), store.resumed)
             advanceTimeBy(QUIET_CHECK)
             runCurrent()
             // Nothing changed: Ready again, without waiting for Wi-Fi.
@@ -395,16 +397,24 @@ class OfflineMapsTest {
         }
 
     @Test
-    fun onMobileDataAnUpdateWithKnownNewDataWaitsForWiFi() =
+    fun onMobileDataAMarkLeftWhenTheAppWasClosedFindsNewDataOnceThenWaitsForWiFi() =
         runTest(UnconfinedTestDispatcher()) {
-            val store = FakeStore()
-            val metadata = PackMetadata("area-1", "Map", 1, 8.448, 47.32, 8.625, 47.435, updating = true, newData = true)
-            store.packs.value =
-                PackStoreState.Ready(listOf(StoredPack(Pack(light), metadata, PackProgress(PackState.Complete, 100, 100))))
-            offlineMaps(store) { false }
-            advanceTimeBy(FIRST_CHECK + CHECK_INTERVAL)
+            val (store, offline) = markedArea()
+            advanceTimeBy(FIRST_CHECK)
             runCurrent()
-            assertEquals(emptyList(), store.resumed)
+            store.progress(light, PackProgress(PackState.Downloading, 5, 100))
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            assertEquals(listOf(light), store.paused)
+            store.progress(light, PackProgress(PackState.Complete, 100, 100))
+            val stored = (store.packs.value as PackStoreState.Ready).packs.first { (it.handle as Pack).styleUrl == light }
+            assertEquals(true, stored.metadata?.newData)
+            assertEquals(OfflineMapStatus.Paused(100, update = true), offline.maps().single().status)
+            assertFalse(offline.downloading)
+            // The new data is known: later checks on mobile data leave it.
+            advanceTimeBy(CHECK_INTERVAL * 3)
+            runCurrent()
+            assertEquals(listOf(light), store.resumed)
         }
 
     @Test

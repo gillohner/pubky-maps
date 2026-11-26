@@ -244,8 +244,8 @@ class OfflineMaps(
      * on Wi-Fi): a walk that is still downloading after [QUIET_CHECK] is paused there, so the area
      * says "Update paused" instead of Ready, and the update goes on on Wi-Fi or with Resume. An
      * area marked "Update paused" without known new data ([PackMetadata.newData]: the app was
-     * closed during the first seconds of a check) is walked on mobile data too, which makes it
-     * Ready again when nothing changed.
+     * closed during the first seconds of a walk) is walked on mobile data too, which makes it Ready
+     * again when nothing changed and stores the new data when there is some.
      */
     internal fun checkForUpdates() {
         val wifi = unmetered()
@@ -276,8 +276,9 @@ class OfflineMaps(
      * ([checkForUpdates]); one that is still downloading after [QUIET_CHECK] shows as updating. A
      * check marks every pack it will walk ([PackMetadata.updating]) before the first starts, and
      * unmarks each once its walk is complete, so a check that stops early, also with the app, leaves
-     * the area marked as not up to date. A [probe] pauses a walk that is still downloading after
-     * [QUIET_CHECK] and ends there.
+     * the area marked as not up to date. A walk still downloading after [QUIET_CHECK] also marks
+     * that the pack has new data ([PackMetadata.newData]). A [probe] pauses such a walk and ends
+     * there.
      */
     private fun runInTurn(
         area: String,
@@ -311,11 +312,10 @@ class OfflineMaps(
                                 rest(handle)
                                 continue
                             }
+                            // Paused first, so the mark's write costs no download on mobile data.
+                            if (probe) stop(handle)
                             mark(handle) { it.copy(newData = true) }
-                            if (probe) {
-                                stop(handle)
-                                return@launch
-                            }
+                            if (probe) return@launch
                             updating.value += area
                         }
                         // [watch] takes the pack out once it is complete or paused. MapLibre may
