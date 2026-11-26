@@ -12,8 +12,10 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 
@@ -33,11 +35,11 @@ interface AreaTiles {
 interface OfflinePlaceStore {
     fun areas(): Set<String>
 
+    /** Stores the places of [area] in place of those it had. */
     fun replace(
         area: String,
         places: Sequence<OfflinePlace>,
-        indexedAt: Long,
-    ): Int
+    )
 
     fun delete(area: String)
 }
@@ -45,8 +47,10 @@ interface OfflinePlaceStore {
 /**
  * Keeps [store] in step with the offline maps ([maps]): the places of an area are read from its
  * tiles once it is Ready, read again once an update of its map data has finished, and deleted with
- * the area. Tiles are read only while no area downloads (MapLibre writes them then); tiles that
- * cannot be read now are tried again after [retry], up to [MAX_TRIES] times per area and process.
+ * the area. Tiles are read only while no area downloads (MapLibre writes them then). A read is tried
+ * again after [retry]: up to [MAX_TRIES] times per area and process when the tiles fail (no pack of
+ * the area, an unknown layout), up to [MAX_BUSY_TRIES] times per process when they are busy (each
+ * try copies MapLibre's database).
  */
 class OfflinePlaceIndexer(
     private val maps: StateFlow<OfflineMapsState>,
@@ -54,31 +58,40 @@ class OfflinePlaceIndexer(
     private val tiles: AreaTiles,
     private val scope: CoroutineScope,
     private val io: CoroutineDispatcher = Dispatchers.IO,
-    private val clock: Clock = Clock.System,
     private val retry: Duration = RETRY,
 ) {
     /** Areas seen updating in this process: their places are read again once they are Ready. */
-    private val updated = mutableSetOf<String>()
+    private val updated = MutableStateFlow<Set<String>>(emptySet())
 
     /** Failed reads per area in this process. */
     private val failures = mutableMapOf<String, Int>()
 
+    /** Reads in this process that found the tiles busy. */
+    private var busy = 0
+
     /** Counts the retries, so the same list of areas is looked at again. */
     private val tries = MutableStateFlow(0)
 
-    private var retrying = false
+    private val retrying = MutableStateFlow(false)
 
     fun start() {
         scope.launch(io) {
-            combine(maps.filterIsInstance<OfflineMapsState.Ready>(), tries) { state, _ -> state.maps }
-                .distinctUntilChanged()
+            val lists =
+                maps
+                    .filterIsInstance<OfflineMapsState.Ready>()
+                    .map { it.maps }
+                    // Every list, also those the conflation below leaves out while a read runs.
+                    .onEach { list ->
+                        val updating = list.filter { (it.status as? OfflineMapStatus.Downloading)?.update == true }.map { it.id }
+                        if (updating.isNotEmpty()) updated.update { it + updating }
+                    }.distinctUntilChanged()
+            combine(lists, tries) { list, _ -> list }
                 .conflate()
                 .collect { sync(it) }
         }
     }
 
     private suspend fun sync(maps: List<OfflineMap>) {
-        maps.filter { (it.status as? OfflineMapStatus.Downloading)?.update == true }.forEach { updated += it.id }
         val stored =
             try {
                 store.areas()
@@ -92,44 +105,50 @@ class OfflinePlaceIndexer(
         if (maps.any { it.status is OfflineMapStatus.Downloading }) return
         val wanted =
             maps
-                .filter { it.status == OfflineMapStatus.Ready && (it.id !in stored || it.id in updated) }
+                .filter { it.status == OfflineMapStatus.Ready && (it.id !in stored || it.id in updated.value) }
                 .map { it.id }
                 .filter { (failures[it] ?: 0) < MAX_TRIES }
-        if (wanted.isEmpty()) return
+        if (wanted.isEmpty() || busy >= MAX_BUSY_TRIES) return
         val done =
             try {
                 tiles.open { places ->
                     wanted.filter { area ->
                         val found = places.places(area) ?: return@filter false
-                        store.replace(area, found, clock.now().toEpochMilliseconds())
+                        store.replace(area, found)
                         true
                     }
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                null
+                emptyList()
             }
-        done?.forEach { updated -= it }
-        val failed = wanted - done.orEmpty().toSet()
+        if (done == null) {
+            busy++
+            return later()
+        }
+        updated.update { it - done.toSet() }
+        val failed = wanted - done.toSet()
         failed.forEach { failures[it] = (failures[it] ?: 0) + 1 }
         if (failed.isNotEmpty()) later()
     }
 
     private fun later() {
-        if (retrying) return
-        retrying = true
+        if (!retrying.compareAndSet(expect = false, update = true)) return
         scope.launch {
             delay(retry)
-            retrying = false
-            tries.value++
+            retrying.value = false
+            tries.update { it + 1 }
         }
     }
 
     companion object {
         val RETRY = 1.minutes
 
-        /** Each try copies MapLibre's database: an area that fails this often waits for the next start. */
+        /** An area whose tiles fail this often waits for the next start. */
         const val MAX_TRIES = 5
+
+        /** Busy tiles (MapLibre writing during the copy) are tried this often per start, about half an hour. */
+        const val MAX_BUSY_TRIES = 30
     }
 }

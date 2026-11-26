@@ -3,10 +3,7 @@
 
 -- An area whose places are here.
 CREATE TABLE area (
-    id TEXT NOT NULL PRIMARY KEY,
-    places INTEGER NOT NULL,
-    -- epoch milliseconds
-    indexed_at INTEGER NOT NULL
+    id TEXT NOT NULL PRIMARY KEY
 );
 
 CREATE TABLE place (
@@ -40,7 +37,7 @@ areas:
 SELECT id FROM area;
 
 putArea:
-INSERT OR REPLACE INTO area(id, places, indexed_at) VALUES (?, ?, ?);
+INSERT OR REPLACE INTO area(id) VALUES (?);
 
 insertPlace:
 INSERT INTO place(area, name, osm_type, osm_id, tag_key, tag_value, category, lat, lon) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);

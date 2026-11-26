@@ -1,6 +1,7 @@
 package to.pubky.maps.offline
 
 import android.content.Context
+import androidx.sqlite.db.SupportSQLiteDatabase
 import app.cash.sqldelight.db.AfterVersion
 import app.cash.sqldelight.db.QueryResult
 import app.cash.sqldelight.db.SqlDriver
@@ -9,21 +10,37 @@ import app.cash.sqldelight.driver.android.AndroidSqliteDriver
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import to.pubky.maps.offline.db.OfflinePlacesDatabase
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.IOException
+import java.io.RandomAccessFile
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.nio.file.attribute.BasicFileAttributes
 import java.util.zip.GZIPInputStream
 import java.util.zip.InflaterInputStream
 
-/** The places of the offline areas, in the no-backup folder (they are built again from the tiles). */
+/**
+ * The places of the offline areas, in the no-backup folder (they are built again from the tiles).
+ * Write-ahead logging lets a search read while an area's places are being written, which takes one
+ * transaction of up to tens of seconds.
+ */
 fun androidOfflinePlaceIndex(context: Context): SqlOfflinePlaceIndex =
     SqlOfflinePlaceIndex(
-        AndroidSqliteDriver(OfflinePlacesDatabase.Schema, context, File(context.noBackupFilesDir, "offline-places.db").path),
+        AndroidSqliteDriver(
+            schema = OfflinePlacesDatabase.Schema,
+            context = context,
+            name = File(context.noBackupFilesDir, "offline-places.db").path,
+            callback =
+                object : AndroidSqliteDriver.Callback(OfflinePlacesDatabase.Schema) {
+                    override fun onConfigure(db: SupportSQLiteDatabase) {
+                        db.enableWriteAheadLogging()
+                    }
+                },
+        ),
     )
 
 /**
@@ -42,6 +59,7 @@ fun startOfflinePlaceIndexer(
             database = File(context.noBackupFilesDir, "maplibre.db"),
             copy = File(context.cacheDir, "maplibre-copy.db"),
         )
+    scope.launch(Dispatchers.IO) { tiles.deleteCopy() }
     OfflinePlaceIndexer(maps.state, index, tiles, scope).start()
 }
 
@@ -77,15 +95,17 @@ internal class MapLibreDatabaseCopy(
 
     private fun openCopy(): SqlDriver = AndroidSqliteDriver(MapLibreLayout, context, copy.path)
 
-    private fun deleteCopy() {
+    /** Deletes the copy and its journal files, also those a process that died left. */
+    fun deleteCopy() {
         for (suffix in listOf("", "-journal", "-wal", "-shm")) File(copy.path + suffix).delete()
     }
 }
 
 /**
  * Copies [database] to [copy] when no write runs on it; false when one does (its rollback journal
- * exists, or its size or time changed during the copy), when it is missing, or when there is no room
- * for the copy and what SQLite may need to open it.
+ * exists, its size or time changed during the copy, or the copy's SQLite change counter is not the
+ * file's after the copy), when it is missing, or when there is no room for the copy and what SQLite
+ * may need to open it.
  */
 internal fun copyUnchanged(
     database: File,
@@ -104,8 +124,21 @@ internal fun copyUnchanged(
     } catch (e: IOException) {
         return false
     }
-    return stamp(database) == before
+    return stamp(database) == before && changeCounter(copy)?.contentEquals(changeCounter(database)) == true
 }
+
+/** SQLite's file change counter (header bytes 24 to 27), which every write transaction raises. */
+private fun changeCounter(file: File): ByteArray? =
+    try {
+        RandomAccessFile(file, "r").use { f ->
+            ByteArray(4).also {
+                f.seek(24)
+                f.readFully(it)
+            }
+        }
+    } catch (e: IOException) {
+        null
+    }
 
 /** Size and modification time of [database], or null while its rollback journal says a write runs. */
 private fun stamp(database: File): Pair<Long, Any>? {

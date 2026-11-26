@@ -1,6 +1,7 @@
 package to.pubky.maps.offline
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -10,7 +11,9 @@ import kotlinx.coroutines.test.runTest
 import to.pubky.maps.links.GeoPoint
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class OfflinePlaceIndexerTest {
@@ -23,11 +26,9 @@ class OfflinePlaceIndexerTest {
         override fun replace(
             area: String,
             places: Sequence<OfflinePlace>,
-            indexedAt: Long,
-        ): Int {
+        ) {
             replaced += area
             stored[area] = places.map { it.name }.toList()
-            return stored.getValue(area).size
         }
 
         override fun delete(area: String) {
@@ -35,15 +36,21 @@ class OfflinePlaceIndexerTest {
         }
     }
 
-    /** The tiles of each area; [busy] makes every open fail as when MapLibre is writing. */
+    /** The tiles of each area; [busy] makes every open find them busy, [broken] makes it fail. */
     private class FakeTiles : AreaTiles {
         val areas = mutableMapOf<String, List<String>>()
         var busy = false
+        var broken = false
         var opened = 0
+
+        /** How long a read takes. */
+        var takes = Duration.ZERO
 
         override suspend fun <T> open(read: (TilePlaces) -> T): T? {
             opened++
+            delay(takes)
             if (busy) return null
+            if (broken) throw IllegalStateException("MapLibre's offline database has version 7")
             return read(
                 object : TilePlaces {
                     override fun places(area: String) =
@@ -119,10 +126,10 @@ class OfflinePlaceIndexerTest {
         }
 
     @Test
-    fun busyTilesAreTriedAgainAMinuteLaterAndAtMostFiveTimes() =
+    fun brokenTilesAreTriedAgainAMinuteLaterAndAtMostFiveTimes() =
         runTest {
             tiles.areas["a"] = listOf("Café Rosa")
-            tiles.busy = true
+            tiles.broken = true
             start()
             maps.value = OfflineMapsState.Ready(listOf(map("a", OfflineMapStatus.Ready)))
             runCurrent()
@@ -133,11 +140,63 @@ class OfflinePlaceIndexerTest {
             advanceTimeBy(10.minutes)
             runCurrent()
             assertEquals(OfflinePlaceIndexer.MAX_TRIES, tiles.opened)
-            tiles.busy = false
+            tiles.broken = false
             maps.value = OfflineMapsState.Ready(listOf(map("a", OfflineMapStatus.Ready).copy(bytes = 1)))
             runCurrent()
             assertEquals(OfflinePlaceIndexer.MAX_TRIES, tiles.opened)
             assertEquals(emptyMap(), store.stored)
+        }
+
+    @Test
+    fun busyTilesAreTriedAgainLongerAndCountForNoArea() =
+        runTest {
+            tiles.areas["a"] = listOf("Café Rosa")
+            tiles.busy = true
+            start()
+            maps.value = OfflineMapsState.Ready(listOf(map("a", OfflineMapStatus.Ready)))
+            runCurrent()
+            advanceTimeBy(9.minutes)
+            runCurrent()
+            assertEquals(10, tiles.opened)
+            tiles.busy = false
+            advanceTimeBy(1.minutes)
+            runCurrent()
+            assertEquals(setOf("a"), store.stored.keys)
+        }
+
+    @Test
+    fun busyTilesStopAfterHalfAnHour() =
+        runTest {
+            tiles.busy = true
+            start()
+            maps.value = OfflineMapsState.Ready(listOf(map("a", OfflineMapStatus.Ready)))
+            runCurrent()
+            advanceTimeBy(60.minutes)
+            runCurrent()
+            assertEquals(OfflinePlaceIndexer.MAX_BUSY_TRIES, tiles.opened)
+        }
+
+    @Test
+    fun anUpdateThatEndsWhileAnotherAreaIsReadIsNotMissed() =
+        runTest {
+            tiles.areas["b"] = listOf("Beck")
+            start()
+            maps.value = OfflineMapsState.Ready(listOf(map("b", OfflineMapStatus.Ready)))
+            runCurrent()
+            // A new area is read for 30 s; b's update starts and ends meanwhile.
+            tiles.areas["a"] = listOf("Café Rosa")
+            tiles.takes = 30.seconds
+            maps.value = OfflineMapsState.Ready(listOf(map("a", OfflineMapStatus.Ready), map("b", OfflineMapStatus.Ready)))
+            runCurrent()
+            tiles.areas["b"] = listOf("Beck", "Neu")
+            maps.value =
+                OfflineMapsState.Ready(listOf(map("a", OfflineMapStatus.Ready), map("b", OfflineMapStatus.Downloading(5, update = true))))
+            runCurrent()
+            maps.value = OfflineMapsState.Ready(listOf(map("a", OfflineMapStatus.Ready), map("b", OfflineMapStatus.Ready).copy(bytes = 2)))
+            runCurrent()
+            advanceTimeBy(70.seconds)
+            runCurrent()
+            assertEquals(listOf("Beck", "Neu"), store.stored["b"])
         }
 
     @Test

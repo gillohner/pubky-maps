@@ -65,7 +65,6 @@ class OfflinePlaceIndexDatabaseTest {
                 place("Bahnhofstrasse", 47.3720, 8.5390, key = "highway", value = "minor", category = "Street"),
                 place("Brunnen", 47.3769, 8.5417, osm = 4, value = "fountain", category = "Fountain"),
             ),
-            indexedAt = 1,
         )
         assertEquals(setOf("a"), index.areas())
         assertEquals(listOf("Rosa Bar", "Café Rosa"), index.find("rosa"))
@@ -81,19 +80,17 @@ class OfflinePlaceIndexDatabaseTest {
     @Test
     fun anAreaIsReplacedAndDeletedAsAWholeAndAPlaceSeenTwiceIsStoredOnce() {
         val index = index()
-        val stored =
-            index.replace(
-                "a",
-                sequenceOf(
-                    place("Café Rosa", 47.38, 8.54, osm = 1),
-                    place("Café Rosa", 47.38, 8.54, osm = 1),
-                    place("Beck", 47.38, 8.54, osm = 2),
-                ),
-                indexedAt = 1,
-            )
-        assertEquals(2, stored)
-        index.replace("b", sequenceOf(place("Café Zürichsee", 47.36, 8.54, osm = 3)), indexedAt = 1)
-        index.replace("a", sequenceOf(place("Beck Neu", 47.38, 8.54, osm = 2)), indexedAt = 2)
+        index.replace(
+            "a",
+            sequenceOf(
+                place("Café Rosa", 47.38, 8.54, osm = 1),
+                place("Café Rosa", 47.38, 8.54, osm = 1),
+                place("Beck", 47.38, 8.54, osm = 2),
+            ),
+        )
+        assertEquals(listOf("Café Rosa"), index.find("rosa"))
+        index.replace("b", sequenceOf(place("Café Zürichsee", 47.36, 8.54, osm = 3)))
+        index.replace("a", sequenceOf(place("Beck Neu", 47.38, 8.54, osm = 2)))
         assertEquals(emptyList(), index.find("rosa"))
         assertEquals(listOf("Beck Neu"), index.find("beck"))
         index.delete("a")
@@ -109,14 +106,15 @@ class OfflinePlaceIndexDatabaseTest {
             "a",
             sequenceOf(
                 place("Bahnhofstrasse", 47.3720, 8.5390, key = "highway", value = "minor", category = "Street"),
-                place("Bahnhofstrasse", 47.3740, 8.5395, key = "highway", value = "minor", category = "Street"),
+                // In the next tile: another sameness, so only the search's distance check makes it one.
+                place("Bahnhofstrasse", 47.3760, 8.5395, key = "highway", value = "minor", category = "Street"),
                 // Another town's street of the same name.
                 place("Bahnhofstrasse", 47.4500, 8.5600, key = "highway", value = "minor", category = "Street"),
             ),
-            indexedAt = 1,
         )
+        // The piece nearest the map centre stands for the street.
         val found = runBlocking { index.search("bahnhofstrasse", zurich) }!!
-        assertEquals(listOf(47.3720, 47.4500), found.map { it.point.lat })
+        assertEquals(listOf(47.3760, 47.4500), found.map { it.point.lat })
     }
 
     @Test
@@ -126,7 +124,7 @@ class OfflinePlaceIndexDatabaseTest {
             (0 until 60_000).asSequence().map { i ->
                 place("Place $i ${WORDS[i % WORDS.size]}", 47.30 + (i % 300) * 0.0005, 8.45 + (i / 300) * 0.0008, osm = i.toLong() + 1)
             }
-        index.replace("a", places, indexedAt = 1)
+        index.replace("a", places)
         index.find("bäckerei")
         val took = measureTime { assertEquals(30, index.find("bäck")?.size) }
         assertTrue(took.inWholeMilliseconds < 100, "search took $took")
@@ -170,7 +168,8 @@ class OfflinePlaceIndexDatabaseTest {
         listOf(
             "CREATE TABLE regions (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, definition TEXT NOT NULL, description BLOB)",
             "CREATE TABLE tiles (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, url_template TEXT NOT NULL, " +
-                "pixel_ratio INTEGER NOT NULL, z INTEGER NOT NULL, x INTEGER NOT NULL, y INTEGER NOT NULL, expires INTEGER, modified INTEGER, etag TEXT, data BLOB, " +
+                "pixel_ratio INTEGER NOT NULL, z INTEGER NOT NULL, x INTEGER NOT NULL, y INTEGER NOT NULL, " +
+                "expires INTEGER, modified INTEGER, etag TEXT, data BLOB, " +
                 "compressed INTEGER NOT NULL DEFAULT 0, accessed INTEGER NOT NULL, must_revalidate INTEGER NOT NULL DEFAULT 0, " +
                 "UNIQUE (url_template, pixel_ratio, z, x, y))",
             "CREATE TABLE region_tiles (region_id INTEGER NOT NULL REFERENCES regions(id) ON DELETE CASCADE, " +
@@ -195,7 +194,8 @@ class OfflinePlaceIndexDatabaseTest {
         ) {
             driver.execute(
                 null,
-                "INSERT INTO tiles (id, url_template, pixel_ratio, z, x, y, data, compressed, accessed) VALUES (?, ?, 1, ?, 8580, 5737, ?, ?, 0)",
+                "INSERT INTO tiles (id, url_template, pixel_ratio, z, x, y, data, compressed, accessed) " +
+                    "VALUES (?, ?, 1, ?, 8580, 5737, ?, ?, 0)",
                 5,
             ) {
                 bindLong(0, id)

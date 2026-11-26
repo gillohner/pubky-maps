@@ -202,8 +202,8 @@ class SearchScreenshotTest {
     @Composable
     private fun Map(
         state: SearchState,
-        card: (@Composable () -> Unit)? = null,
         credits: List<AttributionLink> = ServerDefaults.lists.searchAttribution(),
+        card: (@Composable () -> Unit)? = null,
     ) {
         val dark = isSystemInDarkTheme()
         MapScreen(
@@ -375,7 +375,14 @@ class SearchScreenshotTest {
         get() {
             val offline =
                 listOf(
-                    OfflinePlace("Kunsthaus Zürich", OsmId(OsmType.Relation, 3768127), "tourism", "museum", "Museum", GeoPoint(47.3702, 8.5480)),
+                    OfflinePlace(
+                        "Kunsthaus Zürich",
+                        OsmId(OsmType.Relation, 3768127),
+                        "tourism",
+                        "museum",
+                        "Museum",
+                        GeoPoint(47.3702, 8.5480),
+                    ),
                     OfflinePlace("Kunsthausstrasse", null, "highway", "minor", "Street", GeoPoint(47.3697, 8.5486)),
                     OfflinePlace("Kunsthaus Bar", OsmId(OsmType.Node, 4_012_345_678), "amenity", "bar", "Bar", GeoPoint(47.3705, 8.5476)),
                 )

@@ -39,39 +39,31 @@ class SqlOfflinePlaceIndex(
     /** The areas whose places are here. */
     override fun areas(): Set<String> = queries.areas().executeAsList().toSet()
 
-    /**
-     * Stores the places of [area] in place of those it had; a place seen twice ([OfflinePlace.sameness])
-     * is stored once. Returns how many it stored.
-     */
+    /** Stores the places of [area] in place of those it had; a place seen twice ([OfflinePlace.sameness]) is stored once. */
     override fun replace(
         area: String,
         places: Sequence<OfflinePlace>,
-        indexedAt: Long,
-    ): Int =
-        queries.transactionWithResult {
-            removeArea(area)
-            val seen = HashSet<String>()
-            var count = 0
-            for (place in places) {
-                if (!seen.add(place.sameness)) continue
-                queries.insertPlace(
-                    area = area,
-                    name = place.name,
-                    osm_type = place.osm?.type?.name,
-                    osm_id = place.osm?.id,
-                    tag_key = place.key,
-                    tag_value = place.value,
-                    category = place.category,
-                    lat = place.point.lat,
-                    lon = place.point.lon,
-                )
-                val id = queries.lastPlaceId().executeAsOne()
-                wordsOf(place).forEach { queries.insertWord(it, id) }
-                count++
-            }
-            queries.putArea(area, count.toLong(), indexedAt)
-            count
+    ) = queries.transaction {
+        removeArea(area)
+        val seen = HashSet<String>()
+        for (place in places) {
+            if (!seen.add(place.sameness)) continue
+            queries.insertPlace(
+                area = area,
+                name = place.name,
+                osm_type = place.osm?.type?.name,
+                osm_id = place.osm?.id,
+                tag_key = place.key,
+                tag_value = place.value,
+                category = place.category,
+                lat = place.point.lat,
+                lon = place.point.lon,
+            )
+            val id = queries.lastPlaceId().executeAsOne()
+            wordsOf(place).forEach { queries.insertWord(it, id) }
         }
+        queries.putArea(area)
+    }
 
     override fun delete(area: String) = queries.transaction { removeArea(area) }
 
