@@ -59,7 +59,9 @@ wait_for "The map in the frame, light and dark, to use without a connection." 30
 screenshot picker
 check_alive "area picker"
 xy=$(wait_for "Download" 5) || fail "no Download button in the area picker"
-# From here on the requests are the download's (the map has its tiles already).
+# From here on the requests are the download's (the map has its tiles already); a tile request of
+# the map that is still open finishes first.
+sleep 2
 : > "$log"
 adb shell input tap $xy
 

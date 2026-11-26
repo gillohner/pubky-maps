@@ -76,8 +76,6 @@ data class PackMetadata(
     /** The app stopped the download at the limit of one download ([OfflineLimits]). */
     val stopped: Boolean = false,
 ) {
-    val bounds: AreaBounds get() = AreaBounds(west, south, east, north)
-
     fun encode(): ByteArray = json.encodeToString(serializer(), this).encodeToByteArray()
 
     companion object {

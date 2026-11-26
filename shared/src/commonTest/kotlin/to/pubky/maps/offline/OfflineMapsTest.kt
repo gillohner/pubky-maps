@@ -26,7 +26,11 @@ class OfflineMapsTest {
         val packs = MutableStateFlow<PackStoreState>(PackStoreState.Ready(emptyList()))
         val resumed = ArrayList<String>()
         val paused = ArrayList<String>()
-        var failCreate = false
+        var failCreate: String? = null
+        val deleted = ArrayList<String>()
+
+        /** Runs while the pack of a style is being created. */
+        var whileCreating: (String) -> Unit = {}
 
         /** Whether the controller said a download runs at the moment each pack was resumed. */
         var downloadingAtResume = ArrayList<Boolean>()
@@ -42,7 +46,8 @@ class OfflineMapsTest {
             maxZoom: Int,
             metadata: PackMetadata,
         ): Any {
-            if (failCreate) error("disk full")
+            if (failCreate == styleUrl) error("disk full")
+            whileCreating(styleUrl)
             val pack = Pack(styleUrl)
             packs.value = PackStoreState.Ready(ready + StoredPack(pack, metadata, PackProgress(PackState.Paused)))
             return pack
@@ -53,12 +58,13 @@ class OfflineMapsTest {
             downloadingAtResume += controller?.downloading == true
         }
 
+        /** As MapLibre, reports the pause later: the test sets it with [progress]. */
         override fun pause(handle: Any) {
             paused += (handle as Pack).styleUrl
-            update(handle) { it.copy(progress = it.progress.copy(state = PackState.Paused)) }
         }
 
         override suspend fun delete(handle: Any) {
+            deleted += (handle as Pack).styleUrl
             packs.value = PackStoreState.Ready(ready.filter { it.handle !== handle })
         }
 
@@ -143,16 +149,37 @@ class OfflineMapsTest {
             val store = FakeStore()
             val offline = offlineMaps(store)
             offline.download(zurich, listOf(light))
-            store.progress(light, PackProgress(PackState.Downloading, 900, 2_000, 30_000_000, 900, OfflineLimits.MAX_TILE_BYTES))
+            store.progress(light, PackProgress(PackState.Downloading, 900, 2_000, 30_000_000, 900, 47_000_000))
             assertEquals(emptyList(), store.paused)
-            store.progress(light, PackProgress(PackState.Downloading, 901, 2_000, 30_000_000, 901, OfflineLimits.MAX_TILE_BYTES + 1))
+            // Stopped short of 50 MB: 4 more tiles may be on their way.
+            store.progress(light, PackProgress(PackState.Downloading, 901, 2_000, 30_000_000, 901, 48_000_000))
             assertEquals(listOf(light), store.paused)
             assertEquals(OfflineMapStatus.TooLarge, offline.maps().single().status)
+            assertTrue(offline.downloading)
+            store.progress(light, PackProgress(PackState.Paused, 901, 2_000, 30_000_000, 901, 48_000_000))
             assertFalse(offline.downloading)
 
             offline.download(zurich, listOf(dark))
-            store.progress(dark, PackProgress(PackState.Downloading, 3_001, 4_000, 1_000_000, OfflineLimits.MAX_TILES + 1, 1_000_000))
+            store.progress(dark, PackProgress(PackState.Downloading, 2_995, 4_000, 1_000_000, 2_995, 1_000_000))
+            assertEquals(listOf(light), store.paused)
+            store.progress(dark, PackProgress(PackState.Downloading, 2_996, 4_000, 1_000_000, 2_996, 1_000_000))
             assertEquals(listOf(light, dark), store.paused)
+        }
+
+    @Test
+    fun aPausedDownloadIsThrottledUntilMapLibreHasPausedIt() =
+        runTest(UnconfinedTestDispatcher()) {
+            val store = FakeStore()
+            val offline = offlineMaps(store)
+            offline.download(zurich, listOf(light))
+            store.progress(light, PackProgress(PackState.Downloading, 10, 100))
+            offline.pause("area-1")
+            assertEquals(listOf(light), store.paused)
+            store.progress(light, PackProgress(PackState.Downloading, 11, 100))
+            assertTrue(offline.downloading)
+            store.progress(light, PackProgress(PackState.Paused, 11, 100))
+            assertFalse(offline.downloading)
+            assertEquals(OfflineMapStatus.Paused(11), offline.maps().single().status)
         }
 
     @Test
@@ -192,14 +219,55 @@ class OfflineMapsTest {
         runTest(UnconfinedTestDispatcher()) {
             val store = FakeStore()
             val offline = offlineMaps(store)
-            store.failCreate = true
+            store.failCreate = light
             offline.download(zurich, listOf(light))
             assertEquals("Couldn't start the download: disk full", offline.problem.value)
             assertFalse(offline.downloading)
-            store.failCreate = false
+            store.failCreate = null
             offline.download(zurich, listOf(light))
             assertNull(offline.problem.value)
         }
+
+    @Test
+    fun anAreaWhoseSecondStyleFailsIsNotKeptHalf() =
+        runTest(UnconfinedTestDispatcher()) {
+            val store = FakeStore()
+            val offline = offlineMaps(store)
+            store.failCreate = dark
+            offline.download(zurich, listOf(light, dark))
+            assertEquals(listOf(light), store.deleted)
+            assertEquals(emptyList(), offline.maps())
+            assertFalse(offline.downloading)
+        }
+
+    @Test
+    fun aStyleCreatedAfterItsAreaWasDeletedIsDeletedToo() =
+        runTest(UnconfinedTestDispatcher()) {
+            val store = FakeStore()
+            val offline = offlineMaps(store)
+            store.whileCreating = { if (it == dark) offline.delete("area-1") }
+            offline.download(zurich, listOf(light, dark))
+            assertEquals(listOf(light, dark), store.deleted)
+            assertEquals(listOf(light), store.resumed)
+            assertEquals(emptyList(), offline.maps())
+            assertFalse(offline.downloading)
+        }
+
+    @Test
+    fun theRowSaysWhatTheDownloadDoes() {
+        fun text(
+            status: OfflineMapStatus,
+            bytes: Long = 6_300_000,
+        ) = statusText(OfflineMap("a", "Map", 1, status, bytes))
+        assertEquals("Ready · 6.3\u00A0MB", text(OfflineMapStatus.Ready))
+        assertEquals(
+            "Downloading · 42% · 6.3\u00A0MB\nTrying again: No connection",
+            text(OfflineMapStatus.Downloading(42, "No connection")),
+        )
+        assertEquals("Paused at 64%", text(OfflineMapStatus.Paused(64)))
+        val two = OfflineMapsState.Ready(List(2) { OfflineMap("$it", "Map", 1, OfflineMapStatus.Ready, 0) })
+        assertEquals("2 areas on this phone.", offlineMapsSummary(two))
+    }
 
     @Test
     fun anAreaTooLargeForOneDownloadIsRefused() =

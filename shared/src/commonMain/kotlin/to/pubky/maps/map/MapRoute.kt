@@ -412,7 +412,8 @@ fun MapRoute(
 
 /**
  * The area picker on the live map while [offline] asks for an area: the frame's area is measured
- * whenever the camera rests, back closes the picker, Download starts the download in [styleUrls].
+ * whenever the camera rests (and unknown while it moves, so Download never takes an area the frame
+ * has left), back closes the picker, Download starts the download in [styleUrls].
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -428,8 +429,7 @@ private fun rememberAreaPicker(
     var frame by remember { mutableStateOf<DpRect?>(null) }
     val area by produceState<AreaBounds?>(null, mapState) {
         snapshotFlow { if (mapState.isCameraMoving) null else mapState.cameraPosition to frame }
-            .filterNotNull()
-            .collect { (_, inFrame) -> value = inFrame?.let { mapState.areaIn(it) } }
+            .collect { resting -> value = resting?.second?.let { mapState.areaIn(it) } }
     }
     return AreaPickerUi(
         fits = area?.let { fitsInOneDownload(it) },

@@ -68,6 +68,12 @@ class OfflineMaps(
 ) {
     private val started = MutableStateFlow<Set<Any>>(emptySet())
 
+    /** Packs paused by the app that MapLibre may not have paused yet. */
+    private val stopping = MutableStateFlow<Set<Any>>(emptySet())
+
+    /** Areas deleted in this process, so a style still being created for one is not downloaded. */
+    private val deleted = mutableSetOf<String>()
+
     /** Read on MapLibre's threads for every request: a plain read of the current packs. */
     val downloading: Boolean get() = started.value.isNotEmpty()
 
@@ -133,35 +139,62 @@ class OfflineMaps(
                 north = bounds.north,
             )
         scope.launch {
+            val created = ArrayList<Any>()
             try {
                 styleUrls.distinct().forEach { url ->
                     val handle = store.create(url, bounds, OfflineLimits.MAX_ZOOM, metadata)
+                    created += handle
+                    // Deleted while this style was being created: it goes too.
+                    if (metadata.area in deleted) {
+                        store.delete(handle)
+                        return@launch
+                    }
                     started.value += handle
                     store.resume(handle)
                 }
             } catch (e: Exception) {
                 _problem.value = "Couldn't start the download: ${e.message ?: "the offline storage failed"}"
+                // Half an area would not show in both themes: the styles already created go.
+                created.forEach { handle ->
+                    runCatching {
+                        store.pause(handle)
+                        store.delete(handle)
+                    }
+                    started.value -= handle
+                }
             }
         }
     }
 
     /** Continues a paused offline map. */
     fun resume(id: String) {
+        _problem.value = null
         packs.filter { it.areaId == id && it.progress.state != PackState.Complete }.forEach {
+            stopping.value -= it.handle
             started.value += it.handle
-            store.resume(it.handle)
+            runCatching { store.resume(it.handle) }
+                .onFailure { e -> _problem.value = "Couldn't resume the download: ${e.message ?: "the offline storage failed"}" }
         }
+    }
+
+    /** Pauses an offline map that is downloading; [resume] continues it. */
+    fun pause(id: String) {
+        _problem.value = null
+        packs.filter { it.areaId == id && it.handle in started.value }.forEach { stop(it.handle) }
     }
 
     fun delete(id: String) {
         val area = packs.filter { it.areaId == id }
+        deleted += id
         _problem.value = null
         scope.launch {
             try {
                 area.forEach {
                     store.pause(it.handle)
-                    started.value -= it.handle
                     store.delete(it.handle)
+                    // Only now: until the pack is gone, its requests may still be on their way.
+                    started.value -= it.handle
+                    stopping.value -= it.handle
                 }
             } catch (e: Exception) {
                 _problem.value = "Couldn't delete the offline map: ${e.message ?: "the offline storage failed"}"
@@ -169,24 +202,47 @@ class OfflineMaps(
         }
     }
 
-    /** Stops a pack at the limits of one download, and forgets a pack that finished. */
+    /**
+     * Pauses a pack. It stays in [started] (and requests stay throttled) until the store reports it
+     * is no longer downloading, as MapLibre pauses after the call returns.
+     */
+    private fun stop(handle: Any) {
+        stopping.value += handle
+        runCatching { store.pause(handle) }
+            .onFailure { e -> _problem.value = "Couldn't pause the download: ${e.message ?: "the offline storage failed"}" }
+    }
+
+    /** Stops a pack near the limits of one download, and forgets a pack that finished or paused. */
     private fun watch(pack: StoredPack) {
         val progress = pack.progress
-        if (pack.handle !in started.value) return
+        val handle = pack.handle
+        if (handle !in started.value) return
         when {
-            progress.state == PackState.Complete -> {
-                started.value -= pack.handle
+            progress.state == PackState.Complete || (handle in stopping.value && progress.state != PackState.Downloading) -> {
+                started.value -= handle
+                stopping.value -= handle
             }
 
-            progress.completedTiles > OfflineLimits.MAX_TILES || progress.completedTileBytes > OfflineLimits.MAX_TILE_BYTES -> {
-                store.pause(pack.handle)
-                started.value -= pack.handle
+            handle !in stopping.value && overLimit(progress) -> {
+                stop(handle)
                 val metadata = pack.metadata ?: return
-                scope.launch { runCatching { store.setMetadata(pack.handle, metadata.copy(stopped = true)) } }
+                scope.launch { runCatching { store.setMetadata(handle, metadata.copy(stopped = true)) } }
             }
         }
     }
 }
+
+/**
+ * Whether a download must stop: the check runs as resources complete, while up to
+ * [OfflineLimits.PARALLEL_REQUESTS] more are on their way, so it stops that many tiles (and their
+ * bytes) short of the limits.
+ */
+internal fun overLimit(progress: PackProgress): Boolean =
+    progress.completedTiles >= OfflineLimits.MAX_TILES - OfflineLimits.PARALLEL_REQUESTS ||
+        progress.completedTileBytes >= OfflineLimits.MAX_TILE_BYTES - OfflineLimits.PARALLEL_REQUESTS * LARGEST_TILE_BYTES
+
+/** About the largest vector tile of a dense city at zoom 14. */
+private const val LARGEST_TILE_BYTES = 500_000L
 
 private val StoredPack.areaId: String get() = metadata?.area ?: "pack-${handle.hashCode()}"
 

@@ -27,6 +27,10 @@ data class AreaBounds(
 object OfflineLimits {
     const val MAX_TILES: Long = 3_000
 
+    /**
+     * Counted in tiles: the style, its sprites and its fonts are fetched once per phone and shared
+     * by every download.
+     */
     const val MAX_TILE_BYTES: Long = 50_000_000
 
     const val PARALLEL_REQUESTS: Int = 4

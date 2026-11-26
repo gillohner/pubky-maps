@@ -3,6 +3,7 @@ package to.pubky.maps.offline
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.scan
@@ -75,9 +76,12 @@ class MapLibrePackStore(
     ) = (handle as OfflinePack).setMetadata(metadata.encode())
 }
 
-/** A pack with its metadata and progress; a failure keeps the counts of the last report. */
+/**
+ * A pack with its metadata and progress; a failure keeps the counts of the last report. The fold's
+ * empty start is left out, so a list that changes does not show every pack at 0 % for a moment.
+ */
 private fun OfflinePack.stored(): Flow<StoredPack> =
-    combine(metadata, downloadProgress.scan(PackProgress()) { last, next -> next.applyTo(last) }) { bytes, progress ->
+    combine(metadata, downloadProgress.scan(PackProgress()) { last, next -> next.applyTo(last) }.drop(1)) { bytes, progress ->
         StoredPack(this, PackMetadata.decode(bytes), progress)
     }
 

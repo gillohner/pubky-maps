@@ -334,6 +334,7 @@ private fun AppNavigation(
                         navController.popBackStack(MapDestination, inclusive = false)
                     },
                     onResume = offline::resume,
+                    onPause = offline::pause,
                     onDelete = offline::delete,
                     onBack = back,
                     problem = problem,

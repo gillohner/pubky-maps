@@ -31,7 +31,7 @@ import to.pubky.maps.update.formatMegabytes
 
 /**
  * Offline maps: the areas downloaded to the phone, each with its state and size, a way to download
- * another (it opens the area picker on the map), to continue a paused one and to delete one.
+ * another (it opens the area picker on the map), to pause and continue a download and to delete one.
  */
 @Composable
 fun OfflineMapsScreen(
@@ -40,6 +40,7 @@ fun OfflineMapsScreen(
     onResume: (String) -> Unit,
     onDelete: (String) -> Unit,
     onBack: () -> Unit,
+    onPause: (String) -> Unit = {},
     problem: String? = null,
 ) {
     var deleting by rememberSaveable { mutableStateOf<String?>(null) }
@@ -87,7 +88,7 @@ fun OfflineMapsScreen(
                 }
                 state.maps.forEach { map ->
                     item(key = map.id) {
-                        OfflineMapRow(map, onResume = { onResume(map.id) }, onDelete = { deleting = map.id })
+                        OfflineMapRow(map, onPause = { onPause(map.id) }, onResume = { onResume(map.id) }, onDelete = { deleting = map.id })
                     }
                 }
             }
@@ -113,6 +114,7 @@ fun OfflineMapsScreen(
 @Composable
 private fun OfflineMapRow(
     map: OfflineMap,
+    onPause: () -> Unit,
     onResume: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -128,8 +130,11 @@ private fun OfflineMapRow(
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     )
                 }
+                // In line with the text above it.
+                if (status is OfflineMapStatus.Downloading) {
+                    TextButton(onClick = onPause, contentPadding = PaddingValues(0.dp)) { Text("Pause") }
+                }
                 if (status is OfflineMapStatus.Paused) {
-                    // In line with the text above it.
                     TextButton(onClick = onResume, contentPadding = PaddingValues(0.dp)) { Text("Resume") }
                 }
             }
