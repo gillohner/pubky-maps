@@ -324,7 +324,7 @@ check_reopened_view() {
     # not reach the camera before Back). The second pan's view must then be south of the first's.
     # This start has no launcher intent, so Back finishes the activity (from the launcher, Android
     # 12+ only moves the task back and the rest still runs). The time from the finger's lift to the
-    # activity's destroy is printed for the log (1.2-1.5 s on CI); the rest starts only once the map
+    # activity's destroy is printed for the log (1.0-1.5 s on CI); the rest starts only once the map
     # reports its camera idle, so a build without the save on leaving loses the view even then.
     pan_up() {
         adb shell "input motionevent DOWN 540 1800; input motionevent MOVE 540 1400; input motionevent MOVE 540 1000; input motionevent MOVE 540 600"
