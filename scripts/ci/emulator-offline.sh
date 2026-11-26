@@ -46,9 +46,10 @@ adb shell run-as "$pkg" rm -f no_backup/maplibre.db no_backup/maplibre.db-journa
 adb logcat -c || true
 adb logcat -b crash -c || true
 
-# Starts the app afresh on a map link.
+# Starts the app afresh on a map link, from the whole world (not where the last start left the map).
 open_at() {
     adb shell am force-stop "$pkg"
+    adb shell run-as "$pkg" rm -f no_backup/map-view.json
     local started
     started=$(adb shell am start -W -a android.intent.action.VIEW -d "'geo:$1'" -p "$pkg" 2>&1) || true
     if grep -q "Error" <<< "$started"; then fail "the link did not reach the app: $started"; fi

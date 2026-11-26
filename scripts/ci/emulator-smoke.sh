@@ -2,8 +2,9 @@
 # Smoke test on a running emulator: install the APK, start the app, wait until the map has drawn
 # and hold the start time to a budget, open Settings and each settings page, switch "Follow local
 # rules" off and check it stays off after a restart (a second start held to a budget), open the
-# open-source licences and swipe to their end, then go back with the system back button. Fails on a
-# crash or when the app is not in front. Screenshots, the UI dumps, the start times and the log go
+# open-source licences and swipe to their end, then go back with the system back button; move the
+# map with a link and check that the next start opens it there. Fails on a crash or when the app is
+# not in front. Screenshots, the UI dumps, the start times and the log go
 # to <out dir>.
 # Usage: emulator-smoke.sh <apk> <out dir>
 set -euo pipefail
@@ -271,6 +272,48 @@ wait_for "Show my location" 15 > /dev/null || fail "back from Settings did not r
 sleep 3
 screenshot map-after-back
 check_alive "back to the map"
+
+# The map opens where the user left it: a map link moves it to Zürich, the camera rests there and
+# the app stores the view; after a restart the stored view is still Zürich (a map that opened at
+# the whole world would store that once its camera rested). The file is read through run-as, so
+# only on a debug APK; release.yml's run on the published release APK skips this part.
+expect_view() {
+    adb shell run-as "$pkg" cat no_backup/map-view.json > "$out/map-view-$1.json" 2> /dev/null || true
+    python3 -I -c "
+import json, sys
+try:
+    view = json.load(open(sys.argv[1], encoding='utf-8')).get('view') or {}
+except ValueError:
+    view = {}
+ok = abs(view.get('lat', 0) - 47.37) < 0.01 and abs(view.get('lon', 0) - 8.54) < 0.01 and abs(view.get('zoom', 0) - 14) < 0.5
+print(sys.argv[2] + ':', view)
+sys.exit(0 if ok else 1)" "$out/map-view-$1.json" "$1"
+}
+check_reopened_view() {
+    started=$(adb shell am start -W -a android.intent.action.VIEW -d "'geo:47.37,8.54?z=14'" -p "$pkg" 2>&1) || true
+    if grep -q "Error" <<< "$started"; then fail "the map link did not reach the app: $started"; fi
+    stored=false
+    for _ in $(seq 1 10); do
+        sleep 2
+        if expect_view link; then stored=true; break; fi
+    done
+    $stored || fail "the map's view at Zürich was not stored; see map-view-link.json"
+    screenshot map-link
+    adb shell am force-stop "$pkg"
+    started=$(adb shell am start -W -n "$pkg/.android.MainActivity" 2>&1) || true
+    if grep -q "Error" <<< "$started"; then fail "the app did not start a third time: $started"; fi
+    wait_for "Show my location" 60 > /dev/null || fail "the map screen did not appear after the third start"
+    # Longer than the camera's rest before a view is stored (VIEW_REST_MS, 1 s) once the map is up.
+    sleep 8
+    screenshot map-reopened
+    check_alive "map reopened"
+    expect_view reopened || fail "the map did not open where it was left (stored view changed); see map-view-reopened.json"
+}
+if adb shell run-as "$pkg" true > /dev/null 2>&1; then
+    check_reopened_view
+else
+    echo "not a debug APK (no run-as): the reopened map view is not checked"
+fi
 
 adb logcat -d > "$out/logcat.txt"
 python3 -I "$here/strict_mode.py" "$out/logcat.txt" || fail "StrictMode caught our code (smoke test)"

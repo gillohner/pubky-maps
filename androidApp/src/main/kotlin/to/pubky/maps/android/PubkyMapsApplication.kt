@@ -22,6 +22,8 @@ import to.pubky.maps.config.androidSettingsRepository
 import to.pubky.maps.links.CoreMapLinks
 import to.pubky.maps.links.LinkedPlaces
 import to.pubky.maps.links.MapLinks
+import to.pubky.maps.map.LastMapViewStore
+import to.pubky.maps.map.androidLastMapViewStore
 import to.pubky.maps.offline.OfflineMaps
 import to.pubky.maps.offline.androidOfflineMaps
 import to.pubky.maps.offline.configureMapRuntime
@@ -41,6 +43,9 @@ class PubkyMapsApplication : Application() {
 
     /** The one settings store of the process (DataStore allows one per file). */
     val settingsRepository: SettingsRepository by lazy { androidSettingsRepository(this, scope) }
+
+    /** Where the user left the map; read with the settings when the first screen asks for them. */
+    val lastMapView: LastMapViewStore by lazy { androidLastMapViewStore(this, scope) }
 
     /** The update feeds of this build; not user settings. */
     private val serverConfigRepository: ServerConfigRepository = InMemoryServerConfigRepository()
