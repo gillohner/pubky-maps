@@ -1711,6 +1711,17 @@ mod tests {
             waiting
         }
 
+        /// Ends the wait the way a cancelled coroutine does and returns once it is gone.
+        /// `abort` only asks: until the task is dropped (which aborts the core's task too),
+        /// the wait still runs and takes the result as soon as the exchange is released.
+        async fn abort_wait(waiting: tokio::task::JoinHandle<Result<SignInEvent, CoreError>>) {
+            waiting.abort();
+            let ended = waiting
+                .await
+                .expect_err("the wait cannot finish while the exchange is held");
+            assert!(ended.is_cancelled(), "{ended:?}");
+        }
+
         #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
         #[pubky_testnet::test]
         #[ignore = "needs Postgres: set TEST_PUBKY_CONNECTION_STRING and run with --include-ignored"]
@@ -1720,7 +1731,7 @@ mod tests {
             let waiting = approved_and_exchanging(&core, &gate, &ring).await;
 
             // The coroutine goes away and the user taps cancel while the exchange runs.
-            waiting.abort();
+            abort_wait(waiting).await;
             core.cancel_sign_in();
             gate.release.notify_one();
             tokio::time::timeout(Duration::from_secs(10), async {
@@ -1790,7 +1801,7 @@ mod tests {
             let (testnet, ring) = setup().await;
             let (core, gate) = gated_core(&testnet).await;
             let waiting = approved_and_exchanging(&core, &gate, &ring).await;
-            waiting.abort();
+            abort_wait(waiting).await;
             core.cancel_sign_in();
             gate.release.notify_one();
             tokio::time::timeout(Duration::from_secs(10), async {
