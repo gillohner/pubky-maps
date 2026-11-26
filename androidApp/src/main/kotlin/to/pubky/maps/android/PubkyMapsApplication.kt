@@ -25,8 +25,11 @@ import to.pubky.maps.links.MapLinks
 import to.pubky.maps.map.LastMapViewStore
 import to.pubky.maps.map.androidLastMapViewStore
 import to.pubky.maps.offline.OfflineMaps
+import to.pubky.maps.offline.SqlOfflinePubkyStore
 import to.pubky.maps.offline.androidOfflineMaps
+import to.pubky.maps.offline.androidOfflinePubkyStore
 import to.pubky.maps.offline.configureMapRuntime
+import to.pubky.maps.offline.startOfflinePubkyPlaces
 import to.pubky.maps.place.PlaceServices
 import to.pubky.maps.place.androidPlaceServices
 import to.pubky.maps.search.SearchServices
@@ -68,6 +71,9 @@ class PubkyMapsApplication : Application() {
         )
     }
 
+    /** The Pubky places of the offline maps, which the map shows when Pinakes cannot be reached. */
+    private val offlinePubky: SqlOfflinePubkyStore by lazy { androidOfflinePubkyStore(this) }
+
     /** Place pages and the map's Pubky places layer, with the place cache in the no-backup folder. */
     val places: PlaceServices by lazy {
         androidPlaceServices(
@@ -77,6 +83,7 @@ class PubkyMapsApplication : Application() {
             appVersion = BuildConfig.VERSION_NAME,
             viewer = { signedInKey() },
             health = serviceHealth,
+            offline = offlinePubky,
         )
     }
 
@@ -122,9 +129,15 @@ class PubkyMapsApplication : Application() {
     @Volatile
     private var offlineStarted: OfflineMaps? = null
 
-    /** The offline maps; made by the first screen that needs them, as MapLibre starts with the map. */
+    /**
+     * The offline maps; made by the first screen that needs them, as MapLibre starts with the map.
+     * The Pubky places of their areas are kept in [offlinePubky].
+     */
     val offlineMaps: OfflineMaps by lazy {
-        androidOfflineMaps(this, CoroutineScope(scope.coroutineContext + Dispatchers.Main.immediate)).also { offlineStarted = it }
+        androidOfflineMaps(this, CoroutineScope(scope.coroutineContext + Dispatchers.Main.immediate)).also {
+            offlineStarted = it
+            startOfflinePubkyPlaces(this, scope, it, places.data, offlinePubky)
+        }
     }
 
     /** The user's writes about places (tags, posts, photos, lists, saved places) and their outbox. */

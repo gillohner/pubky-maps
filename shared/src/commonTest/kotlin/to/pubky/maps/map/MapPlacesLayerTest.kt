@@ -1,5 +1,6 @@
 package to.pubky.maps.map
 
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -8,8 +9,10 @@ import okio.Path.Companion.toPath
 import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.links.OsmId
 import to.pubky.maps.links.OsmType
+import to.pubky.maps.offline.KeptPubkyPlaces
 import to.pubky.maps.place.CollectionRefs
 import to.pubky.maps.place.GeoBox
+import to.pubky.maps.place.MapPlace
 import to.pubky.maps.place.MapPlacesPage
 import to.pubky.maps.place.PlaceCardInfo
 import to.pubky.maps.place.PlaceData
@@ -83,6 +86,24 @@ private class TestClock(
     var now: Instant = Instant.fromEpochMilliseconds(1_800_000_000_000),
 ) : Clock {
     override fun now() = now
+}
+
+/** Pubky places kept for one offline area. */
+private class KeptArea(
+    val area: GeoBox,
+    val places: List<MapPlace>,
+) : KeptPubkyPlaces {
+    val asked = mutableListOf<GeoBox>()
+
+    override fun placesIn(
+        box: GeoBox,
+        limit: Long,
+    ): List<MapPlace>? {
+        asked += box
+        val overlaps = area.west <= box.east && area.east >= box.west && area.south <= box.north && area.north >= box.south
+        if (!overlaps) return null
+        return places.filter { it.lat in box.south..box.north && it.lon in box.west..box.east }.take(limit.toInt())
+    }
 }
 
 class MapPlacesLayerTest {
@@ -186,6 +207,49 @@ class MapPlacesLayerTest {
             advanceUntilIdle()
             assertEquals(emptySet<ServicePart>(), health.missing.value)
             assertEquals(11, layer.state.value.places.size)
+        }
+
+    @Test
+    fun withoutPinakesTheOfflineAreasKeptPlacesAreShown() =
+        runTest {
+            val data = AreaData().apply { down = true }
+            val zurich = data.pages.single().places
+            val kept = KeptArea(GeoBox(8.5, 47.3125, 8.5625, 47.4375), zurich + MapPlace("geo:47.5,8.7", "Far away", 47.5, 8.7, null, null))
+            val health = ServiceHealth()
+            val layer = MapPlacesLayer(data, this, TestClock(), health = health, offline = kept, io = StandardTestDispatcher(testScheduler))
+            layer.onCameraIdle(oldTown, zoom = 15.0)
+            advanceUntilIdle()
+            // The asked area (the view grown by half on the grid), not the whole offline area.
+            assertEquals(data.asked.single().first, kept.asked.single())
+            assertEquals(
+                zurich.map { it.uri },
+                layer.state.value.places
+                    .map { it.uri },
+            )
+            assertEquals(kept.asked.single(), layer.state.value.area)
+            assertFalse(layer.state.value.truncated)
+            // The map still names Pinakes as missing, and the next rest asks it again.
+            assertEquals(setOf(ServicePart.Pinakes), health.missing.value)
+            layer.onCameraIdle(oldTown, zoom = 15.0)
+            advanceUntilIdle()
+            assertEquals(2, data.asked.size)
+        }
+
+    @Test
+    fun withoutPinakesOutsideTheOfflineAreasWhatIsShownStays() =
+        runTest {
+            val data = AreaData()
+            val kept = KeptArea(GeoBox(7.4, 46.9, 7.5, 47.0), listOf(MapPlace("geo:46.95,7.45", "Bern", 46.95, 7.45, null, null)))
+            val layer = MapPlacesLayer(data, this, TestClock(), offline = kept, io = StandardTestDispatcher(testScheduler))
+            layer.onCameraIdle(oldTown, zoom = 15.0)
+            advanceUntilIdle()
+            data.down = true
+            // A view a little further, outside the asked area, so it is asked again.
+            layer.onCameraIdle(GeoBox(8.6, 47.4, 8.62, 47.41), zoom = 15.0)
+            advanceUntilIdle()
+            assertEquals(1, kept.asked.size)
+            assertEquals(11, layer.state.value.places.size)
+            assertEquals(GeoBox(8.5, 47.3125, 8.5625, 47.4375), layer.state.value.area)
         }
 
     @Test

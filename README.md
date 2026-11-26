@@ -39,7 +39,10 @@ counts the old release's tiles too); Resume goes on with it, and so does the nex
 unless the user paused it since the app started. An area marked so before the check found new
 data (the app was closed in the walk's first seconds) is walked on mobile data too: it is Ready
 again when nothing changed. MapLibre keeps the offline maps and the map
-cache in one database in the no-backup folder.
+cache in one database in the no-backup folder. The map's Pubky places of each area (the places
+people referenced on Pubky) are fetched from Pinakes as soon as the area is in the list, at most
+10,000 per area, and fetched again once a day on a network Android does not count as metered; when
+Pinakes cannot be reached, the map shows them in the downloaded areas.
 
 Settings:
 
@@ -134,7 +137,9 @@ the link text. The link the user had stays the place's URI.
   in its own SQLite database (`place-cache.db`, never in a backup); `OpeningSchedule` evaluates OSM
   opening hours parsed by osm-opening-hours. The map's Pubky places layer (`map/MapPlacesLayer.kt`)
   asks Pinakes for the view grown by half and widened to a 1/16° grid, at most 1,000 places, and
-  MapLibre clusters them. The
+  MapLibre clusters them. `offline/OfflinePubkyPlaces.kt` keeps the layer's places of each offline
+  area (the area widened to the same grid) in `offline-pubky-places.db` (never in a backup), which
+  the layer reads when every Pinakes server fails. The
   readers are tested against recorded answers (`shared/src/commonTest/fixtures/place/`, refreshed by
   `scripts/place/record-fixtures.py`).
 - Settings are one JSON file with a schema version, written by AndroidX DataStore

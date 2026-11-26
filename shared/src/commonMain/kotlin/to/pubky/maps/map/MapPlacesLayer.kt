@@ -1,14 +1,20 @@
 package to.pubky.maps.map
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.links.OsmId
 import to.pubky.maps.links.OsmType
+import to.pubky.maps.offline.KeptPubkyPlaces
 import to.pubky.maps.place.GeoBox
 import to.pubky.maps.place.MapPlace
 import to.pubky.maps.place.PlaceData
@@ -42,7 +48,9 @@ data class MapPlacesState(
  * `search?bbox=&type=Place`, until Pinakes has a cluster endpoint. Asked when the camera stops, from
  * zoom [MIN_ZOOM] in, for the view grown by half on each side (so small pans need no request), at
  * most [MAX_PAGES] pages of 500. Asked again when the view leaves that area, when it was cut at the
- * cap and the user zoomed in two levels, or after [maxAge]. A failure keeps what is shown.
+ * cap and the user zoomed in two levels, or after [maxAge]. When every Pinakes server fails, the
+ * places kept for the offline areas ([offline]) are shown where one overlaps the asked area, and
+ * elsewhere what is shown stays.
  */
 class MapPlacesLayer(
     private val data: PlaceData,
@@ -51,6 +59,9 @@ class MapPlacesLayer(
     private val maxAge: Duration = 5.minutes,
     /** Told when every Pinakes server failed (the map names it) and when one answers again. */
     private val health: ServiceHealth? = null,
+    /** The Pubky places of the offline areas, read on [io]. */
+    private val offline: KeptPubkyPlaces? = null,
+    private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private val _state = MutableStateFlow(MapPlacesState())
     val state: StateFlow<MapPlacesState> = _state.asStateFlow()
@@ -101,6 +112,8 @@ class MapPlacesLayer(
                             // Asked again on the next stop of the camera.
                             asked = null
                             health?.failed(ServicePart.Pinakes)
+                            val kept = keptIn(area) ?: return@launch
+                            _state.value = MapPlacesState(kept, area, kept.size >= MAX_PLACES, hidden = _state.value.hidden)
                             return@launch
                         }
                     }
@@ -113,12 +126,29 @@ class MapPlacesLayer(
             }
     }
 
+    /** The kept places in [area]; null without an offline area there, or when they cannot be read. */
+    private suspend fun keptIn(area: GeoBox): List<MapPlace>? {
+        val kept = offline ?: return null
+        return withContext(io) {
+            try {
+                kept.placesIn(area, MAX_PLACES)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+
     companion object {
         /** Below this zoom an area holds too many places for a request; a cluster endpoint will lift it. */
         const val MIN_ZOOM = 12.0
 
         /** Up to 1,000 places: enough for a city centre, cheap for Pinakes' 120 requests a minute. */
         const val MAX_PAGES = 2
+
+        /** As many places as [MAX_PAGES] pages of Pinakes hold. */
+        private const val MAX_PLACES = MAX_PAGES * 500L
 
         /**
          * Asked areas are widened to a 1/16° grid (about 7 km), so a request never says where exactly the

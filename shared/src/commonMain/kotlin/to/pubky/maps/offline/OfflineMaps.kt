@@ -29,6 +29,8 @@ data class OfflineMap(
     val status: OfflineMapStatus,
     /** About what the map takes on the phone. */
     val bytes: Long,
+    /** The area on the map; null when MapLibre lost the pack's metadata. */
+    val bounds: AreaBounds? = null,
 )
 
 sealed interface OfflineMapStatus {
@@ -520,6 +522,7 @@ internal fun areas(
                         before ?: 0,
                         progress.maxOf { it.completedTileBytes } + progress.sumOf { it.completedBytes - it.completedTileBytes },
                     ),
+                bounds = first?.let { AreaBounds(it.west, it.south, it.east, it.north) },
             )
         }.sortedByDescending { it.createdAt }
 
