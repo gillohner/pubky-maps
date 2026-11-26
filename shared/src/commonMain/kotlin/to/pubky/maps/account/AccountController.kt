@@ -114,8 +114,8 @@ class AccountController(
     private var retries = 0
 
     /**
-     * A retry was asked for while a restore or refresh ran (and so was not started): if that one
-     * fails, it was likely made before the network worked, and one more attempt follows at once.
+     * The network came back while a restore or refresh ran (so no other attempt started): if that
+     * one fails, it was likely made before the network worked, and one more attempt follows at once.
      */
     private var retryAsked = false
 
@@ -233,14 +233,15 @@ class AccountController(
      * it go out within seconds instead of after the next wait (up to 5 minutes). In the background
      * this is one attempt; the retries on a timer run only in the foreground.
      */
-    fun onNetworkAvailable() = enqueue { retryNow() }
+    fun onNetworkAvailable() =
+        enqueue {
+            // An attempt still running may have been made before the network worked.
+            if (restoreJob?.isActive == true || refreshJob?.isActive == true) retryAsked = true
+            retryNow()
+        }
 
     /** Tries an unreachable homeserver again now, and the waits between retries start over. */
     private fun retryNow() {
-        if (restoreJob?.isActive == true || refreshJob?.isActive == true) {
-            retryAsked = true
-            return
-        }
         if (!health.missing.value.contains(ServicePart.Homeserver)) return
         retries = 0
         retryJob?.cancel()
@@ -565,7 +566,7 @@ class AccountController(
 
     /**
      * The homeserver did not answer: show what is cached and try again later, on a timer in the
-     * foreground, at once when a retry was asked for meanwhile, and when the network comes back.
+     * foreground, at once when the network came back meanwhile, and when the network comes back.
      */
     private fun offline() {
         val state = state.value
