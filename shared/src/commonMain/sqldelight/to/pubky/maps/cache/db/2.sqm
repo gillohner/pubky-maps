@@ -1,0 +1,7 @@
+-- Version 3: where the places the user wrote about are, for the pins of their saved places.
+
+CREATE TABLE place_point (
+    place TEXT NOT NULL PRIMARY KEY,
+    lat REAL NOT NULL,
+    lon REAL NOT NULL
+);

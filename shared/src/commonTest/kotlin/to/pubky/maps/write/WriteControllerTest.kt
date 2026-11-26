@@ -19,6 +19,7 @@ import to.pubky.maps.cache.CachedTag
 import to.pubky.maps.config.AppSettings
 import to.pubky.maps.config.DataKind
 import to.pubky.maps.config.StorageChoice
+import to.pubky.maps.links.GeoPoint
 import kotlin.coroutines.ContinuationInterceptor
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -31,6 +32,7 @@ import kotlin.time.Duration.Companion.seconds
 private const val ME = "8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo"
 private const val OSM = "https://www.openstreetmap.org/node/270803095"
 private const val GOOGLE = "https://maps.app.goo.gl/x1"
+private val SCHOBER = GeoPoint(47.37159, 8.54531)
 private const val TAGGED_COFFEE = "Tagged “coffee”. Tags are public."
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -44,7 +46,7 @@ class WriteControllerTest {
     private var accountRefreshes = 0
     private val messages = mutableListOf<String>()
     private val actions = mutableListOf<WriteMessage>()
-    private val target = WriteTarget(OSM, "Conditorei Schober")
+    private val target = WriteTarget(OSM, "Conditorei Schober", SCHOBER)
 
     private fun signedIn(
         connection: Connection = Connection.Online,
@@ -311,8 +313,8 @@ class WriteControllerTest {
             writer.save(target)
             runCurrent()
 
-            assertEquals(listOf(PhoneSaved(OSM, "Conditorei Schober", 1_000L)), phone.data.saved)
-            assertEquals(listOf(SavedEntry(OSM, Kept.Phone, "Conditorei Schober")), writer.own.value.saved)
+            assertEquals(listOf(PhoneSaved(OSM, "Conditorei Schober", 1_000L, SCHOBER)), phone.data.saved)
+            assertEquals(listOf(SavedEntry(OSM, Kept.Phone, "Conditorei Schober", point = SCHOBER)), writer.own.value.saved)
             assertEquals(emptyList(), writes.calls)
 
             writer.unsave(target, setOf(OSM))
@@ -342,6 +344,35 @@ class WriteControllerTest {
                     .kept,
             )
             assertEquals(emptyList(), phone.data.saved)
+        }
+
+    @Test
+    fun aHomeserverSaveKeepsWhereThePlaceIsForItsPinAndReadsItBackAtTheNextStart() =
+        runTest {
+            signedIn()
+            val writer = controller()
+            runCurrent()
+
+            writer.save(target)
+            runCurrent()
+
+            assertEquals(mapOf(OSM to SCHOBER), store.points())
+            assertEquals(
+                SCHOBER,
+                writer.own.value.saved
+                    .single()
+                    .point,
+            )
+
+            // The next start reads the stored point for the bookmark the cache now has.
+            val next = controller()
+            runCurrent()
+            assertEquals(
+                SCHOBER,
+                next.own.value.saved
+                    .single()
+                    .point,
+            )
         }
 
     @Test

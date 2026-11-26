@@ -3,6 +3,8 @@ package to.pubky.maps.write
 import app.cash.sqldelight.db.SqlDriver
 import kotlinx.serialization.json.Json
 import to.pubky.maps.cache.db.CacheDatabase
+import to.pubky.maps.links.GeoPoint
+import to.pubky.maps.search.geoPointOrNull
 import to.pubky.maps.write.db.PhoneDataDatabase
 
 private val storeJson =
@@ -13,7 +15,7 @@ private val storeJson =
 
 /**
  * The signed-in user's writes on this phone: the outbox, their lists as last read, the posts known
- * not to be lists, and the names of places they wrote about. It lives in the account cache's
+ * not to be lists, and the names and points of places they wrote about. It lives in the account cache's
  * database, so sign-out deletes it with the rest of the account. Calls block on disk.
  */
 interface WriteStore {
@@ -45,6 +47,14 @@ interface WriteStore {
     fun putLabel(
         place: String,
         name: String,
+    )
+
+    /** Where the places the user wrote about are, by place as the write had it. */
+    fun points(): Map<String, GeoPoint>
+
+    fun putPoint(
+        place: String,
+        point: GeoPoint,
     )
 }
 
@@ -100,6 +110,20 @@ class SqlWriteStore(
     ) {
         queries.putPlaceLabel(place, name)
     }
+
+    override fun points(): Map<String, GeoPoint> =
+        queries
+            .placePoints()
+            .executeAsList()
+            .mapNotNull { row -> geoPointOrNull(row.lat, row.lon)?.let { row.place to it } }
+            .toMap()
+
+    override fun putPoint(
+        place: String,
+        point: GeoPoint,
+    ) {
+        queries.putPlacePoint(place, point.lat, point.lon)
+    }
 }
 
 /** What the user keeps on this phone only. Calls block on disk. */
@@ -126,7 +150,11 @@ class SqlPhoneStore(
 
     override fun read(): PhoneData =
         PhoneData(
-            saved = queries.savedPlaces { place, name, savedAt -> PhoneSaved(place, name, savedAt) }.executeAsList(),
+            saved =
+                queries
+                    .savedPlaces { place, name, savedAt, lat, lon ->
+                        PhoneSaved(place, name, savedAt, if (lat != null && lon != null) geoPointOrNull(lat, lon) else null)
+                    }.executeAsList(),
             lists =
                 queries.lists().executeAsList().mapNotNull {
                     runCatching { storeJson.decodeFromString(OwnList.serializer(), it) }.getOrNull()
@@ -134,7 +162,7 @@ class SqlPhoneStore(
         )
 
     override fun save(saved: PhoneSaved) {
-        queries.putSavedPlace(saved.place, saved.name, saved.savedAt)
+        queries.putSavedPlace(saved.place, saved.name, saved.savedAt, saved.point?.lat, saved.point?.lon)
     }
 
     override fun unsave(place: String) {

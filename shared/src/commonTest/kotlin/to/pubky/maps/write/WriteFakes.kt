@@ -3,6 +3,7 @@ package to.pubky.maps.write
 import kotlinx.coroutines.CompletableDeferred
 import to.pubky.maps.cache.CachedBookmark
 import to.pubky.maps.cache.CachedTag
+import to.pubky.maps.links.GeoPoint
 
 /** A [PubkyWrites] that records what it was asked and answers as the test says. */
 class FakePubkyWrites : PubkyWrites {
@@ -150,6 +151,7 @@ class MemoryWriteStore : WriteStore {
     var stored = listOf<OwnList>()
     val others = mutableMapOf<Boolean, MutableSet<String>>()
     val names = mutableMapOf<String, String>()
+    val placePoints = mutableMapOf<String, GeoPoint>()
 
     override fun queue(): List<QueuedOp> = outbox.toList()
 
@@ -188,6 +190,15 @@ class MemoryWriteStore : WriteStore {
         name: String,
     ) {
         names[place] = name
+    }
+
+    override fun points(): Map<String, GeoPoint> = placePoints.toMap()
+
+    override fun putPoint(
+        place: String,
+        point: GeoPoint,
+    ) {
+        placePoints[place] = point
     }
 }
 

@@ -1,9 +1,12 @@
 package to.pubky.maps.write
 
 import to.pubky.maps.cache.CachedAccount
+import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.place.PlacePhoto
 import to.pubky.maps.place.PlacePost
 import to.pubky.maps.place.PlaceTag
+import to.pubky.maps.search.GeoInput
+import to.pubky.maps.search.parseGeoInput
 
 /** One of the user's tags. [place] is spelled as the core stores places. */
 data class OwnTag(
@@ -19,6 +22,8 @@ data class SavedEntry(
     val kept: Kept,
     val name: String?,
     val pending: Boolean = false,
+    /** Where it is, for its pin on the map: stored when it was saved, else read from a `geo:` link; null when not known. */
+    val point: GeoPoint? = null,
 )
 
 /** A post or photo written on this phone, until the place page's next load from Nexus has it. */
@@ -108,13 +113,15 @@ data class PhoneSaved(
     val place: String,
     val name: String?,
     val savedAt: Long,
+    val point: GeoPoint? = null,
 )
 
 /**
  * The user's own data: [cached] (the homeserver's copy on this phone) with [confirmed] writes the
  * cache does not reflect yet (made after it was read) and the [queue] still to be sent applied on
  * top, in order, so a write shows at once and disappears again when it is dropped. Places are
- * compared as [normalize] spells them.
+ * compared as [normalize] spells them. [labels] and [points] are the names and points stored for
+ * the places the user wrote about, by place as the write had it.
  */
 internal fun ownData(
     viewer: String?,
@@ -124,6 +131,7 @@ internal fun ownData(
     queue: List<QueuedOp>,
     confirmed: List<Confirmed>,
     labels: Map<String, String>,
+    points: Map<String, GeoPoint> = emptyMap(),
     normalize: (String) -> String,
 ): OwnData {
     val signedIn = viewer != null && cached?.publicKey == viewer
@@ -131,7 +139,10 @@ internal fun ownData(
     val saved = LinkedHashMap<String, SavedEntry>()
     val ownLists = LinkedHashMap<String, OwnList>()
     val posts = mutableListOf<OwnPost>()
-    phone.saved.forEach { saved["phone|" + normalize(it.place)] = SavedEntry(normalize(it.place), Kept.Phone, it.name) }
+    phone.saved.forEach {
+        val place = normalize(it.place)
+        saved["phone|$place"] = SavedEntry(place, Kept.Phone, it.name, point = it.point ?: geoLinkPoint(it.place))
+    }
     phone.lists.forEach { ownLists[it.uri] = it.copy(items = it.items.map(normalize)) }
     if (signedIn) {
         cached.tags.forEach { tag ->
@@ -140,7 +151,8 @@ internal fun ownData(
         }
         cached.bookmarks.forEach { bookmark ->
             val place = normalize(bookmark.place)
-            saved["home|$place"] = SavedEntry(place, Kept.Private, labels[bookmark.place] ?: labels[place])
+            saved["home|$place"] =
+                SavedEntry(place, Kept.Private, labels[bookmark.place] ?: labels[place], point = pointOf(bookmark.place, place, points))
         }
         lists.forEach { ownLists[it.uri] = it.copy(items = it.items.map(normalize)) }
         val readAt = cached.refreshedAt ?: 0
@@ -161,7 +173,7 @@ internal fun ownData(
                 op is WriteOp.CreateList || op is WriteOp.EditList -> {}
 
                 !reflected -> {
-                    apply(op, pending = false, tags, saved, ownLists, labels, normalize)
+                    apply(op, pending = false, tags, saved, ownLists, labels, points, normalize)
                 }
             }
         }
@@ -169,7 +181,7 @@ internal fun ownData(
             when (op) {
                 is WriteOp.Post -> posts += OwnPost(normalize(op.place), op.text, op.at, uri = null)
                 is WriteOp.Photo -> posts += OwnPost(normalize(op.place), op.caption.orEmpty(), op.at, uri = null, photoFile = op.file)
-                else -> apply(op, pending = true, tags, saved, ownLists, labels, normalize)
+                else -> apply(op, pending = true, tags, saved, ownLists, labels, points, normalize)
             }
         }
     }
@@ -194,6 +206,7 @@ private fun apply(
     saved: MutableMap<String, SavedEntry>,
     lists: MutableMap<String, OwnList>,
     labels: Map<String, String>,
+    points: Map<String, GeoPoint>,
     normalize: (String) -> String,
 ) {
     val place = normalize(op.place)
@@ -207,7 +220,8 @@ private fun apply(
         }
 
         is WriteOp.Save -> {
-            saved["home|$place"] = SavedEntry(place, Kept.Private, labels[op.place] ?: labels[place], pending)
+            saved["home|$place"] =
+                SavedEntry(place, Kept.Private, labels[op.place] ?: labels[place], pending, pointOf(op.place, place, points))
         }
 
         is WriteOp.Unsave -> {
@@ -227,6 +241,17 @@ private fun apply(
         is WriteOp.Post, is WriteOp.Photo -> {}
     }
 }
+
+/** Where the place [written] (spelled [place] by the core) is: the point stored for it, else its `geo:` link's. */
+private fun pointOf(
+    written: String,
+    place: String,
+    points: Map<String, GeoPoint>,
+): GeoPoint? = points[written] ?: points[place] ?: geoLinkPoint(place)
+
+/** The point a `geo:` link names ("geo:47.37,8.54"); null for any other link, or a `geo:` search without one. */
+private fun geoLinkPoint(place: String): GeoPoint? =
+    if (place.startsWith("geo:", ignoreCase = true)) (parseGeoInput(place) as? GeoInput.Point)?.point else null
 
 /**
  * The place's tags from Nexus with the user's own [mine] put in: Nexus lags behind the homeserver,

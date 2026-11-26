@@ -109,6 +109,13 @@ INSERT OR REPLACE INTO other_post(private, id) VALUES (?, ?);
 deleteOtherPosts:
 DELETE FROM other_post;
 
+-- Where the places the user wrote about are (WGS84), for the pins of their saved places on the map.
+CREATE TABLE place_point (
+    place TEXT NOT NULL PRIMARY KEY,
+    lat REAL NOT NULL,
+    lon REAL NOT NULL
+);
+
 placeLabels:
 SELECT * FROM place_label;
 
@@ -117,3 +124,12 @@ INSERT OR REPLACE INTO place_label(place, name) VALUES (?, ?);
 
 deletePlaceLabels:
 DELETE FROM place_label;
+
+placePoints:
+SELECT * FROM place_point;
+
+putPlacePoint:
+INSERT OR REPLACE INTO place_point(place, lat, lon) VALUES (?, ?, ?);
+
+deletePlacePoints:
+DELETE FROM place_point;

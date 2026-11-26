@@ -3,6 +3,7 @@ package to.pubky.maps.write
 import to.pubky.maps.cache.CachedAccount
 import to.pubky.maps.cache.CachedBookmark
 import to.pubky.maps.cache.CachedTag
+import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.place.PlacePost
 import to.pubky.maps.place.PlaceTag
 import kotlin.test.Test
@@ -22,6 +23,7 @@ class OwnDataTest {
         confirmed: List<Confirmed> = emptyList(),
         lists: List<OwnList> = emptyList(),
         phone: PhoneData = PhoneData(),
+        points: Map<String, GeoPoint> = emptyMap(),
     ) = ownData(
         viewer = ME,
         cached = cached,
@@ -30,6 +32,7 @@ class OwnDataTest {
         queue = queue.mapIndexed { i, op -> QueuedOp(i.toLong(), op) },
         confirmed = confirmed,
         labels = mapOf(OSM to "Schober"),
+        points = points,
         normalize = { it.replace("https://osm.org/", "https://www.openstreetmap.org/") },
     )
 
@@ -65,13 +68,54 @@ class OwnDataTest {
             listOf(
                 // By name, else by link.
                 SavedEntry(GOOGLE, Kept.Private, null, pending = true),
-                SavedEntry("geo:1,2", Kept.Phone, "Lake"),
+                SavedEntry("geo:1,2", Kept.Phone, "Lake", point = GeoPoint(1.0, 2.0)),
                 SavedEntry(OSM, Kept.Private, "Schober"),
             ),
             own.saved,
         )
         assertTrue(own.forPlace(setOf(OSM)).isSaved)
         assertTrue(!own.forPlace(setOf("geo:9,9")).isSaved)
+    }
+
+    @Test
+    fun aSavedPlaceIsWhereItWasSavedElseWhereItsGeoLinkSays() {
+        val kunsthaus = GeoPoint(47.37038, 8.54831)
+        val lake = GeoPoint(47.35, 8.55)
+        val cached =
+            CachedAccount(
+                ME,
+                null,
+                100,
+                emptyList(),
+                listOf(CachedBookmark("/b/1", "https://osm.org/node/1"), CachedBookmark("/b/2", "https://www.openstreetmap.org/way/7")),
+            )
+        val phone =
+            PhoneData(
+                saved =
+                    listOf(
+                        PhoneSaved("https://www.openstreetmap.org/node/5", "Bench", 5, lake),
+                        PhoneSaved("geo:47.1,8.5?z=17", null, 6),
+                        PhoneSaved("geo:0,0?q=Zürich", null, 7),
+                    ),
+            )
+
+        val own =
+            data(
+                cached,
+                // A point is stored by place as the write had it, which may differ from the core's spelling.
+                queue = listOf(WriteOp.Save("geo:46.9,7.4"), WriteOp.Save(GOOGLE)),
+                phone = phone,
+                points = mapOf("https://osm.org/node/1" to kunsthaus, GOOGLE to lake),
+            )
+
+        val points = own.saved.associate { it.place to it.point }
+        assertEquals(kunsthaus, points[OSM], "stored with the save, under the link as it was written")
+        assertEquals(lake, points[GOOGLE], "a queued save shows its pin at once")
+        assertEquals(GeoPoint(46.9, 7.4), points["geo:46.9,7.4"], "a geo: link carries its point")
+        assertEquals(lake, points["https://www.openstreetmap.org/node/5"], "kept on the phone with its point")
+        assertEquals(GeoPoint(47.1, 8.5), points["geo:47.1,8.5?z=17"])
+        assertNull(points["geo:0,0?q=Zürich"], "a geo: search names no point")
+        assertNull(points["https://www.openstreetmap.org/way/7"], "saved elsewhere, without a point: no pin")
     }
 
     @Test
