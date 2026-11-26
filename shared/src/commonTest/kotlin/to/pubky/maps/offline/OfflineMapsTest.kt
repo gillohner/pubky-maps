@@ -32,7 +32,19 @@ class OfflineMapsTest {
         val paused = ArrayList<String>()
         var failCreate: String? = null
         var failDelete = false
+
+        /** A pack whose delete fails. */
+        var failDeleteOf: Any? = null
         val deleted = ArrayList<String>()
+
+        /** Styles of the packs made to replace another ([PackStore.createLike]), in turn. */
+        val replacements = ArrayList<String>()
+
+        /**
+         * As MapLibre with every tile in its database: a resumed replacement is complete at once, with
+         * the progress of the pack it replaces. Off, it stays downloading.
+         */
+        var linksAtOnce = true
 
         /** Runs while the pack of a style is being created. */
         var whileCreating: (String) -> Unit = {}
@@ -54,11 +66,31 @@ class OfflineMapsTest {
             if (failCreate == styleUrl) error("disk full")
             whileCreating(styleUrl)
             val pack = Pack(styleUrl)
-            packs.value = PackStoreState.Ready(ready + StoredPack(pack, metadata, PackProgress(PackState.Paused)))
+            packs.value = PackStoreState.Ready(ready + StoredPack(pack, metadata, PackProgress(PackState.Paused), styleUrl))
+            return pack
+        }
+
+        override suspend fun createLike(
+            handle: Any,
+            metadata: PackMetadata,
+        ): Any {
+            val style = (handle as Pack).styleUrl
+            if (failCreate == style) error("disk full")
+            replacements += style
+            val pack = Pack(style)
+            packs.value = PackStoreState.Ready(ready + StoredPack(pack, metadata, PackProgress(PackState.Paused), style))
             return pack
         }
 
         override fun resume(handle: Any) {
+            val pack = ready.first { it.handle === handle }
+            if (pack.metadata?.replacing == true) {
+                val old = ready.first { it.style == pack.style && it.metadata?.replacing != true }
+                update(handle) {
+                    it.copy(progress = if (linksAtOnce) old.progress else PackProgress(PackState.Downloading, 10, 100))
+                }
+                return
+            }
             resumed += (handle as Pack).styleUrl
             downloadingAtResume += controller?.downloading == true
         }
@@ -69,7 +101,7 @@ class OfflineMapsTest {
         }
 
         override suspend fun delete(handle: Any) {
-            if (failDelete) error("disk full")
+            if (failDelete || handle === failDeleteOf) error("disk full")
             deleted += (handle as Pack).styleUrl
             packs.value = PackStoreState.Ready(ready.filter { it.handle !== handle })
         }
@@ -86,10 +118,17 @@ class OfflineMapsTest {
             packs.value = PackStoreState.Ready(ready.map { if (it.handle === handle) change(it) else it })
         }
 
+        /** Sets the progress of the pack being made to replace the one of [styleUrl]. */
+        fun replacementProgress(
+            styleUrl: String,
+            progress: PackProgress,
+        ) = update(ready.first { it.style == styleUrl && it.metadata?.replacing == true }.handle) { it.copy(progress = progress) }
+
+        /** Sets the progress of the pack of [styleUrl] that is part of the area (not a replacement being made). */
         fun progress(
             styleUrl: String,
             progress: PackProgress,
-        ) = update(ready.first { (it.handle as Pack).styleUrl == styleUrl }.handle) { it.copy(progress = progress) }
+        ) = update(ready.first { it.style == styleUrl && it.metadata?.replacing != true }.handle) { it.copy(progress = progress) }
     }
 
     private val zurich = AreaBounds(west = 8.448, south = 47.32, east = 8.625, north = 47.435)
@@ -220,6 +259,9 @@ class OfflineMapsTest {
 
             assertEquals(emptyList(), store.updating())
             assertEquals(0, offline.maps().single().newDataAt)
+            // Nothing new: the packs stay.
+            assertEquals(emptyList(), store.replacements)
+            assertEquals(emptyList(), store.deleted)
 
             // And again later: MapLibre walks only a pack that is not active, so each rests once complete.
             assertEquals(listOf(light, dark, light, dark), store.paused)
@@ -252,6 +294,194 @@ class OfflineMapsTest {
             assertFalse(offline.downloading)
             assertTrue(offline.maps().single().newDataAt > 0)
         }
+
+    /** The packs of the store, made to replace another or not. */
+    private fun FakeStore.all() = (packs.value as PackStoreState.Ready).packs
+
+    /** A check of [readyArea] whose light walk downloads a new release; returns the packs before it. */
+    private fun TestScope.updateBothStyles(store: FakeStore): List<Any> {
+        val before = store.all().map { it.handle }
+        advanceTimeBy(FIRST_CHECK)
+        runCurrent()
+        store.progress(light, PackProgress(PackState.Downloading, 21, 100, 500_000, 20, 400_000))
+        advanceTimeBy(QUIET_CHECK)
+        runCurrent()
+        store.progress(light, PackProgress(PackState.Complete, 100, 100, 3_000_000, 80, 2_500_000))
+        // The dark style shares the new tiles: its walk fetches nothing.
+        advanceTimeBy(QUIET_CHECK)
+        runCurrent()
+        return before
+    }
+
+    @Test
+    fun anUpdateReplacesEveryPackOfTheAreaSoTheReleaseBeforesTilesCanGo() =
+        runTest(UnconfinedTestDispatcher()) {
+            val (store, offline) = readyArea()
+            val fetching = ArrayList<Boolean>()
+            backgroundScope.launch { offline.fetchingChanges.collect { fetching += it } }
+            val before = updateBothStyles(store)
+
+            // Both styles: the dark one kept the old release's tiles too, though its walk fetched nothing.
+            assertEquals(listOf(light, dark), store.replacements)
+            assertEquals(listOf(light, dark), store.deleted)
+            val packs = store.all()
+            assertEquals(listOf(light, dark), packs.map { it.style })
+            assertTrue(packs.none { pack -> before.any { it === pack.handle } })
+            assertTrue(packs.none { it.metadata?.replacing == true })
+            val map = offline.maps().single()
+            assertEquals("area-1", map.id)
+            assertEquals("Map around 47.38° N, 8.54° E", map.name)
+            assertEquals(OfflineMapStatus.Ready, map.status)
+            assertEquals(3_100_000, map.bytes)
+            // The new packs keep when each got new map data, so the area's places are not read twice.
+            assertTrue(map.newDataAt > 0)
+            assertEquals(listOf(map.newDataAt, 0L), packs.map { it.metadata?.newDataAt })
+            assertTrue(packs.all { it.metadata?.updating == false && it.metadata?.newData == false })
+            assertFalse(offline.downloading)
+            // The tiles are read again only after the replacement, which writes the database too.
+            assertEquals(listOf(false, true, false), fetching)
+
+            // The next check walks the new packs, and finds nothing new.
+            advanceTimeBy(CHECK_INTERVAL - QUIET_CHECK * 2)
+            runCurrent()
+            assertEquals(listOf(light, dark, light), store.resumed)
+            advanceTimeBy(QUIET_CHECK * 2)
+            runCurrent()
+            assertEquals(listOf(light, dark), store.replacements)
+        }
+
+    @Test
+    fun aReplacementThatDoesNotFinishKeepsTheOldPack() =
+        runTest(UnconfinedTestDispatcher()) {
+            val (store, offline) = readyArea()
+            store.linksAtOnce = false
+            val before = updateBothStyles(store)
+
+            // The pack being made is not part of the area meanwhile.
+            assertEquals(3, store.all().size)
+            val map = offline.maps().single()
+            assertEquals(OfflineMapStatus.Ready, map.status)
+            assertEquals(3_100_000, map.bytes)
+            assertTrue(offline.downloading)
+
+            advanceTimeBy(REPLACE_TIMEOUT)
+            runCurrent()
+            assertEquals(listOf(light), store.replacements)
+            assertEquals(listOf(light), store.deleted)
+            assertEquals(before, store.all().map { it.handle })
+            assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
+            assertFalse(offline.downloading)
+            assertNull(offline.problem.value)
+        }
+
+    @Test
+    fun aNewPackIsNotTakenForCompleteBeforeItHasTiles() =
+        runTest(UnconfinedTestDispatcher()) {
+            val (store, offline) = readyArea()
+            store.linksAtOnce = false
+            updateBothStyles(store)
+            // MapLibre may report a pack with nothing counted yet as complete.
+            store.replacementProgress(light, PackProgress(PackState.Complete, 0, 0))
+            assertEquals(emptyList(), store.deleted)
+            store.replacementProgress(light, PackProgress(PackState.Complete, 100, 100, 3_000_000, 80, 2_500_000))
+            assertEquals(listOf(light), store.deleted)
+            assertEquals(listOf(light, dark), store.replacements)
+        }
+
+    @Test
+    fun aReplacementThatCannotBeCreatedKeepsThePacks() =
+        runTest(UnconfinedTestDispatcher()) {
+            val (store, offline) = readyArea()
+            store.failCreate = light
+            val before = updateBothStyles(store)
+            assertEquals(before, store.all().map { it.handle })
+            assertEquals(emptyList(), store.deleted)
+            assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
+            assertFalse(offline.downloading)
+            assertNull(offline.problem.value)
+        }
+
+    @Test
+    fun aNewPackStaysWhenTheOldOnesDeleteFailedForTheNextStartToSettle() =
+        runTest(UnconfinedTestDispatcher()) {
+            val (store, offline) = readyArea()
+            val oldLight = store.all().first { it.style == light }.handle
+            store.failDeleteOf = oldLight
+            updateBothStyles(store)
+            // MapLibre may have deleted it all the same: the new pack is not deleted, and the next
+            // check of this process leaves it as it is, while the list shows the old one.
+            val left = store.all().filter { it.metadata?.replacing == true }
+            assertEquals(listOf(light), left.map { it.style })
+            assertEquals(listOf(light), store.replacements)
+            assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
+            assertFalse(offline.downloading)
+            advanceTimeBy(CHECK_INTERVAL)
+            runCurrent()
+            assertEquals(left.map { it.handle }, store.all().filter { it.metadata?.replacing == true }.map { it.handle })
+            assertEquals(emptyList(), store.deleted)
+        }
+
+    @Test
+    fun deletingAnAreaDuringAReplacementDeletesEveryPackOnce() =
+        runTest(UnconfinedTestDispatcher()) {
+            val (store, offline) = readyArea()
+            store.linksAtOnce = false
+            updateBothStyles(store)
+            offline.delete("area-1")
+            runCurrent()
+            assertEquals(emptyList(), store.all())
+            assertEquals(listOf(dark, light, light), store.deleted.sorted())
+            assertNull(offline.problem.value)
+            assertFalse(offline.downloading)
+            assertEquals(emptyList(), offline.maps())
+        }
+
+    @Test
+    fun pausingAnAreaDuringAReplacementDeletesTheNewPack() =
+        runTest(UnconfinedTestDispatcher()) {
+            val (store, offline) = readyArea()
+            store.linksAtOnce = false
+            val before = updateBothStyles(store)
+            offline.pause("area-1")
+            runCurrent()
+            assertEquals(before, store.all().map { it.handle })
+            assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
+            assertFalse(offline.downloading)
+        }
+
+    @Test
+    fun aReplacementAnEndedProcessLeftIsSettledAtTheNextCheck() =
+        runTest(UnconfinedTestDispatcher()) {
+            val store = FakeStore()
+            val metadata = PackMetadata("area-1", "Map", 1, 8.448, 47.32, 8.625, 47.435, newDataAt = 5)
+            val complete = PackProgress(PackState.Complete, 100, 100, 3_000_000, 80, 2_500_000)
+            // The light pack's replacement was made, the process ended before the old one went; the
+            // dark pack's old one went, the process ended before its replacement was unmarked.
+            val oldLight = StoredPack(Pack(light), metadata, complete, light)
+            val newLight = StoredPack(Pack(light), metadata.copy(replacing = true), complete, light)
+            val newDark = StoredPack(Pack(dark), metadata.copy(replacing = true), complete, dark)
+            store.packs.value = PackStoreState.Ready(listOf(oldLight, newLight, newDark))
+            val offline = offlineMaps(store)
+            assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
+
+            advanceTimeBy(FIRST_CHECK)
+            runCurrent()
+            assertEquals(listOf(light), store.deleted)
+            assertEquals(listOf(oldLight.handle, newDark.handle), store.all().map { it.handle })
+            assertTrue(store.all().none { it.metadata?.replacing == true })
+            assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
+        }
+
+    @Test
+    fun aPackMadeToReplaceAnotherIsPartOfItsAreaOnlyOnceTheOtherIsGone() {
+        val metadata = PackMetadata("area-1", "Map", 1, 8.448, 47.32, 8.625, 47.435)
+        val old = StoredPack(Pack(light), metadata, PackProgress(PackState.Complete, 100, 100), light)
+        val new = StoredPack(Pack(light), metadata.copy(replacing = true), PackProgress(PackState.Downloading, 10, 100), light)
+        val dark = StoredPack(Pack(dark), metadata, PackProgress(PackState.Complete, 100, 100), dark)
+        assertEquals(listOf(old, dark), visible(listOf(old, new, dark)))
+        assertEquals(listOf(new, dark), visible(listOf(new, dark)))
+        assertEquals(OfflineMapStatus.Ready, areas(listOf(old, new, dark)).single().status)
+    }
 
     @Test
     fun aWalkThatFetchesTilesWithinSecondsStaysReadyWithNewMapData() =
@@ -334,8 +564,8 @@ class OfflineMapsTest {
             store.packs.value =
                 PackStoreState.Ready(
                     listOf(
-                        StoredPack(Pack(light), metadata, complete),
-                        StoredPack(Pack(dark), metadata.copy(updating = false), complete),
+                        StoredPack(Pack(light), metadata, complete, light),
+                        StoredPack(Pack(dark), metadata.copy(updating = false), complete, dark),
                     ),
                 )
             val offline = offlineMaps(store)
@@ -411,7 +641,9 @@ class OfflineMapsTest {
         val metadata = PackMetadata("area-1", "Map", 1, 8.448, 47.32, 8.625, 47.435, updating = true)
         val complete = PackProgress(PackState.Complete, 100, 100, 3_000_000, 80, 2_500_000)
         store.packs.value =
-            PackStoreState.Ready(listOf(StoredPack(Pack(light), metadata, complete), StoredPack(Pack(dark), metadata, complete)))
+            PackStoreState.Ready(
+                listOf(StoredPack(Pack(light), metadata, complete, light), StoredPack(Pack(dark), metadata, complete, dark)),
+            )
         val offline = offlineMaps(store) { false }
         assertEquals(OfflineMapStatus.Paused(100, update = true), offline.maps().single().status)
         return store to offline

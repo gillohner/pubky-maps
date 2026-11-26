@@ -5,8 +5,9 @@
 # and the dark style until the list says Ready under the name of the town the map labels in it, with
 # the app's User-Agent, never more than 4 tile requests at once and no tile twice. Then the server
 # moves its tiles to a new release and the app, started far from the area, updates the area by
-# itself. With the server gone the area draws in light and dark (the fixture's water colour, not the
-# bare background), also after three theme switches in one process (which count MainActivity's
+# itself and replaces its packs, so no tile of the old release stays linked to it. With the server
+# gone the area draws in light and dark (the fixture's water colour, not the bare background), also
+# after three theme switches in one process (which count MainActivity's
 # instances for StrictMode), and search, whose servers are gone too, finds the area's places in the
 # offline maps. Delete removes it.
 # Usage: emulator-offline.sh <apk> <out dir>
@@ -208,6 +209,37 @@ check_alive "offline map updated"
 # walk. Stopping the app before both walks end leaves the area "Update paused" at the next start
 # until its first check walks it again, so the steps below would not see it Ready at once.
 sleep 25
+
+# After the update the app replaces each style's pack by one that links only the new release's
+# tiles, and deletes the old one: no tile of the release before stays linked to the area (MapLibre's
+# map cache keeps them within its size limit). Read from a copy of MapLibre's database (journal mode
+# DELETE, so a copy taken between two writes is whole; a torn one is taken again).
+linked=""
+for _ in $(seq 1 20); do
+    adb exec-out run-as "$pkg" cat no_backup/maplibre.db > "$out/maplibre-updated.db" || true
+    rc=0
+    linked=$(python3 -I - "$out/maplibre-updated.db" <<'PY'
+import sqlite3, sys
+try:
+    db = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
+    regions = db.execute("SELECT COUNT(*) FROM regions").fetchone()[0]
+    rows = db.execute(
+        "SELECT t.url_template, COUNT(*) FROM region_tiles r JOIN tiles t ON t.id = r.tile_id GROUP BY t.url_template"
+    ).fetchall()
+    cached = db.execute("SELECT COUNT(*) FROM tiles WHERE url_template LIKE '%/tiles/1/%'").fetchone()[0]
+except sqlite3.DatabaseError as e:
+    print(f"unreadable copy: {e}")
+    sys.exit(3)
+links = {template.split("/tiles/")[1].split("/")[0]: n for template, n in rows}
+print(f"{regions} packs; tiles linked per release: {links}; release 1 tiles in the database: {cached}")
+sys.exit(0 if regions == 2 and "2" in links and "1" not in links else 3)
+PY
+) || rc=$?
+    ((rc == 0)) && break
+    sleep 3
+done
+echo "$linked"
+((rc == 0)) || fail "the update left the release before's tiles linked to the offline map: $linked"
 
 # Without the server the area still draws, in both themes.
 kill "$server"

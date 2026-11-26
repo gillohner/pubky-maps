@@ -19,6 +19,16 @@ interface PackStore {
         metadata: PackMetadata,
     ): Any
 
+    /**
+     * Registers a paused pack of the same style, area and zooms as the pack [handle], with
+     * [metadata], and returns its handle. Resumed, it links what the database has of that area and
+     * fetches only what is missing.
+     */
+    suspend fun createLike(
+        handle: Any,
+        metadata: PackMetadata,
+    ): Any
+
     fun resume(handle: Any)
 
     fun pause(handle: Any)
@@ -48,6 +58,8 @@ data class StoredPack(
     val handle: Any,
     val metadata: PackMetadata?,
     val progress: PackProgress,
+    /** The address of the pack's map style. */
+    val style: String? = null,
 )
 
 enum class PackState { Unknown, Downloading, Paused, Complete }
@@ -93,6 +105,12 @@ data class PackMetadata(
      * first: the places of the area are read again from its tiles when it changes.
      */
     val newDataAt: Long = 0,
+    /**
+     * A pack made to take the place of the pack of its style in its area after an update
+     * ([OfflineMaps]); until the old one is deleted, it is not part of the area. One left over by a
+     * process that ended between the two steps is deleted, or takes the place, at the next check.
+     */
+    val replacing: Boolean = false,
 ) {
     fun encode(): ByteArray = json.encodeToString(serializer(), this).encodeToByteArray()
 
