@@ -61,9 +61,10 @@ private fun isPrivateFolderLookup(frame: StackTraceElement): Boolean =
 
 /**
  * The class named by an instance count violation's message ("class to.pubky.maps.android.MainActivity;
- * instances=2; limit=1"). StrictMode raises it for a leaked activity: after a garbage collection more
- * instances of the class are still in memory than the app has running. Its stack is one made-up frame
- * (`StrictMode.setClassInstanceLimit`), so the leak is blamed on the class that leaked.
+ * instances=2; limit=1"). StrictMode raises it for a leaked activity: when an activity is destroyed
+ * and, after a garbage collection, more instances of its class are in memory than the app still runs
+ * plus one. Its stack is one made-up frame (`StrictMode.setClassInstanceLimit`), so the leak is blamed
+ * on the class that leaked.
  */
 private val leakedClass = Regex("""^class ([\w.$]+); instances=""")
 

@@ -223,5 +223,6 @@ adb shell input tap $xy
 wait_for "No offline maps yet." 20 > /dev/null || fail "the offline map was not deleted"
 check_alive "offline map deleted"
 
-adb logcat -d > "$out/logcat.txt" || true
+# The theme switches above recreate MainActivity, so this also fails on a leaked activity of ours.
+check_strict_mode "offline maps"
 echo "an area downloads, updates to new tiles, draws without a connection in light and dark, and deletes"
