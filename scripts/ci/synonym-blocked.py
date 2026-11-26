@@ -47,9 +47,15 @@ JOB_SERVICE = "OutboxJobService"
 REGISTERED = re.compile(r"^\s*JOB #u\d+a\d+/1: \S+ \S*OutboxJobService", re.M)
 STARTED = re.compile(r"START: #u\d+a\d+/1 \S*OutboxJobService")
 # An entry of the job history: "-5m10s376ms   START: #u0a209/1 to.pubky.maps/.android.OutboxJobService" (how
-# long ago), or "... STOP: #u0a209/1 ... unexpectedly disconnected" for a run whose process died.
+# long ago), or "... STOP: #u0a209/1 ... unexpectedly disconnected" for a run whose process died (DIED).
 HISTORY = re.compile(r"^\s*-(?P<age>[\dmshd]+)\s+(?P<kind>START|STOP): #u\d+a\d+/(?P<id>\d+) \S*OutboxJobService(?P<rest>.*)$",
                      re.M)
+# How JobScheduler ends a running job whose process died (Android 15, JobServiceContext): whichever of its
+# binder calls or the service connection meets the dead process first. The death itself blocks the app's
+# network, and JobScheduler telling the run so can come first: "host crashed when trying to inform of
+# network change" (run 45874052666).
+DIED = ("unexpectedly disconnected", "binding died", "host crashed when trying to inform of network change",
+        "host crashed when trying to stop")
 BANNER = "Can't reach your homeserver"
 
 
@@ -244,6 +250,13 @@ def enqueued(jobs, job_id):
     return seconds(age.group(1)) if age else None
 
 
+def died_since(jobs, since_kill):
+    """The reasons of the runs of the outbox job that ended because their process died, in the last
+    `since_kill` s of the job history."""
+    return [rest.strip() for rest, age in history(jobs, "STOP")
+            if age < since_kill and rest.strip() in DIED]
+
+
 def rerun_after_kill(jobs, since_kill):
     """How the outbox job ran again after its process was killed during a run, from `dumpsys jobscheduler`
     taken `since_kill` s after the kill: "guard" (the run's guard job ran, which scheduled the job anew),
@@ -337,9 +350,9 @@ def outbox_retries_the_closed_app(dev):
     (dev.out / "jobs-retry-after.txt").write_text(jobs)
     (dev.out / "standby-bucket.txt").write_text(dev.shell(f"am get-standby-bucket {PKG}") + "\n")
     since_kill = time.time() - killed
-    died = [rest for rest, age in history(jobs, "STOP") if age < since_kill and "unexpectedly disconnected" in rest]
-    if not died:
-        dev.fail("the kill did not end a run of the outbox job ('unexpectedly disconnected'; jobs-retry-after.txt)")
+    if not died_since(jobs, since_kill):
+        dev.fail("the kill did not end a run of the outbox job (no STOP naming a dead process since the kill; "
+                 "jobs-retry-after.txt)")
     if not after or after == before:
         dev.fail(f"the killed app was not started again for its waiting write (pid {before}; jobs-retry-*.txt)")
     restarted = [age for _, age in history(jobs, "START") if age < since_kill]
