@@ -2,7 +2,6 @@ package to.pubky.maps.android
 
 import android.app.Application
 import android.net.ConnectivityManager
-import android.net.Network
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -130,10 +129,12 @@ class PubkyMapsApplication : Application() {
                 core = core,
                 settings = settingsRepository.settings,
             )
-        // Writes that wait for a connection are sent as soon as the phone has one.
+        // Writes that wait for a connection are sent as soon as the phone has one: the homeserver
+        // is tried again first (writes wait for it), then the outbox.
         getSystemService(ConnectivityManager::class.java)?.registerDefaultNetworkCallback(
-            object : ConnectivityManager.NetworkCallback() {
-                override fun onAvailable(network: Network) = writes.flush()
+            NetworkReturns {
+                account.controller.onNetworkAvailable()
+                writes.flush()
             },
         )
     }

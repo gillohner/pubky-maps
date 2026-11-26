@@ -70,8 +70,9 @@ user's collections (read from their homeserver, public or private, or kept on th
 places each. Save keeps the place privately on the homeserver or on the phone only, per the
 setting; the **Saved** screen (from the search page) lists saved places and lists. Public writes
 show a Public badge first. A write shows at once and goes into an outbox on the phone, sent in
-order; one without a connection waits and is retried, one the homeserver refuses is taken back
-with a message.
+order; one without a connection waits and is retried, and goes out as soon as the phone is online
+again (the homeserver is tried again then, not only on a timer); one the homeserver refuses is
+taken back with a message.
 
 The map also shows the places people referenced on Pubky (from zoom 12, from Pinakes, clustered).
 When no Pinakes server answers, the map's status line says so.
