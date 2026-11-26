@@ -3,8 +3,10 @@
 # runner (scripts/ci/place_fixture_server.py through adb reverse; no public network): an
 # openstreetmap.org link to the Conditorei Schober opens the app on its place page, a sheet over the
 # map with the card's name and kind, the Pubky tags and the posts; the handle raises it to the whole
-# screen, where the lists holding the place show; back closes it. Checks that Pinakes and Nexus were
-# asked with the app's User-Agent, Nexus for every spelling people used for the place.
+# screen, where the lists holding the place show; back closes it. Directions, with location granted
+# and the emulator's GPS at Zürich HB, ask the fixture Valhalla for a route by car from there to the
+# place, show its time and draw it on the map; Walk asks again on foot. Checks that Pinakes, Nexus
+# and Valhalla were asked with the app's User-Agent, Nexus for every spelling people used for the place.
 # Usage: emulator-place.sh <apk> <out dir>
 set -euo pipefail
 
@@ -35,13 +37,18 @@ adb reverse "tcp:$port" "tcp:$port"
 cat > "$out/settings.json" <<JSON
 {"schemaVersion": 1, "servers": {
   "pinakes": [{"name": "Fixtures", "url": "http://127.0.0.1:$port"}],
-  "nexus": [{"name": "Fixtures", "url": "http://127.0.0.1:$port"}]}}
+  "nexus": [{"name": "Fixtures", "url": "http://127.0.0.1:$port"}],
+  "valhalla": [{"name": "Fixtures", "url": "http://127.0.0.1:$port"}]}}
 JSON
 adb push "$out/settings.json" /data/local/tmp/pubky-maps-settings.json > /dev/null
 adb shell chmod 644 /data/local/tmp/pubky-maps-settings.json
 adb shell run-as "$pkg" mkdir -p files/datastore
 adb shell run-as "$pkg" cp /data/local/tmp/pubky-maps-settings.json files/datastore/settings.json
 adb shell run-as "$pkg" rm -f no_backup/place-cache.db no_backup/place-cache.db-journal
+# Directions start from the user's position: the permission is granted up front (the dialog is the
+# my-location button's, tested in the smoke test) and the GPS is put at Zürich HB below.
+adb shell pm grant "$pkg" android.permission.ACCESS_FINE_LOCATION
+adb shell pm grant "$pkg" android.permission.ACCESS_COARSE_LOCATION
 # The map opens at the whole world, not where an earlier test left it.
 adb shell run-as "$pkg" rm -f no_backup/map-view.json
 # A log buffer large enough to keep StrictMode's reports from the start until the end.
@@ -59,6 +66,29 @@ wait_for "coffee" 5 > /dev/null || fail "the coffee tag is missing"
 sleep 3
 screenshot place-half
 check_alive "place page"
+
+# The emulator's GPS at Zürich HB, sent again every 2 s: Android hands a fix only to listeners
+# already registered.
+( for _ in $(seq 1 60); do adb emu geo fix 8.5403 47.3779 > /dev/null 2>&1 || true; sleep 2; done ) &
+gps=$!
+trap 'kill $server $gps 2> /dev/null || true' EXIT
+xy=$(wait_for "Directions" 10) || fail "no Directions on the place page"
+adb shell input tap $xy
+wait_for "5 min · 1.4 km" 40 > /dev/null || fail "no route time and length after Directions"
+# A server the user added carries no credits of its own: OpenStreetMap's, and where to report errors.
+wait_for "© OpenStreetMap contributors · Report a map error" 5 > /dev/null || fail "no routing credits under the route"
+sleep 3
+screenshot place-directions
+check_alive "directions"
+# The route's darker edge (RouteLine.kt) on the map above the sheet.
+share=$(python3 -I "$here/png_stats.py" "$out/place-directions.png" 0 0.1 1 0.45 '#0b4fb3' | awk '{print $3}')
+python3 -I -c "import sys; sys.exit(0 if float(sys.argv[1]) >= 0.0005 else 1)" "$share" ||
+    fail "the route is not drawn on the map (share of its colour: $share)"
+xy=$(wait_for "Walk" 5) || fail "no Walk mode in the directions"
+adb shell input tap $xy
+sleep 4
+check_alive "directions on foot"
+kill $gps 2> /dev/null || true
 
 xy=$(wait_for "Show more of the place" 5) || fail "no sheet handle"
 adb shell input tap $xy
@@ -97,6 +127,14 @@ assert any(p.endswith("/collections") for p in paths), paths
 agents = {l["ua"] for l in lines}
 assert all(a.startswith(("PubkyMaps/", "pubky-maps-core/")) for a in agents), agents
 assert all(l["ua"].startswith("PubkyMaps/") for l in lines if l["path"].startswith("/v1/stream/")), agents
+# Directions: by car from the GPS fix to the card's point, then on foot from the same start.
+routes = [l for l in lines if l["path"] == "/route"]
+assert [r["costing"] for r in routes] == ["auto", "pedestrian"], routes
+for r in routes:
+    start, end = r["locations"]
+    assert abs(start["lat"] - 47.3779) < 1e-3 and abs(start["lon"] - 8.5403) < 1e-3, r
+    assert abs(end["lat"] - 47.3708689) < 1e-6 and abs(end["lon"] - 8.5418241) < 1e-6, r
+    assert r["ua"].startswith("PubkyMaps/"), r
 print("requests:", len(lines), sorted(set(paths)))
 PY
 

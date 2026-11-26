@@ -17,6 +17,9 @@ enum class ServicePart(
 
     /** Neither Photon nor Pinakes answered the last search. */
     Search("Search is offline"),
+
+    /** No routing server answered the last route. */
+    Routing("Can't reach routing"),
 }
 
 /**

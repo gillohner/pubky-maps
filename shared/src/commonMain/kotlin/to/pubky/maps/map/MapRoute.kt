@@ -93,6 +93,8 @@ import to.pubky.maps.place.PlaceServices
 import to.pubky.maps.place.PlaceSheet
 import to.pubky.maps.place.PlaceWriteActions
 import to.pubky.maps.place.SheetStop
+import to.pubky.maps.routing.DirectionsUi
+import to.pubky.maps.routing.RouteStatus
 import to.pubky.maps.search.RecentSearch
 import to.pubky.maps.search.SearchActions
 import to.pubky.maps.search.SearchArea
@@ -201,6 +203,14 @@ fun MapRoute(
             ?.collectAsStateWithLifecycle()
             ?.value
             .orEmpty()
+    val directions = places?.directions
+    val directionsState =
+        directions
+            ?.directions
+            ?.collectAsStateWithLifecycle()
+            ?.value
+    val foundRoute = directionsState?.status as? RouteStatus.Found
+    val routePoints by rememberUpdatedState(foundRoute?.route?.points)
     // Pins while search is open; the picked result also when its card shows.
     val searchPins by rememberUpdatedState(searchState?.takeIf { it.mode != SearchMode.Idle })
     val mapState =
@@ -209,6 +219,8 @@ fun MapRoute(
             // Read once: later views are kept by the map's own saved state (rotation, Settings).
             initialCameraPosition = remember { startView?.toCameraPosition() ?: WorldCamera },
         ) {
+            // Under the location dot and every pin.
+            routePoints?.let { RouteLine(it) }
             LocationIndicatorLayer(id = "user-location", locationState = locationState)
             if (pubkyPlaces.isNotEmpty()) {
                 MapPlacesPins(
@@ -352,6 +364,57 @@ fun MapRoute(
 
     fun roomsOf(uri: String): Flow<DpRect?> = snapshotFlow { uncoveredMap?.takeIf { it.first == uri }?.second }
 
+    // Directions belong to the place they were opened on: another place, or none, closes them.
+    val shownUri = shown?.place?.uri
+    LaunchedEffect(directions, shownUri) {
+        val open = directions?.directions?.value ?: return@LaunchedEffect
+        if (open.placeUri != shownUri) directions.close()
+    }
+    // A found route is fitted into the map its place page leaves in view, once per route.
+    LaunchedEffect(foundRoute) {
+        val route = foundRoute?.route ?: return@LaunchedEffect
+        val room = uncoveredMap?.takeIf { it.first == directionsState.placeUri }?.second
+        mapState.animateCameraToBounds(
+            BoundingBox(
+                west = route.points.minOf { it.lon },
+                south = route.points.minOf { it.lat },
+                east = route.points.maxOf { it.lon },
+                north = route.points.maxOf { it.lat },
+            ),
+            CameraFit(fitPadding = routeFitPadding(room, mapState.viewport?.size)),
+        )
+    }
+    val startDirections = directions?.let { rememberStartDirections(it, locationState) }
+    val settingsLauncher = rememberSystemSettingsLauncher()
+    val directionsUi =
+        if (directions != null && directionsState != null && startDirections != null) {
+            DirectionsUi(
+                directions = directionsState,
+                onMode = directions::selectMode,
+                onClose = directions::close,
+                onRetry = {
+                    if (directionsState.from == null) {
+                        startDirections(directionsState.placeUri, directionsState.to)
+                    } else {
+                        directions.retry()
+                    }
+                },
+                onOpenSettings =
+                    if (settingsLauncher.canOpenApplicationSettings) {
+                        (
+                            {
+                                settingsLauncher.openApplicationSettings()
+                            }
+                        )
+                    } else {
+                        null
+                    },
+                credits = routeCredits(servers, foundRoute?.server),
+            )
+        } else {
+            null
+        }
+
     // A place opened from a link: the map moves to it once per opening, into the middle of the map
     // its page leaves in view. Saved, so returning from Settings or recreating the activity keeps
     // where the user has moved the map since.
@@ -396,7 +459,9 @@ fun MapRoute(
     }
     val placePage =
         places?.let {
-            rememberPlacePage(it, shown, mapSearch?.userLocation, onSharePlace, openIn, writes, onWrite) { sheetMoved = true }
+            rememberPlacePage(it, shown, mapSearch?.userLocation, onSharePlace, openIn, writes, onWrite, startDirections, directionsUi) {
+                sheetMoved = true
+            }
         }
     // The area on screen goes offline in the style on screen and the other theme's of the same server.
     val areaPicker =
@@ -760,6 +825,8 @@ private fun rememberPlacePage(
     openIn: OpenInApps?,
     writes: WriteController?,
     onWrite: (WriteTarget, WriteIntent) -> Unit,
+    startDirections: ((String, GeoPoint) -> Unit)?,
+    directions: DirectionsUi?,
     onSheetMoved: () -> Unit,
 ): PlacePageSlot? {
     LaunchedEffect(shown?.place) {
@@ -803,6 +870,11 @@ private fun rememberPlacePage(
             onOpenLink = rememberSafeLinkOpener(),
             onLoadMorePosts = places.pages::loadMorePosts,
             writes = if (writes != null && own != null) placeWriteActions(page, own, writes, onWrite, publicTagsExplained) else null,
+            onDirections =
+                (page.place.point ?: page.card?.point)?.let { to ->
+                    startDirections?.let { start -> { start(shown.place.uri, to) } }
+                },
+            directions = directions?.takeIf { it.directions.placeUri == shown.place.uri },
         )
     return PlacePageSlot(
         full = stop == SheetStop.Full,

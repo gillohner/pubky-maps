@@ -35,6 +35,7 @@ import to.pubky.maps.links.OsmId
 import to.pubky.maps.links.OsmType
 import to.pubky.maps.map.MapScreen
 import to.pubky.maps.map.PlacePageSlot
+import to.pubky.maps.map.routeCredits
 import to.pubky.maps.place.AlsoOnLink
 import to.pubky.maps.place.KeptDetails
 import to.pubky.maps.place.LocalRemoteImage
@@ -56,6 +57,12 @@ import to.pubky.maps.place.PlaceSource
 import to.pubky.maps.place.PlaceTag
 import to.pubky.maps.place.RemoteImageContent
 import to.pubky.maps.place.SheetStop
+import to.pubky.maps.routing.Directions
+import to.pubky.maps.routing.DirectionsUi
+import to.pubky.maps.routing.NoRouteReason
+import to.pubky.maps.routing.Route
+import to.pubky.maps.routing.RouteStatus
+import to.pubky.maps.routing.TravelMode
 import to.pubky.maps.ui.PubkyMapsTheme
 
 /**
@@ -303,12 +310,37 @@ class PlaceScreenshotTest {
             onOpenIn = {},
             onOpenLink = {},
             onLoadMorePosts = {},
+            onDirections = {},
+        )
+
+    /** Directions to the Kunsthaus from Zürich HB, in [status]; found: FOSSGIS' route by car. */
+    private fun directionsTo(
+        status: RouteStatus,
+        mode: TravelMode = TravelMode.Car,
+    ) = actions.copy(
+        directions =
+            DirectionsUi(
+                directions =
+                    Directions(kunsthausRef.uri, kunsthausRef.point!!, mode, from = GeoPoint(47.3779, 8.5403), status = status),
+                onMode = {},
+                onClose = {},
+                onRetry = {},
+                onOpenSettings = {},
+                credits = routeCredits(ServerDefaults.lists, null),
+            ),
+    )
+
+    private val foundRoute =
+        RouteStatus.Found(
+            Route(listOf(GeoPoint(47.3779, 8.5403), kunsthausRef.point!!), seconds = 289.373, meters = 1401.0),
+            server = "https://valhalla1.openstreetmap.de",
         )
 
     @Composable
     internal fun Page(
         page: PlacePageState,
         stop: SheetStop = SheetStop.Half,
+        actions: PlacePageActions = this.actions,
     ) {
         val dark = isSystemInDarkTheme()
         MapScreen(
@@ -416,6 +448,43 @@ class PlaceScreenshotTest {
 
     @Test
     fun tappedOfflineTabletDark() = capture("place-tapped-offline", Device.Tablet, dark = true) { Page(tappedOffline) }
+
+    @Test
+    fun directionsPhoneLight() = capture("place-directions", Device.Phone, dark = false) { Page(rich, actions = directionsTo(foundRoute)) }
+
+    @Test
+    fun directionsPhoneDark() = capture("place-directions", Device.Phone, dark = true) { Page(rich, actions = directionsTo(foundRoute)) }
+
+    @Test
+    fun directionsTabletLight() =
+        capture("place-directions", Device.Tablet, dark = false) { Page(rich, actions = directionsTo(foundRoute)) }
+
+    @Test
+    fun directionsTabletDark() = capture("place-directions", Device.Tablet, dark = true) { Page(rich, actions = directionsTo(foundRoute)) }
+
+    @Test
+    fun directionsPeekLargeFontPhoneLight() =
+        capture("place-directions-peek", Device.Phone, dark = false, largeFont = true) {
+            Page(rich, SheetStop.Peek, directionsTo(foundRoute, TravelMode.Bike))
+        }
+
+    @Test
+    fun directionsFindingPhoneLight() =
+        capture("place-directions-finding", Device.Phone, dark = false) {
+            Page(sparse, actions = directionsTo(RouteStatus.Finding, TravelMode.Walk))
+        }
+
+    @Test
+    fun directionsNoLocationPhoneDark() =
+        capture("place-directions-no-location", Device.Phone, dark = true) {
+            Page(sparse, actions = directionsTo(RouteStatus.NoLocation(permissionOff = true)))
+        }
+
+    @Test
+    fun directionsTooFarPhoneLight() =
+        capture("place-directions-too-far", Device.Phone, dark = false) {
+            Page(sparse, actions = directionsTo(RouteStatus.NoRoute(NoRouteReason.TooFar), TravelMode.Walk))
+        }
 
     @Test
     fun offlinePhoneLight() = capture("place-offline", Device.Phone, dark = false) { Page(offline) }

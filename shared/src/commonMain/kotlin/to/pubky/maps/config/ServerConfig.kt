@@ -33,6 +33,7 @@ enum class Service(
     Pinakes("pinakes"),
     Nexus("nexus"),
     Overpass("overpass"),
+    Valhalla("valhalla"),
     PkarrRelay("pkarr_relay"),
     AuthRelay("auth_relay"),
     ;

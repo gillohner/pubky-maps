@@ -112,13 +112,13 @@ Settings:
 - **Account:** sign in with [Pubky Ring](https://github.com/pubky/pubky-ring). It shows the user's
   profile name, tags and saved places, kept on the phone so they stay readable offline, and signs out.
 - **Server lists:** an ordered list of servers per service (map styles, Photon, Pinakes, Nexus,
-  Overpass, Pkarr relays, sign-in relay). Users add, remove, reorder and reset them; servers run by Synonym are
+  Overpass, Valhalla, Pkarr relays, sign-in relay). Users add, remove, reorder and reset them; servers run by Synonym are
   marked. The map uses its style list in order, the next style taking over when one fails to load;
   sign-in uses the Pkarr and sign-in relay lists (from the next start after a change); opening a
   map link asks the Pinakes list; search uses the Photon and Pinakes lists the same way (the next
   server takes over on an error, a timeout or "too many requests"); place pages and the map's Pubky
-  places use the Pinakes and Nexus lists the same way, and the offline areas' place details the
-  Overpass list.
+  places use the Pinakes and Nexus lists the same way, the offline areas' place details the
+  Overpass list, and directions the Valhalla list.
 - **What is stored online:** per kind of data (saved places, home and work, lists, check-ins, tracks,
   location history, photo locations) phone only, homeserver private or public. Tags and reviews are
   public by nature. Saved places, lists and photo locations follow the choices; the other kinds are
@@ -138,7 +138,7 @@ beside it. A place tapped on the map that its sheet or panel would hide moves to
 map left in view (also under the notices below the search bar) once the sheet has opened, or, while
 the page loads, once its growing header covers it; not after the user moved the map or the
 sheet. A search result or a link's place goes there in one move as its page opens. It shows the
-name, what the place is, the distance and the address, Share and Open in
+name, what the place is, the distance and the address, Directions, Share and Open in
 (the apps switched on in Settings, installed ones first); the Pinakes card's photo and text with
 their credits; OpenStreetMap details from the card's facts when Pinakes serves them, or, when the card brings none, those an offline area keeps (opening hours with open or closed now, phone,
 website, wheelchair access, cuisine); Pubky tags with their counts and who tagged (people the user
@@ -148,6 +148,16 @@ its own and is hidden while it has nothing. What a page showed is kept on the ph
 reopens offline with a note saying when it was saved; the user's own tags and lists in it are shown
 only to the account that saw them. Typed coordinates open a page without any request, and the
 map's Pubky places wait until the user moves the map away from the typed point.
+
+**Directions** on a place page ask for the user's position as the my-location button does (the
+permission only then) and route from there to the place by car, bike or on foot (car at first, then
+the mode picked last) through the Valhalla list (FOSSGIS' public server by default: at most one
+request a second, the next server taking over when one fails). The page shows the route's time and
+length with the server's credits and a link to report a map error; the map draws the line and fits
+it into the part the page leaves in view. Another place, or closing the page, ends them. Without a
+position, a route or a server, the page says which is missing (with Settings when location access is
+off for good), and every server failing names routing in the map's line of missing parts. Directions
+give no turn-by-turn guidance and need a connection.
 
 **Writing about a place** (signed in; a write that needs the homeserver opens the sign-in first and
 continues after it). The page's action row has Save, Tag, Post and Add to list; its sections have
@@ -373,9 +383,12 @@ screenshots search with its pins, and the update probe screenshots each step of 
   [OpenMapTiles](https://www.openmaptiles.org/)), with [VersaTiles](https://versatiles.org) (Colorful
   and Colorful Dark) as the fallback.
 - Search: [Photon](https://photon.komoot.io) by komoot (OpenStreetMap data), and Pinakes.
+- Routes: [Valhalla](https://github.com/valhalla/valhalla) on [FOSSGIS](https://www.fossgis.de)' public
+  server (OpenStreetMap data), credited under each route.
 - Icons: [Material icons](https://github.com/google/material-design-icons) (Apache-2.0).
 
-The map always shows the credits of the style it draws; Settings → Map data lists every source.
+The map always shows the credits of the style it draws; Settings → Map data lists every source of the
+map and of search; a route shows its own under it.
 
 ## Licence
 

@@ -16,6 +16,7 @@ internal val Service.title: String
             Service.Pinakes -> "Places"
             Service.Nexus -> "Tags and posts"
             Service.Overpass -> "Offline place details"
+            Service.Valhalla -> "Routes"
             Service.PkarrRelay -> "Finding homeservers"
             Service.AuthRelay -> "Sign-in relay"
         }
@@ -46,6 +47,10 @@ internal val Service.description: String
             Service.Overpass -> {
                 "Overpass servers: opening hours, phone numbers and websites of the places in your offline maps. " +
                     "They learn which areas you keep."
+            }
+
+            Service.Valhalla -> {
+                "Valhalla servers: routes by car, bike and on foot. They learn where each route starts and ends."
             }
 
             Service.PkarrRelay -> {
