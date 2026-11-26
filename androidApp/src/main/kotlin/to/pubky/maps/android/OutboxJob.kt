@@ -145,6 +145,8 @@ internal fun guardRun(
     context: Context,
     runGoing: Boolean,
 ) {
+    // A new job starts with no failures: a process killed during every run is tried again about
+    // every 2.5 minutes, where Android's own count would have stretched the wait.
     val jobs = context.getSystemService(JobScheduler::class.java) ?: return
     if (!runGoing && jobs.getPendingJob(OUTBOX_JOB_ID) != null) scheduleOutboxJob(context)
 }
@@ -216,6 +218,24 @@ internal fun connectivityLost(stopReason: Int?): Boolean =
         (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && stopReason == JobParameters.STOP_REASON_CONSTRAINT_CONNECTIVITY)
 
 /**
+ * What [OutboxJobService.onStartJob] does for job [jobId]: the guard job runs at once ([guardRun],
+ * false: done); the outbox job starts a run ([startRun], true: it goes on until `jobFinished`).
+ */
+internal fun startJob(
+    context: Context,
+    jobId: Int,
+    runGoing: Boolean,
+    startRun: () -> Unit,
+): Boolean {
+    if (jobId == OUTBOX_GUARD_JOB_ID) {
+        guardRun(context, runGoing)
+        return false
+    }
+    startRun()
+    return true
+}
+
+/**
  * Runs when the phone has a network while writes wait. Starting the process restores the session
  * and builds the outbox ([PubkyMapsApplication.onCreate]); the run then waits until it is sent, and
  * Android runs it again later (after [BACKOFF_MS], doubling) when the homeserver could not be reached.
@@ -227,32 +247,29 @@ internal fun connectivityLost(stopReason: Int?): Boolean =
  * Known limit: a backoff built up while the phone had a network but the homeserver could not be
  * reached stays when the network goes and comes back between two runs (only a run stopped by the
  * network going is followed by a fresh job), so with the app closed such a write goes out when that
- * backoff ends; opening the app sends it at once.
+ * backoff ends; opening the app sends it at once. A run whose process died is started again by its
+ * guard as a fresh job, with no backoff kept.
  */
 class OutboxJobService : JobService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var run: Job? = null
 
-    override fun onStartJob(params: JobParameters): Boolean {
-        if (params.jobId == OUTBOX_GUARD_JOB_ID) {
-            guardRun(this, runGoing = run?.isActive == true)
-            return false
+    override fun onStartJob(params: JobParameters): Boolean =
+        startJob(this, params.jobId, runGoing = run?.isActive == true) {
+            val app = application as PubkyMapsApplication
+            run =
+                scope.launch {
+                    runOutbox(
+                        this@OutboxJobService,
+                        app.writes.waiting,
+                        sendNow = {
+                            app.account.controller.onNetworkAvailable()
+                            app.writes.flush()
+                        },
+                        finish = { reschedule -> jobFinished(params, reschedule) },
+                    )
+                }
         }
-        val app = application as PubkyMapsApplication
-        run =
-            scope.launch {
-                runOutbox(
-                    this@OutboxJobService,
-                    app.writes.waiting,
-                    sendNow = {
-                        app.account.controller.onNetworkAvailable()
-                        app.writes.flush()
-                    },
-                    finish = { reschedule -> jobFinished(params, reschedule) },
-                )
-            }
-        return true
-    }
 
     /** Android stopped the run (the network went, or it needed the resources). */
     override fun onStopJob(params: JobParameters): Boolean {

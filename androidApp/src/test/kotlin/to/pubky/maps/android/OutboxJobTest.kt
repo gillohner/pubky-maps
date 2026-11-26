@@ -220,6 +220,19 @@ class OutboxJobTest {
     }
 
     @Test
+    fun theGuardJobEndsAtOnceAndTheOutboxJobStartsARun() {
+        var runs = 0
+        jobs.schedule(outboxJob(context, expedited = false))
+
+        assertFalse("done in onStartJob", startJob(context, OUTBOX_GUARD_JOB_ID, runGoing = false) { runs++ })
+        assertEquals("the guard sends nothing itself", 0, runs)
+        assertTrue("the outbox job, scheduled anew", jobs.getPendingJob(OUTBOX_JOB_ID)!!.isExpedited)
+
+        assertTrue("goes on until jobFinished", startJob(context, OUTBOX_JOB_ID, runGoing = false) { runs++ })
+        assertEquals(1, runs)
+    }
+
+    @Test
     fun nothingWaitingCancelsTheGuardJobToo() =
         runTest(UnconfinedTestDispatcher()) {
             jobs.schedule(guardJob(context))

@@ -235,9 +235,13 @@ def history(jobs, kind, job_id=1):
 
 
 def active_run(jobs):
-    """Whether `dumpsys jobscheduler` lists a run of the outbox job under "Active jobs"."""
+    """Whether `dumpsys jobscheduler` lists a run of the outbox job under "Active jobs" that started less
+    than 20 s ago, so it is still going when the app is killed a few seconds later (a run lasts 60 s)."""
     active = jobs.split("Active jobs:", 1)[1].split("Idle contexts", 1)[0] if "Active jobs:" in jobs else ""
-    return re.search(r"Slot #\d+.*#u\d+a\d+/1 \S*OutboxJobService", active) is not None
+    if re.search(r"Slot #\d+.*#u\d+a\d+/1 \S*OutboxJobService", active) is None:
+        return False
+    starts = [age for _, age in history(jobs, "START")]
+    return bool(starts) and min(starts) < 20
 
 
 def outbox_retries_the_closed_app(dev):
@@ -245,7 +249,7 @@ def outbox_retries_the_closed_app(dev):
     # Every Synonym host is blocked, so no run can send and each one lasts its whole minute; Android
     # runs the job again after a backoff (30 s, doubling). Wait until a run is going: the bug this
     # checks is a process that dies during a run.
-    deadline = time.time() + 150
+    deadline = time.time() + 180
     jobs = ""
     while time.time() < deadline and not active_run(jobs):
         time.sleep(2)
@@ -284,6 +288,7 @@ def outbox_retries_the_closed_app(dev):
     # anew; the job's state is kept every 30 s, so a missed run can be read from the artifacts.
     after = ""
     restarted = []
+    guarded = []
     snapshot = 0
     while time.time() < killed + 300:
         if time.time() >= killed + 30 * snapshot:
@@ -294,7 +299,8 @@ def outbox_retries_the_closed_app(dev):
         if after and after != before:
             jobs = dev.shell(f"dumpsys jobscheduler {PKG}", timeout=60)
             restarted = [age for _, age in history(jobs, "START") if age < time.time() - killed]
-            if restarted:
+            guarded = [age for _, age in history(jobs, "START", job_id=2) if age < time.time() - killed]
+            if restarted and guarded:
                 break
         time.sleep(3)
     (dev.out / "jobs-retry-after.txt").write_text(jobs)
@@ -305,6 +311,8 @@ def outbox_retries_the_closed_app(dev):
         dev.fail("the kill did not end a run of the outbox job ('unexpectedly disconnected'; jobs-retry-after.txt)")
     if not after or after == before:
         dev.fail(f"the killed app was not started again for its waiting write (pid {before}; jobs-retry-*.txt)")
+    if not guarded:
+        dev.fail(f"the run's guard job did not run since the kill, {since_kill:.0f} s ago (jobs-retry-after.txt)")
     if not restarted:
         dev.fail(f"no run of the outbox job since the kill, {since_kill:.0f} s ago (jobs-retry-after.txt)")
     log_lines = dev.adb("logcat", "-d", "-b", "all", check=False, timeout=120).splitlines()
@@ -315,8 +323,8 @@ def outbox_retries_the_closed_app(dev):
         dev.fail(f"process {after} was not started for the outbox job (outbox-retry.txt, logcat.txt)")
     if not REGISTERED.search(jobs):
         dev.fail("the outbox job is gone while the write still waits (jobs-retry-after.txt)")
-    log(f"Android started the killed app again (pid {before} -> {after}) and ran its outbox job, "
-        f"about {since_kill - min(restarted):.0f} s after the kill")
+    log(f"Android started the killed app again (pid {before} -> {after}) for the run's guard job, which "
+        f"started the outbox job again about {since_kill - min(restarted):.0f} s after the kill")
 
 
 if __name__ == "__main__":
