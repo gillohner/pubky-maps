@@ -106,6 +106,38 @@ class StrictModeReportTest {
         )
     }
 
+    /** StrictMode's made-up stack of an instance count violation. */
+    private val instanceCountStack = arrayOf(StackTraceElement("android.os.StrictMode", "setClassInstanceLimit", "StrictMode.java", 1))
+
+    @Test
+    fun aLeakedActivityOfOursIsOurs() {
+        assertEquals(
+            "ours InstanceCountViolation at to.pubky.maps.android.MainActivity",
+            strictModeReport(
+                "InstanceCountViolation",
+                instanceCountStack,
+                "class to.pubky.maps.android.MainActivity; instances=2; limit=1",
+            ),
+        )
+    }
+
+    @Test
+    fun aLeakedActivityOfALibraryIsTheLibrarys() {
+        assertEquals(
+            "library InstanceCountViolation at com.example.SignInActivity",
+            strictModeReport("InstanceCountViolation", instanceCountStack, "class com.example.SignInActivity; instances=3; limit=2"),
+        )
+    }
+
+    @Test
+    fun aMessageThatNamesNoLeakedClassLeavesTheStackToDecide() {
+        val stack = arrayOf(frame("java.io.FileInputStream"), frame("to.pubky.maps.search.RecentSearches"))
+        assertEquals(
+            "ours DiskReadViolation at to.pubky.maps.search.RecentSearches.call(File.kt:1)",
+            strictModeReport("DiskReadViolation", stack, "class to.pubky.maps.Other read a file"),
+        )
+    }
+
     @Test
     fun aStackOfOnlyThePlatformIsNotOurs() {
         val stack = arrayOf(frame("java.io.FileInputStream"), frame("android.app.ActivityThread"))

@@ -251,8 +251,11 @@ screenshots search with its pins, and the update probe screenshots each step of 
   Android, Java, Kotlin, AndroidX and the app's I/O layers (SQLDelight, okio, JNA).
   StrictMode sees only Java I/O, not the Rust core's native files and sockets. Every emulator
   test above reads the log at its end (`scripts/ci/strict_mode.py`), lists the reports and fails on
-  one that blames our code; reports about a library, and our lookups of the app's private folders
-  (`filesDir`, `noBackupFilesDir`: a microsecond check that the folder exists), are listed only.
+  one that blames our code (a leaked activity is blamed on its class: the offline test switches
+  the theme three times in one process, each switch recreates `MainActivity`, and an old one still
+  in memory at the second or third fails it); reports about a library, and our lookups of the
+  app's private folders (`filesDir`, `noBackupFilesDir`: a microsecond check that the folder
+  exists), are listed only.
 
 ## Data sources and attribution
 
