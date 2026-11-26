@@ -53,6 +53,11 @@ private val HandleHeight = 20.dp
  * the header drag it; scrolling the page up first raises the sheet to the top, scrolling down at the
  * top of the page lowers it; a tap on the handle steps it up (and from the top back to half).
  * [maxHeight] is the room it may take (under the search bar).
+ *
+ * The header stays in place over the scrolling page while it and the handle take at most half of
+ * [maxHeight]. A taller one (a large font in split screen) scrolls with the page, as [PlacePanel]'s
+ * does: kept in place it would leave the page a strip, or no room at all, and the sections could not
+ * be reached. Below the top stop that page is back at its start, so the lowest stop shows the header.
  */
 @Composable
 fun PlaceSheet(
@@ -76,6 +81,12 @@ fun PlaceSheet(
     var contentPx by remember { mutableIntStateOf(0) }
     val fullPx = if (contentPx > 0 && headerPx > 0) (headerPx + handlePx + contentPx).coerceAtMost(maxPx) else maxPx
     val stops = SheetStops(peek = peekPx, half = (maxPx * 0.5f).coerceAtMost(fullPx), full = fullPx)
+    // headerPx is the header's own height in both places, so moving it does not change the answer.
+    val headerScrolls = headerPx > 0 && headerPx + handlePx > maxPx * 0.5f
+    val pageScroll = rememberScrollState()
+    LaunchedEffect(stop, headerScrolls) {
+        if (headerScrolls && stop != SheetStop.Full) pageScroll.animateScrollTo(0)
+    }
     // The resting height, animated between stops; while a finger moves the sheet, [dragged].
     val resting = remember { Animatable(stops.height(stop)) }
     var dragged by remember { mutableStateOf<Float?>(null) }
@@ -166,18 +177,20 @@ fun PlaceSheet(
                         state = dragState,
                         orientation = Orientation.Vertical,
                         onDragStopped = { velocity -> release(-velocity) },
-                    ).onSizeChanged { headerPx = it.height - handlePx.toInt() },
+                    ),
             ) {
-                Handle(stop) { onStopChange(SheetStops.afterTap(stop)) }
-                PlaceHeader(page, context, actions)
+                Handle(stop) { onStopChange(stops.afterTap(stop)) }
+                if (!headerScrolls) PlaceHeader(page, context, actions, Modifier.onSizeChanged { headerPx = it.height })
             }
             Column(
                 Modifier
                     .fillMaxWidth()
                     .weight(1f)
                     .nestedScroll(nestedScroll)
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(pageScroll),
             ) {
+                // Dragged by the page's own scrolling (the nested scroll above), as the sections are.
+                if (headerScrolls) PlaceHeader(page, context, actions, Modifier.onSizeChanged { headerPx = it.height })
                 PlaceSections(
                     page,
                     context,

@@ -52,16 +52,19 @@ data class SheetStops(
         return stops.minBy { abs(height(it) - height) }
     }
 
+    /**
+     * A tap on the handle: one stop up, and from the top back to half. Where half is no taller than
+     * the lowest stop (a short window), the lowest goes to the top, so the tap is never lost.
+     */
+    fun afterTap(stop: SheetStop): SheetStop =
+        when (stop) {
+            SheetStop.Peek -> if (height(SheetStop.Half) > peek + 1f) SheetStop.Half else SheetStop.Full
+            SheetStop.Half -> SheetStop.Full
+            SheetStop.Full -> SheetStop.Half
+        }
+
     companion object {
         /** px/s; about a quick flick on a phone. */
         const val FLING_VELOCITY = 1200f
-
-        /** A tap on the handle: one stop up, and from the top back to half. */
-        fun afterTap(stop: SheetStop): SheetStop =
-            when (stop) {
-                SheetStop.Peek -> SheetStop.Half
-                SheetStop.Half -> SheetStop.Full
-                SheetStop.Full -> SheetStop.Half
-            }
     }
 }

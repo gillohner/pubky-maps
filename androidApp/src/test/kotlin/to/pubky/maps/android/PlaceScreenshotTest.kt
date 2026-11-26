@@ -76,6 +76,9 @@ class PlaceScreenshotTest {
 
         /** A phone as tall as the whole rich page, to see every section at once. */
         TallPhone(412, 2300),
+
+        /** A phone's half of the screen in split screen, where a header at a large font is taller than half the sheet. */
+        SplitPhone(412, 450),
     }
 
     private fun capture(
@@ -335,6 +338,14 @@ class PlaceScreenshotTest {
     @Test
     fun richPeekLargeFontPhoneLight() =
         capture("place-rich-peek", Device.Phone, dark = false, largeFont = true) { Page(rich, SheetStop.Peek) }
+
+    @Test
+    fun richFullLargeFontSplitPhoneLight() =
+        capture("place-rich-full", Device.SplitPhone, dark = false, largeFont = true) { Page(rich, SheetStop.Full) }
+
+    @Test
+    fun richFullLargeFontSplitPhoneDark() =
+        capture("place-rich-full", Device.SplitPhone, dark = true, largeFont = true) { Page(rich, SheetStop.Full) }
 
     @Test
     fun sparsePhoneLight() = capture("place-sparse", Device.Phone, dark = false) { Page(sparse) }
