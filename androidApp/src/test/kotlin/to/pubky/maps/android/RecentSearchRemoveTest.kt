@@ -122,10 +122,25 @@ class RecentSearchRemoveTest {
     fun theMenuPhoneDark() = longPressZoo("search-recent-remove-phone-dark")
 
     @Test
-    fun talkBackOffersTheRemoveAction() {
+    @Config(qualifiers = "w1280dp-h800dp-notnight-mdpi")
+    fun theMenuTabletLight() = longPressZoo("search-recent-remove-tablet-light")
+
+    @Test
+    @Config(qualifiers = "w1280dp-h800dp-night-mdpi")
+    fun theMenuTabletDark() = longPressZoo("search-recent-remove-tablet-dark")
+
+    @Test
+    fun talkBackRemovesWithTheRowsAction() {
         showRecents()
-        val row = compose.onNode(hasClickAction().and(hasText("zoo"))).fetchSemanticsNode()
-        assertEquals("Remove from recent searches", row.config[SemanticsActions.OnLongClick].label)
+        val row = compose.onNode(hasClickAction().and(hasText("zoo")))
+        val config = row.fetchSemanticsNode().config
+        assertEquals("Show options", config[SemanticsActions.OnLongClick].label)
+        val remove = config[SemanticsActions.CustomActions].single()
+        assertEquals("Remove from recent searches", remove.label)
+        compose.runOnIdle { remove.action() }
+        compose.waitForIdle()
+        assertEquals(listOf("conditorei schober", "bahnhofstrasse 1"), store.entries.value.map { it.query })
+        compose.onNodeWithText("zoo").assertDoesNotExist()
     }
 
     @Test
@@ -133,6 +148,8 @@ class RecentSearchRemoveTest {
         showRecents(removable = false)
         compose.onNodeWithText("zoo").performTouchInput { longClick() }
         compose.onNodeWithText("Remove from recent searches").assertDoesNotExist()
+        val config = compose.onNode(hasClickAction().and(hasText("zoo"))).fetchSemanticsNode().config
+        assertEquals(null, config.getOrNull(SemanticsActions.CustomActions))
         assertEquals(3, store.entries.value.size)
     }
 }

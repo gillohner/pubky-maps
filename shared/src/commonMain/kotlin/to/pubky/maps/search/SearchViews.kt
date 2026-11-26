@@ -41,7 +41,9 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.LinkAnnotation
@@ -334,10 +336,13 @@ private fun ResultRow(
 /** The words of the long-press menu on a recent search, and of its TalkBack action. */
 internal const val REMOVE_RECENT = "Remove from recent searches"
 
+/** What TalkBack says a long press on a recent search does: it opens the menu. */
+internal const val RECENT_OPTIONS = "Show options"
+
 /**
  * A past search. A long press opens a menu to remove it ([onRemove], when the history can change): the
- * row keeps the distance as its only trailing item, as quiet as Google Maps' and CoMaps' history rows,
- * and TalkBack offers the long press as "Remove from recent searches".
+ * row keeps the distance as its only trailing item, as quiet as Google Maps' and CoMaps' history rows.
+ * TalkBack lists "Remove from recent searches" among the row's actions, which removes it at once.
  */
 @Composable
 private fun RecentRow(
@@ -361,11 +366,22 @@ private fun RecentRow(
             trailingContent =
                 distanceText(userLocation, place?.point)?.let { d -> { Text(d, style = MaterialTheme.typography.labelMedium) } },
             modifier =
-                Modifier.combinedClickable(
-                    onClick = onClick,
-                    onLongClick = onRemove?.let { { menuOpen = true } },
-                    onLongClickLabel = onRemove?.let { REMOVE_RECENT },
-                ),
+                Modifier
+                    .combinedClickable(
+                        onClick = onClick,
+                        onLongClick = onRemove?.let { { menuOpen = true } },
+                        onLongClickLabel = onRemove?.let { RECENT_OPTIONS },
+                    ).semantics {
+                        if (onRemove != null) {
+                            customActions =
+                                listOf(
+                                    CustomAccessibilityAction(REMOVE_RECENT) {
+                                        onRemove()
+                                        true
+                                    },
+                                )
+                        }
+                    },
         )
         if (onRemove != null) {
             DropdownMenu(
