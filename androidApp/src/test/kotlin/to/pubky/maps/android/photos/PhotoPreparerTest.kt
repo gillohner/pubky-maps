@@ -15,7 +15,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
-import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -26,7 +25,6 @@ import java.io.InputStream
 /** Photos are re-encoded on the phone: camera and phone details and (unless asked) the GPS spot never leave it. */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [36])
 class PhotoPreparerTest {
     /** A JPEG as a phone camera writes it: make, model, software, time, GPS and an orientation. */
     private fun cameraPhoto(

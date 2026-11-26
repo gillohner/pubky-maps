@@ -38,7 +38,7 @@ import to.pubky.maps.ui.PubkyMapsTheme
 /** The results sheet on a phone: its handle steps it between half, full and back; the list drags it too. */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [36], qualifiers = "w412dp-h915dp")
+@Config(qualifiers = "w412dp-h915dp")
 class SearchInteractionTest {
     @get:Rule
     val compose = createComposeRule()

@@ -48,7 +48,6 @@ private const val TABLET = "w1280dp-h800dp"
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [36])
 @OptIn(ExperimentalRoborazziApi::class)
 class WriteInteractionTest {
     @get:Rule

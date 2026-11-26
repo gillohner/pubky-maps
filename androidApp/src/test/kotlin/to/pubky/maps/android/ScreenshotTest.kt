@@ -19,7 +19,6 @@ import com.github.takahirom.roborazzi.uiMode
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import to.pubky.maps.AppInfo
 import to.pubky.maps.account.AccountScreen
@@ -61,7 +60,6 @@ import to.pubky.maps.update.UpdatesUiState
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [36])
 @OptIn(ExperimentalRoborazziApi::class)
 class ScreenshotTest {
     private enum class Device(

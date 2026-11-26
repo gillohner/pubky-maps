@@ -54,7 +54,7 @@ import to.pubky.maps.ui.PubkyMapsTheme
 /** The phone place sheet driven by touch: a released drag animates to its stop; the controls stay clear of the search bar. */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [36], qualifiers = "w412dp-h915dp-notnight-mdpi")
+@Config(qualifiers = "w412dp-h915dp-notnight-mdpi")
 class PlaceSheetInteractionTest {
     @get:Rule
     val compose = createComposeRule()
