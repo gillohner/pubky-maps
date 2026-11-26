@@ -9,9 +9,11 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onParent
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.DpRect
+import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -25,6 +27,7 @@ import to.pubky.maps.config.ServerDefaults
 import to.pubky.maps.map.AreaPickerUi
 import to.pubky.maps.map.MapScreen
 import to.pubky.maps.map.MapSearch
+import to.pubky.maps.map.mapTopControlsPadding
 import to.pubky.maps.search.SearchActions
 import to.pubky.maps.search.SearchState
 import to.pubky.maps.ui.PubkyMapsTheme
@@ -32,7 +35,8 @@ import to.pubky.maps.ui.PubkyMapsTheme
 /**
  * The area picker's top bar shows its whole instruction: at Android's largest font size (200 %) on a
  * phone the text wraps and the bar grows with it, so no line is cut, and the frame starts below the
- * text. Native graphics, so text is measured with real fonts.
+ * text, and the map's scale bar and compass start below the bar. Native graphics, so text is measured
+ * with real fonts.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -85,6 +89,16 @@ class AreaPickerLargeFontTest {
         assertTrue("frame top ${frame.top} is below the text's bottom ${text.bottom}", frame.top >= text.bottom)
     }
 
+    /** The scale bar and compass the map draws under the picker start below its bar, so it covers neither. */
+    private fun assertMapControlsBelowTheBar() {
+        // The bar is the Surface around the instruction.
+        val bar = compose.onNodeWithText(instruction, useUnmergedTree = true).onParent().getUnclippedBoundsInRoot()
+        assertTrue("the bar holds the instruction", bar.bottom - bar.top >= 48.dp)
+        // No system bars in this test: the safe area starts at the top, the controls' box 12 dp under it.
+        val controlsTop = 12.dp + mapTopControlsPadding(frame, safeTop = 0.dp)
+        assertTrue("map controls top $controlsTop is below the bar's bottom ${bar.bottom}", controlsTop >= bar.bottom)
+    }
+
     @Test
     fun atLargeFontTheWholeInstructionShows() {
         show(fontScale = 2f)
@@ -94,6 +108,7 @@ class AreaPickerLargeFontTest {
         // the layout reports wider than the text here, at the normal font too.
         assertFalse("no line is cut off", text.didOverflowHeight)
         assertFrameBelowTheText()
+        assertMapControlsBelowTheBar()
     }
 
     @Test
@@ -103,5 +118,8 @@ class AreaPickerLargeFontTest {
         assertEquals(1, text.lineCount)
         assertFalse(text.didOverflowHeight)
         assertFrameBelowTheText()
+        assertMapControlsBelowTheBar()
+        // Where they are without the picker: under the search bar.
+        assertEquals(mapTopControlsPadding(null, safeTop = 0.dp), mapTopControlsPadding(frame, safeTop = 0.dp))
     }
 }

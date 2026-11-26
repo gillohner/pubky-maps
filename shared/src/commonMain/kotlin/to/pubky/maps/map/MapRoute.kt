@@ -2,8 +2,11 @@ package to.pubky.maps.map
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
@@ -474,6 +477,10 @@ fun MapRoute(
                     }
                 },
         ) {
+            // Under the search bar, or under the area picker's bar while it is open. No parent consumes
+            // insets, so this inset is the one safeDrawingPadding applies below and the picker's bar
+            // is placed under.
+            val controlsTop = mapTopControlsPadding(areaPicker?.frame, WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding())
             Box(
                 Modifier
                     .fillMaxSize()
@@ -483,14 +490,13 @@ fun MapRoute(
                 DisappearingScaleBar(
                     metersPerDp = { mapState.viewport?.metersPerDpAtCenter ?: 0.0 },
                     zoom = { mapState.cameraPosition.zoom },
-                    // Under the search bar.
-                    modifier = Modifier.align(Alignment.TopStart).padding(top = TopControlSize + MapControlMargin),
+                    modifier = Modifier.align(Alignment.TopStart).padding(top = controlsTop),
                 )
                 DisappearingCompassButton(
                     modifier =
                         Modifier
                             .align(Alignment.TopEnd)
-                            .padding(top = TopControlSize + MapControlMargin),
+                            .padding(top = controlsTop),
                     size = TopControlSize,
                 )
             }
@@ -526,6 +532,7 @@ private fun rememberAreaPicker(
     }
     return AreaPickerUi(
         fits = area?.let { fitsInOneDownload(it) },
+        frame = frame,
         onFrame = { frame = it },
         onDownload = {
             val bounds = area?.takeIf { fitsInOneDownload(it) }

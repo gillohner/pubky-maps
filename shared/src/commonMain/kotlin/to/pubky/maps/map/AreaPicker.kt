@@ -38,6 +38,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
 import to.pubky.maps.config.AttributionLink
@@ -47,11 +48,28 @@ import to.pubky.maps.ui.AppIcons
 data class AreaPickerUi(
     /** Whether the area in the frame fits in one download; null until the map has measured it. */
     val fits: Boolean?,
+    /** The frame as last measured ([onFrame]); null until it has been. */
+    val frame: DpRect? = null,
     /** The frame, in dp from the map's top start corner (the overlay covers the map exactly). */
     val onFrame: (DpRect) -> Unit = {},
     val onDownload: () -> Unit = {},
     val onCancel: () -> Unit = {},
 )
+
+/**
+ * How far the map's top controls (scale bar, compass) start below the top of their box, which lies
+ * [MapControlMargin] inside the safe area ([safeTop] being its top inset): under the search bar's place.
+ * While the picker is open they start no higher than its [pickerFrame] (in dp from the map's top),
+ * because a large font makes the picker's bar taller than the search bar and it would cover them (and
+ * take the compass's taps). At the normal font the frame starts where they do.
+ */
+fun mapTopControlsPadding(
+    pickerFrame: DpRect?,
+    safeTop: Dp,
+): Dp {
+    val underSearchBar = TopControlSize + MapControlMargin
+    return maxOf(underSearchBar, (pickerFrame?.top ?: 0.dp) - safeTop - MapControlMargin)
+}
 
 /**
  * Picking an area to download: the map stays movable under a frame, the rest of it shaded; a bar on
