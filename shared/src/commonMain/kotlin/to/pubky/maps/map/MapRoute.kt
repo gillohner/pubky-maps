@@ -37,7 +37,6 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -358,23 +357,24 @@ fun MapRoute(
     // A place tapped on the map opens its sheet or panel over the map, maybe over the place: once the
     // sheet has opened, a place it hides moves to the middle of the map left in view, as in Google
     // Maps (keepTappedInView). Once per tap and map size (saved, see keptInViewKey); not after the user
-    // moved the map or dragged the sheet. Search picks and links centre the map themselves.
+    // moved the map or the sheet. Search picks and links centre the map themselves.
     var keptInView by rememberSaveable { mutableStateOf<String?>(null) }
-    // The open place's uri and the stop its sheet is at (rememberPlacePage reports it).
-    var pageStop by remember { mutableStateOf<Pair<String, SheetStop>?>(null) }
+    // The user moved the open place's sheet (a drag, a tap on its handle) since it was tapped.
+    var sheetMoved by remember { mutableStateOf(false) }
     LaunchedEffect(tapped == null) { if (tapped == null) keptInView = null }
     val tappedShown = tapped?.takeIf { shown?.place?.uri == it.uri }
     LaunchedEffect(tappedShown) {
         val place = tappedShown ?: return@LaunchedEffect
         val point = place.point ?: return@LaunchedEffect
         val pages = places?.pages ?: return@LaunchedEffect
+        sheetMoved = false
         keepTappedInView(
             uri = place.uri,
             point = point,
             rooms = snapshotFlow { uncoveredMap },
             pageDone = pages.state.map { page -> page?.place?.uri == place.uri && page.loading.isEmpty() },
-            userMoved = snapshotFlow { mapState.isCameraMoving && mapState.cameraMoveReason == CameraMoveReason.Gesture },
-            sheetStops = snapshotFlow { pageStop }.mapNotNull { it?.takeIf { (uri) -> uri == place.uri }?.second },
+            userMoved =
+                snapshotFlow { sheetMoved || (mapState.isCameraMoving && mapState.cameraMoveReason == CameraMoveReason.Gesture) },
             map = mapState.keepInViewMap(),
             kept = { keptInView },
             onKept = { keptInView = it },
@@ -382,7 +382,7 @@ fun MapRoute(
     }
     val placePage =
         places?.let {
-            rememberPlacePage(it, shown, mapSearch?.userLocation, onSharePlace, openIn, writes, onWrite) { stop -> pageStop = stop }
+            rememberPlacePage(it, shown, mapSearch?.userLocation, onSharePlace, openIn, writes, onWrite) { sheetMoved = true }
         }
     // The area on screen goes offline in the style on screen and the other theme's of the same server.
     val areaPicker =
@@ -740,7 +740,7 @@ private fun JsonObject?.strings(): Map<String, String> =
 
 /**
  * The place page of [shown] for the map screen: its state from [places], the sheet's stop (saved per
- * place, told to [onStop] with the place's uri), the clock, and its actions. Null when no place is open.
+ * place; [onSheetMoved] when the user moves the sheet), the clock, and its actions. Null when no place is open.
  */
 @Composable
 private fun rememberPlacePage(
@@ -751,7 +751,7 @@ private fun rememberPlacePage(
     openIn: OpenInApps?,
     writes: WriteController?,
     onWrite: (WriteTarget, WriteIntent) -> Unit,
-    onStop: (Pair<String, SheetStop>) -> Unit,
+    onSheetMoved: () -> Unit,
 ): PlacePageSlot? {
     LaunchedEffect(shown?.place) {
         val place = shown?.place
@@ -768,7 +768,6 @@ private fun rememberPlacePage(
         }
     }
     if (shown == null) return null
-    SideEffect { onStop(shown.place.uri to stop) }
     SystemBack { shown.onClose() }
     val page = pageState?.takeIf { it.place.uri == shown.place.uri } ?: PlacePageState(shown.place)
     // Built once per place and point (it asks the core and the package manager), not per recomposition.
@@ -799,7 +798,19 @@ private fun rememberPlacePage(
     return PlacePageSlot(
         full = stop == SheetStop.Full,
         sheet = { maxHeight, inset ->
-            PlaceSheet(page, context, actions, stop, { stop = it }, maxHeight, bottomInset = inset)
+            PlaceSheet(
+                page,
+                context,
+                actions,
+                stop,
+                {
+                    stop = it
+                    onSheetMoved()
+                },
+                maxHeight,
+                bottomInset = inset,
+                onDragStart = onSheetMoved,
+            )
         },
         panel = { modifier -> PlacePanel(page, context, actions, modifier) },
     )

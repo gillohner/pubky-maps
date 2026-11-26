@@ -13,7 +13,6 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import to.pubky.maps.links.GeoPoint
-import to.pubky.maps.place.SheetStop
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -149,7 +148,6 @@ class KeepInViewTest {
         val rooms = MutableStateFlow<DpRect?>(null)
         val done = MutableStateFlow(false)
         val userMoved = MutableStateFlow(false)
-        val stop = MutableStateFlow(SheetStop.Peek)
         val job =
             scope.launch {
                 keepTappedInView(
@@ -158,7 +156,6 @@ class KeepInViewTest {
                     rooms = rooms,
                     pageDone = done,
                     userMoved = userMoved,
-                    sheetStops = stop,
                     map = map,
                     kept = { kept },
                     onKept = { kept = it },
@@ -287,18 +284,25 @@ class KeepInViewTest {
         }
 
     @Test
-    fun aSheetDraggedWhileThePageLoadsMovesNothing() =
+    fun aSheetOrMapTheUserMovedWhileThePageLoadsStaysEvenAfterSettings() =
         runTest {
             val tap = Tap(this, FakeMap(at = DpOffset(200.dp, 550.dp)))
             tap.rooms.value = phone
             settle()
-            // The user pulls the sheet up to half before the page has loaded: its room is theirs.
-            tap.stop.value = SheetStop.Half
+            // The user pulls the sheet up before the page has loaded and holds it there: its room is theirs.
+            tap.userMoved.value = true
             runCurrent()
             tap.rooms.value = phone.copy(bottom = 457.dp)
             settle()
             assertTrue(tap.map.centred.isEmpty())
+            // Kept: back from Settings (the loop starts again), the map stays where the user left it.
             assertEquals(keptInViewKey("https://www.openstreetmap.org/node/1", DpSize(412.dp, 915.dp)), tap.kept)
             tap.job.cancel()
+            val back = Tap(this, tap.map, kept = tap.kept)
+            back.rooms.value = phone.copy(bottom = 457.dp)
+            back.done.value = true
+            settle()
+            assertTrue(tap.map.centred.isEmpty())
+            back.job.cancel()
         }
 }

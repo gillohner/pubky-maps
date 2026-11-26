@@ -11,12 +11,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.launch
 import to.pubky.maps.links.GeoPoint
-import to.pubky.maps.place.SheetStop
 
 /**
  * How close to the edge of the uncovered map a place still counts as in view: its pin (a 24 dp dot)
@@ -102,9 +100,9 @@ internal interface KeepInViewMap {
  * Keeps the place [uri] tapped at [point] in view while its sheet or panel opens: each time the map
  * left in view ([rooms], see [settled]) has settled with the camera at rest, a place it hides moves
  * to its middle, once per place and map size ([kept] and [onKept], see [keptInViewKey]). Nothing
- * moves once [userMoved] the map (where the user put the map is theirs) or once the sheet left the
- * stop it opened at ([sheetStops]; the tap counts as kept then): the room the user dragged the sheet
- * to is theirs too, as in Google Maps.
+ * moves once [userMoved] the map or the sheet (a drag, also one held still, a tap on its handle):
+ * where the user put them is theirs, as in Google Maps. The tap counts as kept then, also after a
+ * return from Settings.
  *
  * The sheet's lowest height is its header, which grows when the place's card or a part's failure
  * arrives, mostly after the first room has settled. So a room that shows the place counts as final
@@ -117,7 +115,6 @@ internal suspend fun keepTappedInView(
     rooms: Flow<DpRect?>,
     pageDone: Flow<Boolean>,
     userMoved: Flow<Boolean>,
-    sheetStops: Flow<SheetStop>,
     map: KeepInViewMap,
     kept: () -> String?,
     onKept: (String) -> Unit,
@@ -126,10 +123,6 @@ internal suspend fun keepTappedInView(
         var moved = false
         launch {
             userMoved.first { it }
-            moved = true
-        }
-        launch {
-            sheetStops.distinctUntilChanged().drop(1).first()
             moved = true
             map.size?.let { onKept(keptInViewKey(uri, it)) }
         }
