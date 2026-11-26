@@ -221,4 +221,57 @@ class UncoveredMapTest {
         val room = checkNotNull(reported)
         assertEquals(banner + 16f, room.top.value, 1f)
     }
+
+    /**
+     * Another place opened at the same height lays the sheet out the same, so nothing is measured or
+     * placed again; the room is still reported to the screen's new caller (MapRoute tags it with the
+     * place now shown, and moves only that place into a room tagged with it).
+     */
+    @Test
+    @Config(qualifiers = "w412dp-h915dp-notnight-mdpi")
+    fun anotherPlaceAtTheSameHeightIsGivenTheRoomToo() {
+        val other = page.copy(place = page.place.copy(uri = "https://www.openstreetmap.org/node/1"))
+        var placeShown by mutableStateOf("first")
+        var reportedFor: String? = null
+        compose.setContent {
+            PubkyMapsTheme {
+                val tag = placeShown
+                MapScreen(
+                    attribution = emptyList(),
+                    mapUnavailable = false,
+                    onRetryMap = {},
+                    onMyLocation = {},
+                    onOpenSettings = {},
+                    placePage =
+                        PlacePageSlot(
+                            full = false,
+                            sheet = { maxHeight, inset ->
+                                PlaceSheet(
+                                    if (tag ==
+                                        "first"
+                                    ) {
+                                        page
+                                    } else {
+                                        other
+                                    },
+                                    context,
+                                    actions,
+                                    SheetStop.Half,
+                                    {},
+                                    maxHeight,
+                                    bottomInset = inset,
+                                )
+                            },
+                            panel = { modifier -> PlacePanel(page, context, actions, modifier) },
+                        ),
+                    onUncoveredMap = { if (it != null) reportedFor = tag },
+                ) { Box(Modifier.fillMaxSize()) }
+            }
+        }
+        compose.waitForIdle()
+        assertEquals("first", reportedFor)
+        placeShown = "second"
+        compose.waitForIdle()
+        assertEquals("second", reportedFor)
+    }
 }

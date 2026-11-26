@@ -17,8 +17,9 @@ import kotlin.math.tan
 
 /**
  * How long the map left in view must keep its size before a picked or linked place moves into it.
- * Shorter than [ROOM_SETTLE_MS]: the map waits for it before it moves at all, and the page opens at
- * its stop at once (only a page already open, at another height, animates there, every frame).
+ * Shorter than [ROOM_SETTLE_MS]: the map waits for it before it moves at all. A new page opens at
+ * its stop in its first frame; a page already open at another height animates there, a new room
+ * every frame.
  */
 internal const val OPEN_ROOM_SETTLE_MS = 100L
 
@@ -33,7 +34,11 @@ private const val MAX_MERCATOR_LAT = 85.05112878
 
 /**
  * The map that a picked or linked place's page leaves in view once the page has opened ([rooms],
- * see [settled]); null when none comes within [OPEN_ROOM_WAIT_MS] (no page shows for it).
+ * see [settled]); null when none comes within [OPEN_ROOM_WAIT_MS] (no page shows for it). The room
+ * of a page that is still loading: at half a loading page is shorter than the page it becomes (its
+ * stop is no taller than its content), so the place lands lower in the room the loaded page leaves,
+ * in view (on a 412x915 dp phone ~80 dp above the controls) but not in its middle. Waiting for the
+ * page would hold the move for as long as the network takes.
  */
 internal suspend fun openedRoom(rooms: Flow<DpRect?>): DpRect? =
     withTimeoutOrNull(OPEN_ROOM_WAIT_MS) { settled(rooms, OPEN_ROOM_SETTLE_MS).first() }

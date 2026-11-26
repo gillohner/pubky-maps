@@ -1052,14 +1052,17 @@ private fun rememberMyLocationAction(
 /**
  * Moves the camera to [point] at [zoom]. With [rooms], the map its page leaves in view (see
  * [openedRoom]), the place lands in its middle ([centreShowing]): the move waits for the page to
- * open, at most [OPEN_ROOM_WAIT_MS], so it is one move and not a second one after it.
+ * open, at most [OPEN_ROOM_WAIT_MS], so it is one move and not a second one after it. A finger that
+ * moved the map meanwhile has put it where the user wants it: then the map stays.
  */
 private suspend fun MapState.moveToPlace(
     point: GeoPoint,
     zoom: Double,
     rooms: Flow<DpRect?>?,
 ) {
+    val before = cameraPosition
     val room = rooms?.let { openedRoom(it) }
+    if (cameraPosition != before && cameraMoveReason == CameraMoveReason.Gesture) return
     val centre = centreShowing(point, room, viewport?.size, zoom, cameraPosition.bearing)
     animateCamera(CameraUpdate(center = Position(longitude = centre.lon, latitude = centre.lat), zoom = zoom))
 }
