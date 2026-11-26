@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.launch
@@ -181,22 +182,39 @@ fun restingViews(cameras: Flow<CameraPosition?>): Flow<MapView> =
         }.distinctUntilChanged()
 
 /**
+ * The camera as the map reports it: its [position], whether it [moving], and whether the user's own
+ * gesture moved it ([byGesture]: maplibre-compose's move reason, which stays Gesture after the finger
+ * lifts until the app itself moves the camera).
+ */
+data class CameraReport(
+    val position: CameraPosition,
+    val moving: Boolean,
+    val byGesture: Boolean,
+)
+
+/**
  * Saves each view the camera rests at ([restingViews] of [cameras]) until cancelled. When the map
  * leaves the screen before a rest is over (Back right after a pan finishes the activity, and this
- * with it), the last position [cameras] gave is saved then, unless the camera was moving (null): a
- * view the camera only passes through (a fling, the move to a linked place) is never saved. The last
- * value of the flow is used, not the map's state at that moment, because the map has already let go
- * of its view by then and no longer says whether its camera moves.
+ * with it), the last position [cameras] gave at rest or moved by the user's gesture is saved then:
+ * the map still reports a pan as moving for a moment after the finger lifts (longer when it flings
+ * or a frame stalls), and that is where the user left the map. A view the app's own move only
+ * passes through (to a linked place, a search result) is never saved; the last one before it is.
+ * The last value of the flow is used, not the map's state at that moment, because the map has
+ * already let go of its view by then and no longer says whether its camera moves.
  */
 suspend fun saveRestingViews(
-    cameras: Flow<CameraPosition?>,
+    cameras: Flow<CameraReport>,
     save: (MapView) -> Unit,
 ) {
-    var latest: CameraPosition? = null
+    var leftAt: CameraPosition? = null
     try {
-        restingViews(cameras.onEach { latest = it }).collect { save(it) }
+        val rests =
+            cameras
+                .onEach { if (!it.moving || it.byGesture) leftAt = it.position }
+                .map { if (it.moving) null else it.position }
+        restingViews(rests).collect { save(it) }
     } finally {
-        latest?.let { save(MapView.of(it)) }
+        leftAt?.let { save(MapView.of(it)) }
     }
 }
 

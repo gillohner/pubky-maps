@@ -255,10 +255,15 @@ fun MapRoute(
         if (awaitMapDrawn(mapState.events, styleReady)) mapDrawn()
     }
 
-    // The next start opens where the camera last rested, or where it was when the map left the screen.
+    // The next start opens where the camera last rested, or where the user had moved it when the map
+    // left the screen.
     val viewRested by rememberUpdatedState(onViewRested)
     LaunchedEffect(mapState) {
-        saveRestingViews(snapshotFlow { if (mapState.isCameraMoving) null else mapState.cameraPosition }) { viewRested(it) }
+        val cameras =
+            snapshotFlow {
+                CameraReport(mapState.cameraPosition, mapState.isCameraMoving, mapState.cameraMoveReason == CameraMoveReason.Gesture)
+            }
+        saveRestingViews(cameras) { viewRested(it) }
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
