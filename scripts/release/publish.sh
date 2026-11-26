@@ -16,11 +16,12 @@
 # In GitHub Actions it writes `published=true` (or `false` when it published nothing) to the step's
 # outputs, so the job that installs the published APK runs only when there is one.
 #
-# Usage: publish.sh <tag> <title> <notes file> <dist dir> <feed file name>
+# Usage: BUILD_SHA=<the commit dist/ was built from> publish.sh <tag> <title> <notes file> <dist dir> <feed file name>
+# (an edge run builds main's head, which can be newer than the run's own commit: edge-commit.py)
 set -euo pipefail
 tag=$1 title=$2 notes=$3 dist=$4 feed=$5
 repo=$GITHUB_REPOSITORY
-sha=$GITHUB_SHA
+sha=${BUILD_SHA:?the commit dist/ was built from}
 
 upload() {
   for i in 1 2 3 4 5; do

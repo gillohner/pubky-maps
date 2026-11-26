@@ -1,6 +1,7 @@
 name: release
 # Signed releases on GitHub (scripts/release/):
-# - every push to main replaces the `edge` pre-release (its tag moves to the commit);
+# - every push to main replaces the `edge` pre-release with a build of main's head when the run
+#   starts (its tag moves to that commit; scripts/release/edge-commit.py);
 # - a `v<x.y.z>` tag makes that release (the tag must match pubkymaps.version in gradle.properties);
 # - a manual run builds any branch and replaces the `dev` pre-release, which is how changes to the
 #   release are tried before they merge. It never touches `edge` or a version.
@@ -46,9 +47,28 @@ jobs:
       version_code: ${{ steps.v.outputs.version_code }}
       version_name: ${{ steps.v.outputs.version_name }}
       feed_name: ${{ steps.v.outputs.feed_name }}
+      sha: ${{ steps.commit.outputs.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
+      # Every job builds and publishes this commit. An edge run builds main's head, so a run queued
+      # after a newer commit's run (GitHub cancels a pending run when another is queued) never
+      # publishes an older commit than main's (scripts/release/edge-commit.py).
+      - id: commit
+        name: the commit to build
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/main ]; then
+            python3 -I scripts/release/edge-commit.py "$GITHUB_REPOSITORY" "$GITHUB_SHA" | tee -a "$GITHUB_OUTPUT"
+          else
+            echo "sha=$GITHUB_SHA" | tee -a "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.commit.outputs.sha }}
           persist-credentials: false
       - id: v
         name: channel and version
@@ -63,6 +83,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.meta.outputs.sha }}
           persist-credentials: false
       - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
@@ -118,6 +139,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.meta.outputs.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -171,9 +193,11 @@ jobs:
       TAG: ${{ needs.meta.outputs.release_tag }}
       VERSION_NAME: ${{ needs.meta.outputs.version_name }}
       FEED: ${{ needs.meta.outputs.feed_name }}
+      BUILD_SHA: ${{ needs.meta.outputs.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.meta.outputs.sha }}
           persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -203,7 +227,7 @@ jobs:
         run: sha256sum -- * > SHA256SUMS && cat SHA256SUMS
       - name: notes
         run: |
-          short=${GITHUB_SHA::7}
+          short=${BUILD_SHA::7}
           {
             case $CHANNEL in
               edge) echo "The latest build of \`main\` ($short), replaced on every push. Not a release: expect rough edges." ;;
@@ -225,8 +249,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           case $CHANNEL in
-            edge) title="Edge (main @ ${GITHUB_SHA::7})" ;;
-            dev) title="Dev ($GITHUB_REF_NAME @ ${GITHUB_SHA::7})" ;;
+            edge) title="Edge (main @ ${BUILD_SHA::7})" ;;
+            dev) title="Dev ($GITHUB_REF_NAME @ ${BUILD_SHA::7})" ;;
             stable) title="Pubky Maps $VERSION_NAME" ;;
           esac
           bash scripts/release/publish.sh "$TAG" "$title" "$RUNNER_TEMP/notes.md" dist "$FEED"
@@ -248,6 +272,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.meta.outputs.sha }}
           persist-credentials: false
       - name: the published APK, its checksum and its certificate
         shell: bash
