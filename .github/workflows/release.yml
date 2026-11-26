@@ -72,13 +72,16 @@ jobs:
       - uses: ./.github/actions/rust-android
         with:
           cache-key: android-release
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # android.yml's build job saves the Gradle cache; this job only reads it.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.gradle/caches/modules-2
             ~/.gradle/wrapper/dists
-          key: gradle-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', '**/*.gradle.kts') }}
-          restore-keys: gradle-
+          key: gradle-android-build-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', '**/*.gradle.kts') }}
+          restore-keys: |
+            gradle-android-build-
+            gradle-
       - name: Gradle wrapper
         run: |
           for i in 1 2 3; do

@@ -1,0 +1,235 @@
+#!/usr/bin/env python3
+"""Checks that each Gradle and cargo cache of CI is saved by one job only, and that the job running
+the tests caches what the tests download. CI: android.yml, build job.
+
+A cache is saved once per key, by the first job that finishes with a miss; a job that hits the key
+later gets only what that first job downloaded. When the build job (check: ktlint, lint, tests)
+shared its Gradle key with update-apks (release APKs only), update-apks often saved first, and every
+later build fetched ktlint, lint and the test libraries from Maven Central again, where GitHub's
+runners get "429 Too Many Requests". So:
+- a step that saves a Gradle cache (actions/cache) uses a key that starts with gradle-<workflow>-<job>-;
+  other jobs read it with actions/cache/restore;
+- a cargo cache name (rust-android cache-key, rust-cache shared-key) is saved by one job; others read
+  it with save: false / save-if: false;
+- a job that runs the Robolectric tests (gradlew check or test...) caches the Android jars Robolectric
+  downloads into ~/.m2.
+
+Usage: cache-keys-check.py [workflow.yml ...]   (default: every file in .github/workflows)
+"""
+import re
+import sys
+from pathlib import Path
+
+ROBOLECTRIC_JARS = "~/.m2/repository/org/robolectric"
+COMMENT = r"(?:[ \t]+#.*)?"
+
+
+def unquote(text):
+    text = text.strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in "'\"":
+        return text[1:-1]
+    return text
+
+
+def jobs(text):
+    """(job id, job text) of a workflow: the keys one level under `jobs:`."""
+    m = re.search(rf"(?m)^jobs:{COMMENT}[ \t]*\n", text)
+    if not m:
+        return []
+    body = text[m.end():]
+    end = re.search(r"(?m)^[^\s#]", body)
+    if end:
+        body = body[:end.start()]
+    first = re.search(r"(?m)^([ \t]+)[A-Za-z0-9_-]+:", body)
+    if not first:
+        return []
+    indent = re.escape(first.group(1))
+    parts = re.split(rf"(?m)^{indent}([A-Za-z0-9_-]+):{COMMENT}[ \t]*$", body)
+    return list(zip(parts[1::2], parts[2::2]))
+
+
+def steps(job_text):
+    """The text of each step of a job, at whatever indentation its `steps:` list uses."""
+    m = re.search(rf"(?m)^([ \t]*)steps:{COMMENT}[ \t]*\n", job_text)
+    if not m:
+        return []
+    body = job_text[m.end():]
+    first = re.search(r"(?m)^([ \t]*)- ", body)
+    if not first:
+        return []
+    return re.split(rf"(?m)^{re.escape(first.group(1))}- ", body)[1:]
+
+
+def field(step, name):
+    """The value of `name:` in a step: one line, or the lines of a block scalar (|, |-, >, ...)."""
+    m = re.search(rf"(?m)^([ \t]*){re.escape(name)}:[ \t]*(.*?){COMMENT}[ \t]*$", step)
+    if not m:
+        return []
+    head = m.group(2)
+    if head and head[0] not in "|>":
+        return [unquote(head)]
+    lines = []
+    for line in step[m.end():].split("\n")[1:]:
+        if line.strip() and len(line) - len(line.lstrip()) <= len(m.group(1)):
+            break
+        if line.strip():
+            lines.append(unquote(line))
+    return lines
+
+
+def value(step, name):
+    lines = field(step, name)
+    return lines[0] if lines else None
+
+
+def gradle_tasks(job_text):
+    """The arguments of every ./gradlew command in a job's run steps, continuation lines joined."""
+    joined = re.sub(r"\\[ \t]*\n", " ", job_text)
+    return [re.sub(r"#.*", "", m) for m in re.findall(r"\./gradlew\b([^\n]*)", joined)]
+
+
+def check(workflows):
+    """Problems found in {workflow name: text}."""
+    problems = []
+    cargo = {}
+    for workflow, text in workflows.items():
+        for job, job_text in jobs(text):
+            where = f"{workflow}.yml job {job}"
+            runs_tests = any(re.search(r"(?<![\w:-])(:?[\w-]+:)*(check|test\w*)(?![\w-])", args)
+                             for args in gradle_tasks(job_text))
+            cached = []
+            for step in steps(job_text):
+                uses = value(step, "uses") or ""
+                saves = (value(step, "save") or value(step, "save-if") or "true").lower() != "false"
+                if re.search(r"actions/cache(/save)?@", uses):
+                    paths = field(step, "path")
+                    cached += paths
+                    if any(".gradle" in p for p in paths):
+                        prefix = f"gradle-{workflow}-{job}-"
+                        key = value(step, "key") or ""
+                        if not key.startswith(prefix):
+                            problems.append(f"{where}: saves the Gradle cache {key!r}, whose key does not start with {prefix!r}")
+                        restore = field(step, "restore-keys")
+                        if restore and restore[0] != prefix:
+                            problems.append(f"{where}: the first restore key {restore[0]!r} is not {prefix!r}")
+                elif "actions/cache/restore@" in uses:
+                    cached += field(step, "path")
+                name = None
+                if "./.github/actions/rust-android" in uses:
+                    name = value(step, "cache-key")
+                elif "Swatinem/rust-cache@" in uses:
+                    name = value(step, "shared-key")
+                if name and saves:
+                    cargo.setdefault(name, []).append(where)
+            if runs_tests and not any(ROBOLECTRIC_JARS.startswith(p.rstrip("/")) for p in cached):
+                problems.append(f"{where}: runs the tests but does not cache {ROBOLECTRIC_JARS}")
+    for name, users in sorted(cargo.items()):
+        if len(users) > 1:
+            problems.append(f"the cargo cache {name!r} is saved by {', '.join(users)}")
+    return problems
+
+
+SHARED = """on: push
+jobs:
+  build:
+    steps:
+      - uses: ./.github/actions/rust-android
+        with:
+          cache-key: android-app
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+          key: gradle-${{ hashFiles('x') }}
+          restore-keys: gradle-
+      - run: ./gradlew --continue check
+  release: # the release APKs
+    steps:
+    - name: cargo
+      uses: ./.github/actions/rust-android
+      with:
+        cache-key: "android-app"
+    - name: gradle
+      uses: actions/cache@v6
+      with:
+        path: |-
+          ~/.gradle/caches/modules-2
+        key: >-
+          gradle-${{ hashFiles('x') }}
+  tests:
+    steps:
+      - run: |
+          ./gradlew \\
+            :androidApp:testDirectDebugUnitTest
+"""
+
+OWN = """on: push
+jobs: # one saver per cache
+  build:
+    steps:
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+          key: "gradle-a-build-${{ hashFiles('x') }}"
+          restore-keys: |
+            gradle-a-build-
+            gradle-
+      - uses: actions/cache@v6
+        with:
+          path: ~/.m2/repository
+          key: m2-${{ hashFiles('x') }}
+      - run: ./gradlew --continue check verifyRoborazziDirectDebug  # all of it
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core-host
+  release:
+    steps:
+      - uses: ./.github/actions/rust-android
+        with:
+          cache-key: core-host
+          save: false
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core-host
+          save-if: 'false'
+      - uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+          key: gradle-a-build-${{ hashFiles('x') }}
+      - run: ./gradlew assembleRelease -Pnot-a-check=1
+"""
+
+
+def self_check():
+    """The check finds each problem in SHARED, written in several YAML forms, and none in OWN."""
+    found = check({"a": SHARED})
+    failures = []
+    for expected in ("a.yml job build: saves the Gradle cache", "a.yml job release: saves the Gradle cache",
+                     "a.yml job build: the first restore key", "a.yml job build: runs the tests but does not cache",
+                     "a.yml job tests: runs the tests but does not cache",
+                     "the cargo cache 'android-app' is saved by a.yml job build, a.yml job release"):
+        if not any(expected in p for p in found):
+            failures.append(f"self-check: not found: {expected} (found {found})")
+    if len(found) != 6:
+        failures.append(f"self-check: expected 6 problems, found {found}")
+    wrong = check({"a": OWN})
+    if wrong:
+        failures.append(f"self-check: a correct workflow was refused: {wrong}")
+    return failures
+
+
+def main(args):
+    files = [Path(a) for a in args] or sorted(Path(".github/workflows").glob("*.yml"))
+    failures = self_check() + check({f.stem: f.read_text() for f in files})
+    for f in failures:
+        print("FAIL " + f)
+    if failures:
+        return 1
+    print(f"cache keys: ok ({len(files)} workflows)")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
