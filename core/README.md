@@ -107,9 +107,9 @@ No TLS setup is needed in Kotlin, because the core uses its own Mozilla root sto
 `.github/workflows/advisories.yml`, when the crate graph or `deny.toml` changes and every Monday)
 checks the crates the app ships against the RustSec advisories: the core for both Android ABIs,
 without dev dependencies (the test homeserver and relay) and without `uniffi-bindgen`. A
-vulnerable or unsound crate fails it, and so does an unmaintained or yanked crate the core depends
+vulnerable, unsound or yanked crate fails it, and so does an unmaintained crate the core depends
 on itself. The ignores in `deny.toml` each name the crate that pins the advisory and why it cannot
 happen in the app; one that matches nothing any more fails the check, so it is dropped once its
-cause is gone. They all come with `pubky 0.10`, which `pubky-social-specs` 1.0.0-rc.2 still
-depends on beside the core's `pubky 0.18` (lru 0.16 through mainline 7, heapless 0.7 through
-postcard).
+cause is gone. They all come with `pubky 0.10`, which `pubky-social-specs` 1.0.0-rc.2 depends on
+beside the core's `pubky 0.18` (lru 0.16 through mainline 7 and pkarr 7, heapless 0.7 through
+postcard). The ABIs are those `scripts/build-android.sh` builds; a new one goes into `deny.toml` too.

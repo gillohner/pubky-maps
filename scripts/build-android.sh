@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Builds the Rust core for Android with cargo-ndk: libpubky_maps_core.so for arm64-v8a and
 # x86_64, laid out as jniLibs/<abi>/ for the Gradle module.
+# The advisory check covers these ABIs too: a new one goes into deny.toml's graph targets.
 #
 # Usage: scripts/build-android.sh [OUT_DIR]   (default: core/jniLibs)
 # Needs: ANDROID_NDK_HOME (NDK r27 or newer), cargo-ndk 4, and the rustup targets
