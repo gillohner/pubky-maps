@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
@@ -178,6 +179,26 @@ fun restingViews(cameras: Flow<CameraPosition?>): Flow<MapView> =
             delay(VIEW_REST_MS)
             emit(MapView.of(camera))
         }.distinctUntilChanged()
+
+/**
+ * Saves each view the camera rests at ([restingViews] of [cameras]) until cancelled. When the map
+ * leaves the screen before a rest is over (Back right after a pan finishes the activity, and this
+ * with it), the last position [cameras] gave is saved then, unless the camera was moving (null): a
+ * view the camera only passes through (a fling, the move to a linked place) is never saved. The last
+ * value of the flow is used, not the map's state at that moment, because the map has already let go
+ * of its view by then and no longer says whether its camera moves.
+ */
+suspend fun saveRestingViews(
+    cameras: Flow<CameraPosition?>,
+    save: (MapView) -> Unit,
+) {
+    var latest: CameraPosition? = null
+    try {
+        restingViews(cameras.onEach { latest = it }).collect { save(it) }
+    } finally {
+        latest?.let { save(MapView.of(it)) }
+    }
+}
 
 /** The file's content: the last view, none on a first start. */
 internal data class StoredView(

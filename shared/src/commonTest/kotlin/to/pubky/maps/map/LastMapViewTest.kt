@@ -88,6 +88,55 @@ class LastMapViewTest {
             job.cancel()
         }
 
+    @Test
+    fun aMapLeftBeforeItsRestSavesTheViewItShows() =
+        runTest {
+            val camera = MutableStateFlow<CameraPosition?>(zurich.toCameraPosition())
+            val saved = mutableListOf<MapView>()
+            val job = launch { saveRestingViews(camera) { saved += it } }
+            advanceTimeBy(VIEW_REST_MS + 1)
+            assertEquals(listOf(zurich), saved)
+            // A pan, then Back 300 ms after it ends: the map goes before the camera has rested.
+            camera.value = null
+            advanceTimeBy(300)
+            camera.value = lugano.toCameraPosition()
+            advanceTimeBy(300)
+            job.cancelAndJoin()
+            assertEquals(listOf(zurich, lugano), saved)
+        }
+
+    @Test
+    fun aMapLeftWhileTheCameraMovesSavesNothingMore() =
+        runTest {
+            val camera = MutableStateFlow<CameraPosition?>(zurich.toCameraPosition())
+            val saved = mutableListOf<MapView>()
+            val job = launch { saveRestingViews(camera) { saved += it } }
+            advanceTimeBy(VIEW_REST_MS + 1)
+            // Back during a fling (or the move to a linked place): a view on the way is not where the user was.
+            camera.value = null
+            advanceTimeBy(300)
+            job.cancelAndJoin()
+            assertEquals(listOf(zurich), saved)
+        }
+
+    @Test
+    fun theViewSavedOnLeavingOpensTheNextMap() =
+        runTest {
+            fileSystem.createDirectories(path.parent!!)
+            withStore { store ->
+                advanceUntilIdle()
+                val camera = MutableStateFlow<CameraPosition?>(lugano.toCameraPosition())
+                val job = launch { saveRestingViews(camera, store::save) }
+                advanceTimeBy(300)
+                job.cancelAndJoin()
+                advanceUntilIdle()
+            }
+            withStore { store ->
+                advanceUntilIdle()
+                assertEquals(StartView.Read(lugano), store.startView.value)
+            }
+        }
+
     private val fileSystem = FakeFileSystem()
     private val path = "/data/no_backup/map-view.json".toPath()
 

@@ -3,9 +3,9 @@
 # and hold the start time to a budget, open Settings and each settings page, switch "Follow local
 # rules" off and check it stays off after a restart (a second start held to a budget), open the
 # open-source licences and swipe to their end, then go back with the system back button; move the
-# map with a link and check that the next start opens it there. Fails on a crash or when the app is
-# not in front. Screenshots, the UI dumps, the start times and the log go
-# to <out dir>.
+# map with a link and check that the next start opens it there, then pan it and press Back at once
+# and check that the panned view is stored. Fails on a crash or when the app is not in front.
+# Screenshots, the UI dumps, the start times and the log go to <out dir>.
 # Usage: emulator-smoke.sh <apk> <out dir>
 set -euo pipefail
 
@@ -91,12 +91,16 @@ wait_for() {
     return 1
 }
 
-check_alive() {
+check_no_crash() {
     adb logcat -d -b crash > "$out/crash.txt" || true
     # A Java crash names the process; a native one (MapLibre) shows it in the tombstone header.
     if grep -qE "Process: $pkg|>>> $pkg <<<" "$out/crash.txt"; then
         fail "the app crashed ($1); see crash.txt"
     fi
+}
+
+check_alive() {
+    check_no_crash "$1"
     adb shell dumpsys activity activities | grep -E "topResumedActivity|mResumedActivity" > "$out/resumed.txt" || true
     grep -q "$pkg/" "$out/resumed.txt" || fail "the app is not the resumed activity ($1): $(cat "$out/resumed.txt")"
 }
@@ -277,6 +281,8 @@ check_alive "back to the map"
 # the app stores the view; after a restart the stored view is still Zürich (a map that opened at
 # the whole world would store that once its camera rested). The file is read through run-as, so
 # only on a debug APK; release.yml's run on the published release APK skips this part.
+# expect_view NAME [LAT_FROM LAT_TO]: the stored view is at Zürich's longitude and zoom 14, with
+# its latitude in the range (Zürich's 47.37 by default); a copy of the file is kept as NAME.
 expect_view() {
     adb shell run-as "$pkg" cat no_backup/map-view.json > "$out/map-view-$1.json" 2> /dev/null || true
     python3 -I -c "
@@ -285,9 +291,10 @@ try:
     view = json.load(open(sys.argv[1], encoding='utf-8')).get('view') or {}
 except ValueError:
     view = {}
-ok = abs(view.get('lat', 0) - 47.37) < 0.01 and abs(view.get('lon', 0) - 8.54) < 0.01 and abs(view.get('zoom', 0) - 14) < 0.5
+lat_from, lat_to = float(sys.argv[3]), float(sys.argv[4])
+ok = lat_from <= view.get('lat', 0) <= lat_to and abs(view.get('lon', 0) - 8.54) < 0.01 and abs(view.get('zoom', 0) - 14) < 0.5
 print(sys.argv[2] + ':', view)
-sys.exit(0 if ok else 1)" "$out/map-view-$1.json" "$1"
+sys.exit(0 if ok else 1)" "$out/map-view-$1.json" "$1" "${2:-47.36}" "${3:-47.38}"
 }
 check_reopened_view() {
     started=$(adb shell am start -W -a android.intent.action.VIEW -d "'geo:47.37,8.54?z=14'" -p "$pkg" 2>&1) || true
@@ -308,6 +315,21 @@ check_reopened_view() {
     screenshot map-reopened
     check_alive "map reopened"
     expect_view reopened || fail "the map did not open where it was left (stored view changed); see map-view-reopened.json"
+    # A pan, then Back at once: the map leaves the screen before its camera has rested for 1 s and
+    # stores the last view it showed. The finger moves up by 1,200 px (about 460 dp, about 0.013
+    # degrees of latitude at zoom 14), so the map shows a view south of Zürich. The finger rests
+    # before it lifts (each input call takes a few hundred ms), so the map does not fling on. This
+    # start has no launcher intent, so Back finishes the activity (from the launcher, Android 12+ only
+    # moves the task back and the rest still runs). The time from the finger's lift to the
+    # activity's destroy is printed: only under 1 s does the 1 s rest not store the view by itself.
+    adb shell "input motionevent DOWN 540 1800; input motionevent MOVE 540 1400; input motionevent MOVE 540 1000; input motionevent MOVE 540 600"
+    adb shell "input motionevent UP 540 600; log -t PubkyMapsSmoke lifted; input keyevent KEYCODE_BACK"
+    sleep 3
+    check_no_crash "back right after a pan"
+    adb logcat -d -v epoch -b main -b events > "$out/logcat-pan-back.txt" || true
+    awk '/PubkyMapsSmoke.*lifted/ { up = $1 } up && /wm_on_destroy_called.*MainActivity/ { printf "lift to destroy: %d ms\n", ($1 - up) * 1000; exit }' \
+        "$out/logcat-pan-back.txt"
+    expect_view panned 47.30 47.365 || fail "the view at Back right after a pan was not stored; see map-view-panned.json"
 }
 if adb shell run-as "$pkg" true > /dev/null 2>&1; then
     check_reopened_view
