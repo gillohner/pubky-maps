@@ -270,21 +270,7 @@ fun MapRoute(
     val snackbarHostState = remember { SnackbarHostState() }
     val myLocation = rememberMyLocationAction(locationState, mapState, snackbarHostState)
 
-    // A place opened from a link: the map moves to it once per opening. Saved, so returning from
-    // Settings or recreating the activity keeps where the user has moved the map since.
     val place = linkedPlace.place
-    var centredAt by rememberSaveable { mutableIntStateOf(0) }
-    LaunchedEffect(linkedPlace.placedAt) {
-        if (linkedPlace.placedAt == centredAt) return@LaunchedEffect
-        centredAt = linkedPlace.placedAt
-        val point = place?.point ?: return@LaunchedEffect
-        mapState.animateCamera(
-            CameraUpdate(
-                center = Position(longitude = point.lon, latitude = point.lat),
-                zoom = place.zoom ?: PLACE_ZOOM,
-            ),
-        )
-    }
     LaunchedEffect(linkMessages) { linkMessages.collect { snackbarHostState.showOnly(it) } }
     // A write that could not be made, or that waits for a connection, says so.
     if (writes != null) WriteMessages(writes, snackbarHostState)
@@ -357,12 +343,32 @@ fun MapRoute(
     }
     val held = !layerMayAsk(shown?.place?.source, movedSinceShown)
     SideEffect { layerHeld.value = held }
-    // The map that a place page leaves in view (MapScreen reports it).
-    var uncoveredMap by remember { mutableStateOf<DpRect?>(null) }
+    // The map that a place page leaves in view (MapScreen reports it), with the place it was shown
+    // for: a room measured for the place shown before is not this one's.
+    var uncoveredMap by remember { mutableStateOf<Pair<String, DpRect>?>(null) }
+
+    fun roomsOf(uri: String): Flow<DpRect?> = snapshotFlow { uncoveredMap?.takeIf { it.first == uri }?.second }
+
+    // A place opened from a link: the map moves to it once per opening, into the middle of the map
+    // its page leaves in view. Saved, so returning from Settings or recreating the activity keeps
+    // where the user has moved the map since.
+    var centredAt by rememberSaveable { mutableIntStateOf(0) }
+    LaunchedEffect(linkedPlace.placedAt) {
+        if (linkedPlace.placedAt == centredAt) return@LaunchedEffect
+        centredAt = linkedPlace.placedAt
+        val point = place?.point ?: return@LaunchedEffect
+        mapState.moveToPlace(point, place.zoom ?: PLACE_ZOOM, rooms = roomsOf(place.uri).takeIf { shown?.place?.uri == place.uri })
+    }
+    // A picked search result: the map moves to it, the same way.
+    LaunchedEffect(selected) {
+        val picked = selected?.place ?: return@LaunchedEffect
+        val point = picked.point ?: return@LaunchedEffect
+        mapState.moveToPlace(point, picked.zoom ?: PLACE_ZOOM, rooms = roomsOf(picked.uri).takeIf { shown?.place?.uri == picked.uri })
+    }
     // A place tapped on the map opens its sheet or panel over the map, maybe over the place: once the
     // sheet has opened, a place it hides moves to the middle of the map left in view, as in Google
     // Maps (keepTappedInView). Once per tap and map size (saved, see keptInViewKey); not after the user
-    // moved the map or the sheet. Search picks and links centre the map themselves.
+    // moved the map or the sheet. Search picks and links move the map themselves (moveToPlace).
     var keptInView by rememberSaveable { mutableStateOf<String?>(null) }
     // The user moved the open place's sheet (a drag, a tap on its handle) since it was tapped.
     var sheetMoved by remember { mutableStateOf(false) }
@@ -376,7 +382,7 @@ fun MapRoute(
         keepTappedInView(
             uri = place.uri,
             point = point,
-            rooms = snapshotFlow { uncoveredMap },
+            rooms = roomsOf(place.uri),
             pageDone = pages.state.map { page -> page?.place?.uri == place.uri && page.loading.isEmpty() },
             userMoved =
                 snapshotFlow { sheetMoved || (mapState.isCameraMoving && mapState.cameraMoveReason == CameraMoveReason.Gesture) },
@@ -417,7 +423,7 @@ fun MapRoute(
         search = mapSearch,
         placePage = placePage,
         areaPicker = areaPicker,
-        onUncoveredMap = { uncoveredMap = it },
+        onUncoveredMap = { room -> uncoveredMap = room?.let { r -> shown?.place?.uri?.let { it to r } } },
         placeCard =
             when {
                 placePage != null -> {
@@ -609,8 +615,8 @@ private fun MapState.areaIn(frame: DpRect): AreaBounds? =
     }.getOrNull()
 
 /**
- * Search on the live map: asks around the map's centre, moves the map to a picked result and fits
- * it to the results of a search, and takes the back action while search is open.
+ * Search on the live map: asks around the map's centre, fits the map to the results of a search
+ * (MapRoute moves it to a picked one), and takes the back action while search is open.
  */
 @Composable
 private fun rememberMapSearch(
@@ -629,15 +635,6 @@ private fun rememberMapSearch(
     // Search takes the bottom of the screen: a place opened from a link makes way.
     val searching = state.mode != SearchMode.Idle
     LaunchedEffect(searching) { if (searching) onCloseLinkedPlace() }
-    // A picked result: the map moves to it.
-    val selected = state.selected?.takeIf { state.mode == SearchMode.Selected }
-    LaunchedEffect(selected) {
-        val place = selected?.place ?: return@LaunchedEffect
-        val point = place.point ?: return@LaunchedEffect
-        mapState.animateCamera(
-            CameraUpdate(center = Position(longitude = point.lon, latitude = point.lat), zoom = place.zoom ?: PLACE_ZOOM),
-        )
-    }
     // The results of a search: the map shows those near the area searched, once per search (not
     // again when a slower source adds results, after the user moved the map, or back from a place).
     var fittedQuery by remember { mutableStateOf<String?>(null) }
@@ -1055,6 +1052,24 @@ private fun rememberMyLocationAction(
             }
         }
     }
+}
+
+/**
+ * Moves the camera to [point] at [zoom]. With [rooms], the map its page leaves in view (see
+ * [openedRoom]), the place lands in its middle ([centreShowing]): the move waits for the page to
+ * open, at most [OPEN_ROOM_WAIT_MS], so it is one move and not a second one after it. A finger that
+ * moved the map meanwhile has put it where the user wants it: then the map stays.
+ */
+private suspend fun MapState.moveToPlace(
+    point: GeoPoint,
+    zoom: Double,
+    rooms: Flow<DpRect?>?,
+) {
+    val before = cameraPosition
+    val room = rooms?.let { openedRoom(it) }
+    if (cameraPosition != before && cameraMoveReason == CameraMoveReason.Gesture) return
+    val centre = centreShowing(point, room, viewport?.size, zoom, cameraPosition.bearing)
+    animateCamera(CameraUpdate(center = Position(longitude = centre.lon, latitude = centre.lat), zoom = zoom))
 }
 
 /** The camera of [this] map for [keepTappedInView]. */
