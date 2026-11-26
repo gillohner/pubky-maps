@@ -231,6 +231,27 @@ class MapPlacesLayerTest {
         assertEquals("https://www.openstreetmap.org/relation/3768127", museum.uri)
         assertEquals("Museum", museum.category)
         assertEquals(PlaceSource.Map, museum.source)
+        // OpenMapTiles groups OSM values under classes of its own; the value still names the place.
+        val atm = tappedPlace(12345671, mapOf("name" to "UBS", "class" to "atm", "subclass" to "atm"), point)!!
+        assertEquals("ATM", atm.category)
+        val books = tappedPlace(12345681, mapOf("name" to "Orell Füssli", "class" to "library", "subclass" to "books"), point)!!
+        assertEquals("Bookshop", books.category)
+        val cafe = tappedPlace(12345691, mapOf("name" to "Schober", "class" to "cafe", "subclass" to "cafe"), point)!!
+        assertEquals("Café", cafe.category)
+        // It also puts shop values under classes of their own; they are shops, as search calls them.
+        val clothes = tappedPlace(12345701, mapOf("name" to "Jelmoli", "class" to "clothing_store", "subclass" to "clothes"), point)!!
+        assertEquals("Clothes shop", clothes.category)
+        val bicycle = tappedPlace(12345711, mapOf("name" to "Velo Lade", "class" to "bicycle", "subclass" to "bicycle"), point)!!
+        assertEquals("Bicycle shop", bicycle.category)
+        val wine = tappedPlace(12345721, mapOf("name" to "Riegger", "class" to "alcohol_shop", "subclass" to "wine"), point)!!
+        assertEquals("Wine shop", wine.category)
+        val parts = tappedPlace(12345731, mapOf("name" to "Auto Teile", "class" to "car", "subclass" to "car_parts"), point)!!
+        assertEquals("Car parts shop", parts.category)
+        // A value OpenMapTiles takes from another key too goes by its class: an office of a charity is no shop.
+        val office = tappedPlace(12345741, mapOf("name" to "Caritas", "class" to "office", "subclass" to "charity"), point)!!
+        assertEquals("Charity", office.category)
+        val charityShop = tappedPlace(12345751, mapOf("name" to "Caritas Laden", "class" to "shop", "subclass" to "charity"), point)!!
+        assertEquals("Charity shop", charityShop.category)
         // Shortbread (VersaTiles) names the kind by its OSM key.
         val school = tappedPlace(273068472, mapOf("name" to "Rämibühl", "amenity" to "school"), point)!!
         assertEquals("School", school.category)

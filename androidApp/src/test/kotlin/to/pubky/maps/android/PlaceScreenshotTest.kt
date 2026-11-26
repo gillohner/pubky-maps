@@ -236,7 +236,7 @@ class PlaceScreenshotTest {
                     osm = OsmId(OsmType.Node, 10946043353),
                     source = PlaceSource.Photon,
                     address = "Zentralstrasse 127, 8003 Zürich",
-                    category = "Bakery shop",
+                    category = "Bakery",
                 ),
             social = PlaceSocial(emptyList(), emptyList(), 0, 0),
             loading = emptySet(),

@@ -15,6 +15,7 @@ import to.pubky.maps.place.PlaceData
 import to.pubky.maps.place.PlaceRef
 import to.pubky.maps.place.PlaceSource
 import to.pubky.maps.search.SourceAnswer
+import to.pubky.maps.search.TAG_LABELS_BY_VALUE
 import to.pubky.maps.search.categoryOf
 import to.pubky.maps.search.osmIdFromUrl
 import to.pubky.maps.search.schemaTypeLabel
@@ -205,9 +206,112 @@ fun tappedPlace(
     val osm = id?.let(::osmIdOfTileFeature) ?: return null
     val name = (properties["name"] ?: properties["name_int"])?.trim()?.ifEmpty { null } ?: return null
     val category =
-        properties["subclass"]?.let { categoryOf(properties["class"] ?: "amenity", it, photonType = null) }
+        properties["subclass"]?.let { TAG_LABELS_BY_VALUE[it] ?: categoryOf(omtKeyOf(properties["class"], it), it, photonType = null) }
             ?: listOf("amenity", "shop", "tourism", "leisure", "historic", "office", "man_made")
                 .firstNotNullOfOrNull { key -> properties[key]?.let { categoryOf(key, it, photonType = null) } }
             ?: properties["kind"]?.let { categoryOf("place", it, photonType = null) }
     return PlaceRef(uri = osm.url, name = name, point = point, osm = osm, source = PlaceSource.Map, category = category)
 }
+
+/**
+ * The OSM key of an OpenMapTiles subclass. OpenMapTiles groups many shop values under classes of
+ * their own (`class=clothing_store`, `subclass=clothes`; `class=bicycle`, `subclass=bicycle`), so a
+ * subclass that OpenMapTiles takes only from `shop` is a shop ("Clothes shop", as search says), and
+ * any other subclass is named by its value under its class.
+ */
+private fun omtKeyOf(
+    omtClass: String?,
+    subclass: String,
+): String = if (subclass in OMT_SHOP_VALUES) "shop" else omtClass ?: "amenity"
+
+// The shop values of OpenMapTiles' POI layer (layers/poi/mapping.yaml, `def_poi_mapping_shop`),
+// without `charity` and `ice_cream`, which it also takes from `office` and `amenity`. `charity` goes
+// by its class (`class=office`, `subclass=charity` is a charity's office, not a shop); `ice_cream`
+// is named by [TAG_LABELS_BY_VALUE] before its key is asked for.
+private val OMT_SHOP_VALUES =
+    setOf(
+        "accessories",
+        "alcohol",
+        "antiques",
+        "art",
+        "bag",
+        "bakery",
+        "beauty",
+        "bed",
+        "beverages",
+        "bicycle",
+        "books",
+        "boutique",
+        "butcher",
+        "camera",
+        "car",
+        "car_repair",
+        "car_parts",
+        "carpet",
+        "chemist",
+        "chocolate",
+        "clothes",
+        "coffee",
+        "computer",
+        "confectionery",
+        "convenience",
+        "copyshop",
+        "cosmetics",
+        "deli",
+        "delicatessen",
+        "department_store",
+        "doityourself",
+        "dry_cleaning",
+        "electronics",
+        "erotic",
+        "fabric",
+        "farm",
+        "florist",
+        "frozen_food",
+        "furniture",
+        "garden_centre",
+        "general",
+        "gift",
+        "greengrocer",
+        "hairdresser",
+        "hardware",
+        "hearing_aids",
+        "hifi",
+        "interior_decoration",
+        "jewelry",
+        "kiosk",
+        "lamps",
+        "laundry",
+        "locksmith",
+        "mall",
+        "massage",
+        "mobile_phone",
+        "motorcycle",
+        "music",
+        "musical_instrument",
+        "newsagent",
+        "optician",
+        "outdoor",
+        "paint",
+        "perfume",
+        "perfumery",
+        "pet",
+        "photo",
+        "second_hand",
+        "shoes",
+        "sports",
+        "stationery",
+        "supermarket",
+        "tailor",
+        "tattoo",
+        "ticket",
+        "tobacco",
+        "toys",
+        "travel_agency",
+        "video",
+        "video_games",
+        "watches",
+        "weapons",
+        "wholesale",
+        "wine",
+    )
