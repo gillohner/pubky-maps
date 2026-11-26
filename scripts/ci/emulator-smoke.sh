@@ -305,9 +305,10 @@ view_lat() {
 }
 # The latitude range of a pan's view: 0.005-0.1 degrees south of LAT (a pan that flings goes further).
 south_of() { python3 -I -c "import sys; lat = float(sys.argv[1]); print(lat - 0.1, lat - 0.005)" "$1"; }
-# "MS EPOCH": milliseconds from the log line "lift NAME" (or "WORD NAME") to the next destroy of
-# MainActivity, and the destroy's time in seconds since 1970; nothing before that destroy.
-lift_to_destroy() {
+# mark_to_destroy NAME [WORD]: "MS EPOCH", milliseconds from the log line "WORD NAME" (WORD is
+# "lift" unless given) to the next destroy of MainActivity, and the destroy's time in seconds since
+# 1970; nothing before that destroy.
+mark_to_destroy() {
     adb logcat -d -v epoch -b main -b events > "$out/logcat-$1.txt" || true
     awk -v tag="${2:-lift} $1" 'index($0, "PubkyMapsSmoke") && index($0, tag) { up = $1 }
         up && /wm_on_destroy_called.*MainActivity/ { printf "%d %.3f\n", ($1 - up) * 1000, $1; exit }' "$out/logcat-$1.txt"
@@ -380,10 +381,11 @@ check_reopened_view() {
     # A theme switch during a pan, the finger still down: Android recreates MainActivity while the
     # map reports its camera as moving, as it does for a moment after the finger lifts (longer when
     # it flings or a frame stalls), and the map that leaves must still store where the user's
-    # gesture had it. The new map opens at the panned camera (the map keeps it in its saved state) and would
-    # store it after its own 1 s rest, so the view alone does not show the save on leaving; the
-    # file's write time does. A try shows it when the view was first written less than 1 s after
-    # the destroy (the new map's rest ends later). The finger lifts once that write is seen, in the
+    # gesture had it. The new map opens at the panned camera (the map keeps it in its saved state)
+    # and would store it after its own 1 s rest, so the view alone does not show the save on
+    # leaving; the file's write time does. A try shows it when the view was first written less than
+    # 1 s after the destroy (the new map's rest ends later) and not more than 1 s before it (the
+    # save on leaving can land just before Android logs the destroy). The finger lifts once that write is seen, in the
     # new activity, which never had it down. A try that does not show it is tried again; each pans
     # further south.
     proved=false
@@ -399,7 +401,7 @@ check_reopened_view() {
         destroy=""
         for _ in $(seq 1 15); do
             sleep 1
-            destroy=$(lift_to_destroy "switch-$try" switch)
+            destroy=$(mark_to_destroy "switch-$try" switch)
             [ -z "$destroy" ] || break
         done
         [ -n "$destroy" ] || fail "MainActivity was not recreated after a theme switch"
@@ -415,7 +417,7 @@ check_reopened_view() {
         moved=false
         if expect_view "switched-$try" $range; then moved=true; fi
         last=$(view_lat "switched-$try" 2> /dev/null || echo "$last")
-        if $moved && ((${write_ms:-1000} < 1000)); then proved=true; break; fi
+        if $moved && ((${write_ms:-1000} < 1000 && ${write_ms:-1000} > -1000)); then proved=true; break; fi
     done
     $proved || fail "no theme switch during a pan first wrote the view within 1 s of the destroy in 5 tries; see map-view-switched-*.json"
     if [ "$night" = yes ]; then
@@ -432,7 +434,7 @@ check_reopened_view() {
     pan_up back "input keyevent KEYCODE_BACK"
     sleep 3
     check_no_crash "back right after a pan"
-    destroy=$(lift_to_destroy back)
+    destroy=$(mark_to_destroy back)
     lift_ms=${destroy%% *}
     echo "back: lift to destroy ${lift_ms:-unknown} ms"
     expect_view panned $(south_of "$last") || fail "the view at Back right after a pan was not stored; see map-view-panned.json"

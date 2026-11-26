@@ -182,9 +182,9 @@ fun restingViews(cameras: Flow<CameraPosition?>): Flow<MapView> =
         }.distinctUntilChanged()
 
 /**
- * The camera as the map reports it: its [position], whether it [moving], and whether the user's own
- * gesture moved it ([byGesture]: maplibre-compose's move reason, which stays Gesture after the finger
- * lifts until the app itself moves the camera).
+ * The camera as the map reports it: its [position], whether it moves ([moving]), and whether the
+ * user's own gesture moved it ([byGesture]: maplibre-compose's move reason, which stays Gesture
+ * after the finger lifts, through a fling, until the app itself moves the camera).
  */
 data class CameraReport(
     val position: CameraPosition,
@@ -198,7 +198,7 @@ data class CameraReport(
  * with it), the last position [cameras] gave at rest or moved by the user's gesture is saved then:
  * the map still reports a pan as moving for a moment after the finger lifts (longer when it flings
  * or a frame stalls), and that is where the user left the map. A view the app's own move only
- * passes through (to a linked place, a search result) is never saved; the last one before it is.
+ * passes through (to a linked place, a search result) is not saved; the last one before it is.
  * The last value of the flow is used, not the map's state at that moment, because the map has
  * already let go of its view by then and no longer says whether its camera moves.
  */
@@ -212,6 +212,7 @@ suspend fun saveRestingViews(
             cameras
                 .onEach { if (!it.moving || it.byGesture) leftAt = it.position }
                 .map { if (it.moving) null else it.position }
+                .distinctUntilChanged()
         restingViews(rests).collect { save(it) }
     } finally {
         leftAt?.let { save(MapView.of(it)) }

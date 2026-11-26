@@ -299,10 +299,10 @@ screenshots search with its pins, and the update probe screenshots each step of 
   after a map link moved the map to Zürich the next start opens it there; a theme switch during
   a pan (the finger still down, so the map reports its camera moving) and Back right after a pan
   still store the new view; for the theme switch the view must be first written within 1 s of
-  MainActivity's destroy, so it was stored on leaving and not by the new map's 1 s rest. The app calls `reportFullyDrawn` once the
-  map has drawn its first whole view (MapLibre idle with a style from the list); the test reads
-  Android's "Displayed" and "Fully drawn" times of the first
-  start and of a restart (`scripts/ci/start_time.py`) and fails when the map took longer than the
+  MainActivity's destroy, so it was stored on leaving and not by the new map's 1 s rest. The app
+  calls `reportFullyDrawn` once the map has drawn its first whole view (MapLibre idle with a style
+  from the list); the test reads Android's "Displayed" and "Fully drawn" times of the first start
+  and of a restart (`scripts/ci/start_time.py`) and fails when the map took longer than the
   budget set in `emulator-smoke.sh`.
 - Offline maps (`scripts/ci/emulator-offline.sh`, two tiny styles served on the runner): an area
   downloads from Settings → Offline maps until Ready, with at most 4 tile requests at a time, the
