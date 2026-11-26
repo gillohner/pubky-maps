@@ -33,6 +33,7 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.constrainHeight
+import androidx.compose.ui.unit.constrainWidth
 import androidx.compose.ui.unit.dp
 import to.pubky.maps.ui.AppIcons
 
@@ -93,9 +94,9 @@ fun KeptBadge(
  * The sentence goes beside the badge when it takes no more lines there than on the whole width, else
  * under the badge: at 200 % font the badge takes a third of a phone's width, and beside it the
  * sentence would be a narrow column one line longer or more ("Anyone can read it / and see that it
- * is / yours."). Counting lines rather than comparing heights keeps it under then even when the badge's
- * own row makes both arrangements about as tall, because short ragged lines are what make it hard to
- * read.
+ * is / yours."). The rule looks at the sentence's own lines, not at the height of the whole note, so
+ * the sentence goes under even when the badge's row makes both arrangements about as tall: short
+ * ragged lines are what make it hard to read.
  */
 @Composable
 fun KeptNote(
@@ -111,11 +112,20 @@ fun KeptNote(
             ),
         modifier = modifier,
     ) { (badgeParts, textParts), constraints ->
-        val badge = badgeParts.single().measure(constraints.copy(minWidth = 0, minHeight = 0))
+        val badgePart = badgeParts.single()
         val text = textParts.single()
-        val width = if (constraints.hasBoundedWidth) constraints.maxWidth else badge.width + text.maxIntrinsicWidth(Constraints.Infinity)
         val sideGap = KeptNoteSideGap.roundToPx()
-        val sideWidth = (width - badge.width - sideGap).coerceAtLeast(0)
+        // The badge's own width from its intrinsics, not from its placeable: when a parent asks this
+        // layout for its intrinsic height, Compose measures stand-ins as wide as the constraints.
+        val badgeWidth = badgePart.maxIntrinsicWidth(Constraints.Infinity)
+        val width =
+            if (constraints.hasBoundedWidth) {
+                constraints.maxWidth
+            } else {
+                constraints.constrainWidth(badgeWidth + sideGap + text.maxIntrinsicWidth(Constraints.Infinity))
+            }
+        val badge = badgePart.measure(Constraints(maxWidth = width))
+        val sideWidth = (width - badgeWidth - sideGap).coerceAtLeast(0)
         // Text of the same style grows by whole lines, so the taller one is the one with more lines.
         val beside = sideWidth > 0 && text.minIntrinsicHeight(sideWidth) <= text.minIntrinsicHeight(width)
         val note = text.measure(Constraints(maxWidth = if (beside) sideWidth else width))
@@ -124,7 +134,7 @@ fun KeptNote(
             constraints.constrainHeight(if (beside) maxOf(badge.height, note.height) else badge.height + underGap + note.height)
         layout(width, height) {
             badge.placeRelative(0, 0)
-            if (beside) note.placeRelative(badge.width + sideGap, 0) else note.placeRelative(0, badge.height + underGap)
+            if (beside) note.placeRelative(badgeWidth + sideGap, 0) else note.placeRelative(0, badge.height + underGap)
         }
     }
 }
