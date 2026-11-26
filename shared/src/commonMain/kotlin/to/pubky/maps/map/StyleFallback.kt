@@ -26,6 +26,16 @@ data class StyleFallback(
      */
     fun failed(styleUrl: String): StyleFallback = if (current?.url == styleUrl) copy(index = index + 1) else this
 
+    /**
+     * The style of the other theme ([other]) at the same place in its list, so an offline area takes
+     * both themes from the server the map has fallen back to (the default lists have one provider
+     * per place); its last style when [other] is shorter. Null when every style failed.
+     */
+    fun otherTheme(other: List<ServerEntry>): ServerEntry? {
+        if (current == null) return null
+        return other.getOrNull(index.coerceAtMost(other.lastIndex))
+    }
+
     /** Starts again from the first style. */
     fun retry(): StyleFallback = copy(index = 0)
 }

@@ -32,6 +32,9 @@ import to.pubky.maps.links.LinkTarget
 import to.pubky.maps.links.LinkedPlaceState
 import to.pubky.maps.links.OpenIn
 import to.pubky.maps.map.MapRoute
+import to.pubky.maps.offline.OfflineMaps
+import to.pubky.maps.offline.OfflineMapsScreen
+import to.pubky.maps.offline.offlineMapsSummary
 import to.pubky.maps.place.OpenInApps
 import to.pubky.maps.place.PlaceServices
 import to.pubky.maps.search.SearchServices
@@ -86,6 +89,9 @@ private data object OpenInAppsDestination
 private data object LicencesDestination
 
 @Serializable
+private data object OfflineMapsDestination
+
+@Serializable
 private data object AccountDestination
 
 @Serializable
@@ -106,6 +112,7 @@ private data class WriteDestination(
  * none. [links] opens map links other apps send and shares places; null where the core is not
  * available. [search] is the place search; null where it is not available. [places] opens place
  * pages and shows the places people referenced on Pubky on the map; null where it is not available.
+ * [offline] downloads areas for use without a connection; null where it is not available.
  */
 @Composable
 fun App(
@@ -118,6 +125,7 @@ fun App(
     search: SearchServices? = null,
     places: PlaceServices? = null,
     writes: WriteUi? = null,
+    offline: OfflineMaps? = null,
 ) {
     val loaded by settingsRepository.settings.collectAsStateWithLifecycle()
     // Place photos and profile pictures, with the app's User-Agent like every other request. Coil
@@ -146,6 +154,7 @@ fun App(
                 search,
                 places,
                 writes,
+                offline,
             )
         }
         val dialog = updatesState?.dialog
@@ -177,6 +186,7 @@ private fun AppNavigation(
     search: SearchServices?,
     places: PlaceServices?,
     writes: WriteUi?,
+    offline: OfflineMaps?,
 ) {
     val update: ((AppSettings) -> AppSettings) -> Unit = remember(settingsRepository) { { settingsRepository.update(it) } }
     val navController = rememberNavController()
@@ -277,6 +287,8 @@ private fun AppNavigation(
                     navController.open(WriteDestination(intent.name, target.uri, target.name))
                 },
                 onOpenSaved = writes?.let { { navController.open(SavedDestination) } },
+                offline = offline,
+                onDownloadStarted = { navController.open(OfflineMapsDestination) },
             )
         }
         composable<SettingsDestination> {
@@ -302,7 +314,32 @@ private fun AppNavigation(
                 onOpenAccount = { navController.open(AccountDestination) },
                 recentSearchCount = recentSearches?.size,
                 onClearRecentSearches = { search?.recents?.clear() },
+                offlineMaps =
+                    offline
+                        ?.state
+                        ?.collectAsStateWithLifecycle()
+                        ?.value
+                        ?.let(::offlineMapsSummary),
+                onOpenOfflineMaps = { navController.open(OfflineMapsDestination) },
             )
+        }
+        if (offline != null) {
+            composable<OfflineMapsDestination> {
+                val state by offline.state.collectAsStateWithLifecycle()
+                val problem by offline.problem.collectAsStateWithLifecycle()
+                OfflineMapsScreen(
+                    state = state,
+                    onDownloadArea = {
+                        offline.startPicking()
+                        navController.popBackStack(MapDestination, inclusive = false)
+                    },
+                    onResume = offline::resume,
+                    onPause = offline::pause,
+                    onDelete = offline::delete,
+                    onBack = back,
+                    problem = problem,
+                )
+            }
         }
         if (account != null) {
             composable<AccountDestination> {

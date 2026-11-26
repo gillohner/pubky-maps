@@ -19,6 +19,26 @@ searches stay on the phone (Settings → Privacy → Clear search history). Eith
 holds back the other; with both unreachable the list and the map's degraded line say search is
 offline, and Search asks again. Photon is credited under the results and in Settings → Map data.
 
+**Offline maps** (Settings → Offline maps): Download an area opens a frame over the map; the map
+in the frame downloads in the style on screen and the other theme's style of the same server, so it
+shows light and dark without a connection. One download may take at most 3,000 tiles (zoom 0 to 14) and 50 MB of
+tiles, with at most 4 requests at a time and the app's User-Agent (OpenFreeMap's terms for offline
+downloads, applied to every map server); the picker refuses a larger area and a download that grows
+past the limit stops. The two styles download one after the other, so the tiles they share are
+fetched once. The list shows each area's progress and size; a download paused or the app was closed
+during resumes from there, and an area deletes. 20 seconds after the start and every 30 minutes the
+app walks each ready area again: unchanged, this costs no request; when the map server has moved
+its tiles to a new release (OpenFreeMap does with each one), the area downloads again at the new
+addresses, within the same limits, and shows "Updating"; the old release's tiles stay with the area
+until it is deleted. On a network Android counts as metered the walk stops after 10 seconds when it
+finds a new release (Google Maps and OsmAnd update offline maps on Wi-Fi). An update that stops
+before it finishes leaves the area marked "Update paused" (MapLibre would call it complete, as it
+counts the old release's tiles too); Resume goes on with it, and so does the next check on Wi-Fi
+unless the user paused it since the app started. An area marked so before the check found new
+data (the app was closed in the walk's first seconds) is walked on mobile data too: it is Ready
+again when nothing changed. MapLibre keeps the offline maps and the map
+cache in one database in the no-backup folder.
+
 Settings:
 
 - **Account:** sign in with [Pubky Ring](https://github.com/pubky/pubky-ring). It shows the user's
@@ -206,6 +226,10 @@ screenshots search with its pins, and the update probe screenshots each step of 
 ## Emulator tests in CI
 
 - Smoke test (`scripts/ci/emulator-smoke.sh`): the map draws, Settings opens, back returns.
+- Offline maps (`scripts/ci/emulator-offline.sh`, two tiny styles served on the runner): an area
+  downloads from Settings → Offline maps until Ready, with at most 4 tile requests at a time, the
+  app's User-Agent and no tile twice; after the server moves its tiles to a new release the app
+  updates the area by itself; with the server gone the area draws in light and dark; it deletes.
 - Sign-in probe (`scripts/ci/sign-in-probe.py`): Pubky Ring cannot run in CI, so a fixture relay on
   the runner stands in for the sign-in relay. The probe opens Settings → Account, starts a sign-in,
   reads the QR code, checks the link and that the app listens on the relay, then opens Ring's return

@@ -71,6 +71,9 @@ import to.pubky.maps.config.ServerLists
 import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.links.LinkProvider
 import to.pubky.maps.links.LinkedPlaceState
+import to.pubky.maps.offline.AreaBounds
+import to.pubky.maps.offline.OfflineMaps
+import to.pubky.maps.offline.fitsInOneDownload
 import to.pubky.maps.place.GeoBox
 import to.pubky.maps.place.OpenInApps
 import to.pubky.maps.place.OpeningLinkCard
@@ -141,8 +144,13 @@ fun MapRoute(
     onWrite: (WriteTarget, WriteIntent) -> Unit = { _, _ -> },
     /** Opens the Saved screen; null where there is none. */
     onOpenSaved: (() -> Unit)? = null,
+    /** Offline maps: the map shows the area picker while they ask for one; null where there are none. */
+    offline: OfflineMaps? = null,
+    /** Shows the offline maps once a download started from the picker. */
+    onDownloadStarted: () -> Unit = {},
 ) {
-    val sources = servers.mapStyles(isSystemInDarkTheme())
+    val dark = isSystemInDarkTheme()
+    val sources = servers.mapStyles(dark)
     // Saved, so a trip to Settings does not start again from a style that already failed.
     var fallbackIndex by rememberSaveable(sources) { mutableIntStateOf(0) }
     val fallback = StyleFallback(sources, fallbackIndex)
@@ -289,6 +297,22 @@ fun MapRoute(
     val held = !layerMayAsk(shown?.place?.source, movedSinceShown)
     SideEffect { layerHeld.value = held }
     val placePage = places?.let { rememberPlacePage(it, shown, mapSearch?.userLocation, onSharePlace, openIn, writes, onWrite) }
+    // The area on screen goes offline in the style on screen and the other theme's of the same server.
+    val areaPicker =
+        offline?.let {
+            rememberAreaPicker(
+                offline = it,
+                mapState = mapState,
+                styleUrls = listOfNotNull(fallback.current?.url, fallback.otherTheme(servers.mapStyles(!dark))?.url),
+                onDownloadStarted = onDownloadStarted,
+            )
+        }
+    LaunchedEffect(areaPicker != null) {
+        if (areaPicker == null) return@LaunchedEffect
+        search?.controller?.close()
+        onClosePlace()
+        tapped = null
+    }
 
     MapScreen(
         attribution = (fallback.current ?: sources.first()).attribution,
@@ -300,6 +324,7 @@ fun MapRoute(
         snackbarHostState = snackbarHostState,
         search = mapSearch,
         placePage = placePage,
+        areaPicker = areaPicker,
         placeCard =
             when {
                 placePage != null -> {
@@ -384,6 +409,60 @@ fun MapRoute(
         }
     }
 }
+
+/**
+ * The area picker on the live map while [offline] asks for an area: the frame's area is measured
+ * whenever the camera rests (and unknown while it moves, so Download never takes an area the frame
+ * has left), back closes the picker, Download starts the download in [styleUrls].
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun rememberAreaPicker(
+    offline: OfflineMaps,
+    mapState: MapState,
+    styleUrls: List<String>,
+    onDownloadStarted: () -> Unit,
+): AreaPickerUi? {
+    val picking by offline.picking.collectAsStateWithLifecycle()
+    BackHandler(enabled = picking) { offline.stopPicking() }
+    if (!picking) return null
+    var frame by remember { mutableStateOf<DpRect?>(null) }
+    val area by produceState<AreaBounds?>(null, mapState) {
+        // The viewport changes with every camera move and arrives once the map (attached again on
+        // the way back from Settings) can convert screen points.
+        snapshotFlow { if (mapState.isCameraMoving) null else mapState.viewport?.let { it to frame } }
+            .collect { resting -> value = resting?.second?.let { mapState.areaIn(it) } }
+    }
+    return AreaPickerUi(
+        fits = area?.let { fitsInOneDownload(it) },
+        onFrame = { frame = it },
+        onDownload = {
+            area?.takeIf { fitsInOneDownload(it) }?.let {
+                offline.download(it, styleUrls)
+                onDownloadStarted()
+            }
+        },
+        onCancel = offline::stopPicking,
+    )
+}
+
+/** The box around the map under [frame]; null while the map cannot tell. */
+private fun MapState.areaIn(frame: DpRect): AreaBounds? =
+    runCatching<AreaBounds?> {
+        val corners =
+            listOf(
+                DpOffset(frame.left, frame.top),
+                DpOffset(frame.right, frame.top),
+                DpOffset(frame.left, frame.bottom),
+                DpOffset(frame.right, frame.bottom),
+            ).map { positionFromScreenLocation(it) ?: return null }
+        AreaBounds(
+            west = corners.minOf { it.longitude },
+            south = corners.minOf { it.latitude },
+            east = corners.maxOf { it.longitude },
+            north = corners.maxOf { it.latitude },
+        )
+    }.getOrNull()
 
 /**
  * Search on the live map: asks around the map's centre, moves the map to a picked result and fits

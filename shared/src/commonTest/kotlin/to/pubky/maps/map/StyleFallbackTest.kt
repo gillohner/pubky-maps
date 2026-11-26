@@ -36,6 +36,19 @@ class StyleFallbackTest {
     }
 
     @Test
+    fun theOtherThemeComesFromTheServerTheMapFellBackTo() {
+        val light = ServerDefaults.lists.mapStyles(darkTheme = false)
+        val dark = ServerDefaults.lists.mapStyles(darkTheme = true)
+        val fellBack = StyleFallback(light).failed(light[0].url)
+
+        assertEquals(dark[0], StyleFallback(light).otherTheme(dark))
+        assertEquals(dark[1], fellBack.otherTheme(dark))
+        assertEquals(dark[1], StyleFallback(light + first, index = 2).otherTheme(dark))
+        assertNull(fellBack.failed(light[1].url).otherTheme(dark))
+        assertNull(StyleFallback(light).otherTheme(emptyList()))
+    }
+
+    @Test
     fun whenEveryStyleFailedThereIsNoCurrentStyle() {
         val fallback = StyleFallback(listOf(first, second)).failed(first.url).failed(second.url)
 

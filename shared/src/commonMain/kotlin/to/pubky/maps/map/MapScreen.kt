@@ -103,7 +103,8 @@ data class MapSearch(
  * [missing] parts of the app (a service whose every server failed) show in one line under the bar.
  * Search: typing opens a full-screen page on a phone and a panel beside the map on a wide screen;
  * results show as pins and in a list (a sheet at the bottom on a phone, the panel on a wide screen).
- * [search] is null where search is not available.
+ * [search] is null where search is not available. While [areaPicker] is set, the map shows only the
+ * area picker over it.
  */
 @Composable
 fun MapScreen(
@@ -118,6 +119,7 @@ fun MapScreen(
     placeCard: (@Composable () -> Unit)? = null,
     search: MapSearch? = null,
     placePage: PlacePageSlot? = null,
+    areaPicker: AreaPickerUi? = null,
     map: @Composable () -> Unit,
 ) {
     BoxWithConstraints(modifier.fillMaxSize()) {
@@ -128,6 +130,10 @@ fun MapScreen(
         val pagePanel = placePage != null && wide
         val screenHeight = maxHeight
         map()
+        if (areaPicker != null) {
+            AreaPickerOverlay(areaPicker, attribution)
+            return@BoxWithConstraints
+        }
         StatusBarScrim()
         BoxWithConstraints(
             Modifier

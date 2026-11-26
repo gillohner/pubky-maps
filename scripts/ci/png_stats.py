@@ -1,7 +1,8 @@
 """Colour statistics of a region of a PNG screenshot, without third-party modules.
 
-Usage: png_stats.py <file.png> <left> <top> <right> <bottom>   (fractions of width and height)
-Prints: "<distinct colours> <share of the most common colour>"
+Usage: png_stats.py <file.png> <left> <top> <right> <bottom> [#rrggbb]   (fractions of width and height)
+Prints: "<distinct colours> <share of the most common colour>", and with a colour also the share of
+pixels within 12 of it in each channel.
 """
 
 import struct
@@ -67,7 +68,12 @@ def main():
             px = row[x * bpp : x * bpp + 3]
             counts[px] = counts.get(px, 0) + 1
     total = sum(counts.values())
-    print(len(counts), f"{max(counts.values()) / total:.3f}")
+    line = [str(len(counts)), f"{max(counts.values()) / total:.3f}"]
+    if len(sys.argv) > 6:
+        want = bytes.fromhex(sys.argv[6].lstrip("#"))
+        near = sum(n for px, n in counts.items() if all(abs(a - b) <= 12 for a, b in zip(px, want)))
+        line.append(f"{near / total:.3f}")
+    print(" ".join(line))
 
 
 if __name__ == "__main__":
