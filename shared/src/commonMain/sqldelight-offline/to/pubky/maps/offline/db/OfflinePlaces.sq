@@ -1,9 +1,10 @@
 -- The named places in the map tiles of each offline area, so search finds them without a
 -- connection. Built from the tiles on the phone; deleted with the area.
 
--- An area whose places are here.
+-- An area whose places are here, read from its map data of new_data_at (OfflineMap.newDataAt).
 CREATE TABLE area (
-    id TEXT NOT NULL PRIMARY KEY
+    id TEXT NOT NULL PRIMARY KEY,
+    new_data_at INTEGER NOT NULL
 );
 
 CREATE TABLE place (
@@ -34,10 +35,10 @@ CREATE INDEX word_word ON word(word);
 CREATE INDEX word_place ON word(place);
 
 areas:
-SELECT id FROM area;
+SELECT id, new_data_at FROM area;
 
 putArea:
-INSERT OR REPLACE INTO area(id) VALUES (?);
+INSERT OR REPLACE INTO area(id, new_data_at) VALUES (?, ?);
 
 insertPlace:
 INSERT INTO place(area, name, osm_type, osm_id, tag_key, tag_value, category, lat, lon) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
@@ -56,6 +57,10 @@ DELETE FROM place WHERE area = ?;
 
 deleteArea:
 DELETE FROM area WHERE id = ?;
+
+-- How many places have a word in [from, until): search looks the rarest typed word up.
+countWordFrom:
+SELECT COUNT(*) FROM word WHERE word >= :from AND word < :until;
 
 -- The places with a word in [from, until), nearest to the point first (in degrees, which is
 -- enough to pick the nearest few hundred).

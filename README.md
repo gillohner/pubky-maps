@@ -45,14 +45,17 @@ people referenced on Pubky) are fetched from Pinakes as soon as the area is in t
 Pinakes cannot be reached, the map shows them in the downloaded areas. These requests tell Pinakes
 which areas are downloaded (the area widened to a 1/16° grid), also while the user looks elsewhere.
 
-**Search without a connection:** once an area is ready, and again after an update, the app reads
-the named places of its zoom 14 tiles (points of interest, towns and districts, streets, peaks,
-lakes) into its own database (`no_backup/offline-places.db`), from a copy of MapLibre's database
-taken while no download runs (MapLibre's own SQLite writes the file; a second SQLite in the process
-must not open it). When Photon cannot be reached, search answers from these places: every typed
-word starts a word of the name or the category, nearest first, merged with Pinakes when it answers.
-The list says the places are from the offline maps and that addresses need a connection, and the
-map's credits stand under them. Deleting an area deletes its places.
+**Search without a connection:** once an area is ready, and again after every update that fetched
+tiles (the area's `newDataAt`, kept with its places), the app reads the named places of its zoom 14
+tiles (points of interest, towns and districts, streets, peaks, lakes) into its own database
+(`no_backup/offline-places.db`). It reads only the newest tile of each source at each place, as the
+release before's tiles stay linked to the area, from a copy of MapLibre's database taken while no
+download runs (MapLibre's own SQLite writes the file; a second SQLite in the process must not open
+it). When Photon cannot be reached, search answers from these places: every typed word starts a word
+of the name or the category, looked up by the rarest of them, nearest first (a place named exactly as
+typed always among them), merged with Pinakes when it answers. The list says the places are from the
+offline maps and that addresses need a connection, and the map's credits stand under them. Deleting
+an area deletes its places.
 
 Settings:
 

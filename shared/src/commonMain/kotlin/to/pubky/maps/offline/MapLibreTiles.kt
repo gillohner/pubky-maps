@@ -24,7 +24,10 @@ class MapLibreTiles(
     /**
      * The places in [area]'s tiles of zoom [OfflineLimits.MAX_ZOOM] (the deepest of the map's vector
      * tiles, which holds every named place), the newest tiles first; null when MapLibre has no pack
-     * of [area]. The tiles are read one at a time as the sequence is walked.
+     * of [area]. MapLibre keeps the tiles of the releases before linked to a pack after an update, so
+     * only the newest tile of each source at each place is read ([newestOfEachSource]): a shop that
+     * closed or a street renamed since is not found. The tiles are read one at a time as the sequence
+     * is walked.
      */
     override fun places(area: String): Sequence<OfflinePlace>? {
         val version = query("PRAGMA user_version", 0) { it.getLong(0) }.firstOrNull()
@@ -34,16 +37,18 @@ class MapLibreTiles(
                 cursor.getLong(0)?.takeIf { PackMetadata.decode(cursor.getBytes(1))?.area == area }
             }
         if (regions.isEmpty()) return null
-        val tiles =
+        val linked =
             query(
-                "SELECT DISTINCT tiles.id FROM region_tiles JOIN tiles ON tiles.id = region_tiles.tile_id " +
-                    "WHERE region_tiles.region_id IN (${regions.joinToString(",") { "?" }}) AND tiles.z = ? ORDER BY tiles.id DESC",
+                "SELECT DISTINCT tiles.id, tiles.url_template, tiles.x, tiles.y FROM region_tiles " +
+                    "JOIN tiles ON tiles.id = region_tiles.tile_id " +
+                    "WHERE region_tiles.region_id IN (${regions.joinToString(",") { "?" }}) AND tiles.z = ?",
                 regions.size + 1,
                 binders = {
                     regions.forEachIndexed { i, id -> bindLong(i, id) }
                     bindLong(regions.size, OfflineLimits.MAX_ZOOM.toLong())
                 },
-            ) { it.getLong(0) }
+            ) { LinkedTile(it.getLong(0)!!, it.getString(1)!!, it.getLong(2)!!, it.getLong(3)!!) }
+        val tiles = newestOfEachSource(linked)
         return tiles.asSequence().flatMap { id -> placesOfStoredTile(id) }
     }
 
@@ -92,5 +97,29 @@ class MapLibreTiles(
         const val SCHEMA_VERSION = 6L
     }
 }
+
+/** A tile linked to a pack: its row, address and place in the grid. */
+internal class LinkedTile(
+    val id: Long,
+    val urlTemplate: String,
+    val x: Long,
+    val y: Long,
+)
+
+/**
+ * The ids of the newest of [tiles] (the highest id: MapLibre adds a release's tiles after those of
+ * the one before) for each source and place in the grid, newest first. A map server's release is a
+ * part of its tile address with digits (OpenFreeMap: `.../planet/20251119_001001_pt/{z}/{x}/{y}.pbf`),
+ * so addresses that differ only in such parts are one source; a style's other sources keep theirs.
+ */
+internal fun newestOfEachSource(tiles: List<LinkedTile>): List<Long> =
+    tiles
+        .groupBy { Triple(sourceOf(it.urlTemplate), it.x, it.y) }
+        .values
+        .map { same -> same.maxOf { it.id } }
+        .sortedDescending()
+
+/** A tile address without the parts that name a release ([newestOfEachSource]). */
+private fun sourceOf(urlTemplate: String): String = urlTemplate.split('/').filterNot { part -> part.any { it.isDigit() } }.joinToString("/")
 
 private fun ByteArray.isGzip(): Boolean = size >= 2 && this[0] == 0x1f.toByte() && this[1] == 0x8b.toByte()

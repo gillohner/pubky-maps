@@ -55,9 +55,9 @@ fun startOfflinePlaceIndexer(
 ) {
     val tiles =
         MapLibreDatabaseCopy(
-            context = context,
             database = File(context.noBackupFilesDir, "maplibre.db"),
             copy = File(context.cacheDir, "maplibre-copy.db"),
+            openCopy = { AndroidSqliteDriver(MapLibreLayout, context, it.path) },
         )
     scope.launch(Dispatchers.IO) { tiles.deleteCopy() }
     OfflinePlaceIndexer(maps.state, index, tiles, scope).start()
@@ -69,11 +69,12 @@ fun startOfflinePlaceIndexer(
  * first one's locks (POSIX locks are per process) and could take a write in progress for a crashed
  * one and roll it back. A plain copy only reads the file. It counts only if the file had no journal
  * (no write in progress) and the same size and time before and after, else the read is tried later.
+ * [openCopy] opens the copy with [MapLibreLayout] as its schema.
  */
 internal class MapLibreDatabaseCopy(
-    private val context: Context,
     private val database: File,
     private val copy: File,
+    private val openCopy: (File) -> SqlDriver,
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : AreaTiles {
     override suspend fun <T> open(read: (TilePlaces) -> T): T? =
@@ -82,7 +83,7 @@ internal class MapLibreDatabaseCopy(
                 // A copy left by a process that died, with its journal, must not meet the new one.
                 deleteCopy()
                 if (!copyUnchanged(database, copy)) return@withContext null
-                val driver = openCopy()
+                val driver = openCopy(copy)
                 try {
                     read(MapLibreTiles(driver, ::inflateZlibOrGzip))
                 } finally {
@@ -92,8 +93,6 @@ internal class MapLibreDatabaseCopy(
                 deleteCopy()
             }
         }
-
-    private fun openCopy(): SqlDriver = AndroidSqliteDriver(MapLibreLayout, context, copy.path)
 
     /** Deletes the copy and its journal files, also those a process that died left. */
     fun deleteCopy() {
@@ -105,22 +104,20 @@ internal class MapLibreDatabaseCopy(
  * Copies [database] to [copy] when no write runs on it; false when one does (its rollback journal
  * exists, its size or time changed during the copy, or the copy's SQLite change counter is not the
  * file's after the copy), when it is missing, or when there is no room for the copy and what SQLite
- * may need to open it.
+ * may need to open it ([usableSpace] of the copy's folder). [copyFile] copies.
  */
 internal fun copyUnchanged(
     database: File,
     copy: File,
+    usableSpace: (File) -> Long = { it.usableSpace },
+    copyFile: (File, File) -> Unit = { from, to -> Files.copy(from.toPath(), to.toPath(), StandardCopyOption.REPLACE_EXISTING) },
 ): Boolean {
     if (!database.isFile) return false
     val before = stamp(database) ?: return false
-    if (copy.absoluteFile.parentFile
-            ?.usableSpace
-            ?.let { it < 2 * before.first } != false
-    ) {
-        return false
-    }
+    val folder = copy.absoluteFile.parentFile ?: return false
+    if (usableSpace(folder) < 2 * before.first) return false
     try {
-        Files.copy(database.toPath(), copy.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        copyFile(database, copy)
     } catch (e: IOException) {
         return false
     }
@@ -156,7 +153,7 @@ private fun stamp(database: File): Pair<Long, Any>? {
  * MapLibre's layout as the copy's schema: a copy is never created or migrated here, so a database
  * of another version fails to open (the read is tried later) instead of being changed.
  */
-private object MapLibreLayout : SqlSchema<QueryResult.Value<Unit>> {
+internal object MapLibreLayout : SqlSchema<QueryResult.Value<Unit>> {
     override val version: Long = MapLibreTiles.SCHEMA_VERSION
 
     override fun create(driver: SqlDriver): QueryResult.Value<Unit> =

@@ -19,20 +19,24 @@ import kotlin.time.Duration.Companion.seconds
 class OfflinePlaceIndexerTest {
     private class FakeStore : OfflinePlaceStore {
         val stored = mutableMapOf<String, List<String>>()
+        val readAt = mutableMapOf<String, Long>()
         val replaced = ArrayList<String>()
 
-        override fun areas() = stored.keys.toSet()
+        override fun areas() = stored.keys.associateWith { readAt.getValue(it) }
 
         override fun replace(
             area: String,
+            newDataAt: Long,
             places: Sequence<OfflinePlace>,
         ) {
             replaced += area
             stored[area] = places.map { it.name }.toList()
+            readAt[area] = newDataAt
         }
 
         override fun delete(area: String) {
             stored -= area
+            readAt -= area
         }
     }
 
@@ -67,7 +71,8 @@ class OfflinePlaceIndexerTest {
     private fun map(
         id: String,
         status: OfflineMapStatus,
-    ) = OfflineMap(id, "Map $id", 0, status, 0)
+        newDataAt: Long = 0,
+    ) = OfflineMap(id, "Map $id", 0, status, 0, newDataAt)
 
     private fun TestScope.start() {
         val dispatcher = StandardTestDispatcher(testScheduler)
@@ -110,19 +115,64 @@ class OfflinePlaceIndexerTest {
         }
 
     @Test
-    fun anAreaIsReadAgainOnceItsUpdateFinished() =
+    fun anAreaIsReadAgainOnceItIsReadyWithNewMapData() =
         runTest {
             tiles.areas["a"] = listOf("Café Rosa")
             start()
             maps.value = OfflineMapsState.Ready(listOf(map("a", OfflineMapStatus.Ready)))
             runCurrent()
-            tiles.areas["a"] = listOf("Café Rosa", "Neu")
+            tiles.areas["a"] = listOf("Neu")
             maps.value = OfflineMapsState.Ready(listOf(map("a", OfflineMapStatus.Downloading(20, update = true))))
             runCurrent()
+            assertEquals(listOf("a"), store.replaced)
+            maps.value = OfflineMapsState.Ready(listOf(map("a", OfflineMapStatus.Ready, newDataAt = 5)))
+            runCurrent()
+            assertEquals(listOf("Neu"), store.stored["a"])
+            // An update fast enough never to show as updating: only its new data says it ran.
+            tiles.areas["a"] = listOf("Neuer")
+            maps.value = OfflineMapsState.Ready(listOf(map("a", OfflineMapStatus.Ready, newDataAt = 9)))
+            runCurrent()
+            assertEquals(listOf("Neuer"), store.stored["a"])
+            assertEquals(listOf("a", "a", "a"), store.replaced)
+        }
+
+    @Test
+    fun anAreaReadFromOlderMapDataBeforeTheAppStartedIsReadAgain() =
+        runTest {
+            store.replace("a", 3, sequenceOf(OfflinePlace("Alt", null, "amenity", "cafe", "Café", GeoPoint(47.0, 8.0))))
+            tiles.areas["a"] = listOf("Neu")
+            start()
+            maps.value = OfflineMapsState.Ready(listOf(map("a", OfflineMapStatus.Ready, newDataAt = 3)))
+            runCurrent()
+            assertEquals(0, tiles.opened)
+            maps.value = OfflineMapsState.Ready(listOf(map("a", OfflineMapStatus.Ready, newDataAt = 8)))
+            runCurrent()
+            assertEquals(listOf("Neu"), store.stored["a"])
+            assertEquals(8L, store.readAt["a"])
+        }
+
+    @Test
+    fun anUpdateThatEndsWhileTheSameAreaIsReadIsReadAfterIt() =
+        runTest {
+            tiles.areas["a"] = listOf("Café Rosa")
+            tiles.takes = 30.seconds
+            start()
             maps.value = OfflineMapsState.Ready(listOf(map("a", OfflineMapStatus.Ready)))
             runCurrent()
-            assertEquals(listOf("Café Rosa", "Neu"), store.stored["a"])
-            assertEquals(listOf("a", "a"), store.replaced)
+            // The read takes the tiles as they were at its start: those of newDataAt 0.
+            maps.value = OfflineMapsState.Ready(listOf(map("a", OfflineMapStatus.Downloading(5, update = true))))
+            runCurrent()
+            maps.value = OfflineMapsState.Ready(listOf(map("a", OfflineMapStatus.Ready, newDataAt = 4)))
+            runCurrent()
+            advanceTimeBy(31.seconds)
+            runCurrent()
+            assertEquals(listOf("Café Rosa"), store.stored["a"])
+            assertEquals(0L, store.readAt["a"])
+            tiles.areas["a"] = listOf("Neu")
+            advanceTimeBy(30.seconds)
+            runCurrent()
+            assertEquals(listOf("Neu"), store.stored["a"])
+            assertEquals(4L, store.readAt["a"])
         }
 
     @Test
@@ -192,7 +242,7 @@ class OfflinePlaceIndexerTest {
             maps.value =
                 OfflineMapsState.Ready(listOf(map("a", OfflineMapStatus.Ready), map("b", OfflineMapStatus.Downloading(5, update = true))))
             runCurrent()
-            maps.value = OfflineMapsState.Ready(listOf(map("a", OfflineMapStatus.Ready), map("b", OfflineMapStatus.Ready).copy(bytes = 2)))
+            maps.value = OfflineMapsState.Ready(listOf(map("a", OfflineMapStatus.Ready), map("b", OfflineMapStatus.Ready, newDataAt = 6)))
             runCurrent()
             advanceTimeBy(70.seconds)
             runCurrent()

@@ -211,6 +211,7 @@ class OfflineMapsTest {
             assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
 
             assertEquals(emptyList(), store.updating())
+            assertEquals(0, offline.maps().single().newDataAt)
 
             // And again later: MapLibre walks only a pack that is not active, so each rests once complete.
             assertEquals(listOf(light, dark, light, dark), store.paused)
@@ -241,6 +242,36 @@ class OfflineMapsTest {
             runCurrent()
             assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
             assertFalse(offline.downloading)
+            assertTrue(offline.maps().single().newDataAt > 0)
+        }
+
+    @Test
+    fun aWalkThatFetchesTilesWithinSecondsStaysReadyWithNewMapData() =
+        runTest(UnconfinedTestDispatcher()) {
+            val (store, offline) = readyArea()
+            advanceTimeBy(FIRST_CHECK)
+            runCurrent()
+            // A small area of a new release: its tiles come before the walk could show as updating.
+            store.progress(light, PackProgress(PackState.Downloading, 21, 100, 500_000, 20, 400_000))
+            offline.fetchedNewData()
+            store.progress(light, PackProgress(PackState.Complete, 100, 100, 3_000_000, 80, 2_500_000))
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
+            val first = offline.maps().single().newDataAt
+            assertTrue(first > 0)
+            // The dark style's walk shares the new tiles and fetches nothing: the time stays.
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            assertEquals(first, offline.maps().single().newDataAt)
+            assertFalse(offline.downloading)
+            // The next check finds nothing new.
+            advanceTimeBy(CHECK_INTERVAL)
+            runCurrent()
+            advanceTimeBy(QUIET_CHECK * 2)
+            runCurrent()
+            assertEquals(listOf(light, dark, light, dark), store.resumed)
+            assertEquals(first, offline.maps().single().newDataAt)
         }
 
     @Test

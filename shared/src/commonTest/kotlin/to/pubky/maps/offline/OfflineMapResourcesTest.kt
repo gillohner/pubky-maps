@@ -38,6 +38,7 @@ class OfflineMapResourcesTest {
         downloading: Boolean = true,
         engine: MockEngine,
         onClientMade: () -> Unit = {},
+        fetchedNewData: () -> Unit = {},
     ) = OfflineMapResources(
         {
             onClientMade()
@@ -48,6 +49,7 @@ class OfflineMapResourcesTest {
         },
         downloading = { downloading },
         clock = clock,
+        fetchedNewData = fetchedNewData,
     )
 
     @Test
@@ -61,6 +63,20 @@ class OfflineMapResourcesTest {
             resources.load(offline = true, url = tile)
             resources.load(offline = false, url = tile)
             assertEquals(1, made)
+        }
+
+    @Test
+    fun aDownloadsRequestThatGetsDataSaysSo() =
+        runTest {
+            var fetched = 0
+            val ok = resources(engine = MockEngine { respond(byteArrayOf(1)) }) { fetched++ }
+            ok.load(offline = true, url = tile)
+            assertEquals(1, fetched)
+            // The map's own requests, an unchanged copy and a failure fetched no new map data.
+            ok.load(offline = false, url = tile)
+            resources(engine = MockEngine { respond("", HttpStatusCode.NotModified) }) { fetched++ }.load(offline = true, url = tile)
+            resources(engine = MockEngine { respond("", HttpStatusCode.BadGateway) }) { fetched++ }.load(offline = true, url = tile)
+            assertEquals(1, fetched)
         }
 
     @Test

@@ -13,7 +13,6 @@ import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.time.Duration
@@ -33,11 +32,13 @@ interface AreaTiles {
 
 /** Where the places of the offline areas are kept. Calls block on disk. */
 interface OfflinePlaceStore {
-    fun areas(): Set<String>
+    /** The areas whose places are here, with the [OfflineMap.newDataAt] they were read at. */
+    fun areas(): Map<String, Long>
 
-    /** Stores the places of [area] in place of those it had. */
+    /** Stores the places of [area], read at its [newDataAt], in place of those it had. */
     fun replace(
         area: String,
+        newDataAt: Long,
         places: Sequence<OfflinePlace>,
     )
 
@@ -46,8 +47,9 @@ interface OfflinePlaceStore {
 
 /**
  * Keeps [store] in step with the offline maps ([maps]): the places of an area are read from its
- * tiles once it is Ready, read again once an update of its map data has finished, and deleted with
- * the area. Tiles are read only while no area downloads (MapLibre writes them then). A read is tried
+ * tiles once it is Ready, read again once it is Ready with other map data than they were read from
+ * ([OfflineMap.newDataAt], kept with them, so an update that finished while the app was closed or
+ * during a read is not missed), and deleted with the area. Tiles are read only while no area downloads (MapLibre writes them then). A read is tried
  * again after [retry]: up to [MAX_TRIES] times per area and process when the tiles fail (no pack of
  * the area, an unknown layout), up to [MAX_BUSY_TRIES] times per process when they are busy (each
  * try copies MapLibre's database).
@@ -60,9 +62,6 @@ class OfflinePlaceIndexer(
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val retry: Duration = RETRY,
 ) {
-    /** Areas seen updating in this process: their places are read again once they are Ready. */
-    private val updated = MutableStateFlow<Set<String>>(emptySet())
-
     /** Failed reads per area in this process. */
     private val failures = mutableMapOf<String, Int>()
 
@@ -80,11 +79,7 @@ class OfflinePlaceIndexer(
                 maps
                     .filterIsInstance<OfflineMapsState.Ready>()
                     .map { it.maps }
-                    // Every list, also those the conflation below leaves out while a read runs.
-                    .onEach { list ->
-                        val updating = list.filter { (it.status as? OfflineMapStatus.Downloading)?.update == true }.map { it.id }
-                        if (updating.isNotEmpty()) updated.update { it + updating }
-                    }.distinctUntilChanged()
+                    .distinctUntilChanged()
             combine(lists, tries) { list, _ -> list }
                 .conflate()
                 .collect { sync(it) }
@@ -101,20 +96,21 @@ class OfflinePlaceIndexer(
                 return later()
             }
         val listed = maps.map { it.id }.toSet()
-        (stored - listed).forEach { area -> runCatching { store.delete(area) } }
+        (stored.keys - listed).forEach { area -> runCatching { store.delete(area) } }
         if (maps.any { it.status is OfflineMapStatus.Downloading }) return
+        // Each with the map data it has now: an update that ends during the read changes it again.
         val wanted =
             maps
-                .filter { it.status == OfflineMapStatus.Ready && (it.id !in stored || it.id in updated.value) }
-                .map { it.id }
-                .filter { (failures[it] ?: 0) < MAX_TRIES }
+                .filter { it.status == OfflineMapStatus.Ready && stored[it.id] != it.newDataAt }
+                .filter { (failures[it.id] ?: 0) < MAX_TRIES }
+                .associate { it.id to it.newDataAt }
         if (wanted.isEmpty() || busy >= MAX_BUSY_TRIES) return
         val done =
             try {
                 tiles.open { places ->
-                    wanted.filter { area ->
+                    wanted.keys.filter { area ->
                         val found = places.places(area) ?: return@filter false
-                        store.replace(area, found)
+                        store.replace(area, wanted.getValue(area), found)
                         true
                     }
                 }
@@ -127,8 +123,7 @@ class OfflinePlaceIndexer(
             busy++
             return later()
         }
-        updated.update { it - done.toSet() }
-        val failed = wanted - done.toSet()
+        val failed = wanted.keys - done.toSet()
         failed.forEach { failures[it] = (failures[it] ?: 0) + 1 }
         if (failed.isNotEmpty()) later()
     }

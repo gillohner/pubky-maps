@@ -155,7 +155,13 @@ class PubkyMapsApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        configureMapRuntime(this, BuildConfig.VERSION_NAME, scope) { offlineStarted?.downloading == true }
+        configureMapRuntime(
+            this,
+            BuildConfig.VERSION_NAME,
+            scope,
+            downloading = { offlineStarted?.downloading == true },
+            fetchedNewData = { offlineStarted?.fetchedNewData() },
+        )
         updates = startUpdater(this, serverConfigRepository)
         // Restores a stored session in the background; the map never waits for it.
         val (started, cacheDriver) = startAccount(this, scope, serviceHealth, core)

@@ -36,12 +36,12 @@ class SqlOfflinePlaceIndex(
     OfflinePlaceStore {
     private val queries = OfflinePlacesDatabase(driver).offlinePlacesQueries
 
-    /** The areas whose places are here. */
-    override fun areas(): Set<String> = queries.areas().executeAsList().toSet()
+    override fun areas(): Map<String, Long> = queries.areas().executeAsList().associate { it.id to it.new_data_at }
 
     /** Stores the places of [area] in place of those it had; a place seen twice ([OfflinePlace.sameness]) is stored once. */
     override fun replace(
         area: String,
+        newDataAt: Long,
         places: Sequence<OfflinePlace>,
     ) = queries.transaction {
         removeArea(area)
@@ -62,7 +62,7 @@ class SqlOfflinePlaceIndex(
             val id = queries.lastPlaceId().executeAsOne()
             wordsOf(place).forEach { queries.insertWord(it, id) }
         }
-        queries.putArea(area)
+        queries.putArea(area, newDataAt)
     }
 
     override fun delete(area: String) = queries.transaction { removeArea(area) }
@@ -79,33 +79,52 @@ class SqlOfflinePlaceIndex(
     ): List<OfflinePlace>? =
         withContext(io) {
             if (queries.areas().executeAsList().isEmpty()) return@withContext null
-            val words = normalizeForMatch(query).split(' ').filter { it.isNotEmpty() }.distinct()
-            // The longest word finds the fewest places through the index; the others filter them.
-            val longest = words.maxByOrNull { it.length } ?: return@withContext emptyList()
-            val until = longest.dropLast(1) + (longest.last() + 1)
+            val typed = normalizeForMatch(query)
+            val words = typed.split(' ').filter { it.isNotEmpty() }.distinct()
+            if (words.isEmpty()) return@withContext emptyList()
+            // The rarest word (often the name, not the category every restaurant has) finds the
+            // fewest places through the index; the others filter them.
+            val counts = words.associateWith { queries.countWordFrom(it, it.until()).executeAsOne() }
+            val rarest = words.minBy { counts.getValue(it) }
             val centre = area.centre
+
+            fun nearest(
+                from: String,
+                until: String,
+            ) = queries
+                .withWordFrom(from, until, centre.lat, centre.lon, CANDIDATES) {
+                    _,
+                    _,
+                    name,
+                    osmType,
+                    osmId,
+                    key,
+                    value,
+                    category,
+                    lat,
+                    lon,
+                    ->
+                    OfflinePlace(name, osmOf(osmType, osmId), key, value, category, GeoPoint(lat, lon))
+                }.executeAsList()
             val found =
-                queries
-                    .withWordFrom(longest, until, centre.lat, centre.lon, CANDIDATES) {
-                        _,
-                        _,
-                        name,
-                        osmType,
-                        osmId,
-                        key,
-                        value,
-                        category,
-                        lat,
-                        lon,
-                        ->
-                        OfflinePlace(name, osmOf(osmType, osmId), key, value, category, GeoPoint(lat, lon))
-                    }.executeAsList()
-            found
-                .filter { place ->
-                    val placeWords = wordsOf(place)
-                    words.all { w -> placeWords.any { it.startsWith(w) } }
-                }.withoutRepeatedPieces()
-                .take(RESULTS)
+                if (counts.getValue(rarest) <= CANDIDATES) {
+                    nearest(rarest, rarest.until())
+                } else {
+                    // Too many start with it for the nearest few hundred to hold every one: those
+                    // with the word itself ("Uster", not "Usterstrasse") are looked up too.
+                    (nearest(rarest, rarest.until()) + nearest(rarest, rarest + '\u0000'))
+                        .distinct()
+                        .sortedBy { distanceMeters(it.point, centre) }
+                }
+            val matching =
+                found
+                    .filter { place ->
+                        val placeWords = wordsOf(place)
+                        words.all { w -> placeWords.any { it.startsWith(w) } }
+                    }.withoutRepeatedPieces()
+            // A place named exactly as typed passes the cut wherever it is: the ranking puts it first.
+            val (exact, others) = matching.partition { normalizeForMatch(it.name) == typed }
+            (exact + others).take(RESULTS)
         }
 
     private companion object {
@@ -116,6 +135,9 @@ class SqlOfflinePlaceIndex(
         const val RESULTS = 30
     }
 }
+
+/** The first string after every string that starts with this one: the end of its index range. */
+private fun String.until(): String = dropLast(1) + (last() + 1)
 
 /** The words a place is found by: those of its name and of its category ("Café", "Street"). */
 internal fun wordsOf(place: OfflinePlace): Set<String> =

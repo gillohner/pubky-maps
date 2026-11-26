@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -31,6 +32,12 @@ data class OfflineMap(
     val bytes: Long,
     /** The area on the map; null when MapLibre lost the pack's metadata. */
     val bounds: AreaBounds? = null,
+    /**
+     * When a check last stored new map data for the area (epoch milliseconds), 0 when it has the
+     * data of its first download only. It changes with every update that fetched tiles, also one
+     * fast enough never to show as updating.
+     */
+    val newDataAt: Long = 0,
 )
 
 sealed interface OfflineMapStatus {
@@ -121,6 +128,9 @@ class OfflineMaps(
     /** Checked areas that are fetching new map data: they show as updating. */
     private val updating = MutableStateFlow<Set<String>>(emptySet())
 
+    /** Requests of downloads that got new data from the map server ([fetchedNewData]). */
+    private val fetches = MutableStateFlow(0L)
+
     /** Read on MapLibre's threads for every request: a plain read of the packs downloading or being checked. */
     val downloading: Boolean get() = started.value.isNotEmpty()
 
@@ -160,6 +170,16 @@ class OfflineMaps(
                 delay(CHECK_INTERVAL)
             }
         }
+    }
+
+    /**
+     * A request of a download or check got new data from the map server ([OfflineMapResources]);
+     * called on any thread. A check's walk during which this happens stored new map data, also when
+     * it ends within [QUIET_CHECK] and never shows as updating. Another area's walk at the same time
+     * counts too, so an area may be marked new without new data: its places are only read again.
+     */
+    fun fetchedNewData() {
+        fetches.update { it + 1 }
     }
 
     fun startPicking() {
@@ -297,6 +317,7 @@ class OfflineMaps(
                 try {
                     if (check) handles.forEach { mark(it) { m -> m.copy(updating = true) } }
                     for (handle in handles) {
+                        val fetchedBefore = fetches.value
                         if (check) walking += handle
                         halted -= handle
                         started.value += handle
@@ -312,7 +333,7 @@ class OfflineMaps(
                             walking -= handle
                             if (stateOf(handle) == PackState.Complete) {
                                 started.value -= handle
-                                mark(handle, done)
+                                mark(handle) { done(it, fetches.value != fetchedBefore, clock.now().toEpochMilliseconds()) }
                                 rest(handle)
                                 continue
                             }
@@ -326,7 +347,7 @@ class OfflineMaps(
                         // report an update stopped at the limit complete, as it counts the old tiles.
                         started.first { handle !in it }
                         if (handle in halted || stateOf(handle) != PackState.Complete) return@launch
-                        if (check) mark(handle, done)
+                        if (check) mark(handle) { done(it, fetches.value != fetchedBefore, clock.now().toEpochMilliseconds()) }
                         rest(handle)
                     }
                 } finally {
@@ -450,8 +471,20 @@ internal val CHECK_INTERVAL = 30.minutes
 /** Long enough for MapLibre to walk a complete pack in its database and report it. */
 internal val QUIET_CHECK = 10.seconds
 
-/** A check's walk of a pack finished: the pack is up to date. */
-private val done: (PackMetadata) -> PackMetadata = { it.copy(updating = false, newData = false) }
+/**
+ * A check's walk of a pack finished: the pack is up to date. When the walk [fetched] tiles, or an
+ * earlier walk of this update found new data, the pack has new map data from now on.
+ */
+private fun done(
+    metadata: PackMetadata,
+    fetched: Boolean,
+    now: Long,
+): PackMetadata =
+    metadata.copy(
+        updating = false,
+        newData = false,
+        newDataAt = if (fetched || metadata.newData) maxOf(now, metadata.newDataAt + 1) else metadata.newDataAt,
+    )
 
 private val StoredPack.areaId: String get() = metadata?.area ?: "pack-${handle.hashCode()}"
 
@@ -518,6 +551,7 @@ internal fun areas(
                             OfflineMapStatus.Paused(percent)
                         }
                     },
+                newDataAt = area.maxOf { it.metadata?.newDataAt ?: 0 },
                 // The styles of an area share its tiles: they are stored once. A check counts again from 0.
                 bytes =
                     maxOf(

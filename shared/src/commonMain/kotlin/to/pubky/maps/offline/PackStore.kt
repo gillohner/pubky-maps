@@ -88,6 +88,11 @@ data class PackMetadata(
      * before it could tell, so a walk on mobile data may still clear it when nothing changed.
      */
     val newData: Boolean = false,
+    /**
+     * When a check's walk of the pack last stored new map data (epoch milliseconds), 0 before the
+     * first: the places of the area are read again from its tiles when it changes.
+     */
+    val newDataAt: Long = 0,
 ) {
     fun encode(): ByteArray = json.encodeToString(serializer(), this).encodeToByteArray()
 
