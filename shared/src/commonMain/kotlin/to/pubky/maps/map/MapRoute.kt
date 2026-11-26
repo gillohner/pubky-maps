@@ -787,8 +787,8 @@ private fun ownLinks(
 
 /**
  * A place the user saved or tagged keeps the name and point its page shows, when the phone has none
- * for it ([WriteController.remember] decides); asked again when the page or the user's entries for it
- * change, so a page whose card loads later gives its name then.
+ * for it ([WriteController.remember] decides; the first name kept stays); asked again when the page
+ * or the user's entries for it change, so a page with no name before its card loads keeps the card's.
  */
 @Composable
 private fun RememberOwnPlace(

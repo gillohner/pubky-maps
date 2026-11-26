@@ -436,6 +436,41 @@ class WriteControllerTest {
         }
 
     @Test
+    fun aPlaceSavedOnThePhoneWithNoNameKeepsTheOneItsPageShows() =
+        runTest {
+            phone.data = PhoneData(saved = listOf(PhoneSaved(OSM, null, 7L, SCHOBER)))
+            account.value = AccountState.SignedOut()
+            val writer = controller()
+
+            writer.remember(WriteTarget(OSM, null, null), setOf(OSM))
+            runCurrent()
+            assertEquals(listOf(PhoneSaved(OSM, null, 7L, SCHOBER)), phone.data.saved, "a page with no name or point changes nothing")
+
+            writer.remember(WriteTarget(OSM, "Conditorei Schober", GeoPoint(47.0, 8.0)), setOf(OSM))
+            runCurrent()
+            assertEquals(listOf(PhoneSaved(OSM, "Conditorei Schober", 7L, SCHOBER)), phone.data.saved, "the kept point stays")
+        }
+
+    @Test
+    fun aPageWithNoNameOrPointKeepsNothingForASavedPlace() =
+        runTest {
+            account.value =
+                AccountState.SignedIn(
+                    AccountUser(ME, "Ada"),
+                    CachedAccount(ME, "Ada", 500, emptyList(), listOf(CachedBookmark("/b/1", OSM))),
+                    Connection.Online,
+                )
+            val writer = controller()
+
+            writer.remember(WriteTarget(OSM, null, null), setOf(OSM))
+            runCurrent()
+
+            assertEquals(emptyMap(), store.names)
+            assertEquals(emptyMap(), store.points())
+            assertEquals(listOf(SavedEntry(OSM, Kept.Private, null)), writer.own.value.saved)
+        }
+
+    @Test
     fun signedOutWritesAskForTheSignInFirstAndKeepWhatTheUserWanted() =
         runTest {
             account.value = AccountState.SignedOut()

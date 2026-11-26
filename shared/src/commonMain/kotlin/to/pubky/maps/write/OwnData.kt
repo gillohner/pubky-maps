@@ -121,8 +121,8 @@ data class PhoneSaved(
  * cache does not reflect yet (made after it was read) and the [queue] still to be sent applied on
  * top, in order, so a write shows at once and disappears again when it is dropped. Places are
  * compared as [normalize] spells them. [labels] are the names stored for the places the user wrote
- * about (by place in any spelling: a write keeps the link as the user had it, the homeserver's copy
- * comes back as the core spells it), [points] where they are (by place as the core spells it).
+ * about (by place; a stored place may be spelled otherwise than the core spells it, so they are
+ * compared by [normalize]), [points] where they are (by place as the core spells it).
  */
 internal fun ownData(
     viewer: String?,
