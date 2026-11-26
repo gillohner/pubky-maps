@@ -321,6 +321,93 @@ class AccountControllerTest {
         }
 
     @Test
+    fun aConnectionThatComesBackRetriesTheHomeserverAtOnceInsteadOfAfterTheNextWait() =
+        runTest {
+            secrets.values[SecretStore.SESSION] = "grant-secret"
+            cache.stored = CachedAccount(USER, null, null, emptyList(), emptyList())
+            profile(USER, "Ada")
+            val account = controller()
+            account.start()
+            account.onForeground()
+            runCurrent()
+            // Offline long enough that the next retry is 5 minutes away.
+            advanceTimeBy((15 + 30 + 60 + 120 + 1).seconds)
+            runCurrent()
+            assertEquals(5, core.restored.size)
+
+            core.restore = { AccountSession(USER, "homeserver") }
+            account.onNetworkAvailable()
+            runCurrent()
+
+            val state = assertIs<AccountState.SignedIn>(account.state.value)
+            assertEquals(Connection.Online, state.connection)
+            assertEquals("Ada", state.user.name)
+            assertEquals(emptySet(), health.missing.value)
+            assertEquals(6, core.restored.size)
+        }
+
+    @Test
+    fun aConnectionThatComesBackInTheBackgroundIsTriedOnceWithoutRetriesOnATimer() =
+        runTest {
+            secrets.values[SecretStore.SESSION] = "grant-secret"
+            cache.stored = CachedAccount(USER, null, null, emptyList(), emptyList())
+            val account = controller()
+            account.start()
+            runCurrent()
+            assertEquals(1, core.restored.size)
+
+            account.onNetworkAvailable()
+            runCurrent()
+            assertEquals(2, core.restored.size)
+            assertEquals(Connection.Offline, assertIs<AccountState.SignedIn>(account.state.value).connection)
+
+            advanceTimeBy(600.seconds)
+            runCurrent()
+            assertEquals(2, core.restored.size, "no retries on a timer in the background")
+        }
+
+    @Test
+    fun aConnectionThatComesBackReadsTheDataAgainWhenTheSessionWasRestoredBeforeTheHomeserverWentAway() =
+        runTest {
+            secrets.values[SecretStore.SESSION] = "grant-secret"
+            cache.stored = CachedAccount(USER, null, null, emptyList(), emptyList())
+            profile(USER, "Ada")
+            core.restore = { AccountSession(USER, "homeserver") }
+            core.failReads = CoreFailure.Network("unreachable")
+            val account = controller()
+            account.start()
+            runCurrent()
+            assertEquals(Connection.Offline, assertIs<AccountState.SignedIn>(account.state.value).connection)
+
+            core.failReads = null
+            account.onNetworkAvailable()
+            runCurrent()
+
+            val state = assertIs<AccountState.SignedIn>(account.state.value)
+            assertEquals(Connection.Online, state.connection)
+            assertEquals("Ada", state.user.name)
+            assertEquals(1, core.restored.size, "the session stays; only the data is read again")
+        }
+
+    @Test
+    fun aConnectionThatComesBackWhileTheHomeserverAnswersChangesNothing() =
+        runTest {
+            secrets.values[SecretStore.SESSION] = "grant-secret"
+            core.restore = { AccountSession(USER, "homeserver") }
+            val account = controller()
+            account.start()
+            runCurrent()
+            assertEquals(Connection.Online, assertIs<AccountState.SignedIn>(account.state.value).connection)
+            core.failReads = CoreFailure.Network("would show as offline if read again")
+
+            account.onNetworkAvailable()
+            runCurrent()
+
+            assertEquals(Connection.Online, assertIs<AccountState.SignedIn>(account.state.value).connection)
+            assertEquals(1, core.restored.size)
+        }
+
+    @Test
     fun anEndedSessionSignsOutAndDeletesWhatThePhoneHad() =
         runTest {
             secrets.values[SecretStore.SESSION] = "grant-secret"

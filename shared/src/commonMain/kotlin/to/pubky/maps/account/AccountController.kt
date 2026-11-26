@@ -219,12 +219,24 @@ class AccountController(
         enqueue {
             foreground = true
             if (link != null) waitForRing()
-            if (health.missing.value.contains(ServicePart.Homeserver)) {
-                retries = 0
-                retryJob?.cancel()
-                reconnect()
-            }
+            retryNow()
         }
+
+    /**
+     * The phone has a connection again: retry an unreachable homeserver now, so writes waiting for
+     * it go out within seconds instead of after the next wait (up to 5 minutes). In the background
+     * this is one attempt; the retries on a timer run only in the foreground.
+     */
+    fun onNetworkAvailable() = enqueue { retryNow() }
+
+    /** Tries an unreachable homeserver again now, and the waits between retries start over. */
+    private fun retryNow() {
+        if (!health.missing.value.contains(ServicePart.Homeserver)) return
+        retries = 0
+        retryJob?.cancel()
+        retryJob = null
+        reconnect()
+    }
 
     /** The app left the foreground: stop waiting for Ring and retrying (the network may be cut). */
     fun onBackground() =
