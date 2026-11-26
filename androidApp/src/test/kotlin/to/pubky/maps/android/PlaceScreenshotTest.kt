@@ -260,6 +260,23 @@ class PlaceScreenshotTest {
             savedAt = 1_795_597_920_000,
         )
 
+    /** A café tapped on the map of a downloaded area with no connection, its page never opened before. */
+    private val tappedOffline =
+        PlacePageState(
+            place =
+                PlaceRef(
+                    uri = "https://www.openstreetmap.org/node/4285164389",
+                    name = "Café Schurter",
+                    point = GeoPoint(47.373380, 8.544260),
+                    osm = OsmId(OsmType.Node, 4285164389),
+                    source = PlaceSource.Map,
+                    category = "Café",
+                ),
+            loading = emptySet(),
+            failed = setOf(PlacePart.Card, PlacePart.Social, PlacePart.Posts, PlacePart.Lists),
+            locality = "Altstadt, Zürich",
+        )
+
     private val actions =
         PlacePageActions(
             onClose = {},
@@ -373,6 +390,18 @@ class PlaceScreenshotTest {
 
     @Test
     fun loadingTabletDark() = capture("place-loading", Device.Tablet, dark = true) { Page(loadingPage) }
+
+    @Test
+    fun tappedOfflinePhoneLight() = capture("place-tapped-offline", Device.Phone, dark = false) { Page(tappedOffline) }
+
+    @Test
+    fun tappedOfflinePhoneDark() = capture("place-tapped-offline", Device.Phone, dark = true) { Page(tappedOffline) }
+
+    @Test
+    fun tappedOfflineTabletLight() = capture("place-tapped-offline", Device.Tablet, dark = false) { Page(tappedOffline) }
+
+    @Test
+    fun tappedOfflineTabletDark() = capture("place-tapped-offline", Device.Tablet, dark = true) { Page(tappedOffline) }
 
     @Test
     fun offlinePhoneLight() = capture("place-offline", Device.Phone, dark = false) { Page(offline) }

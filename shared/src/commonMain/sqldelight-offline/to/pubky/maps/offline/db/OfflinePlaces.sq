@@ -25,6 +25,14 @@ CREATE TABLE place (
 
 CREATE INDEX place_area ON place(area);
 
+-- For a place page: the place by its OpenStreetMap element, the places near a point, the labels
+-- around it (Localities).
+CREATE INDEX place_osm ON place(osm_id, osm_type);
+
+CREATE INDEX place_lat ON place(lat);
+
+CREATE INDEX place_label ON place(tag_key, lat);
+
 -- Each word of a place's name and category, as search compares them (normalizeForMatch), so a
 -- typed word finds the places with a word that starts with it through the index.
 CREATE TABLE word (
@@ -82,3 +90,18 @@ SELECT DISTINCT place.* FROM word JOIN place ON place.id = word.place
 WHERE word.word = :word
 ORDER BY place.tag_key = 'place' DESC, (place.lat - :lat) * (place.lat - :lat) + (place.lon - :lon) * (place.lon - :lon)
 LIMIT :limit;
+
+-- The localities stored for an OpenStreetMap element, one per area that has it.
+localitiesOf:
+SELECT locality FROM place WHERE osm_id = :id AND osm_type = :type;
+
+-- A place within the box, if any: a point with none near it lies outside every area's tiles.
+anyIn:
+SELECT id FROM place
+WHERE lat BETWEEN :south AND :north AND lon BETWEEN :west AND :east
+LIMIT 1;
+
+-- The town and district labels in the box, which name a point in it (Localities).
+labelsIn:
+SELECT * FROM place
+WHERE tag_key = 'place' AND lat BETWEEN :south AND :north AND lon BETWEEN :west AND :east;

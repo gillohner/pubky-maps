@@ -59,7 +59,10 @@ class PubkyMapsApplication : Application() {
     /** Which parts of the app are missing because every server of their list failed. */
     val serviceHealth = ServiceHealth()
 
-    /** The places of the offline maps, which search answers from when Photon cannot be reached. */
+    /**
+     * The places of the offline maps, which search answers from when Photon cannot be reached, and
+     * which name the district and town of a place page with no address.
+     */
     private val offlinePlaces: SqlOfflinePlaceIndex by lazy { androidOfflinePlaceIndex(this) }
 
     /**
@@ -91,6 +94,7 @@ class PubkyMapsApplication : Application() {
             viewer = { signedInKey() },
             health = serviceHealth,
             offline = offlinePubky,
+            localities = offlinePlaces,
         )
     }
 

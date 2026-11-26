@@ -20,6 +20,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.measureTime
@@ -280,6 +281,72 @@ class OfflinePlaceIndexDatabaseTest {
     }
 
     @Test
+    fun aPlacePageGetsTheLocalityOfItsElementElseOfItsPointNearTheAreasPlaces() {
+        val index = index()
+        assertNull(index.localityOf(OsmId(OsmType.Node, 1), GeoPoint(47.3703, 8.5481)), "no area")
+        index.replace(
+            "a",
+            0,
+            sequenceOf(
+                place("Kunsthaus Zürich", 47.3703, 8.5481, osm = 1, key = "tourism", value = "museum", category = "Museum"),
+                place("Bahnhofstrasse", 47.3720, 8.5390, key = "highway", value = "minor", category = "Street"),
+                place("Zürich", 47.3700, 8.5400, osm = 10, key = "place", value = "city", category = null),
+                place("Hottingen", 47.3700, 8.5600, osm = 11, key = "place", value = "quarter", category = null),
+                place("Winterthur", 47.5000, 8.7240, osm = 12, key = "place", value = "town", category = null),
+            ),
+        )
+        // The element's stored locality, as offline search shows it; a town's label is in nothing.
+        assertEquals("Hottingen, Zürich", index.localityOf(OsmId(OsmType.Node, 1), GeoPoint(0.0, 0.0)))
+        assertNull(index.localityOf(OsmId(OsmType.Node, 12), GeoPoint(47.5000, 8.7240)))
+        // Another type with the same id is another element: looked up by its point.
+        assertEquals("Zürich", index.localityOf(OsmId(OsmType.Way, 1), GeoPoint(47.3722, 8.5392)))
+        // A Pubky pin or a dropped pin next to the Bahnhofstrasse, which the tiles have no element of.
+        assertEquals("Zürich", index.localityOf(null, GeoPoint(47.3725, 8.5395)))
+        assertEquals("Hottingen, Zürich", index.localityOf(OsmId(OsmType.Node, 99), GeoPoint(47.3705, 8.5490)))
+        // 2 km from every place of the area, where a label outside its tiles could be nearer.
+        assertNull(index.localityOf(null, GeoPoint(47.3900, 8.5390)))
+        index.delete("a")
+        assertNull(index.localityOf(OsmId(OsmType.Node, 1), GeoPoint(47.3703, 8.5481)))
+    }
+
+    @Test
+    fun aVersionTwoDatabaseKeepsItsPlacesAndGetsTheIndexesOfAPlacePage() {
+        val driver = JdbcSqliteDriver("jdbc:sqlite:${File(dir, "v2.db").path}", Properties())
+        // The schema of version 2.
+        listOf(
+            "CREATE TABLE area (id TEXT NOT NULL PRIMARY KEY, new_data_at INTEGER NOT NULL)",
+            "CREATE TABLE place (id INTEGER PRIMARY KEY AUTOINCREMENT, area TEXT NOT NULL, name TEXT NOT NULL, osm_type TEXT, " +
+                "osm_id INTEGER, tag_key TEXT NOT NULL, tag_value TEXT NOT NULL, category TEXT, lat REAL NOT NULL, lon REAL NOT NULL, " +
+                "locality TEXT)",
+            "CREATE INDEX place_area ON place(area)",
+            "CREATE TABLE word (word TEXT NOT NULL, place INTEGER NOT NULL)",
+            "CREATE INDEX word_word ON word(word)",
+            "CREATE INDEX word_place ON word(place)",
+            "INSERT INTO area VALUES ('a', 5)",
+            "INSERT INTO place VALUES (1, 'a', 'Café Rosa', 'Node', 1, 'amenity', 'cafe', 'Café', 47.3700, 8.5410, 'Zürich')",
+            "INSERT INTO place VALUES (2, 'a', 'Zürich', 'Node', 10, 'place', 'city', NULL, 47.3700, 8.5400, NULL)",
+            "INSERT INTO word VALUES ('rosa', 1)",
+        ).forEach { driver.execute(null, it, 0) }
+        assertEquals(3L, OfflinePlacesDatabase.Schema.version)
+
+        OfflinePlacesDatabase.Schema.migrate(driver, 2, OfflinePlacesDatabase.Schema.version)
+
+        val index = SqlOfflinePlaceIndex(driver, io = Dispatchers.Unconfined)
+        assertEquals(mapOf("a" to 5L), index.areas())
+        assertEquals(listOf("Café Rosa"), index.find("rosa"))
+        assertEquals("Zürich", index.localityOf(OsmId(OsmType.Node, 1), GeoPoint(47.3700, 8.5410)))
+        assertEquals("Zürich", index.localityOf(null, GeoPoint(47.3710, 8.5420)))
+        val indexes =
+            driver
+                .executeQuery(null, "SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'place_%'", { c ->
+                    app.cash.sqldelight.db.QueryResult
+                        .Value(buildList { while (c.next().value) add(c.getString(0)!!) })
+                }, 0)
+                .value
+        assertEquals(setOf("place_area", "place_osm", "place_lat", "place_label"), indexes.toSet())
+    }
+
+    @Test
     fun aVersionOneDatabaseIsEmptiedSoItsAreasAreReadAgain() {
         val driver = JdbcSqliteDriver("jdbc:sqlite:${File(dir, "v1.db").path}", Properties())
         // The schema the first released offline places had.
@@ -295,8 +362,6 @@ class OfflinePlaceIndexDatabaseTest {
             "INSERT INTO place VALUES (1, 'a', 'Café Rosa', 'node', 1, 'amenity', 'cafe', 'Café', 47.37, 8.54)",
             "INSERT INTO word VALUES ('rosa', 1)",
         ).forEach { driver.execute(null, it, 0) }
-        assertEquals(2L, OfflinePlacesDatabase.Schema.version)
-
         OfflinePlacesDatabase.Schema.migrate(driver, 1, OfflinePlacesDatabase.Schema.version)
 
         val index = SqlOfflinePlaceIndex(driver, io = Dispatchers.Unconfined)
@@ -341,6 +406,11 @@ class OfflinePlaceIndexDatabaseTest {
         // Two words, one a town's: looked up around the map centre and around the town.
         val inTown = measureTime { assertEquals(30, index.find("bäck ${TOWNS[0]}")?.size) }
         assertTrue(inTown.inWholeMilliseconds < 100, "search in a town took $inTown")
+        // A place page's district and town, by a point among them (a tapped place the tiles have no element of).
+        index.localityOf(null, GeoPoint(47.35, 8.50))
+        val locality = measureTime { assertNotNull(index.localityOf(null, GeoPoint(47.36, 8.52))) }
+        println("a locality in $locality")
+        assertTrue(locality.inWholeMilliseconds < 50, "a locality took $locality")
     }
 
     @Test

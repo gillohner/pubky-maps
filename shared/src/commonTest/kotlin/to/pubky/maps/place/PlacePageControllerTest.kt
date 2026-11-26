@@ -5,6 +5,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.links.OsmId
 import to.pubky.maps.links.OsmType
 import to.pubky.maps.search.SourceAnswer
@@ -164,6 +165,7 @@ class PlacePageControllerTest {
         viewer: String? = null,
         kept: KeptPlaceSocial? = null,
         clock: Clock = Clock.System,
+        localities: OfflineLocality? = null,
     ) = PlacePageController(
         data = data,
         cache = cache,
@@ -172,7 +174,103 @@ class PlacePageControllerTest {
         viewer = { viewer },
         clock = clock,
         io = StandardTestDispatcher(testScheduler),
+        localities = localities,
     )
+
+    /** The offline areas' answer for every point; records what was asked. */
+    private class Hottingen : OfflineLocality {
+        val asked = mutableListOf<Pair<OsmId?, GeoPoint>>()
+
+        override fun localityOf(
+            osm: OsmId?,
+            point: GeoPoint,
+        ): String {
+            asked += osm to point
+            return "Hottingen, Zürich"
+        }
+    }
+
+    private val tapped =
+        PlaceRef(
+            uri = "https://www.openstreetmap.org/node/42",
+            name = "Café Rosa",
+            point = GeoPoint(47.3703, 8.5560),
+            osm = OsmId(OsmType.Node, 42),
+            source = PlaceSource.Map,
+            category = "Café",
+        )
+
+    @Test
+    fun aPlaceTappedOfflineSaysWhereItIsFromTheOfflineAreas() =
+        runTest {
+            val data =
+                FakePlaceData().apply {
+                    pinakesDown = true
+                    nexusDown = true
+                }
+            val localities = Hottingen()
+            val pages = controller(data, localities = localities)
+            pages.open(tapped)
+            advanceUntilIdle()
+            val page = pages.state.value!!
+            assertEquals(listOf<Pair<OsmId?, GeoPoint>>(tapped.osm to tapped.point!!), localities.asked)
+            assertEquals("Hottingen, Zürich", page.address)
+            // Not the street address a long press copies.
+            assertNull(page.streetAddress)
+            assertEquals("Hottingen, Zürich", page.detailText(provider = null))
+        }
+
+    @Test
+    fun theCardsAddressComesBeforeTheOfflineLocality() =
+        runTest {
+            val pages = controller(FakePlaceData(), localities = Hottingen())
+            pages.open(schober.copy(point = GeoPoint(47.3700, 8.5440)))
+            advanceUntilIdle()
+            val page = pages.state.value!!
+            assertEquals("Hottingen, Zürich", page.locality)
+            assertEquals(page.card?.address, page.address)
+            assertNotNull(page.address)
+        }
+
+    @Test
+    fun onlyAPinnedPlaceWithNoAddressOrLocalityIsLookedUp() =
+        runTest {
+            val localities = Hottingen()
+            val pages = controller(FakePlaceData(), localities = localities)
+            val view = tapped.copy(uri = "view", pointIsView = true)
+            val near = tapped.copy(uri = "near", query = "cafe")
+            val addressed = tapped.copy(uri = "addressed", address = "Hottingerstrasse 1, 8032 Zürich")
+            val fromSearch = tapped.copy(uri = "search", locality = "Fluntern, Zürich")
+            val noPoint = tapped.copy(uri = "nopoint", point = null)
+            for (place in listOf(view, near, addressed, fromSearch, noPoint)) {
+                pages.open(place)
+                advanceUntilIdle()
+                assertNull(pages.state.value!!.locality, place.uri)
+            }
+            assertEquals(emptyList<Pair<OsmId?, GeoPoint>>(), localities.asked)
+            assertEquals(
+                "Fluntern, Zürich",
+                pages.state.value!!
+                    .copy(place = fromSearch)
+                    .address,
+            )
+            // Typed coordinates never leave the phone, and the offline areas are on it.
+            val typed = tapped.copy(uri = "geo:47.3703,8.556", name = null, osm = null, source = PlaceSource.Coordinates, category = null)
+            pages.open(typed)
+            advanceUntilIdle()
+            assertEquals("Hottingen, Zürich", pages.state.value!!.address)
+            assertEquals(listOf<Pair<OsmId?, GeoPoint>>(null to typed.point!!), localities.asked)
+        }
+
+    @Test
+    fun aFailingLookupLeavesThePageWithoutALocality() =
+        runTest {
+            val pages = controller(FakePlaceData(), localities = { _, _ -> error("disk") })
+            pages.open(tapped)
+            advanceUntilIdle()
+            assertNull(pages.state.value!!.locality)
+            assertEquals(emptySet<PlacePart>(), pages.state.value!!.loading)
+        }
 
     @Test
     fun everyPartLoads() =

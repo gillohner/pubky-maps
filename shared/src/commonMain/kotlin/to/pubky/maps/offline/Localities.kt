@@ -108,6 +108,9 @@ internal class Localities(
         /** True when a label of [kind] names the places around it (a town, a district). */
         fun names(kind: String): Boolean = kind in REACH
 
+        /** The farthest any label names a place, in meters: a point's labels lie within it. */
+        val MAX_REACH_METERS: Double get() = REACH.values.max()
+
         /** How far a settlement's label names the places around it, in meters. */
         private val SETTLEMENT_REACH = mapOf("city" to 12_000.0, "town" to 5_000.0, "village" to 2_000.0)
 

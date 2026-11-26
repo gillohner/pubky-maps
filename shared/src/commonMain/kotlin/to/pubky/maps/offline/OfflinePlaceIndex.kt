@@ -9,9 +9,12 @@ import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.links.OsmId
 import to.pubky.maps.links.OsmType
 import to.pubky.maps.offline.db.OfflinePlacesDatabase
+import to.pubky.maps.place.OfflineLocality
 import to.pubky.maps.search.SearchArea
 import to.pubky.maps.search.distanceMeters
 import to.pubky.maps.search.normalizeForMatch
+import kotlin.math.PI
+import kotlin.math.cos
 
 /** Search in the places of the offline areas, for when the search servers cannot be reached. */
 fun interface OfflinePlaceSearch {
@@ -27,14 +30,15 @@ fun interface OfflinePlaceSearch {
 }
 
 /**
- * The places of each offline area in SQLite ([OfflinePlacesDatabase]). [replace] and [delete] block
- * on disk: call them off the main thread; [search] moves to [io] itself.
+ * The places of each offline area in SQLite ([OfflinePlacesDatabase]). [replace], [delete] and
+ * [localityOf] block on disk: call them off the main thread; [search] moves to [io] itself.
  */
 class SqlOfflinePlaceIndex(
     driver: SqlDriver,
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : OfflinePlaceSearch,
-    OfflinePlaceStore {
+    OfflinePlaceStore,
+    OfflineLocality {
     private val queries = OfflinePlacesDatabase(driver).offlinePlacesQueries
 
     override fun areas(): Map<String, Long> = queries.areas().executeAsList().associate { it.id to it.new_data_at }
@@ -94,6 +98,27 @@ class SqlOfflinePlaceIndex(
         queries.deleteArea(area)
     }
 
+    /**
+     * The locality stored with the element [osm], as offline search shows it; for a place no area
+     * has (a Pubky pin, a dropped pin, a place the tiles name differently), the one the labels around
+     * [point] give ([Localities.at]), if the areas have a place within [NEAR_METERS] of it: a point
+     * farther from every place lies outside their tiles, where a nearer label may be missing.
+     */
+    override fun localityOf(
+        osm: OsmId?,
+        point: GeoPoint,
+    ): String? {
+        if (osm != null) {
+            val stored = queries.localitiesOf(osm.id, osm.type.name).executeAsList()
+            if (stored.isNotEmpty()) return stored.firstNotNullOfOrNull { it.locality }
+        }
+        val near = Box.around(point, NEAR_METERS)
+        if (queries.anyIn(near.south, near.north, near.west, near.east).executeAsOneOrNull() == null) return null
+        val reach = Box.around(point, Localities.MAX_REACH_METERS)
+        val labels = queries.labelsIn(reach.south, reach.north, reach.west, reach.east, placeOfRow).executeAsList()
+        return Localities(labels).at(point.lat, point.lon)
+    }
+
     override suspend fun search(
         query: String,
         area: SearchArea,
@@ -106,32 +131,16 @@ class SqlOfflinePlaceIndex(
             val counts = words.associateWith { queries.countWordFrom(it, it.until()).executeAsOne() }
             val centre = area.centre
 
-            val place = {
-                _: Long,
-                _: String,
-                name: String,
-                osmType: String?,
-                osmId: Long?,
-                key: String,
-                value: String,
-                category: String?,
-                lat: Double,
-                lon: Double,
-                locality: String?,
-                ->
-                OfflinePlace(name, osmOf(osmType, osmId), key, value, category, GeoPoint(lat, lon), locality)
-            }
-
             /** The places nearest [at] with a word of their name or category that starts with [word]. */
             fun named(
                 word: String,
                 at: GeoPoint,
             ): List<OfflinePlace> {
-                val starting = queries.withWordFrom(word, word.until(), at.lat, at.lon, CANDIDATES, place).executeAsList()
+                val starting = queries.withWordFrom(word, word.until(), at.lat, at.lon, CANDIDATES, placeOfRow).executeAsList()
                 if (counts.getValue(word) <= CANDIDATES) return starting
                 // Too many start with it for the nearest few hundred to hold every one: those with
                 // the word itself ("Uster", not "Usterstrasse") are looked up too.
-                return starting + queries.withWord(word, at.lat, at.lon, CANDIDATES, place).executeAsList()
+                return starting + queries.withWord(word, at.lat, at.lon, CANDIDATES, placeOfRow).executeAsList()
             }
 
             // Every word looks up the places it names, the rarest first (often the name, not the
@@ -164,6 +173,9 @@ class SqlOfflinePlaceIndex(
         }
 
     private companion object {
+        /** How near a place of the areas a point must be for their labels to name it. */
+        const val NEAR_METERS = 500.0
+
         /** Places read for one search, nearest first, before the words are checked. */
         const val CANDIDATES = 400L
 
@@ -218,6 +230,44 @@ private class PlacePoints {
 
     private companion object {
         const val INITIAL = 1024
+    }
+}
+
+/** A place as the index stores it ([OfflinePlacesDatabase]'s `place` row, without its id and area). */
+private val placeOfRow = {
+    _: Long,
+    _: String,
+    name: String,
+    osmType: String?,
+    osmId: Long?,
+    key: String,
+    value: String,
+    category: String?,
+    lat: Double,
+    lon: Double,
+    locality: String?,
+    ->
+    OfflinePlace(name, osmOf(osmType, osmId), key, value, category, GeoPoint(lat, lon), locality)
+}
+
+/** The box [around] a point, in degrees. */
+private class Box(
+    val south: Double,
+    val north: Double,
+    val west: Double,
+    val east: Double,
+) {
+    companion object {
+        fun around(
+            point: GeoPoint,
+            meters: Double,
+        ): Box {
+            val lat = meters / METERS_PER_DEGREE
+            val lon = lat / cos(point.lat * PI / 180).coerceAtLeast(0.01)
+            return Box(point.lat - lat, point.lat + lat, point.lon - lon, point.lon + lon)
+        }
+
+        const val METERS_PER_DEGREE = 111_320.0
     }
 }
 

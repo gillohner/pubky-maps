@@ -77,7 +77,11 @@ from Zürich). A place named exactly as typed passes also when farther than the 
 label before the places named after it. They are merged with Pinakes when it answers. A result
 shows its district and town where an address goes, and so does its page until its Pinakes card
 gives the street address; the list says the places are from the offline maps and that street
-addresses need a connection, and the map's credits stand under them. Deleting an area deletes its
+addresses need a connection, and the map's credits stand under them. A place opened from the map
+(a tapped point of interest, a Pubky pin, a saved place, a link) or typed coordinates without an
+address get the same line on their page: the district and town stored with its OpenStreetMap
+element, else those the labels around its point give, when the areas have a place within 500 m of
+it (farther out, a nearer label may lie outside their tiles). Deleting an area deletes its
 places.
 
 Settings:
