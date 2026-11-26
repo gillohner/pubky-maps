@@ -117,16 +117,6 @@ fun SavedScreen(
                             val name = list.names[place] ?: state.names[place]
                             ListItem(
                                 headlineContent = { Text(name ?: placeText(place), maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                supportingContent =
-                                    name?.let {
-                                        {
-                                            Text(
-                                                placeText(place),
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                            )
-                                        }
-                                    },
                                 modifier = Modifier.padding(start = 40.dp).clickable { onOpen(place) },
                             )
                         }
@@ -152,17 +142,7 @@ private fun PlaceRow(
         supportingContent = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 KeptBadge(row.kept)
-                Text(
-                    if (row.pending) {
-                        "Not sent yet"
-                    } else if (row.name != null) {
-                        placeText(row.place)
-                    } else {
-                        ""
-                    },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                if (row.pending) Text("Not sent yet", maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         },
         leadingContent = { Icon(WriteIcons.Bookmark, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
@@ -190,7 +170,11 @@ private fun Hint(text: String) {
     )
 }
 
-/** A place's link in words, for one whose name is not known: "OpenStreetMap node 270803095", "47.37687, 8.54169". */
+/**
+ * A place's link in words, shown only for one whose name is not known: "OpenStreetMap node 270803095",
+ * "47.37687, 8.54169". A named place shows its name alone, as map apps' saved lists do: the link is
+ * the app's reference, not something the user reads.
+ */
 internal fun placeText(place: String): String {
     val osm = Regex("^https://www\\.openstreetmap\\.org/(node|way|relation)/(\\d+)$").matchEntire(place)
     if (osm != null) return "OpenStreetMap ${osm.groupValues[1]} ${osm.groupValues[2]}"
