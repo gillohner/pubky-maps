@@ -3,6 +3,7 @@ package to.pubky.maps.place
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,6 +39,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -50,13 +53,20 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import kotlinx.coroutines.delay
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -73,6 +83,7 @@ import to.pubky.maps.write.WriteIcons
 import to.pubky.maps.write.mergeOwnTags
 import to.pubky.maps.write.ownPostRows
 import to.pubky.maps.write.pendingText
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 /** What the place page can do, wired by the map. */
@@ -159,9 +170,7 @@ fun PlaceHeader(
         Column(Modifier.padding(end = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             val facts = listOfNotNull(page.categoryText(), context.distance)
             if (facts.isNotEmpty()) Text(facts.joinToString(" · "), style = MaterialTheme.typography.bodyMedium)
-            page.detailText(context.provider)?.let {
-                Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+            page.detailText(context.provider)?.let { DetailLine(it, page.address) }
             page.osm
                 ?.openingHours
                 ?.let(OpeningSchedule::parse)
@@ -355,7 +364,8 @@ fun PlaceSections(
         card?.image?.let { image -> CardImage(image, card.credit("image"), actions) }
         card?.description?.let { Description(it) }
         val osm = page.osm
-        osm?.let { OsmDetailsSection(it, context, actions) }
+        val coordinates = page.coordinatesText
+        if (osm != null || coordinates != null) DetailsSection(osm, coordinates, context, actions)
         val writes = actions.writes
         val viewer = writes?.viewer ?: page.viewer
         val tags = mergeOwnTags(page.tags, writes?.own?.labels, viewer)
@@ -503,14 +513,28 @@ private fun Description(text: String) {
     Text(text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
 }
 
+/** OpenStreetMap's details of the place, then its coordinates (last, as CoMaps and OsmAnd list them). */
 @Composable
-private fun OsmDetailsSection(
-    osm: OsmDetails,
+private fun DetailsSection(
+    osm: OsmDetails?,
+    coordinates: String?,
     context: PlacePageContext,
     actions: PlacePageActions,
 ) {
     Column {
         SectionTitle("Details")
+        osm?.let { OsmDetailRows(it, context, actions) }
+        coordinates?.let { CoordinatesRow(it) }
+    }
+}
+
+@Composable
+private fun OsmDetailRows(
+    osm: OsmDetails,
+    context: PlacePageContext,
+    actions: PlacePageActions,
+) {
+    Column {
         osm.openingHours?.let { HoursRow(it, context) }
         osm.phone?.let { phone ->
             DetailRow(PlaceIcons.Phone, phone, onClick = { actions.onOpenLink("tel:" + phone.filter { it.isDigit() || it == '+' }) })
@@ -554,6 +578,110 @@ private fun DetailRow(
             color = if (onClick != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
         )
     }
+}
+
+/**
+ * The place's coordinates; a tap copies them, as on CoMaps' and OsmAnd's place pages (Google Maps copies
+ * its address and plus code rows the same way). The copy icon says the row copies rather than opens.
+ */
+@Composable
+private fun CoordinatesRow(coordinates: String) {
+    val copy = rememberCopyText()
+    var copied by rememberCopiedFlag()
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .clickable(onClickLabel = "Copy coordinates") {
+                    copy(coordinates)
+                    copied = true
+                }.padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(AppIcons.Place, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.width(16.dp))
+        Text(coordinates, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Spacer(Modifier.width(8.dp))
+        if (copied) {
+            CopiedText("Copied")
+        } else {
+            Icon(PlaceIcons.ContentCopy, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/**
+ * The line under what the place is (its address, else its coordinates, and where a link came from). When it
+ * holds an address, a long press copies the address alone, as in CoMaps and OsmAnd; TalkBack offers it as
+ * the long-press action. The line then says "Address copied" for a moment: Android 12 and older show
+ * nothing when an app copies, and a long press has no other mark of having worked.
+ */
+@Composable
+private fun DetailLine(
+    text: String,
+    address: String?,
+) {
+    val copy = rememberCopyText()
+    var copied by rememberCopiedFlag()
+    val style = MaterialTheme.typography.bodyMedium
+    val color = MaterialTheme.colorScheme.onSurfaceVariant
+    if (address == null) {
+        Text(text, style = style, color = color)
+        return
+    }
+    val copyAddress = {
+        copy(address)
+        copied = true
+    }
+    Box(
+        Modifier
+            .pointerInput(address) { detectTapGestures(onLongPress = { copyAddress() }) }
+            .semantics(mergeDescendants = true) {
+                onLongClick("Copy address") {
+                    copyAddress()
+                    true
+                }
+            },
+    ) {
+        // Both texts are laid out so the line keeps its height while it says "Address copied".
+        Text(text, style = style, color = if (copied) Color.Transparent else color)
+        if (copied) CopiedText("Address copied")
+    }
+}
+
+@Composable
+private fun CopiedText(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+    )
+}
+
+/** True for two seconds after it is set: how long a row says it copied. */
+@Composable
+private fun rememberCopiedFlag(): MutableState<Boolean> {
+    val copied = remember { mutableStateOf(false) }
+    LaunchedEffect(copied.value) {
+        if (copied.value) {
+            delay(2.seconds)
+            copied.value = false
+        }
+    }
+    return copied
+}
+
+/**
+ * Puts plain text on the clipboard. The newer `LocalClipboard` takes a platform `ClipEntry` that common
+ * code cannot build from text on Android; the older clipboard manager takes text on every target.
+ */
+@Suppress("DEPRECATION")
+@Composable
+private fun rememberCopyText(): (String) -> Unit {
+    val clipboard = LocalClipboardManager.current
+    return remember(clipboard) { { text -> clipboard.setText(AnnotatedString(text)) } }
 }
 
 /** The opening hours: the week from today, opened with a tap; as written when the page cannot read them. */

@@ -3,6 +3,7 @@ package to.pubky.maps.place
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
+import to.pubky.maps.links.GeoPoint
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -30,6 +31,17 @@ class PlaceTextsTest {
         assertEquals("Closed", rows[4].hours)
         assertEquals(listOf(true, false, false, false, false, false, false), rows.map { it.today })
         assertEquals("Open 24 hours", weekRows(OpeningSchedule.parse("24/7")!!, LocalDate.parse("2026-11-25"))!![0].hours)
+    }
+
+    @Test
+    fun theDetailsShowTheCoordinatesOnlyWhenThePointIsThePlace() {
+        val point = GeoPoint(47.3778612, 8.5403200)
+        val place = PlaceRef("https://www.openstreetmap.org/node/1", "Kunsthaus", point, null, PlaceSource.Map)
+        assertEquals("47.37786, 8.54032", PlacePageState(place).coordinatesText)
+        // A link's map view, or a search near a point, is not where the place is.
+        assertNull(PlacePageState(place.copy(pointIsView = true)).coordinatesText)
+        assertNull(PlacePageState(place.copy(query = "bakery")).coordinatesText)
+        assertNull(PlacePageState(place.copy(point = null)).coordinatesText)
     }
 
     @Test
