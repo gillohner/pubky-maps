@@ -34,6 +34,26 @@ data class OsmDetails(
                 cuisine.isEmpty() && operator == null && level == null && bitcoin.isEmpty()
 
     companion object {
+        /** Every OSM tag [from] reads: the offline areas keep these of their places. */
+        val KEYS: List<String> =
+            listOf(
+                "opening_hours",
+                "phone",
+                "contact:phone",
+                "website",
+                "contact:website",
+                "email",
+                "contact:email",
+                "wheelchair",
+                "cuisine",
+                "operator",
+                "level",
+                "payment:lightning",
+                "payment:lightning_contactless",
+                "payment:onchain",
+                "currency:XBT",
+            )
+
         /** The details in [facts] (OSM tag names as keys); null when there are none. */
         fun from(facts: Map<String, String>): OsmDetails? {
             fun first(vararg keys: String): String? =

@@ -25,12 +25,14 @@ import to.pubky.maps.links.MapLinks
 import to.pubky.maps.map.LastMapViewStore
 import to.pubky.maps.map.androidLastMapViewStore
 import to.pubky.maps.offline.OfflineMaps
+import to.pubky.maps.offline.SqlOfflineDetails
 import to.pubky.maps.offline.SqlOfflinePlaceIndex
 import to.pubky.maps.offline.SqlOfflinePubkyStore
 import to.pubky.maps.offline.androidOfflineMaps
-import to.pubky.maps.offline.androidOfflinePlaceIndex
+import to.pubky.maps.offline.androidOfflinePlacesDriver
 import to.pubky.maps.offline.androidOfflinePubkyStore
 import to.pubky.maps.offline.configureMapRuntime
+import to.pubky.maps.offline.startOfflinePlaceDetails
 import to.pubky.maps.offline.startOfflinePlaceIndexer
 import to.pubky.maps.offline.startOfflinePubkyPlaces
 import to.pubky.maps.place.PlaceServices
@@ -63,7 +65,12 @@ class PubkyMapsApplication : Application() {
      * The places of the offline maps, which search answers from when Photon cannot be reached, and
      * which name the district and town of a place page with no address.
      */
-    private val offlinePlaces: SqlOfflinePlaceIndex by lazy { androidOfflinePlaceIndex(this) }
+    private val offlinePlaces: SqlOfflinePlaceIndex by lazy { SqlOfflinePlaceIndex(offlinePlacesDriver) }
+
+    /** The OSM details (opening hours, phone, ...) of the offline maps' places, for pages with no Pinakes card. */
+    private val offlineDetails: SqlOfflineDetails by lazy { SqlOfflineDetails(offlinePlacesDriver) }
+
+    private val offlinePlacesDriver by lazy { androidOfflinePlacesDriver(this) }
 
     /**
      * Search and the recent searches, kept while the process lives (rotation keeps the results).
@@ -95,6 +102,7 @@ class PubkyMapsApplication : Application() {
             health = serviceHealth,
             offline = offlinePubky,
             localities = offlinePlaces,
+            details = offlineDetails,
         )
     }
 
@@ -142,14 +150,15 @@ class PubkyMapsApplication : Application() {
 
     /**
      * The offline maps; made by the first screen that needs them, as MapLibre starts with the map.
-     * Their places are read into [offlinePlaces] as areas become ready, and the Pubky places
-     * of their areas are kept in [offlinePubky].
+     * Their places are read into [offlinePlaces] as areas become ready, the Pubky places of their
+     * areas are kept in [offlinePubky] and the OSM details of their places in [offlineDetails].
      */
     val offlineMaps: OfflineMaps by lazy {
         androidOfflineMaps(this, CoroutineScope(scope.coroutineContext + Dispatchers.Main.immediate)).also {
             offlineStarted = it
             startOfflinePubkyPlaces(this, scope, it, places.data, offlinePubky)
             startOfflinePlaceIndexer(this, scope, it, offlinePlaces)
+            startOfflinePlaceDetails(this, scope, it, settingsRepository.settings, BuildConfig.VERSION_NAME, offlineDetails)
         }
     }
 

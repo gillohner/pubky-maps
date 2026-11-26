@@ -32,6 +32,7 @@ enum class Service(
     Photon("photon"),
     Pinakes("pinakes"),
     Nexus("nexus"),
+    Overpass("overpass"),
     PkarrRelay("pkarr_relay"),
     AuthRelay("auth_relay"),
     ;

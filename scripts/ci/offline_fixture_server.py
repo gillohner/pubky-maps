@@ -7,16 +7,21 @@ Every tile is one water polygon over the whole tile, so a drawn map is the style
 missing tile the background colour, and a grid of points labelled as the city "Fixture Town"
 (OpenMapTiles' place layer, drawn as dots in the water colour), for the name of a downloaded area;
 every zoom 14 tile also holds a point of interest named "Fixture Bakery" (OpenMapTiles' poi layer, an
-id of its own per tile), for search in the offline area. Each tile answers after a short wait, so
+id of its own per tile), for search in the offline area. POST /overpass answers an Overpass query for
+the area's place details as Overpass does (CSV of the query's columns, then its end line): every
+bakery in the query's box is open 24/7 and has a phone number. Each tile answers after a short wait, so
 parallel requests overlap; every request is logged as one JSON line (path, User-Agent, how many tile
-requests were open at once).
+requests were open at once, an Overpass query).
 
 Usage: offline_fixture_server.py <port> <request log>
 """
 import json
+import math
+import re
 import sys
 import threading
 import time
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 port = int(sys.argv[1])
@@ -122,6 +127,32 @@ def bakery_layer(x: int, y: int) -> bytes:
 
 TILE = water_tile() + place_layer()
 
+BAKERY_HOURS = "24/7"
+BAKERY_PHONE = "+41 44 000 00 00"
+
+
+def tile_of(lat: float, lon: float) -> tuple[int, int]:
+    """The zoom 14 tile at a point."""
+    n = 2**14
+    x = int((lon + 180) / 360 * n)
+    y = int((1 - math.asinh(math.tan(math.radians(lat))) / math.pi) / 2 * n)
+    return x, y
+
+
+def overpass_answer(query: str) -> bytes:
+    """The bakeries of the zoom 14 tiles in the query's box, open 24/7 with a phone, as CSV of the
+    query's columns (type, id, then OSM tags), and the line its `make end; out;` gives."""
+    columns = re.search(r"\[out:csv\(([^;]*);", query).group(1).split(",")
+    south, west, north, east = map(float, re.search(r"\[bbox:([^\]]*)\]", query).group(1).split(","))
+    (west_x, north_y), (east_x, south_y) = tile_of(north, west), tile_of(south, east)
+    rows = []
+    for x in range(west_x, east_x + 1):
+        for y in range(north_y, south_y + 1):
+            tags = {"::type": "node", "::id": str(x * 100000 + y), '"opening_hours"': BAKERY_HOURS, '"phone"': BAKERY_PHONE}
+            rows.append("\t".join(tags.get(column, "") for column in columns))
+    rows.append("\t".join(["end", "1"] + [""] * (len(columns) - 2)))
+    return ("\n".join(rows) + "\n").encode()
+
 
 class Handler(BaseHTTPRequestHandler):
     def log_line(self, extra: dict) -> None:
@@ -166,6 +197,16 @@ class Handler(BaseHTTPRequestHandler):
             if len(parts) == 6 and parts[3] == "14":
                 body = TILE + bakery_layer(int(parts[4]), int(parts[5]))
             self.send(200, body, "application/x-protobuf")
+        else:
+            self.log_line({})
+            self.send(404, b"", "text/plain")
+
+    def do_POST(self):  # noqa: N802 (http.server's name)
+        body = self.rfile.read(int(self.headers.get("Content-Length", "0"))).decode()
+        if self.path == "/overpass":
+            query = urllib.parse.parse_qs(body).get("data", [""])[0]
+            self.log_line({"query": query})
+            self.send(200, overpass_answer(query), "text/csv", max_age=0)
         else:
             self.log_line({})
             self.send(404, b"", "text/plain")

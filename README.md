@@ -92,17 +92,28 @@ town's page is not named after the town), when the areas have a place within 500
 east or west of it (farther out, a nearer label may lie outside their tiles). Deleting an area
 deletes its places.
 
+**Place details without a connection:** once an area is listed, the app asks the Overpass list for
+the OpenStreetMap details of its named places (opening hours, phone, website, email, wheelchair
+access, cuisine, operator, floor, bitcoin payments: the tags a place page shows), as one query that
+answers only those tags as CSV (a few MB for the largest area one download may take) and ends with
+an end line, so an answer a server cut off goes to the next server. They are kept by element in
+`offline-places.db`, apart from the places read from the tiles, fetched again after a week on a
+network Android does not count as metered, one area at a time and 10 s apart, and deleted with the
+area. A place page with no Pinakes card (none could be loaded, or Pinakes has none for the place)
+shows the details kept for its element, and the offline note says when they were fetched.
+
 Settings:
 
 - **Account:** sign in with [Pubky Ring](https://github.com/pubky/pubky-ring). It shows the user's
   profile name, tags and saved places, kept on the phone so they stay readable offline, and signs out.
 - **Server lists:** an ordered list of servers per service (map styles, Photon, Pinakes, Nexus,
-  Pkarr relays, sign-in relay). Users add, remove, reorder and reset them; servers run by Synonym are
+  Overpass, Pkarr relays, sign-in relay). Users add, remove, reorder and reset them; servers run by Synonym are
   marked. The map uses its style list in order, the next style taking over when one fails to load;
   sign-in uses the Pkarr and sign-in relay lists (from the next start after a change); opening a
   map link asks the Pinakes list; search uses the Photon and Pinakes lists the same way (the next
   server takes over on an error, a timeout or "too many requests"); place pages and the map's Pubky
-  places use the Pinakes and Nexus lists the same way.
+  places use the Pinakes and Nexus lists the same way, and the offline areas' place details the
+  Overpass list.
 - **What is stored online:** per kind of data (saved places, home and work, lists, check-ins, tracks,
   location history, photo locations) phone only, homeserver private or public. Tags and reviews are
   public by nature. Saved places, lists and photo locations follow the choices; the other kinds are
@@ -124,7 +135,7 @@ the page loads, once its growing header covers it; not after the user moved the 
 sheet. A search result or a link's place goes there in one move as its page opens. It shows the
 name, what the place is, the distance and the address, Share and Open in
 (the apps switched on in Settings, installed ones first); the Pinakes card's photo and text with
-their credits; OpenStreetMap details from the card's facts when Pinakes serves them (opening hours with open or closed now, phone,
+their credits; OpenStreetMap details from the card's facts when Pinakes serves them, else those an offline area keeps (opening hours with open or closed now, phone,
 website, wheelchair access, cuisine); Pubky tags with their counts and who tagged (people the user
 follows first, the user's own tags marked); photos and posts about the place from Nexus, newest first;
 the public lists that hold it; and the same place on other services ("Also on"). Each part loads on
@@ -197,7 +208,9 @@ the link text. The link the user had stays the place's URI.
   MapLibre clusters them. `offline/OfflinePubkyPlaces.kt` keeps the layer's places of each offline
   area (the area widened to the same grid) and Nexus' tags of them in `offline-pubky-places.db`
   (never in a backup), which the layer reads when every Pinakes server fails, and a place page when
-  every Nexus server does. The
+  every Nexus server does. `offline/OfflinePlaceDetails.kt` keeps the OSM details of each offline
+  area's places from Overpass (`OverpassPlaceDetails`) in `offline-places.db`, for pages with no
+  card. The
   readers are tested against recorded answers (`shared/src/commonTest/fixtures/place/`, refreshed by
   `scripts/place/record-fixtures.py`).
 - Settings are one JSON file with a schema version, written by AndroidX DataStore

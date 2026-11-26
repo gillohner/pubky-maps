@@ -15,6 +15,7 @@ internal val Service.title: String
             Service.Photon -> "Search"
             Service.Pinakes -> "Places"
             Service.Nexus -> "Tags and posts"
+            Service.Overpass -> "Offline place details"
             Service.PkarrRelay -> "Finding homeservers"
             Service.AuthRelay -> "Sign-in relay"
         }
@@ -27,6 +28,7 @@ internal val Service.description: String
             Service.Photon -> "Photon servers: addresses and places as you type."
             Service.Pinakes -> "Pinakes servers: place details, links and what people use."
             Service.Nexus -> "Nexus servers: tags, reviews and posts people wrote about places."
+            Service.Overpass -> "Overpass servers: opening hours, phone numbers and websites of the places in your offline maps."
             Service.PkarrRelay -> "Pkarr relays: find the homeserver that holds someone's Pubky data."
             Service.AuthRelay -> "Carries your sign-in from Pubky Ring to this app."
         }

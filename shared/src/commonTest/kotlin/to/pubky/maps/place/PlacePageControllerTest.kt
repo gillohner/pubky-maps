@@ -188,6 +188,7 @@ class PlacePageControllerTest {
         kept: KeptPlaceSocial? = null,
         clock: Clock = Clock.System,
         localities: OfflineLocality? = null,
+        details: KeptPlaceDetails? = null,
         io: CoroutineDispatcher = StandardTestDispatcher(testScheduler),
     ) = PlacePageController(
         data = data,
@@ -198,7 +199,81 @@ class PlacePageControllerTest {
         clock = clock,
         io = io,
         localities = localities,
+        details = details,
     )
+
+    /** The offline areas keep Café Rosa's details (or every element's), fetched at 5,000; records what was asked. */
+    private class KeptRosa(
+        val everyElement: Boolean = false,
+    ) : KeptPlaceDetails {
+        val asked = mutableListOf<OsmId>()
+
+        override fun detailsOf(osm: OsmId): KeptDetails? {
+            asked += osm
+            return KeptDetails(mapOf("opening_hours" to "Mo-Su 08:00-18:00", "phone" to "+41 44 000 00 00"), fetchedAt = 5_000).takeIf {
+                everyElement || osm == OsmId(OsmType.Node, 42)
+            }
+        }
+    }
+
+    @Test
+    fun aPlaceWithNoCardShowsTheDetailsTheOfflineAreasKeepWithTheirDate() =
+        runTest {
+            val details = KeptRosa()
+            val pages =
+                controller(
+                    FakePlaceData().apply {
+                        pinakesDown = true
+                        nexusDown = true
+                    },
+                    details = details,
+                )
+            pages.open(tapped)
+            advanceUntilIdle()
+            val page = pages.state.value!!
+            assertEquals(listOf(OsmId(OsmType.Node, 42)), details.asked)
+            assertEquals("Mo-Su 08:00-18:00", page.osm?.openingHours)
+            assertEquals("+41 44 000 00 00", page.osm?.phone)
+            assertEquals(5_000, page.shownAt, "the offline note dates the details")
+        }
+
+    @Test
+    fun aPlacePinakesHasNoCardForShowsTheKeptDetailsOnlineToo() =
+        runTest {
+            val pages = controller(FakePlaceData(), details = KeptRosa())
+            pages.open(tapped)
+            advanceUntilIdle()
+            val page = pages.state.value!!
+            assertNull(page.card)
+            assertEquals("Mo-Su 08:00-18:00", page.osm?.openingHours)
+            assertFalse(page.offline)
+        }
+
+    @Test
+    fun aPageWithACardShowsOnlyTheCardsDetailsAlsoFromTheCache() =
+        runTest {
+            val details = KeptRosa(everyElement = true)
+            val cache = MemoryPlaceCache()
+            controller(FakePlaceData(), cache, details = details).apply { open(schober) }
+            advanceUntilIdle()
+            val pages = controller(FakePlaceData().apply { pinakesDown = true }, cache, details = details)
+            pages.open(schober)
+            advanceUntilIdle()
+            assertEquals(emptyList(), details.asked, "the card is what Pinakes and OSM say of the place")
+            val page = pages.state.value!!
+            assertNotNull(page.card)
+            assertNull(page.keptDetails)
+            assertNull(page.osm, "the Schober's card has no OSM details")
+        }
+
+    @Test
+    fun aFailingDetailsLookupLeavesThePageWithoutThem() =
+        runTest {
+            val pages = controller(FakePlaceData().apply { pinakesDown = true }, details = { error("disk") })
+            pages.open(tapped)
+            advanceUntilIdle()
+            assertNull(pages.state.value!!.osm)
+        }
 
     /** The offline areas' answer for every point; records what was asked. */
     private class Hottingen : OfflineLocality {

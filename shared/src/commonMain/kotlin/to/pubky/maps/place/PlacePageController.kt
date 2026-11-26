@@ -53,12 +53,17 @@ data class PlacePageState(
      * opened without an address or a locality; null when no area covers it.
      */
     val locality: String? = null,
+    /**
+     * The OSM details kept for the offline areas, for a page with no card (none could be loaded or
+     * Pinakes has none); null when no area keeps any for the place.
+     */
+    val keptDetails: KeptDetails? = null,
 ) {
     /** Some part could not be loaded: the page shows saved data, or less. */
     val offline: Boolean get() = failed.isNotEmpty()
 
     /** The date of the oldest saved or kept part shown (epoch ms), for the offline note; null when none is. */
-    val shownAt: Long? get() = listOfNotNull(savedAt, socialAt).minOrNull()
+    val shownAt: Long? get() = listOfNotNull(savedAt, socialAt, keptDetails?.takeIf { card == null }?.fetchedAt).minOrNull()
 
     /** Nexus and Pinakes answered and nobody tagged, wrote about or listed the place. */
     val nothingOnPubky: Boolean
@@ -69,8 +74,8 @@ data class PlacePageState(
     /** How many public lists hold the place: the card's count, at least the lists shown. */
     val listCount: Int get() = maxOf(card?.collections ?: 0, lists.size)
 
-    /** The OSM details of the card, null when it has none. */
-    val osm: OsmDetails? get() = card?.facts?.let(OsmDetails::from)
+    /** The OSM details of the card, else those kept for the offline areas; null when neither has any. */
+    val osm: OsmDetails? get() = (card?.facts ?: keptDetails?.facts)?.let(OsmDetails::from)
 
     /** Tags, the user's own first, then by count; each tag's taggers friends first. */
     val tags: List<PlaceTag>
@@ -90,7 +95,8 @@ data class PlacePageState(
  * answer, the tags kept for the offline areas ([kept]) are shown if they are newer than the cache's,
  * so a place of a downloaded area shows its tags offline also when its page was never opened. A
  * place opened with a point but no address gets its district and town from the offline areas
- * ([localities]), so its page says where it is with no connection too.
+ * ([localities]), so its page says where it is with no connection too, and a page with no card the
+ * OSM details (opening hours, phone, ...) the offline areas keep for its element ([details]).
  */
 class PlacePageController(
     private val data: PlaceData,
@@ -102,6 +108,7 @@ class PlacePageController(
     private val clock: Clock = Clock.System,
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val localities: OfflineLocality? = null,
+    private val details: KeptPlaceDetails? = null,
 ) {
     private val _state = MutableStateFlow<PlacePageState?>(null)
 
@@ -183,6 +190,14 @@ class PlacePageController(
         update(place) { it.copy(locality = locality) }
     }
 
+    /** The OSM details the offline areas keep for the element of a place with no card. */
+    private suspend fun loadDetails(place: PlaceRef) {
+        val details = details ?: return
+        val osm = place.osm ?: return
+        val kept = withContext(io) { runCatching { details.detailsOf(osm) }.getOrNull() } ?: return
+        update(place) { it.copy(keptDetails = kept) }
+    }
+
     private suspend fun load(place: PlaceRef) {
         // Coordinates the user typed never leave the phone (search's rule): no source is asked; the
         // offline areas are on the phone.
@@ -222,6 +237,7 @@ class PlacePageController(
                     cached?.card
                 }
             }
+        if (card == null) loadDetails(place)
         coroutineScope {
             launch { loadSocial(place, card, viewer) }
             launch { loadLists(place, card, viewer) }

@@ -1,0 +1,18 @@
+-- Version 4: the OpenStreetMap details of each offline area's elements, from Overpass. The places
+-- stay: their rows did not change.
+
+CREATE TABLE details_area (
+    id TEXT NOT NULL PRIMARY KEY,
+    fetched_at INTEGER NOT NULL
+);
+
+CREATE TABLE details (
+    area TEXT NOT NULL,
+    osm_type TEXT NOT NULL,
+    osm_id INTEGER NOT NULL,
+    facts TEXT NOT NULL
+);
+
+CREATE INDEX details_osm ON details(osm_id, osm_type);
+
+CREATE INDEX details_by_area ON details(area);
