@@ -38,7 +38,7 @@ class StrictModeReportTest {
     }
 
     @Test
-    fun oursThroughOkioOrTheCoreIsOurs() {
+    fun oursThroughTheAppsIoLayersIsOurs() {
         val okio =
             arrayOf(
                 frame("java.io.FileInputStream"),
@@ -49,13 +49,30 @@ class StrictModeReportTest {
             "ours DiskReadViolation at to.pubky.maps.search.RecentSearches.call(File.kt:1)",
             strictModeReport("DiskReadViolation", okio),
         )
+        // A cache query run on the main thread: SQLite, AndroidX's SQLite, then SQLDelight's driver.
+        val database =
+            arrayOf(
+                frame("libcore.io.BlockGuardOs"),
+                frame("android.database.sqlite.SQLiteConnection"),
+                frame("androidx.sqlite.db.framework.FrameworkSQLiteDatabase"),
+                frame("app.cash.sqldelight.driver.android.AndroidSqliteDriver"),
+                frame("app.cash.sqldelight.Query"),
+                frame("to.pubky.maps.place.AndroidPlacesKt"),
+            )
+        assertEquals(
+            "ours DiskReadViolation at to.pubky.maps.place.AndroidPlacesKt.call(File.kt:1)",
+            strictModeReport("DiskReadViolation", database),
+        )
+        // The Rust core's first call loads its library through JNA, which looks for the file on disk.
+        // (The core's own files and sockets are native calls; StrictMode never sees them.)
         val core =
             arrayOf(
-                frame("java.net.Socket"),
+                frame("java.io.File"),
+                frame("com.sun.jna.NativeLibrary"),
                 frame("com.sun.jna.Native"),
                 frame("to.pubky.maps.core.UniffiLib"),
             )
-        assertEquals("ours NetworkViolation at to.pubky.maps.core.UniffiLib.call(File.kt:1)", strictModeReport("NetworkViolation", core))
+        assertEquals("ours DiskReadViolation at to.pubky.maps.core.UniffiLib.call(File.kt:1)", strictModeReport("DiskReadViolation", core))
     }
 
     @Test

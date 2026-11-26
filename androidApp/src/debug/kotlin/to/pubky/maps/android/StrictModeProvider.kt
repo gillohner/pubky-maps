@@ -21,16 +21,19 @@ private val reporter: ExecutorService by lazy {
 internal const val STRICT_MODE_TAG = "PubkyMapsStrictMode"
 
 /**
- * The packages of Android, Java, Kotlin and AndroidX, and the I/O layers the app calls directly. A
+ * The packages of Android, Java, Kotlin and AndroidX, and the I/O layers the app calls directly:
+ * SQLDelight (its database), okio (its files) and JNA (the Rust core). A
  * violation's stack is read from the top and these frames are skipped: the first frame after them is
- * the code that asked for the slow call. So a blocking DataStore read, an okio file read, a
- * `runBlocking` or a call into the Rust core (through JNA) on the main thread is blamed on the app code
- * that made it.
+ * the code that asked for the slow call. So a blocking DataStore read, a database query, an okio file
+ * read, a `runBlocking` or the core's library load on the main thread is blamed on the app code that
+ * made it. StrictMode sees only Java I/O: the Rust core's own files and sockets are native calls it
+ * never sees (the core's calls are suspend functions, which keeps them off the main thread).
  */
 private val platformPackages =
     listOf(
         "android.",
         "androidx.",
+        "app.cash.sqldelight.",
         "com.android.",
         "com.sun.jna.",
         "dalvik.",
@@ -76,30 +79,36 @@ internal fun strictModeReport(
 }
 
 /**
- * Debug builds only: StrictMode reports disk and network access on the main thread and leaked
- * resources to the log (a leak is seen only when the garbage collector runs). It never stops the app;
- * the emulator tests read the log and fail on a report about our code (an ANR waiting to happen on a
- * slow phone). Release builds do not have it.
+ * Debug builds only: StrictMode reports disk access and custom slow calls on the main thread and
+ * leaked resources to the log (a leak is seen only when the garbage collector runs). The emulator
+ * tests read the log and fail on a report about our code (an ANR waiting to happen on a slow phone).
+ * Release builds do not have it.
+ *
+ * Both policies start from the ones the platform set before any provider runs, and keep its two death
+ * penalties: network on the main thread and a file:// URI handed to another app crash the debug app
+ * as they crash the release app, whichever code made the call. Our own additions only report.
  */
 class StrictModeProvider : ContentProvider() {
     override fun onCreate(): Boolean {
         val thread =
             StrictMode.ThreadPolicy
-                .Builder()
+                .Builder(StrictMode.getThreadPolicy())
                 .detectDiskReads()
                 .detectDiskWrites()
                 .detectNetwork()
+                .penaltyDeathOnNetwork()
                 .detectCustomSlowCalls()
                 .detectResourceMismatches()
                 .detectUnbufferedIo()
         val vm =
             StrictMode.VmPolicy
-                .Builder()
+                .Builder(StrictMode.getVmPolicy())
                 .detectLeakedClosableObjects()
                 .detectLeakedSqlLiteObjects()
                 .detectLeakedRegistrationObjects()
                 .detectActivityLeaks()
                 .detectFileUriExposure()
+                .penaltyDeathOnFileUriExposure()
                 .detectContentUriWithoutPermission()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             thread.penaltyListener(reporter, ::report)
