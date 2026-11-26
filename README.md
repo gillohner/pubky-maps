@@ -13,8 +13,8 @@ from [Photon](https://github.com/komoot/photon) (OpenStreetMap data, biased to t
 Pinakes (places people referenced on Pubky, near the map). The same
 OpenStreetMap place from both is one result, and a stop's platforms are one stop. Results show in a
 list (on a phone a sheet that drags between its first row, half and full height) and as pins with an
-icon of their kind; picking one centres the map and opens its place
-page. Signed in, places the people you follow referenced on Pubky
+icon of their kind; picking one opens its place page and moves the map so the place is in the
+middle of the map the page leaves in view. Signed in, places the people you follow referenced on Pubky
 rank higher. Coordinates
 (`47.37, 8.54`, `47°22'N 8°32'E`), `geo:` URIs and plus codes open a pin without any request. Recent
 searches stay on the phone (Settings → Privacy → Clear search history). Either source failing never
@@ -109,7 +109,7 @@ sheet over the map (header only, half the screen, or the whole screen); on a wid
 beside it. A place tapped on the map that its sheet or panel would hide moves to the middle of the
 map left in view (also under the notices below the search bar) once the sheet has opened, or, while
 the page loads, once its growing header covers it; not after the user moved the map or the
-sheet. It shows the
+sheet. A search result or a link's place goes there in one move as its page opens. It shows the
 name, what the place is, the distance and the address, Share and Open in
 (the apps switched on in Settings, installed ones first); the Pinakes card's photo and text with
 their credits; OpenStreetMap details from the card's facts when Pinakes serves them (opening hours with open or closed now, phone,

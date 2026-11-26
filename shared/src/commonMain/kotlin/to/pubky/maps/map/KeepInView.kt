@@ -71,14 +71,17 @@ internal fun keptInViewKey(
 ): String = "$uri@${size.width.value}x${size.height.value}"
 
 /**
- * The values of [rooms] that stay the same for [ROOM_SETTLE_MS], skipping nulls: while the sheet
+ * The values of [rooms] that stay the same for [settleMs], skipping nulls: while the sheet
  * animates to its height or takes its header's measure, the room changes every frame.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-internal fun <T : Any> settled(rooms: Flow<T?>): Flow<T> =
+internal fun <T : Any> settled(
+    rooms: Flow<T?>,
+    settleMs: Long = ROOM_SETTLE_MS,
+): Flow<T> =
     rooms.transformLatest { room ->
         if (room == null) return@transformLatest
-        delay(ROOM_SETTLE_MS)
+        delay(settleMs)
         emit(room)
     }
 
