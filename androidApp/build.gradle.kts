@@ -3,6 +3,7 @@ import com.android.build.api.variant.HostTestBuilder
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.artifacts.result.ResolvedComponentResult
 import org.gradle.api.artifacts.result.ResolvedDependencyResult
+import org.gradle.api.artifacts.result.UnresolvedDependencyResult
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import javax.inject.Inject
 
@@ -217,16 +218,24 @@ abstract class ListShippedLibraries : DefaultTask() {
     }
 }
 
-/** The group:name:version of every library in the resolved graph under [root]. */
+/**
+ * The group:name:version of every library in the resolved graph under [root]. A dependency that did
+ * not resolve (a 404 or 429 from the repository) fails, as the graph would otherwise lose it and
+ * everything under it, and the advisory check would pass on part of the libraries.
+ */
 fun mavenLibraries(root: ResolvedComponentResult): Set<String> {
     val seen = mutableSetOf(root)
     val queue = ArrayDeque(listOf(root))
+    val unresolved = mutableListOf<String>()
     while (queue.isNotEmpty()) {
         for (dependency in queue.removeFirst().dependencies) {
-            val selected = (dependency as? ResolvedDependencyResult)?.selected ?: continue
-            if (seen.add(selected)) queue.add(selected)
+            when (dependency) {
+                is ResolvedDependencyResult -> if (seen.add(dependency.selected)) queue.add(dependency.selected)
+                is UnresolvedDependencyResult -> unresolved.add("${dependency.attempted}: ${dependency.failure.message}")
+            }
         }
     }
+    if (unresolved.isNotEmpty()) throw GradleException("dependencies did not resolve:\n" + unresolved.joinToString("\n"))
     return seen
         .mapNotNull { it.id as? ModuleComponentIdentifier }
         .map { "${it.group}:${it.module}:${it.version}" }

@@ -186,11 +186,11 @@ the link text. The link the user had stays the place's URI.
   Rust crates linked into the core with their licence files, from `cargo tree` for the Android targets.
 - Versions of every tool and library are in `gradle/libs.versions.toml`.
 - The Maven libraries the app ships (the release APK and bundle of both flavours, Gradle task
-  `listShippedLibraries`; not the test, lint and build tools) are checked against the advisories of
-  [OSV](https://osv.dev) (`scripts/ci/gradle-advisories.py`, CI `.github/workflows/gradle-advisories.yml`,
-  when a dependency changes and every Monday). An advisory fails the check unless
-  `gradle/advisory-ignores.toml` ignores it with a reason; an ignore that matches nothing any more
-  fails too.
+  `listShippedLibraries`, which fails when one does not resolve; not the test, lint and build tools)
+  are checked against the advisories of [OSV](https://osv.dev) (`scripts/ci/gradle-advisories.py`,
+  CI `.github/workflows/gradle-advisories.yml`, when a dependency changes and every Monday). An
+  advisory fails the check unless `gradle/advisory-ignores.toml` ignores it with a reason; an ignore
+  that matches nothing any more fails too, and so does OSV not answering.
 
 ## Build
 

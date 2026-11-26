@@ -11,6 +11,7 @@ count. When OSV cannot be reached after a few tries the check fails: no answer i
 
 Usage: gradle-advisories.py LIBRARIES_TXT [IGNORES_TOML]
 """
+import http.client
 import json
 import sys
 import time
@@ -60,21 +61,21 @@ def ignores(text):
     return out
 
 
-def request(url, body=None):
-    """The JSON answer of OSV, tried up to TRIES times on a network error or a 429/5xx."""
+def request(url, body=None, urlopen=urllib.request.urlopen, sleep=time.sleep):
+    """The JSON answer of OSV, tried up to TRIES times on a 429/5xx, a lost connection or a cut-off answer."""
     data = None if body is None else json.dumps(body).encode()
     headers = {"Content-Type": "application/json", "User-Agent": "pubky-maps-ci"}
     for attempt in range(1, TRIES + 1):
         try:
-            with urllib.request.urlopen(urllib.request.Request(url, data=data, headers=headers), timeout=60) as r:
+            with urlopen(urllib.request.Request(url, data=data, headers=headers), timeout=60) as r:
                 return json.load(r)
         except urllib.error.HTTPError as e:
             if (e.code != 429 and e.code < 500) or attempt == TRIES:
                 raise
-        except (urllib.error.URLError, TimeoutError):
+        except (OSError, http.client.HTTPException, json.JSONDecodeError):
             if attempt == TRIES:
                 raise
-        time.sleep(5 * attempt)
+        sleep(5 * attempt)
     raise AssertionError("unreachable")
 
 

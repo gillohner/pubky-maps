@@ -2,12 +2,18 @@
 """Checks scripts/ci/gradle-advisories.py against a fake OSV: an advisory of a shipped library fails,
 an ignored one (by id or alias) and a withdrawn one do not, a stale ignore fails, page tokens and more
 than one batch are followed, an answer with too few results is refused, and the lists and ignores
-are read strictly. CI: android.yml, build job.
+are read strictly; a 429/5xx, a lost connection or a cut-off answer is retried (a 4xx is not)
+and an empty library list fails. CI: android.yml, build job.
 
 Usage: gradle-advisories-check.py
 """
+import contextlib
+import http.client
 import importlib.util
+import io
 import sys
+import tempfile
+import urllib.error
 from pathlib import Path
 
 spec = importlib.util.spec_from_file_location("gradle_advisories", Path(__file__).with_name("gradle-advisories.py"))
@@ -118,6 +124,55 @@ try:
     failures.append("an answer with too few results was not refused")
 except ValueError:
     pass
+
+class Answer(io.BytesIO):
+    """What urlopen gives: a readable answer that is its own context manager."""
+
+
+def opener(outcomes):
+    """A fake urlopen that answers each call with the next outcome (an exception is raised)."""
+    calls = []
+
+    def urlopen(req, timeout):
+        calls.append(req.full_url)
+        outcome = outcomes[len(calls) - 1]
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return Answer(outcome)
+
+    return urlopen, calls
+
+
+def http_error(code):
+    return urllib.error.HTTPError("https://api.osv.dev/v1/querybatch", code, "status", {}, None)
+
+
+for outcomes, what in (([http_error(503), b'{"ok": 1}'], "503 then answer"),
+                       ([http_error(429), b'{"ok": 1}'], "429 then answer"),
+                       ([ConnectionResetError(), b'{"ok": 1}'], "connection reset then answer"),
+                       ([http.client.RemoteDisconnected(), b'{"ok": 1}'], "remote disconnected then answer"),
+                       ([b'{"ok": ', b'{"ok": 1}'], "cut-off answer then answer"),
+                       ([urllib.error.URLError("no route"), b'{"ok": 1}'], "no route then answer")):
+    urlopen, calls = opener(outcomes)
+    slept = []
+    expect(adv.request("https://x", {"q": 1}, urlopen, slept.append), {"ok": 1}, f"request on {what}")
+    expect((len(calls), slept), (2, [5]), f"tries and waits on {what}")
+for outcomes, what in (([http_error(400)], "400, not retried"),
+                       ([http_error(404)], "404, not retried"),
+                       ([http_error(503)] * adv.TRIES, "503 every time"),
+                       ([TimeoutError()] * adv.TRIES, "timeout every time")):
+    urlopen, calls = opener(outcomes)
+    try:
+        adv.request("https://x", None, urlopen, lambda s: None)
+        failures.append(f"request on {what}: did not fail")
+    except (OSError, http.client.HTTPException):
+        expect(len(calls), len(outcomes), f"tries on {what}")
+
+with tempfile.TemporaryDirectory() as d:
+    empty = Path(d) / "libraries.txt"
+    empty.write_text("# nothing\n")
+    with contextlib.redirect_stderr(io.StringIO()):
+        expect(adv.main(["gradle-advisories.py", str(empty)]), 1, "an empty library list fails")
 
 expect(adv.ignores('[[ignore]]\nid = "GHSA-1"\nreason = "why"\n'), {"GHSA-1": "why"}, "ignores()")
 expect(adv.ignores(Path(adv.IGNORES).read_text()), {}, "the repository's ignore file reads")
