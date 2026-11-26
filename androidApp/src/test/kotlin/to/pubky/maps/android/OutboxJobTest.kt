@@ -2,12 +2,14 @@ package to.pubky.maps.android
 
 import android.app.Application
 import android.app.job.JobInfo
+import android.app.job.JobParameters
 import android.app.job.JobScheduler
 import android.content.ComponentName
 import android.os.PersistableBundle
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -96,6 +98,57 @@ class OutboxJobTest {
 
         afterRun(context, sent = true, waitsNow = true)
         assertNotNull(jobs.getPendingJob(OUTBOX_JOB_ID))
+    }
+
+    @Test
+    fun aRunThatSentEverythingEndsWithoutAnotherRun() =
+        runTest {
+            waiting.value = true
+            val finished = mutableListOf<Boolean>()
+            val run = async { runOutbox(context, waiting, sendNow = { waiting.value = false }, finish = { finished += it }) }
+            runCurrent()
+
+            assertTrue(run.isCompleted)
+            assertEquals("jobFinished(reschedule = false)", listOf(false), finished)
+            assertNull(jobs.getPendingJob(OUTBOX_JOB_ID))
+        }
+
+    @Test
+    fun aRunThatCouldNotSendAsksAndroidToRunItAgain() =
+        runTest {
+            waiting.value = true
+            val finished = mutableListOf<Boolean>()
+            launch { runOutbox(context, waiting, sendNow = {}, finish = { finished += it }) }
+            advanceTimeBy(SEND_WINDOW + 1.seconds)
+
+            assertEquals("jobFinished(reschedule = true)", listOf(true), finished)
+            assertNull("Android runs the same job again after its backoff", jobs.getPendingJob(OUTBOX_JOB_ID))
+        }
+
+    @Test
+    fun aWriteMadeAsTheRunEndsGetsAJobAfterTheRun() =
+        runTest {
+            waiting.value = true
+            val finished = mutableListOf<Boolean>()
+            launch {
+                runOutbox(context, waiting, sendNow = { waiting.value = false }, finish = {
+                    finished += it
+                    waiting.value = true
+                })
+            }
+            runCurrent()
+
+            assertEquals(listOf(false), finished)
+            assertNotNull("the finished job is gone, so a new one is scheduled", jobs.getPendingJob(OUTBOX_JOB_ID))
+        }
+
+    @Test
+    fun onlyAStopForTheNetworkOrAnUntoldOneCountsAsTheNetworkGoing() {
+        assertTrue("before Android 12", connectivityLost(null))
+        assertTrue(connectivityLost(JobParameters.STOP_REASON_CONSTRAINT_CONNECTIVITY))
+        assertFalse(connectivityLost(JobParameters.STOP_REASON_DEVICE_STATE))
+        assertFalse(connectivityLost(JobParameters.STOP_REASON_QUOTA))
+        assertFalse(connectivityLost(JobParameters.STOP_REASON_TIMEOUT))
     }
 
     @Test

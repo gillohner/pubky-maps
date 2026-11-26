@@ -132,11 +132,41 @@ internal suspend fun sendWaiting(
     } ?: false
 
 /**
+ * One run of the job: sends what waits ([sendWaiting]), then tells Android whether to run it again
+ * after its backoff ([finish] true: something still waits) and gives a write made as the run ended
+ * a job again ([afterRun]).
+ */
+internal suspend fun runOutbox(
+    context: Context,
+    waiting: StateFlow<Boolean?>,
+    sendNow: () -> Unit,
+    finish: (reschedule: Boolean) -> Unit,
+    window: Duration = SEND_WINDOW,
+) {
+    val sent = sendWaiting(waiting, window, sendNow = sendNow)
+    finish(!sent)
+    afterRun(context, sent, waitsNow = waiting.value == true)
+}
+
+/**
+ * Whether Android stopped a run because the network went, from the [stopReason] it told (null before
+ * Android 12, which does not tell; most stops of a network job are the network going).
+ */
+internal fun connectivityLost(stopReason: Int?): Boolean =
+    stopReason == null || stopReason == JobParameters.STOP_REASON_CONSTRAINT_CONNECTIVITY
+
+/**
  * Runs when the phone has a network while writes wait. Starting the process restores the session
  * and builds the outbox ([PubkyMapsApplication.onCreate]); the run then waits until it is sent, and
  * Android runs it again later (after [BACKOFF_MS], doubling) when the homeserver could not be reached.
- * A run that starts while the app is open also asks the account to try now, which starts the
- * account's own wait between retries over (at most twice a run).
+ * A run that starts while the app is open also asks the account and the outbox to try now, which
+ * starts both their own waits between retries over (the account's session restore and the outbox's
+ * resend timer; at most twice a run).
+ *
+ * Known limit: a backoff built up while the phone had a network but the homeserver could not be
+ * reached stays when the network goes and comes back between two runs (only a run stopped by the
+ * network going is followed by a fresh job), so with the app closed such a write goes out when that
+ * backoff ends; opening the app sends it at once.
  */
 class OutboxJobService : JobService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -146,13 +176,15 @@ class OutboxJobService : JobService() {
         val app = application as PubkyMapsApplication
         run =
             scope.launch {
-                val sent =
-                    sendWaiting(app.writes.waiting) {
+                runOutbox(
+                    this@OutboxJobService,
+                    app.writes.waiting,
+                    sendNow = {
                         app.account.controller.onNetworkAvailable()
                         app.writes.flush()
-                    }
-                jobFinished(params, !sent)
-                afterRun(this@OutboxJobService, sent, waitsNow = app.writes.waiting.value == true)
+                    },
+                    finish = { reschedule -> jobFinished(params, reschedule) },
+                )
             }
         return true
     }
@@ -160,14 +192,11 @@ class OutboxJobService : JobService() {
     /** Android stopped the run (the network went, or it needed the resources). */
     override fun onStopJob(params: JobParameters): Boolean {
         run?.cancel()
-        // Before Android 12 the reason is not told; most stops of a network job are the network going.
-        val connectivityLost =
-            Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-                params.stopReason == JobParameters.STOP_REASON_CONSTRAINT_CONNECTIVITY
         return rescheduleAfterStop(
             this,
             waits = (application as PubkyMapsApplication).writes.waiting.value != false,
-            connectivityLost = connectivityLost,
+            connectivityLost =
+                connectivityLost(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) params.stopReason else null),
         )
     }
 
