@@ -49,6 +49,9 @@ interface RecentSearchStore {
     /** Puts [entry] first; an older entry for the same text or place goes. */
     fun add(entry: RecentSearch)
 
+    /** Removes [entry] (the entry for its text or place) and keeps the others. */
+    fun remove(entry: RecentSearch)
+
     fun clear()
 
     companion object {
@@ -64,6 +67,9 @@ internal fun List<RecentSearch>.withAdded(entry: RecentSearch): List<RecentSearc
     return (listOf(entry) + rest).take(RecentSearchStore.MAX_ENTRIES)
 }
 
+/** Without [entry]: the one entry with its key goes, the others keep their order. */
+internal fun List<RecentSearch>.withRemoved(entry: RecentSearch): List<RecentSearch> = filterNot { it.key == entry.key }
+
 /** Recent searches in memory, for previews and tests. */
 class InMemoryRecentSearchStore(
     initial: List<RecentSearch> = emptyList(),
@@ -72,6 +78,8 @@ class InMemoryRecentSearchStore(
     override val entries: StateFlow<List<RecentSearch>> = state.asStateFlow()
 
     override fun add(entry: RecentSearch) = state.update { it.withAdded(entry) }
+
+    override fun remove(entry: RecentSearch) = state.update { it.withRemoved(entry) }
 
     override fun clear() {
         state.value = emptyList()
@@ -109,6 +117,8 @@ class DataStoreRecentSearchStore(
     private val writes = Mutex()
 
     override fun add(entry: RecentSearch) = write { it.withAdded(entry) }
+
+    override fun remove(entry: RecentSearch) = write { it.withRemoved(entry) }
 
     override fun clear() = write { emptyList() }
 

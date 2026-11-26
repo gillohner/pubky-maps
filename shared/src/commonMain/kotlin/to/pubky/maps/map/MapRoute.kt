@@ -447,9 +447,10 @@ private fun rememberMapSearch(
 
     val userLocation = locationState.lastLocation?.position?.let { GeoPoint(it.latitude, it.longitude) }
     val actions =
-        remember(controller, mapState, onOpenSaved) {
+        remember(controller, search.recents, mapState, onOpenSaved) {
             SearchActions(
                 onOpenSaved = onOpenSaved,
+                onRemoveRecent = search.recents::remove,
                 onStartEditing = controller::startEditing,
                 onQueryChange = { controller.onQueryChange(it, mapState.searchArea()) },
                 onSubmit = { controller.submit(mapState.searchArea()) },
