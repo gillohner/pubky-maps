@@ -69,3 +69,9 @@ check_alive() {
     adb shell dumpsys activity activities | grep -E "topResumedActivity|mResumedActivity" > "$out/resumed.txt" || true
     grep -q "$pkg/" "$out/resumed.txt" || fail "the app is not the resumed activity ($1): $(cat "$out/resumed.txt")"
 }
+
+# Saves the log and fails when StrictMode caught our code ($1: the step); scripts/ci/strict_mode.py.
+check_strict_mode() {
+    adb logcat -d > "$out/logcat.txt" || true
+    python3 -I "$(dirname "${BASH_SOURCE[0]}")/strict_mode.py" "$out/logcat.txt" || fail "StrictMode caught our code ($1)"
+}

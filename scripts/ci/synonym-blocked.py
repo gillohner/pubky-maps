@@ -118,7 +118,7 @@ def main():
     if dev.wait_for("Show my location", 15) is None:
         dev.fail("back did not return to the map")
     dev.check_alive("back on the map")
-    dev.save_logcat()
+    dev.check_strict_mode(f"synonym-blocked, {case}")
     log(f"synonym-blocked ({case}) passed")
 
 

@@ -100,6 +100,8 @@ check_alive() {
 }
 
 adb install -r "$apk"
+# A log buffer large enough to keep StrictMode's reports from the start until the end.
+adb logcat -G 16M || true
 adb logcat -c || true
 adb logcat -b crash -c || true
 started=$(adb shell am start -W -n "$pkg/.android.MainActivity" 2>&1) || true
@@ -242,4 +244,5 @@ screenshot map-after-back
 check_alive "back to the map"
 
 adb logcat -d > "$out/logcat.txt"
+python3 -I "$here/strict_mode.py" "$out/logcat.txt" || fail "StrictMode caught our code (smoke test)"
 echo "smoke test passed"

@@ -42,6 +42,8 @@ adb shell chmod 644 /data/local/tmp/pubky-maps-settings.json
 adb shell run-as "$pkg" mkdir -p files/datastore
 adb shell run-as "$pkg" cp /data/local/tmp/pubky-maps-settings.json files/datastore/settings.json
 adb shell run-as "$pkg" rm -f no_backup/place-cache.db no_backup/place-cache.db-journal
+# A log buffer large enough to keep StrictMode's reports from the start until the end.
+adb logcat -G 16M || true
 adb logcat -c || true
 adb logcat -b crash -c || true
 
@@ -96,5 +98,5 @@ assert all(l["ua"].startswith("PubkyMaps/") for l in lines if l["path"].startswi
 print("requests:", len(lines), sorted(set(paths)))
 PY
 
-adb logcat -d > "$out/logcat.txt"
+check_strict_mode "place page"
 echo "place page test passed"

@@ -33,6 +33,8 @@ expect_card() {
     adb shell input tap $xy
 }
 
+# A log buffer large enough to keep StrictMode's reports from the start until the end.
+adb logcat -G 16M || true
 adb logcat -c || true
 adb logcat -b crash -c || true
 # The first link starts the app cold; the next ones reach the running app (singleTask).
@@ -51,5 +53,5 @@ send_intent -a android.intent.action.SEND -t text/plain \
     --es android.intent.extra.SUBJECT "'Brandenburger Tor'"
 expect_card link-shared "Brandenburger Tor" "52.51628, 13.37771 · From an OsmAnd link"
 
-adb logcat -d > "$out/logcat.txt" || true
+check_strict_mode "map links"
 echo "map links open on the map"

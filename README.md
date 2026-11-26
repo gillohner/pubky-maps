@@ -215,6 +215,16 @@ screenshots search with its pins, and the update probe screenshots each step of 
   seeded signed-in account the app must start, draw the map, show the cached profile and tags, and
   name the missing homeserver in its banner; a second run also blocks the first map style and the map
   must draw from the next one.
+- StrictMode: debug builds turn it on before the app starts
+  (`androidApp/src/debug/.../StrictModeProvider.kt`), on top of the platform's own policies, so
+  network on the main thread and a file:// URI handed to another app still crash the debug app as
+  they crash the release app. On Android 9 or newer they log each disk access on the main thread and
+  each leaked resource (seen when the garbage collector runs), blamed on the first frame outside
+  Android, Java, Kotlin, AndroidX and the app's I/O layers (SQLDelight, okio, JNA).
+  StrictMode sees only Java I/O, not the Rust core's native files and sockets. Every emulator
+  test above reads the log at its end (`scripts/ci/strict_mode.py`), lists the reports and fails on
+  one that blames our code; reports about a library, and our lookups of the app's private folders
+  (`filesDir`, `noBackupFilesDir`: a microsecond check that the folder exists), are listed only.
 
 ## Data sources and attribution
 
