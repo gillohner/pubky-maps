@@ -30,7 +30,7 @@ fun configureMapRuntime(
     }
     DefaultMapRuntime.configure {
         cacheFile = Path(File(context.noBackupFilesDir, "maplibre.db").path)
-        resourceProvider = OfflineMapResources(offlineHttpClient(appVersion), downloading)
+        resourceProvider = OfflineMapResources({ offlineHttpClient(appVersion) }, downloading)
     }
 }
 
