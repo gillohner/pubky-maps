@@ -365,6 +365,11 @@ private fun RecentRow(
             leadingContent = { Icon(AppIcons.History, contentDescription = null) },
             trailingContent =
                 distanceText(userLocation, place?.point)?.let { d -> { Text(d, style = MaterialTheme.typography.labelMedium) } },
+            // The row the menu is for stays marked while the menu is open.
+            colors =
+                ListItemDefaults.colors(
+                    containerColor = if (menuOpen) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
+                ),
             modifier =
                 Modifier
                     .combinedClickable(
