@@ -25,7 +25,6 @@ import to.pubky.maps.config.ServerDefaults
 import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.links.LinkProvider
 import to.pubky.maps.map.MapScreen
-import to.pubky.maps.place.OpeningLinkCard
 import to.pubky.maps.place.PlaceCard
 import to.pubky.maps.place.PlaceRef
 import to.pubky.maps.place.PlaceSource
@@ -80,34 +79,10 @@ class LinkedPlaceScreenshotTest {
         )
 
     @Composable
-    private fun MapWith(card: (@Composable () -> Unit)?) {
-        val dark = isSystemInDarkTheme()
-        MapScreen(
-            attribution =
-                ServerDefaults.lists
-                    .mapStyles(darkTheme = false)
-                    .first()
-                    .attribution,
-            mapUnavailable = false,
-            onRetryMap = {},
-            onMyLocation = {},
-            onOpenSettings = {},
-            placeCard = card,
-        ) {
-            Box(
-                modifier = Modifier.fillMaxSize().background(if (dark) Color(0xFF2B2D31) else Color(0xFFF2EFE9)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("Map", color = if (dark) Color(0xFF8A8D93) else Color(0xFF9A968E))
-            }
-        }
-    }
-
-    @Composable
     private fun Linked(
         place: PlaceRef = zurichHb,
         provider: LinkProvider = LinkProvider.Google,
-    ) = MapWith { PlaceCard(place = place, provider = provider, onShare = {}, onClose = {}) }
+    ) = PlaceholderMap { PlaceCard(place = place, provider = provider, onShare = {}, onClose = {}) }
 
     @Test
     fun linkedPlacePhoneLight() = capture("map-linked-place", Device.Phone, dark = false) { Linked() }
@@ -177,7 +152,4 @@ class LinkedPlaceScreenshotTest {
                     ),
             )
         }
-
-    @Test
-    fun openingLinkPhoneLight() = capture("map-opening-link", Device.Phone, dark = false) { MapWith { OpeningLinkCard() } }
 }
