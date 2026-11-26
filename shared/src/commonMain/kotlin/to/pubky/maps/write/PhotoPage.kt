@@ -3,7 +3,6 @@ package to.pubky.maps.write
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -77,7 +76,6 @@ const val ALT_MAX = 1000
  * the phone, so camera and device details never leave it; its GPS spot goes only when the user's
  * Photo locations choice is Public.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PhotoPage(
     state: PhotoPageState,

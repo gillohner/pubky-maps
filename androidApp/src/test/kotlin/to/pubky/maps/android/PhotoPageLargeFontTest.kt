@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -58,7 +59,7 @@ class PhotoPageLargeFontTest {
     private fun lines(text: String): Int {
         val layouts = mutableListOf<TextLayoutResult>()
         compose
-            .onNodeWithText(text)
+            .onNodeWithText(text, useUnmergedTree = true)
             .fetchSemanticsNode()
             .config[SemanticsActions.GetTextLayoutResult]
             .action
@@ -73,6 +74,7 @@ class PhotoPageLargeFontTest {
         show(empty, fontScale = 2f)
         assertEquals(1, lines("Choose a photo"))
         assertEquals(1, lines("Take a photo"))
+        assertTrue("Take a photo goes below", top("Take a photo") > top("Choose a photo"))
     }
 
     @Test
@@ -80,6 +82,7 @@ class PhotoPageLargeFontTest {
         show(ready, fontScale = 2f)
         assertEquals(1, lines("Choose another"))
         assertEquals(1, lines("Take a photo"))
+        assertTrue("Take a photo goes below", top("Take a photo") > top("Choose another"))
     }
 
     @Test

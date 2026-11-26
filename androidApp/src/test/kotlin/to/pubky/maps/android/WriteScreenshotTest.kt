@@ -382,14 +382,6 @@ class WriteScreenshotTest {
     }
 
     @Test
-    fun photoPageReadyLargeFontPhoneLight() =
-        capture("write-photo-ready", Device.Phone, dark = false, largeFont = true) { PhotoPageReadyShot() }
-
-    @Test
-    fun photoPageReadyLargeFontPhoneDark() =
-        capture("write-photo-ready", Device.Phone, dark = true, largeFont = true) { PhotoPageReadyShot() }
-
-    @Test
     fun photoPageReadyPhoneLight() = capture("write-photo-ready", Device.Phone, dark = false) { PhotoPageReadyShot() }
 
     @Test
@@ -400,6 +392,14 @@ class WriteScreenshotTest {
 
     @Test
     fun photoPageReadyTabletDark() = capture("write-photo-ready", Device.Tablet, dark = true) { PhotoPageReadyShot() }
+
+    @Test
+    fun photoPageReadyLargeFontPhoneLight() =
+        capture("write-photo-ready", Device.Phone, dark = false, largeFont = true) { PhotoPageReadyShot() }
+
+    @Test
+    fun photoPageReadyLargeFontPhoneDark() =
+        capture("write-photo-ready", Device.Phone, dark = true, largeFont = true) { PhotoPageReadyShot() }
 
     @Composable
     private fun ListPageShot() {
