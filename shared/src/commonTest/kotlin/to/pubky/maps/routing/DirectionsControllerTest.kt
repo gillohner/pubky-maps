@@ -3,6 +3,7 @@ package to.pubky.maps.routing
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -79,6 +80,40 @@ class DirectionsControllerTest {
             c.start("osm:node/1", kunsthaus, here)
             c.locationMissing(permissionOff = false)
             assertEquals(RouteStatus.Finding, c.directions.value?.status)
+        }
+
+    @Test
+    fun aPositionThatDoesNotComeIsMissingAndOneThatComesLaterStillStartsTheRoute() =
+        runTest {
+            val routing = FakeRouting { RouteAnswer.Found(route, "s") }
+            val c = controller(routing)
+            // A permission dialog dismissed without an answer, or no fix indoors.
+            c.start("osm:node/1", kunsthaus, null)
+            advanceTimeBy(29_000)
+            assertEquals(RouteStatus.Locating, c.directions.value?.status)
+            advanceTimeBy(2_000)
+            assertEquals(RouteStatus.NoLocation(permissionOff = false), c.directions.value?.status)
+            // Location access turned on in Settings: its first fix starts the route.
+            c.located(here)
+            advanceUntilIdle()
+            assertTrue(c.directions.value?.status is RouteStatus.Found)
+            assertEquals(1, routing.asked.size)
+        }
+
+    @Test
+    fun aPositionInTimeEndsTheWaitAndAClosedWaitTimesNothingOut() =
+        runTest {
+            val c = controller(FakeRouting { RouteAnswer.Found(route, "s") })
+            c.start("osm:node/1", kunsthaus, null)
+            c.selectMode(TravelMode.Bike)
+            c.located(here)
+            advanceUntilIdle()
+            assertTrue(c.directions.value?.status is RouteStatus.Found)
+            c.close()
+            c.start("osm:node/2", kunsthaus, null)
+            c.close()
+            advanceUntilIdle()
+            assertNull(c.directions.value)
         }
 
     @Test

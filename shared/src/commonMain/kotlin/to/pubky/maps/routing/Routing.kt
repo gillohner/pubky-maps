@@ -61,8 +61,9 @@ fun interface Routing {
  * settings change applies to the next one) and moves to the next one when a server fails (no
  * connection, timeout, error status, an answer it cannot read; a 429 is skipped until its Retry-After
  * as in search). A server that refuses the route itself (HTTP 400 with a Valhalla error code: too far,
- * no road near, not connected) is the answer: the next server holds the same OpenStreetMap roads.
- * Requests to one server are at least [spacing] apart (FOSSGIS: one request a second).
+ * no road near, not connected) hands over too, since servers differ in their limits and regions; the
+ * first refusal is the answer when no server finds a route. Requests to one server are at least
+ * [spacing] apart (FOSSGIS: one request a second).
  */
 class HttpRouting(
     private val client: HttpClient,
@@ -81,6 +82,7 @@ class HttpRouting(
         mode: TravelMode,
     ): RouteAnswer {
         val body = valhallaRouteBody(from, to, mode)
+        var refusal: RouteAnswer.NoRoute? = null
         val answer =
             fallback.first(servers()) { server ->
                 waitTurn(server)
@@ -99,7 +101,8 @@ class HttpRouting(
 
                     response.status == HttpStatusCode.BadRequest -> {
                         val code = valhallaErrorCode(text) ?: throw SearchHttpException(response.status.value, null)
-                        RouteAnswer.NoRoute(noRouteReason(code))
+                        if (refusal == null) refusal = RouteAnswer.NoRoute(noRouteReason(code))
+                        throw SearchHttpException(response.status.value, null)
                     }
 
                     else -> {
@@ -114,7 +117,7 @@ class HttpRouting(
             }
         return when (answer) {
             is SourceAnswer.Answered -> answer.value
-            SourceAnswer.Unreachable -> RouteAnswer.Unreachable
+            SourceAnswer.Unreachable -> refusal ?: RouteAnswer.Unreachable
         }
     }
 

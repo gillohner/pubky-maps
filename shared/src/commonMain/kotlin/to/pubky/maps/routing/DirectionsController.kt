@@ -2,6 +2,7 @@ package to.pubky.maps.routing
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -9,6 +10,8 @@ import kotlinx.coroutines.launch
 import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.status.ServiceHealth
 import to.pubky.maps.status.ServicePart
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /** Where a route to a place stands. */
 sealed interface RouteStatus {
@@ -50,11 +53,14 @@ data class Directions(
  * Directions from the user's position to an open place, for the life of the process: one route at a
  * time, asked again when the mode changes (a newer request replaces one still running), the last mode
  * kept for the next place. Every routing server failing names routing in [health] until one answers.
+ * A position that has not come within [locatingTimeout] (a permission dialog dismissed, no fix
+ * indoors) is missing; one that comes later still starts the route.
  */
 class DirectionsController(
     private val routing: Routing,
     private val scope: CoroutineScope,
     private val health: ServiceHealth? = null,
+    private val locatingTimeout: Duration = 30.seconds,
 ) {
     private val state = MutableStateFlow<Directions?>(null)
     val directions: StateFlow<Directions?> = state.asStateFlow()
@@ -62,6 +68,7 @@ class DirectionsController(
     /** The mode of the next directions: the one the user picked last, by car at first. */
     private var lastMode = TravelMode.Car
     private var request: Job? = null
+    private var locating: Job? = null
 
     /**
      * Opens directions to [placeUri] at [to]: from [from] at once when the position is known, else
@@ -73,13 +80,26 @@ class DirectionsController(
         from: GeoPoint?,
     ) {
         val directions = Directions(placeUri, to, lastMode, from, RouteStatus.Locating)
-        if (from != null) ask(directions) else set(directions)
+        if (from != null) {
+            ask(directions)
+            return
+        }
+        set(directions)
+        locating?.cancel()
+        locating =
+            scope.launch {
+                delay(locatingTimeout)
+                locationMissing(permissionOff = false)
+            }
     }
 
-    /** The user's position arrived while directions wait for it. */
+    /**
+     * The user's position arrived: it starts directions that wait for it, also once they said it was
+     * missing (location access turned on in Settings, a first fix after a long wait).
+     */
     fun located(from: GeoPoint) {
         val current = state.value ?: return
-        if (current.status != RouteStatus.Locating) return
+        if (current.from != null || (current.status != RouteStatus.Locating && current.status !is RouteStatus.NoLocation)) return
         ask(current.copy(from = from))
     }
 
@@ -87,6 +107,8 @@ class DirectionsController(
     fun locationMissing(permissionOff: Boolean) {
         val current = state.value ?: return
         if (current.status != RouteStatus.Locating) return
+        locating?.cancel()
+        locating = null
         set(current.copy(status = RouteStatus.NoLocation(permissionOff)))
     }
 
@@ -109,6 +131,8 @@ class DirectionsController(
     fun close() {
         request?.cancel()
         request = null
+        locating?.cancel()
+        locating = null
         state.value = null
     }
 
@@ -121,6 +145,8 @@ class DirectionsController(
     private fun ask(directions: Directions) {
         val from = directions.from ?: return
         request?.cancel()
+        locating?.cancel()
+        locating = null
         val asked = directions.copy(status = RouteStatus.Finding)
         state.value = asked
         request =

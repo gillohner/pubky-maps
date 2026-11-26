@@ -68,6 +68,7 @@ class ValhallaTest {
         assertNull(valhallaErrorCode("<html>Bad Request</html>"))
         assertEquals(NoRouteReason.TooFar, noRouteReason(154))
         assertEquals(NoRouteReason.NoRoadNear, noRouteReason(171))
+        assertEquals(NoRouteReason.NotConnected, noRouteReason(170))
         assertEquals(NoRouteReason.NotConnected, noRouteReason(442))
         assertEquals(NoRouteReason.NotConnected, noRouteReason(199))
     }

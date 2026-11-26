@@ -30,10 +30,10 @@ enum class NoRouteReason {
     /** Longer than the server routes for this mode (Valhalla 150-158, e.g. 100 km on foot on FOSSGIS). */
     TooFar,
 
-    /** No road or path the mode can use near the start or the end (Valhalla 170-172). */
+    /** No road or path the mode can use near the start or the end (Valhalla 171-172). */
     NoRoadNear,
 
-    /** The two ends are not connected for this mode (Valhalla 442/443, and any other refusal). */
+    /** The two ends are not connected for this mode (Valhalla 170, 442/443, and any other refusal). */
     NotConnected,
 }
 
@@ -80,7 +80,7 @@ fun valhallaErrorCode(json: String): Int? =
 fun noRouteReason(code: Int): NoRouteReason =
     when (code) {
         in 150..158 -> NoRouteReason.TooFar
-        in 170..172 -> NoRouteReason.NoRoadNear
+        in 171..172 -> NoRouteReason.NoRoadNear
         else -> NoRouteReason.NotConnected
     }
 

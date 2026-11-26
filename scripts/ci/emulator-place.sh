@@ -81,7 +81,9 @@ sleep 3
 screenshot place-directions
 check_alive "directions"
 # The route's darker edge (RouteLine.kt) on the map above the sheet.
-share=$(python3 -I "$here/png_stats.py" "$out/place-directions.png" 0 0.1 1 0.45 '#0b4fb3' | awk '{print $3}')
+stats=$(python3 -I "$here/png_stats.py" "$out/place-directions.png" 0 0.1 1 0.45 '#0b4fb3') ||
+    fail "png_stats could not read the screenshot"
+share=$(awk '{print $3}' <<< "$stats")
 python3 -I -c "import sys; sys.exit(0 if float(sys.argv[1]) >= 0.0005 else 1)" "$share" ||
     fail "the route is not drawn on the map (share of its colour: $share)"
 xy=$(wait_for "Walk" 5) || fail "no Walk mode in the directions"

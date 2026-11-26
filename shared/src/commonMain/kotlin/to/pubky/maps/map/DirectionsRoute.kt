@@ -8,6 +8,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import org.maplibre.compose.location.LocationPermission
@@ -38,11 +39,14 @@ internal fun rememberStartDirections(
     LaunchedEffect(directions, locationState) {
         snapshotFlow { locationState.lastLocation?.position }
             .filterNotNull()
-            .collect { if (waiting()) directions.located(GeoPoint(it.latitude, it.longitude)) }
+            .collect { directions.located(GeoPoint(it.latitude, it.longitude)) }
     }
-    // Only changes count: the permission is not granted yet while its dialog shows.
+    // Only changes count: the permission is not granted yet while its dialog shows (also when the
+    // activity is recreated under the dialog). A dialog dismissed without an answer changes nothing:
+    // the controller's timeout ends the wait then.
     LaunchedEffect(directions, locationState) {
         snapshotFlow { locationState.permission }
+            .drop(1)
             .collect { permission ->
                 if (permission is LocationPermission.NotGranted && waiting()) {
                     directions.locationMissing(permissionOff = permission.canRequest == false)
@@ -51,6 +55,7 @@ internal fun rememberStartDirections(
     }
     LaunchedEffect(directions, locationState) {
         snapshotFlow { locationState.status is LocationTrackingStatus.Unavailable }
+            .drop(1)
             .collect { unavailable -> if (unavailable && waiting()) directions.locationMissing(permissionOff = false) }
     }
     return remember(directions, locationState) {
@@ -73,13 +78,15 @@ internal fun rememberStartDirections(
 
                 MyLocationStep.RetryThenCenter -> {
                     directions.start(uri, to, null)
+                    val started = directions.directions.value
                     scope.launch {
                         val recovered =
                             retryRecovers(
                                 retry = locationState::retry,
                                 unavailable = snapshotFlow { locationState.status is LocationTrackingStatus.Unavailable },
                             )
-                        if (!recovered) directions.locationMissing(permissionOff = false)
+                        // Only for these directions: closed and opened again meanwhile, they are others.
+                        if (!recovered && directions.directions.value === started) directions.locationMissing(permissionOff = false)
                     }
                 }
 

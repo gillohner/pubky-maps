@@ -78,11 +78,14 @@ class HttpRoutingTest {
         }
 
     @Test
-    fun aRefusedRouteIsTheAnswerAndNoOtherServerIsAsked() =
+    fun aRefusingServerHandsOverAndItsRefusalIsTheAnswerWhenNoneFindsARoute() =
         runTest {
+            // A server with a shorter limit or a smaller region than the next.
             val r = routing(listOf("https://a.test", "https://b.test")) { if (it == "a.test") "far" else "ok" }
-            assertEquals(RouteAnswer.NoRoute(NoRouteReason.TooFar), r.route(from, to, TravelMode.Walk))
-            assertEquals(1, requests.size)
+            assertIs<RouteAnswer.Found>(r.route(from, to, TravelMode.Walk))
+            assertEquals(2, requests.size)
+            val alone = routing(listOf("https://a.test", "https://down.test")) { if (it == "a.test") "far" else "down" }
+            assertEquals(RouteAnswer.NoRoute(NoRouteReason.TooFar), alone.route(from, to, TravelMode.Walk))
         }
 
     @Test
