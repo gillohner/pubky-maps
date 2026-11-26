@@ -250,6 +250,44 @@ class WriteControllerTest {
         }
 
     @Test
+    fun waitingIsUnknownUntilTheAccountAndItsOutboxAreRead() =
+        runTest {
+            store.enqueue(WriteOp.Tag(OSM, "cake"))
+            val writer = controller()
+            assertNull(writer.waiting.value, "a start that still restores the session knows nothing yet")
+
+            signedIn(Connection.Offline)
+            runCurrent()
+            assertEquals(true, writer.waiting.value, "the outbox read at start waits")
+
+            signedIn(Connection.Online)
+            runCurrent()
+            assertEquals(listOf("tag($OSM, cake)"), sent)
+            assertEquals(false, writer.waiting.value)
+        }
+
+    @Test
+    fun waitingFollowsTheOutboxAndEndsWithASignOut() =
+        runTest {
+            signedIn()
+            val writer = controller()
+            assertEquals(false, writer.waiting.value)
+            writes.failures += CoreFailure.Network("offline")
+
+            writer.tag(target, "coffee")
+            runCurrent()
+            assertEquals(true, writer.waiting.value, "a write without a connection waits")
+
+            account.value = (account.value as AccountState.SignedIn).copy(signingOut = true)
+            runCurrent()
+            assertEquals(false, writer.waiting.value, "a signed-out outbox is never sent")
+
+            account.value = AccountState.SignedOut()
+            runCurrent()
+            assertEquals(false, writer.waiting.value)
+        }
+
+    @Test
     fun theOutboxIsSentAfterTheAppStartsAgain() =
         runTest {
             store.enqueue(WriteOp.Tag(OSM, "cake"))

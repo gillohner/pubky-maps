@@ -13,7 +13,10 @@ that the block works, then:
   credits show, with no Retry notice);
 - the session cannot be restored, so the banner names the missing part ("Can't reach your
   homeserver") while the map stays usable;
-- Settings and the Account page show the cached name, tags and saved place.
+- Settings and the Account page show the cached name, tags and saved place;
+- (`synonym` case) a place saved now waits in the outbox, which keeps a JobScheduler job; with the
+  app's process killed, Android starts it again for that job (OutboxJobService), as it does when a
+  phone with the app closed gets a network.
 
 Usage: synonym-blocked.py <apk> <session fixture json> <synonym|openfreemap> <out dir>
 """
@@ -32,6 +35,9 @@ NAME = "Fixture Rider"
 TAGS = [("https://www.openstreetmap.org/node/240109189", "great coffee"),
         ("geo:47.37689,8.54169", "bench with a view")]
 SAVED = "https://www.openstreetmap.org/way/48210334"
+WAITING_PLACE = "geo:47.3769,8.5417?q=Waiting%20write"
+# As dumpsys and ActivityManager name it (in full or short form).
+JOB_SERVICE = "OutboxJobService"
 BANNER = "Can't reach your homeserver"
 
 
@@ -118,8 +124,67 @@ def main():
     if dev.wait_for("Show my location", 15) is None:
         dev.fail("back did not return to the map")
     dev.check_alive("back on the map")
+    if case == "synonym":
+        outbox_wakes_the_closed_app(dev)
     dev.check_strict_mode(f"synonym-blocked, {case}")
     log(f"synonym-blocked ({case}) passed")
+
+
+def app_pid(dev):
+    return dev.shell(f"pidof {PKG}").strip()
+
+
+def outbox_wakes_the_closed_app(dev):
+    """A write that cannot be sent keeps a job; Android runs it, and so starts the app, with the app closed."""
+    dev.open_link(WAITING_PLACE)
+    dev.tap("Save", timeout=30)
+    if dev.wait_for("Saved", 15) is None:
+        dev.fail("the place page does not show the place as saved")
+    dev.screenshot("saved-waiting")
+    deadline = time.time() + 30
+    jobs = ""
+    while time.time() < deadline and JOB_SERVICE not in jobs:
+        time.sleep(2)
+        jobs = dev.shell(f"dumpsys jobscheduler {PKG}", timeout=60)
+    (dev.out / "jobs.txt").write_text(jobs)
+    if JOB_SERVICE not in jobs:
+        dev.fail("a write waits for the homeserver but no outbox job is scheduled (jobs.txt)")
+    log("the waiting write keeps an outbox job")
+
+    # Closed: off the screen, then the process killed (as Android does to a background app).
+    dev.shell("input keyevent KEYCODE_HOME")
+    time.sleep(2)
+    before = app_pid(dev)
+    if not before:
+        dev.fail("the app's process is not running before it is killed")
+    dev.shell(f"run-as {PKG} kill {before}")
+    # A killed run of the job is run again after its backoff (30 s); a job that had not run yet runs now.
+    deadline = time.time() + 150
+    after = ""
+    while time.time() < deadline:
+        after = app_pid(dev)
+        if after and after != before:
+            break
+        time.sleep(3)
+    if not after or after == before:
+        dev.fail(f"the app was not started again for its waiting write (pid before {before}, after {after!r})")
+    # ActivityManager names why it started the process: "Start proc <pid>:<pkg>/... for service {<job
+    # service>}", and the events log "am_proc_start: [<user>,<pid>,<uid>,<pkg>,service,{<job service>}]".
+    log_lines = dev.adb("logcat", "-d", "-b", "all", check=False, timeout=120).splitlines()
+    reasons = [line for line in log_lines
+               if JOB_SERVICE in line and (f"Start proc {after}:" in line or f",{after}," in line)]
+    (dev.out / "outbox-start.txt").write_text("\n".join(reasons) + "\n")
+    if not reasons:
+        dev.fail(f"process {after} was not started for the outbox job (outbox-start.txt, logcat.txt)")
+    log(f"killed with a write waiting, the app was started again (pid {before} -> {after}) for its outbox job")
+    jobs = dev.shell(f"dumpsys jobscheduler {PKG}", timeout=60)
+    (dev.out / "jobs-after.txt").write_text(jobs)
+    if JOB_SERVICE not in jobs:
+        dev.fail("the outbox job is gone while the write still waits (jobs-after.txt)")
+    dev.start_app()
+    if dev.wait_for("Show my location", 60) is None:
+        dev.fail("the map screen did not appear after the outbox job ran")
+    dev.check_alive("map after the outbox job")
 
 
 if __name__ == "__main__":

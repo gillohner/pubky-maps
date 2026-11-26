@@ -142,6 +142,8 @@ class PubkyMapsApplication : Application() {
                 core = core,
                 settings = settingsRepository.settings,
             )
+        // With the app closed too: a job Android runs when the phone has a network starts the process.
+        followOutbox(this, writes.waiting, scope)
         // Writes that wait for a connection are sent as soon as the phone has one: the homeserver
         // is tried again first (writes wait for it), then the outbox.
         getSystemService(ConnectivityManager::class.java)?.registerDefaultNetworkCallback(

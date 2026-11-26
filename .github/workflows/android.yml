@@ -12,7 +12,8 @@ name: android
 # Pinakes card and Nexus tags, posts and lists, the sheet is raised and closed with back.
 # When the app, the core or CI changed, synonym-blocked runs the app with every Synonym host
 # unreachable (scripts/ci/synonym-blocked.py): the map, the cached account and the degraded banner,
-# and a second time with the first map style blocked too.
+# a place saved then waits and Android starts the killed app again for it (the outbox job), and a
+# second time with the first map style blocked too.
 # Each of these tests on the debug APK fails when StrictMode caught our code reading disk on the
 # main thread or leaking a resource (scripts/ci/strict_mode.py); network on the main thread crashes
 # the app.
