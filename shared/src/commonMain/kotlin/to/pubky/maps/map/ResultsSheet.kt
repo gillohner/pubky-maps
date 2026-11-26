@@ -20,15 +20,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /** How much of the results list shows: its first row, half the screen, or all of it. */
@@ -37,14 +44,19 @@ enum class SheetHeight { Peek, Half, Full }
 /** The handle and the first row: what the sheet keeps on screen when pulled down. */
 private val PeekHeight = 120.dp
 
+/** A release faster than this (about a flick) goes on to the next height; a slower one to the nearest. */
+private val FlingVelocity = 400.dp
+
 /**
  * The results over the map on a phone, as in Google Maps and CoMaps: a sheet at the bottom that the
  * handle drags between its first row ([SheetHeight.Peek]), half the screen ([SheetHeight.Half], where
  * it opens) and the whole height below the search bar ([SheetHeight.Full]); tapping the handle steps
- * up, and back down from full. [above] (the credits and my-location button) rides on the sheet's top
- * edge while there is room for it under [topSpace]; at full height, or while the sheet is dragged
- * that far, it is not there at all (not drawn, not touchable, not read by TalkBack), so it never
- * covers the search bar or Settings. [topSpace] is left free for the search bar.
+ * up, and back down from full. The list drags it too: a finger moving up raises the sheet to full
+ * before the list scrolls, and one moving down with the list at its top lowers it. [above] (the
+ * credits and my-location button) rides on the sheet's top edge while there is room for it under
+ * [topSpace]; at full height, or while the sheet is dragged that far, it is not there at all (not
+ * drawn, not touchable, not read by TalkBack), so it never covers the search bar or Settings.
+ * [topSpace] is left free for the search bar.
  */
 @Composable
 internal fun ResultsSheet(
@@ -65,6 +77,7 @@ internal fun ResultsSheet(
             }
         }
     val state = remember(anchors) { AnchoredDraggableState(SheetHeight.Half, anchors) }
+    val listDrag = remember(state, density) { ListDragsSheet(state, density) }
     val scope = rememberCoroutineScope()
     val step: () -> Unit = {
         val next =
@@ -110,7 +123,7 @@ internal fun ResultsSheet(
                                         ),
                                 )
                             }
-                            content()
+                            Box(Modifier.nestedScroll(listDrag)) { content() }
                         }
                     }
                 },
@@ -127,5 +140,69 @@ internal fun ResultsSheet(
             if (aboveSheet != null && offset - aboveSheet.height >= topLimit) aboveSheet.place(0, offset - aboveSheet.height)
             sheet.place(0, offset)
         }
+    }
+}
+
+/**
+ * Passes the list's scrolling to the sheet first while it can move (as Google Maps' and CoMaps'
+ * results): up until the sheet is full, then the list scrolls; down once the list is at its top. A
+ * release that moved the sheet settles it at a height.
+ */
+private class ListDragsSheet(
+    private val state: AnchoredDraggableState<SheetHeight>,
+    density: Density,
+) : NestedScrollConnection {
+    private val flingVelocity = with(density) { FlingVelocity.toPx() }
+
+    override fun onPreScroll(
+        available: Offset,
+        source: NestedScrollSource,
+    ): Offset =
+        if (available.y < 0 && source == NestedScrollSource.UserInput) {
+            Offset(0f, state.dispatchRawDelta(available.y))
+        } else {
+            Offset.Zero
+        }
+
+    override fun onPostScroll(
+        consumed: Offset,
+        available: Offset,
+        source: NestedScrollSource,
+    ): Offset =
+        if (source == NestedScrollSource.UserInput) {
+            Offset(0f, state.dispatchRawDelta(available.y))
+        } else {
+            Offset.Zero
+        }
+
+    override suspend fun onPreFling(available: Velocity): Velocity {
+        // An upward flick while the sheet is not yet full raises the sheet, not the list.
+        if (available.y < 0 && state.offset > state.anchors.minPosition()) {
+            settle(available.y)
+            return available
+        }
+        return Velocity.Zero
+    }
+
+    // A sheet resting at a height leaves the rest of the fling to the list (its edge stretch).
+    override suspend fun onPostFling(
+        consumed: Velocity,
+        available: Velocity,
+    ): Velocity = if (settle(available.y)) available else Velocity.Zero
+
+    /**
+     * To the next height in the direction of a flick, else to the nearest; a sheet at a height stays.
+     * Returns whether the sheet moved.
+     */
+    private suspend fun settle(velocity: Float): Boolean {
+        val offset = state.offset.takeUnless { it.isNaN() } ?: return false
+        // Offsets grow down the screen: `searchUpwards` looks at larger offsets, the heights below.
+        val target =
+            (if (abs(velocity) >= flingVelocity) state.anchors.closestAnchor(offset, searchUpwards = velocity > 0) else null)
+                ?: state.anchors.closestAnchor(offset)
+                ?: return false
+        if (state.anchors.positionOf(target) == offset) return false
+        state.animateTo(target)
+        return true
     }
 }

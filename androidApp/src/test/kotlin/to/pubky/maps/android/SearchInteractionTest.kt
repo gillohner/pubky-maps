@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -11,6 +12,8 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
+import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -32,7 +35,7 @@ import to.pubky.maps.search.SearchState
 import to.pubky.maps.search.SourceState
 import to.pubky.maps.ui.PubkyMapsTheme
 
-/** The results sheet on a phone: its handle steps it between half, full and back. */
+/** The results sheet on a phone: its handle steps it between half, full and back; the list drags it too. */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [36], qualifiers = "w412dp-h915dp")
@@ -146,5 +149,73 @@ class SearchInteractionTest {
         compose.onNode(hasSetTextAction()).performTouchInput { click(Offset(centerX, bottom - 2f)) }
         compose.waitForIdle()
         assertEquals(1, editing)
+    }
+
+    private fun showResults() {
+        compose.setContent {
+            PubkyMapsTheme {
+                MapScreen(
+                    attribution =
+                        ServerDefaults.lists
+                            .mapStyles(darkTheme = false)
+                            .first()
+                            .attribution,
+                    mapUnavailable = false,
+                    onRetryMap = {},
+                    onMyLocation = {},
+                    onOpenSettings = {},
+                    search =
+                        MapSearch(
+                            SearchState(
+                                mode = SearchMode.Results,
+                                query = "café",
+                                resultsQuery = "café",
+                                results = results,
+                                photon = SourceState.Answered,
+                                pinakes = SourceState.Answered,
+                            ),
+                            recents = emptyList(),
+                            userLocation = null,
+                            actions = SearchActions(),
+                        ),
+                ) { Box(Modifier.fillMaxSize()) }
+            }
+        }
+    }
+
+    @Test
+    fun aDragUpOnTheListRaisesTheSheetBeforeTheListScrolls() {
+        showResults()
+        compose.onNodeWithText("Café 2").performTouchInput {
+            swipe(center, center - Offset(0f, 250.dp.toPx()), durationMillis = 400)
+        }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Results list, full").assertExists()
+        // The sheet took the drag: the list did not scroll, its first result is still on screen.
+        compose.onNodeWithText("Café 1").assertIsDisplayed()
+    }
+
+    @Test
+    fun aDragDownOnTheListAtItsTopLowersTheSheet() {
+        showResults()
+        compose.onNodeWithContentDescription("Results list, half").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Results list, full").assertExists()
+        compose.onNodeWithText("Café 3").performTouchInput {
+            swipe(center, center + Offset(0f, 250.dp.toPx()), durationMillis = 400)
+        }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Results list, half").assertExists()
+    }
+
+    @Test
+    fun aShortFlickOnTheListGoesOnToTheNextHeight() {
+        showResults()
+        // 60 dp in 50 ms: nearer half than full when let go, but fast, so the sheet goes on to full.
+        compose.onNodeWithText("Café 2").performTouchInput {
+            swipe(center, center - Offset(0f, 60.dp.toPx()), durationMillis = 50)
+        }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Results list, full").assertExists()
     }
 }
