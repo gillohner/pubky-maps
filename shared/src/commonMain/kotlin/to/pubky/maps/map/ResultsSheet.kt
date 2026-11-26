@@ -83,7 +83,7 @@ private val PeekStep = HandleHeight
  * sheet's lowest height follows it, never above half the screen. When that leaves it not even
  * [PeekStep] below half (a short window at a large font), the sheet has only half and full. At its
  * lowest height the list is put back at its start, so a sheet lowered from a scrolled list, or given
- * a new first result, shows that whole first row, not a part of a later one.
+ * new rows above the one it shows, shows the whole first row, not a part of a later one.
  */
 @Composable
 internal fun ResultsSheet(
