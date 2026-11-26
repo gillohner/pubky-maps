@@ -148,6 +148,8 @@ fun MapRoute(
     offline: OfflineMaps? = null,
     /** Shows the offline maps once a download started from the picker. */
     onDownloadStarted: () -> Unit = {},
+    /** Called once the map has drawn its first whole view of a style from the list. */
+    onMapDrawn: () -> Unit = {},
 ) {
     val dark = isSystemInDarkTheme()
     val sources = servers.mapStyles(dark)
@@ -214,6 +216,17 @@ fun MapRoute(
                     fallbackIndex = StyleFallback(sources, fallbackIndex).failed(style.uri).index
                 }
             }
+    }
+
+    // The first whole view of the map, for the start time (once per map: Android takes the first
+    // report of an activity and ignores the later ones, e.g. back from Settings). A start that leaves
+    // the map before it drew (a link to another page) reports when the user first comes back to it,
+    // so such a start counts more than its map.
+    val mapDrawn by rememberUpdatedState(onMapDrawn)
+    LaunchedEffect(mapState) {
+        val styleReady =
+            snapshotFlow { mapState.style.loadState is StyleLoadState.Ready && mapState.style.baseStyle is BaseStyle.Uri }
+        if (awaitMapDrawn(mapState.events, styleReady)) mapDrawn()
     }
 
     val snackbarHostState = remember { SnackbarHostState() }

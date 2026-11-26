@@ -126,6 +126,8 @@ fun App(
     places: PlaceServices? = null,
     writes: WriteUi? = null,
     offline: OfflineMaps? = null,
+    /** Called once the map has drawn its first whole view; Android reports it as the start's fully drawn time. */
+    onMapDrawn: () -> Unit = {},
 ) {
     val loaded by settingsRepository.settings.collectAsStateWithLifecycle()
     // Place photos and profile pictures, with the app's User-Agent like every other request. Coil
@@ -155,6 +157,7 @@ fun App(
                 places,
                 writes,
                 offline,
+                onMapDrawn,
             )
         }
         val dialog = updatesState?.dialog
@@ -187,6 +190,7 @@ private fun AppNavigation(
     places: PlaceServices?,
     writes: WriteUi?,
     offline: OfflineMaps?,
+    onMapDrawn: () -> Unit,
 ) {
     val update: ((AppSettings) -> AppSettings) -> Unit = remember(settingsRepository) { { settingsRepository.update(it) } }
     val navController = rememberNavController()
@@ -289,6 +293,7 @@ private fun AppNavigation(
                 onOpenSaved = writes?.let { { navController.open(SavedDestination) } },
                 offline = offline,
                 onDownloadStarted = { navController.open(OfflineMapsDestination) },
+                onMapDrawn = onMapDrawn,
             )
         }
         composable<SettingsDestination> {

@@ -54,6 +54,9 @@ class MainActivity : ComponentActivity() {
                 places = app.places,
                 writes = WriteUi(app.writes, AndroidPhotoInput),
                 offline = app.offlineMaps,
+                // The map on screen is the start's "fully drawn" time (logcat "Fully drawn"), held
+                // to a budget by the emulator smoke test.
+                onMapDrawn = ::reportFullyDrawn,
             )
         }
     }
