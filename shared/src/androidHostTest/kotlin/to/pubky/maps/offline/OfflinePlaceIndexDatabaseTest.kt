@@ -225,8 +225,39 @@ class OfflinePlaceIndexDatabaseTest {
         val city = place("Zürich", 47.3200, 8.5400, osm = 1, key = "place", value = "city", category = null)
         index.replace("a", 0, (stops + city + place("Café Rosa", 47.3210, 8.5410, osm = 2)).asSequence())
         assertEquals("Zürich", index.find("zürich")?.first())
-        // So a query naming the town finds it and looks around it.
+        // And the other words of a query naming it still match the places in it (the lookup
+        // around a town is theOtherWordsAreLookedUpAroundATownNamed's).
         assertEquals(listOf("Café Rosa"), index.find("cafe zurich"))
+    }
+
+    @Test
+    fun aShortbreadCapitalNamesThePlacesInItAndIsLookedUpAround() {
+        val index = index()
+        // A VersaTiles (Shortbread) tile over Zürich, whose label is a `state_capital`.
+        val tile =
+            vectorTile(
+                mapOf(
+                    "pois" to
+                        listOf(
+                            TestFeature(11, mapOf("name" to "Kunsthaus", "tourism" to "museum"), listOf(3000 to 3000)),
+                            TestFeature(21, mapOf("name" to "Café Rosa", "amenity" to "cafe"), listOf(3050 to 3050)),
+                        ),
+                    "place_labels" to
+                        listOf(
+                            TestFeature(31, mapOf("name" to "Zürich", "kind" to "state_capital"), listOf(2000 to 2000)),
+                            TestFeature(41, mapOf("name" to "Hottingen", "kind" to "quarter"), listOf(3100 to 3100)),
+                        ),
+                ),
+            )
+        // The map is on Winterthur, 20 km away, among 450 cafés of its own.
+        val winterthur = SearchArea(GeoPoint(47.5000, 8.7240), zoom = 14.0, halfDiagonalMeters = 3_000.0)
+        val near = (0 until 450).map { i -> place("Café $i", 47.5000 + i * 0.00001, 8.7240, osm = i + 100L) }
+        index.replace("a", 0, (near + placesOfTile(14, 8580, 5737, decodeVectorTile(tile))).asSequence())
+        val museum = runBlocking { index.search("kunsthaus", winterthur) }!!
+        assertEquals(listOf("Hottingen, Zürich"), museum.map { it.locality })
+        assertEquals("city", runBlocking { index.search("zürich", winterthur) }!!.first().photonType)
+        // "cafe zurich" looks around the capital, past the cafés nearer the map.
+        assertEquals(listOf("Café Rosa"), runBlocking { index.search("cafe zurich", winterthur) }!!.map { it.name })
     }
 
     @Test

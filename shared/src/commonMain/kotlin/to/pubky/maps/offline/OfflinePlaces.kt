@@ -101,7 +101,10 @@ private fun placeOf(
 
         "place", "place_labels" -> {
             val kind = properties["class"] ?: properties["kind"] ?: return null
-            if (kind in SKIPPED_PLACES) null else place("place", kind)
+            // Shortbread calls the capitals among its cities `capital` and `state_capital`, where
+            // OpenMapTiles keeps `city`: stored as cities, they name the places around them
+            // ("Museum · Hottingen, Zürich") and are found as cities.
+            if (kind in SKIPPED_PLACES) null else place("place", if (kind in CAPITALS) "city" else kind)
         }
 
         "transportation_name", "street_labels" -> {
@@ -200,6 +203,9 @@ private val SHORTBREAD_KEYS = listOf("amenity", "shop", "tourism", "leisure", "h
 
 /** Place labels too large for a search inside a downloaded area. */
 private val SKIPPED_PLACES = setOf("continent", "country", "state", "province")
+
+/** Shortbread's kinds of the capitals among its cities (OpenMapTiles has no such class). */
+private val CAPITALS = setOf("capital", "state_capital")
 
 /** Line labels that are not streets: railways, ferries, lifts, pistes. */
 private val NOT_STREETS = setOf("rail", "transit", "ferry", "aerialway", "ski", "railway", "subway", "tram", "light_rail")
