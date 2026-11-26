@@ -230,6 +230,8 @@ check_alive "offline map drawn without a connection"
 open_at "$zurich"
 xy=$(wait_for "Search here" 30) || fail "no search bar without a connection"
 adb shell input tap $xy
+# The field takes the keyboard a moment after the tap; earlier keys are lost.
+sleep 1
 adb shell input text bakery
 wait_for "Fixture Bakery" 30 > /dev/null || fail "search without a connection did not find the offline area's places"
 wait_for "Search is offline: these places are from your offline maps. Addresses need a connection." 5 > /dev/null ||
