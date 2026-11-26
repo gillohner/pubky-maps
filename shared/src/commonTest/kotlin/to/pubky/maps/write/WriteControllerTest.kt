@@ -471,6 +471,41 @@ class WriteControllerTest {
         }
 
     @Test
+    fun aPageOpenWhileSigningOutKeepsNothingInTheAccountsStore() =
+        runTest {
+            val onPhone = "https://www.openstreetmap.org/node/3"
+            phone.data = PhoneData(saved = listOf(PhoneSaved(onPhone, "Lindenhof", 7L)))
+            account.value =
+                AccountState.SignedIn(
+                    AccountUser(ME, "Ada"),
+                    CachedAccount(ME, "Ada", 500, emptyList(), listOf(CachedBookmark("/b/1", OSM))),
+                    Connection.Online,
+                )
+            val writer = controller()
+
+            // The sign-out has begun (the account's store is being cleared) and the writer has not
+            // seen it yet: the homeserver bookmark is still the user's.
+            account.value = (account.value as AccountState.SignedIn).copy(signingOut = true)
+            writer.remember(target, setOf(OSM))
+            writer.remember(WriteTarget(onPhone, "Lindenhof", SCHOBER), setOf(onPhone))
+            runCurrent()
+
+            assertEquals(emptyMap(), store.names, "the account's store keeps no name")
+            assertEquals(emptyMap(), store.points(), "the account's store keeps no point")
+            assertEquals(
+                listOf(PhoneSaved(onPhone, "Lindenhof", 7L, SCHOBER)),
+                phone.data.saved,
+                "a place saved on the phone still keeps its point",
+            )
+
+            // Once the writer has seen the sign-out, the bookmark is no longer the user's at all.
+            writer.remember(target, setOf(OSM))
+            runCurrent()
+            assertEquals(emptyMap(), store.names)
+            assertEquals(emptyMap(), store.points())
+        }
+
+    @Test
     fun signedOutWritesAskForTheSignInFirstAndKeepWhatTheUserWanted() =
         runTest {
             account.value = AccountState.SignedOut()
