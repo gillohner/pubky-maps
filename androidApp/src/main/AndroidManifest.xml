@@ -3,6 +3,8 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- The job that sends waiting writes (OutboxJobService) stays scheduled over a restart of the phone. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
@@ -42,6 +44,11 @@
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
         android:theme="@style/Theme.PubkyMaps">
+        <!-- Sends writes that wait for a connection when the phone has one, also with the app closed. -->
+        <service
+            android:name=".android.OutboxJobService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
         <!-- Lends the camera app a file to write a photo into, for a photo post. -->
         <provider
             android:name=".android.photos.PhotoFileProvider"

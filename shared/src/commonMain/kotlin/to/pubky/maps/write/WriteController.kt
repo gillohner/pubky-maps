@@ -110,6 +110,18 @@ class WriteController(
     /** A write that waits for the user to sign in; the app shows the sign-in while it is set. */
     val signInFirst: StateFlow<SignInFirst?> = mutableSignInFirst.asStateFlow()
 
+    private val mutableWaiting = MutableStateFlow<Boolean?>(null)
+
+    /**
+     * Whether the outbox holds writes still to send (for the signed-in user); null until the
+     * controller read the account it starts with and its outbox, so a start never reads as "nothing
+     * waits" before the outbox was read. Android sends what waits with the app closed while it is true.
+     */
+    val waiting: StateFlow<Boolean?> = mutableWaiting.asStateFlow()
+
+    /** The account the controller acts on is known (not [AccountState.Loading]) and its outbox was read. */
+    private var accountKnown = false
+
     private val actions = Channel<suspend () -> Unit>(Channel.UNLIMITED)
 
     @Volatile
@@ -524,6 +536,7 @@ class WriteController(
         // Signed out, the account's cache and the outbox in it are gone (sign-out, or a start with no
         // stored session); the outbox's photos go too. Loading at start is not signed out.
         if (state is AccountState.SignedOut) io { files.deleteAllBut(emptySet()) }
+        accountKnown = state != AccountState.Loading
         publish()
         if (canSend()) {
             send()
@@ -766,6 +779,7 @@ class WriteController(
     fun normalize(place: String): String = core?.normalize(place) ?: place
 
     private fun publish() {
+        mutableWaiting.value = if (accountKnown) viewer != null && queue.isNotEmpty() else null
         val cached = signedIn?.cached
         mutableOwn.value =
             ownData(
