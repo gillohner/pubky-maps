@@ -23,6 +23,7 @@ import to.pubky.maps.cache.CachedTag
 import to.pubky.maps.config.AppSettings
 import to.pubky.maps.config.DataKind
 import to.pubky.maps.config.StorageChoice
+import to.pubky.maps.links.GeoPoint
 import kotlin.concurrent.Volatile
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -131,6 +132,7 @@ class WriteController(
     private var lists: List<OwnList> = emptyList()
     private var phoneData = PhoneData()
     private var labels: Map<String, String> = emptyMap()
+    private var points: Map<String, GeoPoint> = emptyMap()
     private var viewer: String? = null
     private var listsLoaded = false
 
@@ -333,7 +335,7 @@ class WriteController(
     fun save(target: WriteTarget) =
         enqueue {
             if (settings().storage(DataKind.SavedPlaces) == StorageChoice.PhoneOnly) {
-                val saved = PhoneSaved(normalize(target.uri), target.name, now())
+                val saved = PhoneSaved(normalize(target.uri), target.name, now(), target.point)
                 io { phone.save(saved) }
                 phoneData = phoneData.copy(saved = listOf(saved) + phoneData.saved.filterNot { it.place == saved.place })
                 publish()
@@ -496,6 +498,13 @@ class WriteController(
             io { store.putLabel(target.uri, name) }
             labels = labels + (target.uri to name)
         }
+        // By the core's spelling: the homeserver's bookmark comes back spelled so, not as the link was opened.
+        val point = target.point
+        val place = normalize(target.uri)
+        if (point != null && points[place] != point) {
+            io { store.putPoint(place, point) }
+            points = points + (place to point)
+        }
         publish()
         return true
     }
@@ -525,12 +534,14 @@ class WriteController(
                 queue = io { store.queue() }
                 lists = io { store.lists() }
                 labels = io { store.labels() }
+                points = io { store.points() }
                 // Photos of writes that are no longer queued (sent, or dropped by a sign-out) are not needed.
                 io { files.deleteAllBut(queue.mapNotNull { (it.op as? WriteOp.Photo)?.file }.toSet()) }
             } else {
                 queue = emptyList()
                 lists = emptyList()
                 labels = emptyMap()
+                points = emptyMap()
             }
         }
         // Signed out, the account's cache and the outbox in it are gone (sign-out, or a start with no
@@ -790,6 +801,7 @@ class WriteController(
                 queue = queue,
                 confirmed = confirmed,
                 labels = labels,
+                points = points,
                 normalize = ::normalize,
             ).copy(
                 listsLoaded = listsLoaded,

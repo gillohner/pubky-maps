@@ -5,7 +5,10 @@ CREATE TABLE saved_place (
     place TEXT NOT NULL PRIMARY KEY,
     name TEXT,
     -- epoch milliseconds
-    saved_at INTEGER NOT NULL
+    saved_at INTEGER NOT NULL,
+    -- Where the place is (WGS84), for its pin on the map; null when the app did not know it.
+    lat REAL,
+    lon REAL
 );
 
 -- One JSON OwnList per list.
@@ -23,7 +26,7 @@ savedPlaces:
 SELECT * FROM saved_place ORDER BY saved_at DESC;
 
 putSavedPlace:
-INSERT OR REPLACE INTO saved_place(place, name, saved_at) VALUES (?, ?, ?);
+INSERT OR REPLACE INTO saved_place(place, name, saved_at, lat, lon) VALUES (?, ?, ?, ?, ?);
 
 deleteSavedPlace:
 DELETE FROM saved_place WHERE place = ?;

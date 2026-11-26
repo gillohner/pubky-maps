@@ -3,6 +3,7 @@ package to.pubky.maps.write
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import to.pubky.maps.config.StorageChoice
+import to.pubky.maps.links.GeoPoint
 
 /** Where one of the user's own things is kept (the "What is stored online" choices). */
 @Serializable
@@ -139,10 +140,14 @@ data class QueuedOp(
     val op: WriteOp,
 )
 
-/** What a write is about: the place's URI as the user had it, and its name for lists of the user's own places. */
+/**
+ * What a write is about: the place's URI as the user had it, its name for lists of the user's own
+ * places, and where it is, for the pin of a saved place on the map (null when the page does not know).
+ */
 data class WriteTarget(
     val uri: String,
     val name: String?,
+    val point: GeoPoint? = null,
 )
 
 /** What the user wanted to do when the app asked them to sign in first. */

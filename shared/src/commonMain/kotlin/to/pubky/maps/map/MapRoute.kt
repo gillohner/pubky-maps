@@ -174,6 +174,14 @@ fun MapRoute(
             ?.collectAsStateWithLifecycle()
             ?.value
     val pubkyPlaces by rememberUpdatedState(layerState?.takeUnless { it.hidden }?.places.orEmpty())
+    val saved =
+        writes
+            ?.own
+            ?.collectAsStateWithLifecycle()
+            ?.value
+            ?.saved
+            .orEmpty()
+    val savedPins by rememberUpdatedState(remember(saved) { savedPins(saved) })
     var clusterTarget by remember { mutableStateOf<Position?>(null) }
     val scope = rememberCoroutineScope()
     val searchState =
@@ -207,6 +215,17 @@ fun MapRoute(
                         tapped = place.toPlaceRef()
                     },
                     onCluster = { clusterTarget = it },
+                )
+            }
+            // Above the Pubky places, under the opened place's pin (drawn on a saved place when it is opened).
+            if (savedPins.isNotEmpty()) {
+                SavedPins(
+                    savedPins,
+                    onSelect = { entry ->
+                        search?.controller?.close()
+                        onClosePlace()
+                        tapped = entry.toPlaceRef()
+                    },
                 )
             }
             pinnedPoint?.let { PlacePin(it) }
@@ -750,6 +769,12 @@ private fun rememberPlacePage(
     )
 }
 
+/**
+ * Where the page's place is, kept with a save for its pin on the map: the place's own point (not a map
+ * view or a search centre), else its Pinakes card's.
+ */
+internal val PlacePageState.placePoint: GeoPoint? get() = place.point?.takeIf { place.pinned } ?: card?.point
+
 /** The place page's writes: what the user has about [page]'s place (by every link of it) and what they can do. */
 internal fun placeWriteActions(
     page: PlacePageState,
@@ -760,7 +785,7 @@ internal fun placeWriteActions(
 ): PlaceWriteActions {
     val links = PlacePageController.placeLinks(page.place, page.card).map(writes::normalize).toSet()
     val ownPlace = own.forPlace(links)
-    val target = WriteTarget(page.place.uri, page.card?.name ?: page.place.name)
+    val target = WriteTarget(page.place.uri, page.card?.name ?: page.place.name, page.placePoint)
 
     fun open(intent: WriteIntent) = if (writes.needsSignIn(intent)) writes.signInFirst(target, intent) else onWrite(target, intent)
     return PlaceWriteActions(

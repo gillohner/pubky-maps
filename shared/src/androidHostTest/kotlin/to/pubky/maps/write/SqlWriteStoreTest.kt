@@ -4,6 +4,7 @@ import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import to.pubky.maps.cache.CachedAccount
 import to.pubky.maps.cache.SqlAccountCache
 import to.pubky.maps.cache.db.CacheDatabase
+import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.write.db.PhoneDataDatabase
 import java.io.File
 import java.nio.file.Files
@@ -77,10 +78,13 @@ class SqlWriteStoreTest {
         store.addOtherPosts(private = false, listOf("A", "B"))
         store.addOtherPosts(private = true, listOf("C"))
         store.putLabel("geo:1,2", "Bench")
+        store.putPoint("https://osm.org/node/1", GeoPoint(47.37, 8.54))
+        store.putPoint("https://osm.org/node/1", GeoPoint(47.38, 8.55))
 
         assertEquals(setOf("A", "B"), store.otherPosts(false).toSet())
         assertEquals(listOf("C"), store.otherPosts(true))
         assertEquals(mapOf("geo:1,2" to "Bench"), store.labels())
+        assertEquals(mapOf("https://osm.org/node/1" to GeoPoint(47.38, 8.55)), store.points())
     }
 
     @Test
@@ -92,6 +96,7 @@ class SqlWriteStoreTest {
         store.enqueue(tag)
         store.putList(list)
         store.putLabel("geo:1,2", "Bench")
+        store.putPoint("geo:1,2", GeoPoint(1.0, 2.0))
 
         cache.replace(CachedAccount(USER, "Ada", 1, emptyList(), emptyList()))
         assertEquals(1, store.queue().size, "a refresh of the cache keeps what waits to be sent")
@@ -101,6 +106,7 @@ class SqlWriteStoreTest {
         assertEquals(emptyList(), store.queue())
         assertEquals(emptyList(), store.lists())
         assertEquals(emptyMap(), store.labels())
+        assertEquals(emptyMap(), store.points(), "where the user's saved places are goes with the account")
     }
 
     @Test
@@ -126,7 +132,7 @@ class SqlWriteStoreTest {
             "CREATE TABLE bookmark (path TEXT NOT NULL PRIMARY KEY, place TEXT NOT NULL)",
             "INSERT INTO account VALUES ('$USER', 'Ada', 7)",
         ).forEach { driver.execute(null, it, 0) }
-        assertEquals(2L, CacheDatabase.Schema.version)
+        assertEquals(3L, CacheDatabase.Schema.version)
 
         CacheDatabase.Schema.migrate(driver, 1, CacheDatabase.Schema.version)
 
@@ -134,6 +140,35 @@ class SqlWriteStoreTest {
         val store = SqlWriteStore(driver)
         store.enqueue(tag)
         assertEquals(tag, store.queue().single().op)
+        store.putPoint("geo:1,2", GeoPoint(1.0, 2.0))
+        assertEquals(GeoPoint(1.0, 2.0), store.points()["geo:1,2"])
+    }
+
+    @Test
+    fun aVersionTwoCacheKeepsItsOutboxAndNamesAndGainsPoints() {
+        val driver = JdbcSqliteDriver("jdbc:sqlite:${File(dir, "v2.db").path}", Properties())
+        // The schema before saved places had points: version 1's tables plus 1.sqm.
+        listOf(
+            "CREATE TABLE account (public_key TEXT NOT NULL PRIMARY KEY, name TEXT, refreshed_at INTEGER)",
+            "CREATE TABLE tag (path TEXT NOT NULL PRIMARY KEY, place TEXT NOT NULL, label TEXT NOT NULL, created_at INTEGER NOT NULL)",
+            "CREATE TABLE bookmark (path TEXT NOT NULL PRIMARY KEY, place TEXT NOT NULL)",
+            "CREATE TABLE outbox (seq INTEGER PRIMARY KEY AUTOINCREMENT, op TEXT NOT NULL)",
+            "CREATE TABLE own_list (uri TEXT NOT NULL PRIMARY KEY, private INTEGER NOT NULL, list TEXT NOT NULL)",
+            "CREATE TABLE other_post (private INTEGER NOT NULL, id TEXT NOT NULL, PRIMARY KEY (private, id))",
+            "CREATE TABLE place_label (place TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL)",
+            "INSERT INTO place_label VALUES ('geo:1,2', 'Bench')",
+        ).forEach { driver.execute(null, it, 0) }
+        // The outbox is the same in both versions: a write waiting before the update.
+        SqlWriteStore(driver).enqueue(tag)
+
+        CacheDatabase.Schema.migrate(driver, 2, CacheDatabase.Schema.version)
+
+        val store = SqlWriteStore(driver)
+        assertEquals(tag, store.queue().single().op)
+        assertEquals(mapOf("geo:1,2" to "Bench"), store.labels())
+        assertEquals(emptyMap(), store.points())
+        store.putPoint("geo:1,2", GeoPoint(1.0, 2.0))
+        assertEquals(mapOf("geo:1,2" to GeoPoint(1.0, 2.0)), store.points())
     }
 
     @Test
@@ -145,11 +180,45 @@ class SqlWriteStoreTest {
 
         phone.save(PhoneSaved("geo:1,2", "Lake", 10))
         phone.save(PhoneSaved("geo:3,4", null, 20))
+        phone.save(PhoneSaved("https://www.openstreetmap.org/node/1", "Schober", 30, GeoPoint(47.37159, 8.54531)))
         phone.putList(phoneList)
         phone.unsave("geo:1,2")
 
         val read = SqlPhoneStore(driver).read()
-        assertEquals(listOf(PhoneSaved("geo:3,4", null, 20)), read.saved)
+        assertEquals(
+            listOf(
+                PhoneSaved("https://www.openstreetmap.org/node/1", "Schober", 30, GeoPoint(47.37159, 8.54531)),
+                PhoneSaved("geo:3,4", null, 20),
+            ),
+            read.saved,
+        )
         assertEquals(listOf(phoneList), read.lists)
+    }
+
+    @Test
+    fun aVersionOnePhoneStoreKeepsItsSavedPlacesAndGainsPoints() {
+        val driver = JdbcSqliteDriver("jdbc:sqlite:${File(dir, "old-phone.db").path}", Properties())
+        // The schema the first released phone store had.
+        listOf(
+            "CREATE TABLE saved_place (place TEXT NOT NULL PRIMARY KEY, name TEXT, saved_at INTEGER NOT NULL)",
+            "CREATE TABLE phone_list (uri TEXT NOT NULL PRIMARY KEY, list TEXT NOT NULL)",
+            "CREATE TABLE flag (name TEXT NOT NULL PRIMARY KEY)",
+            "INSERT INTO saved_place VALUES ('https://www.openstreetmap.org/node/1', 'Schober', 10)",
+        ).forEach { driver.execute(null, it, 0) }
+        assertEquals(2L, PhoneDataDatabase.Schema.version)
+
+        PhoneDataDatabase.Schema.migrate(driver, 1, PhoneDataDatabase.Schema.version)
+
+        val phone = SqlPhoneStore(driver)
+        assertEquals(listOf(PhoneSaved("https://www.openstreetmap.org/node/1", "Schober", 10)), phone.read().saved)
+        phone.save(PhoneSaved("geo:3,4", null, 20, GeoPoint(3.0, 4.0)))
+        assertEquals(
+            GeoPoint(3.0, 4.0),
+            phone
+                .read()
+                .saved
+                .first()
+                .point,
+        )
     }
 }

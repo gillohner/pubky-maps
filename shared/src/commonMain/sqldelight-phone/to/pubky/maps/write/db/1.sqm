@@ -1,0 +1,4 @@
+-- Version 2: where each saved place is, for its pin on the map.
+
+ALTER TABLE saved_place ADD COLUMN lat REAL;
+ALTER TABLE saved_place ADD COLUMN lon REAL;

@@ -106,7 +106,10 @@ too), which drops camera and phone details and, unless Photo locations is Public
 then uploaded and posted as an `image` post embedding the place, with alt text. Lists are the
 user's collections (read from their homeserver, public or private, or kept on the phone), 100
 places each. Save keeps the place privately on the homeserver or on the phone only, per the
-setting; the **Saved** screen (from the search page) lists saved places and lists. Public writes
+setting; the **Saved** screen (from the search page) lists saved places and lists, and the map
+shows each saved place as a purple bookmark badge that opens it. The homeserver's bookmark holds
+only the link, so the place's point is kept on the phone with the save; a `geo:` link names its
+own, and other places saved before this, on another device or before the last sign-out have no badge. Public writes
 show a Public badge first. A write shows at once and goes into an outbox on the phone, sent in
 order; one without a connection waits and is retried, and goes out as soon as the phone is online
 again (the homeserver is tried again then, not only on a timer), also with the app closed: while
