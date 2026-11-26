@@ -99,24 +99,30 @@ class SqlOfflinePlaceIndex(
     }
 
     /**
-     * The locality stored with the element [osm], as offline search shows it; for a place no area
-     * has (a Pubky pin, a dropped pin, a place the tiles name differently), the one the labels around
-     * [point] give ([Localities.at]), if the areas have a place within [NEAR_METERS] of it: a point
-     * farther from every place lies outside their tiles, where a nearer label may be missing.
+     * The locality stored with the element [osm], as offline search shows it. For a place no area
+     * has a locality for (a Pubky pin, a dropped pin, a place the tiles name differently, one at an
+     * area's edge that a neighbouring area's label reaches), the one the labels around [point] give
+     * ([Localities.named], so a town's page is not named after itself), if the areas have a place in
+     * the square of [NEAR_METERS] each way around it: a point farther from every place lies outside
+     * their tiles, where a nearer label may be missing.
      */
     override fun localityOf(
         osm: OsmId?,
         point: GeoPoint,
+        name: String?,
     ): String? {
         if (osm != null) {
-            val stored = queries.localitiesOf(osm.id, osm.type.name).executeAsList()
-            if (stored.isNotEmpty()) return stored.firstNotNullOfOrNull { it.locality }
+            queries
+                .localitiesOf(osm.id, osm.type.name)
+                .executeAsList()
+                .firstNotNullOfOrNull { it.locality }
+                ?.let { return it }
         }
         val near = Box.around(point, NEAR_METERS)
         if (queries.anyIn(near.south, near.north, near.west, near.east).executeAsOneOrNull() == null) return null
         val reach = Box.around(point, Localities.MAX_REACH_METERS)
         val labels = queries.labelsIn(reach.south, reach.north, reach.west, reach.east, placeOfRow).executeAsList()
-        return Localities(labels).at(point.lat, point.lon)
+        return Localities(labels).named(name, point.lat, point.lon)
     }
 
     override suspend fun search(
@@ -173,7 +179,7 @@ class SqlOfflinePlaceIndex(
         }
 
     private companion object {
-        /** How near a place of the areas a point must be for their labels to name it. */
+        /** How near a place of the areas (north, south, east or west) a point must be for their labels to name it. */
         const val NEAR_METERS = 500.0
 
         /** Places read for one search, nearest first, before the words are checked. */

@@ -110,6 +110,7 @@ class PlacePageController(
 
     private var job: Job? = null
     private var moreJob: Job? = null
+    private var localityJob: Job? = null
 
     /** Per Nexus resource: how many replies it has and how many were loaded. */
     private val replyPages = mutableMapOf<String, ReplyPage>()
@@ -119,29 +120,36 @@ class PlacePageController(
         val loaded: Int,
     )
 
-    /** Opens the page of [place]; the same place again keeps what is loaded. */
+    /**
+     * Opens the page of [place]; the same place again keeps what is loaded, its district and town
+     * too (a search result's, when the same place is then tapped on the map).
+     */
     fun open(place: PlaceRef) {
         val current = _state.value
         if (current != null && current.place.uri == place.uri) {
-            if (current.place != place) _state.value = current.copy(place = place)
+            if (current.place != place) {
+                val locality = current.locality ?: current.place.locality
+                _state.value = current.copy(place = place, locality = locality)
+                if (locality == null && localityJob?.isActive != true) localityJob = scope.launch { loadLocality(place) }
+            }
             return
         }
         job?.cancel()
         moreJob?.cancel()
+        localityJob?.cancel()
+        localityJob = null
         replyPages.clear()
         _state.value = PlacePageState(place, viewer = viewer())
-        job =
-            scope.launch {
-                launch { loadLocality(place) }
-                load(place)
-            }
+        job = scope.launch { load(place) }
     }
 
     /** Closes the page. */
     fun close() {
         job?.cancel()
         moreJob?.cancel()
+        localityJob?.cancel()
         job = null
+        localityJob = null
         _state.value = null
     }
 
@@ -171,14 +179,16 @@ class PlacePageController(
     private suspend fun loadLocality(place: PlaceRef) {
         val localities = localities ?: return
         val point = place.point?.takeIf { place.pinned && place.address == null && place.locality == null } ?: return
-        val locality = withContext(io) { runCatching { localities.localityOf(place.osm, point) }.getOrNull() } ?: return
+        val locality = withContext(io) { runCatching { localities.localityOf(place.osm, point, place.name) }.getOrNull() } ?: return
         update(place) { it.copy(locality = locality) }
     }
 
     private suspend fun load(place: PlaceRef) {
-        // Coordinates the user typed never leave the phone (search's rule): no source is asked.
+        // Coordinates the user typed never leave the phone (search's rule): no source is asked; the
+        // offline areas are on the phone.
         if (place.source == PlaceSource.Coordinates) {
             update(place) { it.copy(loading = emptySet()) }
+            loadLocality(place)
             return
         }
         val viewer = viewer()
@@ -198,6 +208,8 @@ class PlacePageController(
                 )
             }
         }
+        // After the cache, so a saved street address is not replaced by the district and town for a moment.
+        if (cached?.card?.address == null) localityJob = scope.launch { loadLocality(place) }
         val card =
             when (val answer = data.card(listOfNotNull(place.uri, place.osm?.url))) {
                 is SourceAnswer.Answered -> {

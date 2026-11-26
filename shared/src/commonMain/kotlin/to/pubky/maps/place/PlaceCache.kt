@@ -57,12 +57,14 @@ class SqlPlaceCache(
  */
 fun interface OfflineLocality {
     /**
-     * The district and town of the place [osm] at [point]: the one an offline area stored for the
-     * element, else the one its labels give the point; null when no offline area covers it.
+     * The district and town of the place [osm] named [name] at [point]: the one an offline area
+     * stored for the element, else the one its labels give the point; null when no offline area
+     * covers it or no label reaches it.
      */
     fun localityOf(
         osm: OsmId?,
         point: GeoPoint,
+        name: String?,
     ): String?
 }
 

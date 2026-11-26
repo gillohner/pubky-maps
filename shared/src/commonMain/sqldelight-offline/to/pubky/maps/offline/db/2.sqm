@@ -1,8 +1,8 @@
 -- Version 3: indexes for a place page's district and town (a place by its OpenStreetMap element,
 -- the places and labels near a point). The places stay: their rows did not change.
 
-CREATE INDEX place_osm ON place(osm_id, osm_type);
+CREATE INDEX place_osm ON place(osm_id, osm_type) WHERE osm_id IS NOT NULL;
 
-CREATE INDEX place_lat ON place(lat);
+CREATE INDEX place_point ON place(lat, lon);
 
-CREATE INDEX place_label ON place(tag_key, lat);
+CREATE INDEX place_label ON place(lat, lon) WHERE tag_key = 'place';

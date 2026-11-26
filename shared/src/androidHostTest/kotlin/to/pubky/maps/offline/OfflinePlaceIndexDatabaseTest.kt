@@ -283,7 +283,7 @@ class OfflinePlaceIndexDatabaseTest {
     @Test
     fun aPlacePageGetsTheLocalityOfItsElementElseOfItsPointNearTheAreasPlaces() {
         val index = index()
-        assertNull(index.localityOf(OsmId(OsmType.Node, 1), GeoPoint(47.3703, 8.5481)), "no area")
+        assertNull(index.localityOf(OsmId(OsmType.Node, 1), GeoPoint(47.3703, 8.5481), null), "no area")
         index.replace(
             "a",
             0,
@@ -296,17 +296,33 @@ class OfflinePlaceIndexDatabaseTest {
             ),
         )
         // The element's stored locality, as offline search shows it; a town's label is in nothing.
-        assertEquals("Hottingen, Zürich", index.localityOf(OsmId(OsmType.Node, 1), GeoPoint(0.0, 0.0)))
-        assertNull(index.localityOf(OsmId(OsmType.Node, 12), GeoPoint(47.5000, 8.7240)))
+        assertEquals("Hottingen, Zürich", index.localityOf(OsmId(OsmType.Node, 1), GeoPoint(0.0, 0.0), null))
+        assertNull(index.localityOf(OsmId(OsmType.Node, 12), GeoPoint(47.5000, 8.7240), "Winterthur"))
         // Another type with the same id is another element: looked up by its point.
-        assertEquals("Zürich", index.localityOf(OsmId(OsmType.Way, 1), GeoPoint(47.3722, 8.5392)))
+        assertEquals("Zürich", index.localityOf(OsmId(OsmType.Way, 1), GeoPoint(47.3722, 8.5392), null))
         // A Pubky pin or a dropped pin next to the Bahnhofstrasse, which the tiles have no element of.
-        assertEquals("Zürich", index.localityOf(null, GeoPoint(47.3725, 8.5395)))
-        assertEquals("Hottingen, Zürich", index.localityOf(OsmId(OsmType.Node, 99), GeoPoint(47.3705, 8.5490)))
+        assertEquals("Zürich", index.localityOf(null, GeoPoint(47.3725, 8.5395), null))
+        assertEquals("Hottingen, Zürich", index.localityOf(OsmId(OsmType.Node, 99), GeoPoint(47.3705, 8.5490), null))
         // 2 km from every place of the area, where a label outside its tiles could be nearer.
-        assertNull(index.localityOf(null, GeoPoint(47.3900, 8.5390)))
+        assertNull(index.localityOf(null, GeoPoint(47.3900, 8.5390), null))
+        // A town's or district's page opened from its relation, which the tiles do not have.
+        assertNull(index.localityOf(OsmId(OsmType.Relation, 1682248), GeoPoint(47.3720, 8.5400), "Zürich"))
+        assertEquals("Zürich", index.localityOf(OsmId(OsmType.Relation, 1701), GeoPoint(47.3705, 8.5590), "Hottingen"))
+        assertEquals("Hottingen, Zürich", index.localityOf(OsmId(OsmType.Node, 99), GeoPoint(47.3705, 8.5490), "Café Rosa"))
+        // A café at the edge of area b, which has no label reaching it; area c's town does.
+        index.replace("b", 0, sequenceOf(place("Café am Rand", 47.2000, 8.6000, osm = 77)))
+        assertNull(runBlocking { index.search("rand", zurich) }!!.single().locality)
+        index.replace(
+            "c",
+            0,
+            sequenceOf(
+                place("Café Mitte", 47.2050, 8.6050, osm = 78),
+                place("Meilen", 47.2100, 8.6100, osm = 79, key = "place", value = "town", category = null),
+            ),
+        )
+        assertEquals("Meilen", index.localityOf(OsmId(OsmType.Node, 77), GeoPoint(47.2000, 8.6000), "Café am Rand"))
         index.delete("a")
-        assertNull(index.localityOf(OsmId(OsmType.Node, 1), GeoPoint(47.3703, 8.5481)))
+        assertNull(index.localityOf(OsmId(OsmType.Node, 1), GeoPoint(47.3703, 8.5481), null))
     }
 
     @Test
@@ -334,8 +350,8 @@ class OfflinePlaceIndexDatabaseTest {
         val index = SqlOfflinePlaceIndex(driver, io = Dispatchers.Unconfined)
         assertEquals(mapOf("a" to 5L), index.areas())
         assertEquals(listOf("Café Rosa"), index.find("rosa"))
-        assertEquals("Zürich", index.localityOf(OsmId(OsmType.Node, 1), GeoPoint(47.3700, 8.5410)))
-        assertEquals("Zürich", index.localityOf(null, GeoPoint(47.3710, 8.5420)))
+        assertEquals("Zürich", index.localityOf(OsmId(OsmType.Node, 1), GeoPoint(47.3700, 8.5410), null))
+        assertEquals("Zürich", index.localityOf(null, GeoPoint(47.3710, 8.5420), null))
         val indexes =
             driver
                 .executeQuery(null, "SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'place_%'", { c ->
@@ -343,7 +359,7 @@ class OfflinePlaceIndexDatabaseTest {
                         .Value(buildList { while (c.next().value) add(c.getString(0)!!) })
                 }, 0)
                 .value
-        assertEquals(setOf("place_area", "place_osm", "place_lat", "place_label"), indexes.toSet())
+        assertEquals(setOf("place_area", "place_osm", "place_point", "place_label"), indexes.toSet())
     }
 
     @Test
@@ -407,8 +423,8 @@ class OfflinePlaceIndexDatabaseTest {
         val inTown = measureTime { assertEquals(30, index.find("bäck ${TOWNS[0]}")?.size) }
         assertTrue(inTown.inWholeMilliseconds < 100, "search in a town took $inTown")
         // A place page's district and town, by a point among them (a tapped place the tiles have no element of).
-        index.localityOf(null, GeoPoint(47.35, 8.50))
-        val locality = measureTime { assertNotNull(index.localityOf(null, GeoPoint(47.36, 8.52))) }
+        index.localityOf(null, GeoPoint(47.35, 8.50), null)
+        val locality = measureTime { assertNotNull(index.localityOf(null, GeoPoint(47.36, 8.52), null)) }
         println("a locality in $locality")
         assertTrue(locality.inWholeMilliseconds < 50, "a locality took $locality")
     }

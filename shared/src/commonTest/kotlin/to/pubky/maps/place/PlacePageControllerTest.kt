@@ -1,14 +1,18 @@
 package to.pubky.maps.place
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Runnable
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.links.OsmId
 import to.pubky.maps.links.OsmType
 import to.pubky.maps.search.SourceAnswer
+import kotlin.coroutines.CoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -139,6 +143,24 @@ internal class KeptSchober(
     }
 }
 
+/** Runs what is sent to it only when told to: a disk read still under way. */
+private class HeldDispatcher : CoroutineDispatcher() {
+    private val held = ArrayDeque<Runnable>()
+
+    val waiting: Int get() = held.size
+
+    override fun dispatch(
+        context: CoroutineContext,
+        block: Runnable,
+    ) {
+        held += block
+    }
+
+    fun runAll() {
+        while (held.isNotEmpty()) held.removeFirst().run()
+    }
+}
+
 private class MemoryPlaceCache : PlaceCache {
     val saved = mutableMapOf<String, PlaceSnapshot>()
 
@@ -166,6 +188,7 @@ class PlacePageControllerTest {
         kept: KeptPlaceSocial? = null,
         clock: Clock = Clock.System,
         localities: OfflineLocality? = null,
+        io: CoroutineDispatcher = StandardTestDispatcher(testScheduler),
     ) = PlacePageController(
         data = data,
         cache = cache,
@@ -173,7 +196,7 @@ class PlacePageControllerTest {
         kept = kept,
         viewer = { viewer },
         clock = clock,
-        io = StandardTestDispatcher(testScheduler),
+        io = io,
         localities = localities,
     )
 
@@ -184,6 +207,7 @@ class PlacePageControllerTest {
         override fun localityOf(
             osm: OsmId?,
             point: GeoPoint,
+            name: String?,
         ): String {
             asked += osm to point
             return "Hottingen, Zürich"
@@ -263,9 +287,66 @@ class PlacePageControllerTest {
         }
 
     @Test
+    fun theSamePlaceOpenedAgainKeepsItsLocalityOrLooksItUp() =
+        runTest {
+            val localities = Hottingen()
+            val pages = controller(FakePlaceData().apply { pinakesDown = true }, localities = localities)
+            // An offline search result, then the same café tapped on the map (no locality of its own).
+            pages.open(tapped.copy(locality = "Fluntern, Zürich"))
+            advanceUntilIdle()
+            pages.open(tapped)
+            advanceUntilIdle()
+            assertEquals("Fluntern, Zürich", pages.state.value!!.address)
+            assertEquals(emptyList<Pair<OsmId?, GeoPoint>>(), localities.asked)
+            // Opened first with no point (a link not resolved yet), then with its point: looked up then.
+            pages.close()
+            pages.open(tapped.copy(point = null))
+            advanceUntilIdle()
+            pages.open(tapped)
+            advanceUntilIdle()
+            assertEquals("Hottingen, Zürich", pages.state.value!!.address)
+            assertEquals(1, localities.asked.size)
+        }
+
+    @Test
+    fun aSavedStreetAddressIsNotLookedUpAndALateLookupStaysOnItsOwnPage() =
+        runTest {
+            val cache = MemoryPlaceCache()
+            val localities = Hottingen()
+            val online = controller(FakePlaceData(), cache, localities = localities)
+            val schoberAt = schober.copy(point = GeoPoint(47.3700, 8.5440))
+            online.open(schoberAt)
+            advanceUntilIdle()
+            assertEquals(1, localities.asked.size)
+            // Offline later: the saved card's street address shows from the start, with no lookup.
+            val offline = controller(FakePlaceData().apply { pinakesDown = true }, cache, localities = localities)
+            offline.open(schoberAt)
+            advanceUntilIdle()
+            assertEquals(1, localities.asked.size)
+            assertNull(offline.state.value!!.locality)
+            assertNotNull(offline.state.value!!.address)
+
+            // A lookup still running when another place opens does not name the other place.
+            val held = HeldDispatcher()
+            val pages = controller(FakePlaceData().apply { pinakesDown = true }, localities = localities, io = held)
+            pages.open(tapped)
+            runCurrent()
+            assertEquals(1, held.waiting)
+            pages.open(tapped.copy(uri = "other", point = null))
+            held.runAll()
+            advanceUntilIdle()
+            assertEquals(
+                "other",
+                pages.state.value!!
+                    .place.uri,
+            )
+            assertNull(pages.state.value!!.locality)
+        }
+
+    @Test
     fun aFailingLookupLeavesThePageWithoutALocality() =
         runTest {
-            val pages = controller(FakePlaceData(), localities = { _, _ -> error("disk") })
+            val pages = controller(FakePlaceData(), localities = { _, _, _ -> error("disk") })
             pages.open(tapped)
             advanceUntilIdle()
             assertNull(pages.state.value!!.locality)

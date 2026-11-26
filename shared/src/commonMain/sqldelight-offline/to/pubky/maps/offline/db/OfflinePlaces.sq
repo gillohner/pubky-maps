@@ -11,7 +11,7 @@ CREATE TABLE place (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     area TEXT NOT NULL,
     name TEXT NOT NULL,
-    -- node, way or relation; null for a place the tiles give no OpenStreetMap element for (streets)
+    -- Node, Way or Relation (OsmType's names); null for a place the tiles give no OpenStreetMap element for (streets)
     osm_type TEXT,
     osm_id INTEGER,
     tag_key TEXT NOT NULL,
@@ -27,11 +27,11 @@ CREATE INDEX place_area ON place(area);
 
 -- For a place page: the place by its OpenStreetMap element, the places near a point, the labels
 -- around it (Localities).
-CREATE INDEX place_osm ON place(osm_id, osm_type);
+CREATE INDEX place_osm ON place(osm_id, osm_type) WHERE osm_id IS NOT NULL;
 
-CREATE INDEX place_lat ON place(lat);
+CREATE INDEX place_point ON place(lat, lon);
 
-CREATE INDEX place_label ON place(tag_key, lat);
+CREATE INDEX place_label ON place(lat, lon) WHERE tag_key = 'place';
 
 -- Each word of a place's name and category, as search compares them (normalizeForMatch), so a
 -- typed word finds the places with a word that starts with it through the index.
