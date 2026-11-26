@@ -169,7 +169,7 @@ Every CI run also uploads the debug APK as an artifact (`pubky-maps-debug-apk`).
 [GitHub releases](https://github.com/gillohner/pubky-maps/releases) (`.github/workflows/release.yml`):
 
 - `edge`: a pre-release that every push to `main` replaces with a build of `main`'s head (versionName
-  `<x.y.z>-edge.<run>`), so it is never older than `main` when pushes come close together;
+  `<x.y.z>-edge.<run>`), so pushes that come close together do not leave it on an older commit;
 - `v<x.y.z>`: a release, made by pushing that tag; the tag must match `pubkymaps.version` in
   `gradle.properties`;
 - `dev`: a pre-release from a manual run of the workflow on any branch, to try release changes. It is

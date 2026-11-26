@@ -11,8 +11,9 @@ publishes main's head.
 
 The run keeps its own commit when main's head is that commit, when the head is not a descendant of
 it (main was rewritten), or when release.yml differs between the two (this run's steps are the older
-release.yml, which might not build the newer commit; the warning says edge stays behind until a run of
-main's head publishes). When GitHub cannot be asked, it keeps its own commit and warns.
+release.yml, which might not build the newer commit). When GitHub cannot be asked, it keeps its own
+commit and warns. publish.sh then publishes such a build only when its commit comes after the one
+edge has, so edge never goes back; it can stay behind main until the next push to main.
 
 Usage: edge-commit.py <owner/repo> <this run's commit>   (GH_TOKEN for `gh api`)
 Prints `sha=<commit>` for $GITHUB_OUTPUT; notices and warnings go to stderr.
@@ -34,7 +35,7 @@ def choose(run_sha: str, head_sha: str, status: str, run_workflow: str, head_wor
                          f"building {run_sha[:7]}")
     if run_workflow != head_workflow:
         return run_sha, (f"warning::main moved on to {head_sha[:7]} with another {WORKFLOW}; building "
-                         f"{run_sha[:7]}, so edge stays behind main until a run of {head_sha[:7]} publishes")
+                         f"{run_sha[:7]}; edge can stay behind main until the next push to main")
     return head_sha, f"notice::main moved on to {head_sha[:7]} since this run of {run_sha[:7]} was queued; building {head_sha[:7]}"
 
 
@@ -53,7 +54,8 @@ def main() -> None:
         run_workflow = gh(f"repos/{repo}/contents/{WORKFLOW}?ref={run_sha}", ".sha")
         head_workflow = gh(f"repos/{repo}/contents/{WORKFLOW}?ref={head_sha}", ".sha")
     except (subprocess.SubprocessError, OSError, ValueError) as e:
-        print(f"::warning::could not ask GitHub for main's head ({e}); building {run_sha[:7]}", file=sys.stderr)
+        why = (getattr(e, "stderr", None) or str(e)).strip().splitlines()[-1:] or [type(e).__name__]
+        print(f"::warning::could not ask GitHub for main's head ({why[0]}); building {run_sha[:7]}", file=sys.stderr)
         print(f"sha={run_sha}")
         return
     sha, why = choose(run_sha, head_sha, status, run_workflow, head_workflow)
