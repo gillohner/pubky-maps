@@ -186,6 +186,10 @@ cp "$log" "$out/update.jsonl"
 open_offline_maps
 wait_ready offline-updated 60 || fail "the updated offline map is not Ready"
 check_alive "offline map updated"
+# The check walks each style for 10 s and marks it until its walk ends; the row says Ready during a
+# walk. Stopping the app before both walks end leaves the area "Update paused" at the next start
+# until its first check walks it again, so the steps below would not see it Ready at once.
+sleep 25
 
 # Without the server the area still draws, in both themes.
 kill "$server"
