@@ -6,6 +6,9 @@ inputs:
   cache-key:
     description: Name of the cargo cache (jobs that build the same things share one)
     required: true
+  save:
+    description: Whether this job saves the cargo cache ('false' to only read it; one job saves each)
+    default: "true"
 runs:
   using: composite
   steps:
@@ -17,6 +20,7 @@ runs:
       with:
         shared-key: ${{ inputs.cache-key }}
         cache-bin: true
+        save-if: ${{ inputs.save }}
     - name: cargo-ndk and the NDK
       shell: bash
       run: |

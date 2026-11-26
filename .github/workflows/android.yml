@@ -1,6 +1,6 @@
 name: android
 # One build job checks the app (unit tests, Android lint, ktlint, Roborazzi screenshots, the release
-# tools' self-checks, one Gradle and cargo cache per job) and builds the debug APK, with the Rust core built by Gradle (bindings from a
+# and CI tools' self-checks) and builds the debug APK, with the Rust core built by Gradle (bindings from a
 # host build, jniLibs with cargo-ndk). The emulator job installs that APK, starts the app, waits for
 # the map to draw, opens Settings and each settings page, checks that a setting survives a restart,
 # goes back, fails on a crash, then runs the sign-in probe (scripts/ci/sign-in-probe.py): Settings >
@@ -53,10 +53,11 @@ jobs:
       - uses: ./.github/actions/rust-android
         with:
           cache-key: android-app
-      # Each job has its own Gradle cache: a key is saved once, by the first job to finish, and this
-      # job resolves more (ktlint, lint, test libraries) than the release builds. Robolectric
-      # downloads its Android jars into ~/.m2 at test time. Both otherwise come from Maven Central on
-      # every run, which answers GitHub's runners with 429 (scripts/ci/cache-keys-check.py).
+      # Only this job saves the Gradle cache; the release builds read it. A key is saved once, by the
+      # first job to finish, and this job resolves more (ktlint, lint, test libraries) than they do.
+      # Robolectric downloads its Android jars into ~/.m2 at test time. Both otherwise come from
+      # Maven Central on every run, which answers GitHub's runners with 429
+      # (scripts/ci/cache-keys-check.py).
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -338,18 +339,20 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+      # The build job's cargo and Gradle caches, read only: that job resolves and builds what this one
+      # needs and more, and only one job saves each cache.
       - uses: ./.github/actions/rust-android
         with:
-          cache-key: android-update-apks
-      # Its own Gradle cache, as the build job's.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+          cache-key: android-app
+          save: false
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.gradle/caches/modules-2
             ~/.gradle/wrapper/dists
-          key: gradle-android-update-apks-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', '**/*.gradle.kts') }}
+          key: gradle-android-build-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', '**/*.gradle.kts') }}
           restore-keys: |
-            gradle-android-update-apks-
+            gradle-android-build-
             gradle-
       # N and N+1, each signed with a release key made for this run only; the feed key is throwaway
       # too. Gradle never sees either key.
