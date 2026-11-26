@@ -15,12 +15,13 @@ that the block works, then:
   homeserver") while the map stays usable;
 - Settings and the Account page show the cached name, tags and saved place;
 - (`synonym` case) a place saved now waits in the outbox, which keeps a JobScheduler job; with the
-  app's process killed, Android starts it again for that job (OutboxJobService), as it does when a
-  phone with the app closed gets a network.
+  app closed (off screen, its process killed) Android runs the job again and starts the app's
+  process for it (OutboxJobService), as it does for a closed app whose job is due.
 
 Usage: synonym-blocked.py <apk> <session fixture json> <synonym|openfreemap> <out dir>
 """
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -38,6 +39,10 @@ SAVED = "https://www.openstreetmap.org/way/48210334"
 WAITING_PLACE = "geo:47.3769,8.5417?q=Waiting%20write"
 # As dumpsys and ActivityManager name it (in full or short form).
 JOB_SERVICE = "OutboxJobService"
+# `dumpsys jobscheduler <pkg>`: a registered job ("JOB #u0a190/1: 3f2a1b to.pubky.maps/.android.OutboxJobService"),
+# and a start of it in the job history ("START: #u0a190/1 to.pubky.maps/.android.OutboxJobService").
+REGISTERED = re.compile(r"^\s*JOB #u\d+a\d+/1: \S+ \S*OutboxJobService", re.M)
+STARTED = re.compile(r"START: #u\d+a\d+/1 \S*OutboxJobService")
 BANNER = "Can't reach your homeserver"
 
 
@@ -143,12 +148,12 @@ def outbox_wakes_the_closed_app(dev):
     dev.screenshot("saved-waiting")
     deadline = time.time() + 30
     jobs = ""
-    while time.time() < deadline and JOB_SERVICE not in jobs:
+    while time.time() < deadline and not REGISTERED.search(jobs):
         time.sleep(2)
         jobs = dev.shell(f"dumpsys jobscheduler {PKG}", timeout=60)
     (dev.out / "jobs.txt").write_text(jobs)
-    if JOB_SERVICE not in jobs:
-        dev.fail("a write waits for the homeserver but no outbox job is scheduled (jobs.txt)")
+    if not REGISTERED.search(jobs):
+        dev.fail("a write waits for the homeserver but no outbox job is registered (jobs.txt)")
     log("the waiting write keeps an outbox job")
 
     # Closed: off the screen, then the process killed (as Android does to a background app).
@@ -157,9 +162,11 @@ def outbox_wakes_the_closed_app(dev):
     before = app_pid(dev)
     if not before:
         dev.fail("the app's process is not running before it is killed")
+    starts_before = len(STARTED.findall(dev.shell(f"dumpsys jobscheduler {PKG}", timeout=60)))
     dev.shell(f"run-as {PKG} kill {before}")
-    # A killed run of the job is run again after its backoff (30 s); a job that had not run yet runs now.
-    deadline = time.time() + 150
+    # A killed run of the job is run again after its backoff (30 s, doubling); a job that had not run
+    # yet, or whose run had ended, runs when its backoff is over.
+    deadline = time.time() + 240
     after = ""
     while time.time() < deadline:
         after = app_pid(dev)
@@ -179,7 +186,9 @@ def outbox_wakes_the_closed_app(dev):
     log(f"killed with a write waiting, the app was started again (pid {before} -> {after}) for its outbox job")
     jobs = dev.shell(f"dumpsys jobscheduler {PKG}", timeout=60)
     (dev.out / "jobs-after.txt").write_text(jobs)
-    if JOB_SERVICE not in jobs:
+    if len(STARTED.findall(jobs)) <= starts_before:
+        dev.fail(f"no new run of the outbox job after the kill ({starts_before} before; jobs-after.txt)")
+    if not REGISTERED.search(jobs):
         dev.fail("the outbox job is gone while the write still waits (jobs-after.txt)")
     dev.start_app()
     if dev.wait_for("Show my location", 60) is None:
