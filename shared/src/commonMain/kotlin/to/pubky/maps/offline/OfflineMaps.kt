@@ -270,7 +270,7 @@ class OfflineMaps(
                         if (stateOf(handle) != PackState.Complete) return@launch
                     }
                 } finally {
-                    walking -= handles.toSet()
+                    walking.removeAll(handles.toSet())
                     checking.value -= area
                     updating.value -= area
                     if (runs[area] === coroutineContext.job) runs.remove(area)
