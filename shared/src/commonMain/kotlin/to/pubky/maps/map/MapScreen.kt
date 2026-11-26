@@ -238,7 +238,7 @@ fun MapScreen(
                         BottomControls(attribution, onMyLocation, snackbarHostState)
                     }
                 },
-            ) { onFirstRowEnd ->
+            ) { list, onFirstRowEnd ->
                 SearchList(
                     search.state,
                     search.recents,
@@ -247,6 +247,7 @@ fun MapScreen(
                     contentPadding = PaddingValues(bottom = 8.dp),
                     credits = search.credits,
                     onFirstRowEnd = onFirstRowEnd,
+                    listState = list,
                 )
             }
         }
