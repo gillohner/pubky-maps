@@ -114,6 +114,12 @@ class AccountController(
     private var retries = 0
 
     /**
+     * A retry was asked for while a restore or refresh ran (and so was not started): if that one
+     * fails, it was likely made before the network worked, and one more attempt follows at once.
+     */
+    private var retryAsked = false
+
+    /**
      * Counts session changes (signed in, restored, signing out, signed out). A restore, refresh or
      * revoke result is applied only while the session it was made for is still the current one.
      */
@@ -231,6 +237,10 @@ class AccountController(
 
     /** Tries an unreachable homeserver again now, and the waits between retries start over. */
     private fun retryNow() {
+        if (restoreJob?.isActive == true || refreshJob?.isActive == true) {
+            retryAsked = true
+            return
+        }
         if (!health.missing.value.contains(ServicePart.Homeserver)) return
         retries = 0
         retryJob?.cancel()
@@ -545,6 +555,7 @@ class AccountController(
         if (state.value !is AccountState.SignedIn && state.value != AccountState.Loading) return
         sessionInstalled = true
         retries = 0
+        retryAsked = false
         io { cache.begin(restoredSession.publicKey) }
         val cached = io { cache.read() } ?: CachedAccount(restoredSession.publicKey, null, null, emptyList(), emptyList())
         mutableState.value = AccountState.SignedIn(AccountUser(cached.publicKey, cached.name), cached, Connection.Online)
@@ -552,7 +563,10 @@ class AccountController(
         refreshData()
     }
 
-    /** The homeserver did not answer: show what is cached and try again later (in the foreground). */
+    /**
+     * The homeserver did not answer: show what is cached and try again later, on a timer in the
+     * foreground, at once when a retry was asked for meanwhile, and when the network comes back.
+     */
     private fun offline() {
         val state = state.value
         when {
@@ -568,6 +582,18 @@ class AccountController(
             }
         }
         health.failed(ServicePart.Homeserver)
+        if (retryAsked) {
+            retryAsked = false
+            retries = 0
+            retryJob?.cancel()
+            retryJob = null
+            // The attempt that failed handed this here as its last step, and may not count as
+            // finished yet; it must not hold off the next one.
+            restoreJob = null
+            refreshJob = null
+            reconnect()
+            return
+        }
         if (!foreground) return
         val wait = retryDelays[minOf(retries, retryDelays.lastIndex)]
         retries++
@@ -613,6 +639,7 @@ class AccountController(
         if (signedIn.user.publicKey != loaded.publicKey) return
         io { cache.replace(loaded) }
         retries = 0
+        retryAsked = false
         health.recovered(ServicePart.Homeserver)
         mutableState.value =
             signedIn.copy(
@@ -625,6 +652,7 @@ class AccountController(
 
     private fun refreshDone() {
         val signedIn = state.value as? AccountState.SignedIn ?: return
+        retryAsked = false
         health.recovered(ServicePart.Homeserver)
         mutableState.value = signedIn.copy(connection = Connection.Online, refreshing = false)
     }
@@ -632,6 +660,7 @@ class AccountController(
     private suspend fun signedOut(notice: String?) {
         stopSessionJobs()
         session++
+        retryAsked = false
         core?.forgetSession()
         sessionInstalled = false
         // Before the steps that can fail: once signed out, no homeserver is missing.

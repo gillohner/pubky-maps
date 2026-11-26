@@ -367,6 +367,35 @@ class AccountControllerTest {
         }
 
     @Test
+    fun aRetryAskedForWhileAnAttemptRunsFollowsAtOnceWhenThatAttemptFails() =
+        runTest {
+            secrets.values[SecretStore.SESSION] = "grant-secret"
+            cache.stored = CachedAccount(USER, null, null, emptyList(), emptyList())
+            val account = controller()
+            account.start()
+            runCurrent()
+            val gate = CompletableDeferred<Unit>()
+            core.restore = {
+                gate.await()
+                throw CoreFailure.Network("made before the network worked")
+            }
+
+            // The network is the default (the attempt starts), then Android has validated it.
+            account.onNetworkAvailable()
+            runCurrent()
+            account.onNetworkAvailable()
+            runCurrent()
+            assertEquals(2, core.restored.size, "one attempt at a time")
+
+            core.restore = { AccountSession(USER, "homeserver") }
+            gate.complete(Unit)
+            runCurrent()
+
+            assertEquals(3, core.restored.size)
+            assertEquals(Connection.Online, assertIs<AccountState.SignedIn>(account.state.value).connection)
+        }
+
+    @Test
     fun aConnectionThatComesBackReadsTheDataAgainWhenTheSessionWasRestoredBeforeTheHomeserverWentAway() =
         runTest {
             secrets.values[SecretStore.SESSION] = "grant-secret"

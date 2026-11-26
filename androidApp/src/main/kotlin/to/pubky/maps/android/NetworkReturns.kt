@@ -16,25 +16,29 @@ import android.net.NetworkCapabilities
 internal class NetworkReturns(
     private val onBack: () -> Unit,
 ) : ConnectivityManager.NetworkCallback() {
-    // Android calls a callback on one thread, in order.
-    private var validated: Set<Network> = emptySet()
+    // The default network as last validated. A default-network callback hears only about the
+    // current default (Android calls it on one thread, in order), so a new default starts over.
+    private var validated: Network? = null
 
-    override fun onAvailable(network: Network) = onBack()
+    override fun onAvailable(network: Network) {
+        validated = null
+        onBack()
+    }
 
     override fun onCapabilitiesChanged(
         network: Network,
         networkCapabilities: NetworkCapabilities,
     ) {
         if (networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) {
-            if (network in validated) return
-            validated = validated + network
+            if (network == validated) return
+            validated = network
             onBack()
-        } else {
-            validated = validated - network
+        } else if (network == validated) {
+            validated = null
         }
     }
 
     override fun onLost(network: Network) {
-        validated = validated - network
+        if (network == validated) validated = null
     }
 }

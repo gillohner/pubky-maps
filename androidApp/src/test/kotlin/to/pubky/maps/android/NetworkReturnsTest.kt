@@ -71,4 +71,16 @@ class NetworkReturnsTest {
         returns.onCapabilitiesChanged(mobile, capabilities(validated = true))
         assertEquals(3, calls)
     }
+
+    @Test
+    fun aNetworkThatIsTheDefaultAgainSendsWhenItIsValidatedAgain() {
+        // Wi-Fi validated, then mobile data is the default; Wi-Fi may lose its internet meanwhile
+        // without this callback hearing of it, and is checked again when it is the default again.
+        returns.onCapabilitiesChanged(wifi, capabilities(validated = true))
+        returns.onAvailable(mobile)
+        returns.onCapabilitiesChanged(mobile, capabilities(validated = true))
+        returns.onAvailable(wifi)
+        returns.onCapabilitiesChanged(wifi, capabilities(validated = true))
+        assertEquals(5, calls)
+    }
 }
