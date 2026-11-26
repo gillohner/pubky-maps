@@ -281,6 +281,33 @@ class ResultsSheetPeekTest {
     }
 
     @Test
+    fun aSheetLoweredByItsListShowsANewResultAboveTheShownOne() {
+        val search = mutableStateOf(state(listOf(aarau)))
+        show(fontScale = 1f, search)
+        // A slow drag down on the list (at its top) lowers the sheet as far as it goes, without a flick.
+        compose.onNode(hasScrollToIndexAction()).performTouchInput {
+            swipe(topCenter + Offset(0f, 8.dp.toPx()), topCenter + Offset(0f, 900.dp.toPx()), durationMillis = 3000)
+        }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Results list, peek").assertExists()
+        search.value = state(listOf(kunsthaus, aarau))
+        compose.waitForIdle()
+        assertWhole("Museum · Heimplatz 1, 8001 Zürich")
+        assertHidden("Museum · Aargauerplatz, 5000 Aarau")
+    }
+
+    @Test
+    fun aScrollAtTheLowestHeightStays() {
+        // TalkBack moves on to a later result by scrolling the list; at the lowest height that row stays shown.
+        show(fontScale = 1f, mutableStateOf(state(many)))
+        lower()
+        compose.onNode(hasScrollToIndexAction()).performScrollToIndex(3)
+        compose.waitForIdle()
+        assertWhole("Museum · Teststrasse 4, 8001 Zürich")
+        assertHidden("Museum · Teststrasse 1, 8001 Zürich")
+    }
+
+    @Test
     @Config(qualifiers = "w412dp-h340dp")
     fun onAShortScreenTheSheetHasNoLowestHeightOfItsOwn() {
         // In split screen at twice the font size the first result alone takes more than half the window:

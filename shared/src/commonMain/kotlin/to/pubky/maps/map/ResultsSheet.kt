@@ -82,8 +82,8 @@ private val PeekStep = HandleHeight
  * row reaches from its top (it grows with the font size and a long name or address), and the
  * sheet's lowest height follows it, never above half the screen. When that leaves it not even
  * [PeekStep] below half (a short window at a large font), the sheet has only half and full. At its
- * lowest height the list is at its start, so a sheet lowered from a scrolled list, or given a new
- * first result, shows that whole first row, not a part of a later one.
+ * lowest height the list is put back at its start, so a sheet lowered from a scrolled list, or given
+ * a new first result, shows that whole first row, not a part of a later one.
  */
 @Composable
 internal fun ResultsSheet(
@@ -113,13 +113,7 @@ internal fun ResultsSheet(
     // at half when that height is gone.
     SideEffect { state.updateAnchors(anchors, state.targetValue.takeIf(anchors::hasPositionFor) ?: SheetHeight.Half) }
     val list = rememberLazyListState()
-    // At the lowest height the list cannot scroll (a drag up raises the sheet first), so a list away
-    // from its start there was scrolled before the sheet came down, or kept a row it had shown above
-    // new results: back to the start, where the first row is measured and shown whole.
-    LaunchedEffect(state, list) {
-        val scrolled = { list.firstVisibleItemIndex != 0 || list.firstVisibleItemScrollOffset != 0 }
-        snapshotFlow { state.settledValue == SheetHeight.Peek && scrolled() }.collect { away -> if (away) list.scrollToItem(0) }
-    }
+    LaunchedEffect(state, list) { keepListStartAtPeek(state, list) }
     val listDrag = remember(state, density) { ListDragsSheet(state, density) }
     val scope = rememberCoroutineScope()
     val step: () -> Unit = {
@@ -185,6 +179,38 @@ internal fun ResultsSheet(
             if (aboveSheet != null && offset - aboveSheet.height >= topLimit) aboveSheet.place(0, offset - aboveSheet.height)
             sheet.place(0, offset)
         }
+    }
+}
+
+/**
+ * Puts [list] back at its start when the sheet comes down to its lowest height with the list scrolled
+ * (it was scrolled at a higher one), and when, at the lowest height, new rows came in above the row it
+ * showed, which the list keeps in view: there the first row is measured and shown whole. A scroll at
+ * that height that shows other rows (TalkBack moving on to the next result) stays.
+ */
+private suspend fun keepListStartAtPeek(
+    state: AnchoredDraggableState<SheetHeight>,
+    list: LazyListState,
+) {
+    var wasAtPeek = false
+    var shownIndex = 0
+    var shownKey: Any? = null
+    // By position, not `settledValue`: a sheet lowered by dragging its list stops at the lowest height
+    // without an animation, so it is there without having settled.
+    val shown =
+        snapshotFlow {
+            val peek = state.anchors.positionOf(SheetHeight.Peek)
+            // NaN (never near) while there is no lowest height or no offset yet.
+            val atPeek = abs(state.offset - peek) < 1f
+            Triple(atPeek, list.firstVisibleItemIndex, list.layoutInfo.visibleItemsInfo.firstOrNull()?.key)
+        }
+    shown.collect { (atPeek, index, key) ->
+        val scrolled = index != 0 || list.firstVisibleItemScrollOffset != 0
+        val pushedDown = key != null && key == shownKey && index > shownIndex
+        if (atPeek && scrolled && (!wasAtPeek || pushedDown)) list.requestScrollToItem(0)
+        wasAtPeek = atPeek
+        shownIndex = index
+        shownKey = key
     }
 }
 
