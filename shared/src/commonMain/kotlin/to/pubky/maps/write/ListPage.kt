@@ -2,6 +2,8 @@ package to.pubky.maps.write
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -54,6 +56,7 @@ data class ListPageState(
  * Add a place to one of the user's lists, or take it out (each tick is sent at once), or make a new
  * list with the place in it. Where each list is kept is shown beside it; a full list says so.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ListPage(
     state: ListPageState,
@@ -114,12 +117,19 @@ fun ListPage(
                     }
                 }
             }
-            Button(
-                onClick = onCreate,
-                enabled = state.newName.isNotBlank() && state.newName.length <= LIST_NAME_MAX,
-            ) { Text("Create list with this place") }
-            // Where the list goes, once more beside the button that sends it.
-            KeptBadge(state.newKept)
+            // Where the list goes, once more beside the button that sends it (under it when large text
+            // leaves no room beside it).
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
+                Button(
+                    onClick = onCreate,
+                    enabled = state.newName.isNotBlank() && state.newName.length <= LIST_NAME_MAX,
+                ) { Text("Create list with this place") }
+                KeptBadge(state.newKept)
+            }
         }
         Text(
             "A list holds up to ${OwnList.MAX_LIST_ITEMS} places. Each tick is sent at once.",
