@@ -5,11 +5,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -114,7 +116,7 @@ class OfflineMaps(
     private val halted = mutableSetOf<Any>()
 
     /** The download or check that runs for an area: its packs one after the other. */
-    private val runs = mutableMapOf<String, Job>()
+    private val runs = MutableStateFlow<Map<String, Job>>(emptyMap())
 
     /**
      * Packs a check resumed less than [QUIET_CHECK] ago. They were complete before, so until then a
@@ -133,6 +135,13 @@ class OfflineMaps(
 
     /** Read on MapLibre's threads for every request: a plain read of the packs downloading or being checked. */
     val downloading: Boolean get() = started.value.isNotEmpty()
+
+    /**
+     * Whether MapLibre may be writing tiles: a pack downloads ([downloading]) or a download or check
+     * runs, also between its styles and during a check's walk that leaves the area Ready.
+     */
+    val fetchingChanges: Flow<Boolean> =
+        combine(started, runs) { packs, areas -> packs.isNotEmpty() || areas.isNotEmpty() }.distinctUntilChanged()
 
     private val _picking = MutableStateFlow(false)
 
@@ -251,7 +260,7 @@ class OfflineMaps(
     fun pause(id: String) {
         _problem.value = null
         held += id
-        runs.remove(id)?.cancel()
+        endRun(id)
         packs.filter { it.areaId == id && it.handle in started.value }.forEach { stop(it.handle) }
     }
 
@@ -273,7 +282,7 @@ class OfflineMaps(
      */
     internal fun checkForUpdates() {
         val wifi = unmetered()
-        areas(packs).filter { it.id !in runs && it.id !in held }.forEach { map ->
+        areas(packs).filter { it.id !in runs.value && it.id !in held }.forEach { map ->
             val area = packs.filter { it.areaId == map.id }
             val handles =
                 when {
@@ -310,7 +319,7 @@ class OfflineMaps(
         check: Boolean = false,
         probe: Boolean = false,
     ) {
-        runs.remove(area)?.cancel()
+        endRun(area)
         // Started once it is in [runs], so a run that ends at once also leaves it.
         val job =
             scope.launch(start = CoroutineStart.LAZY) {
@@ -364,11 +373,17 @@ class OfflineMaps(
                     walking.removeAll(handles.toSet())
                     checking.value -= area
                     updating.value -= area
-                    if (runs[area] === coroutineContext.job) runs.remove(area)
+                    if (runs.value[area] === coroutineContext.job) runs.value -= area
                 }
             }
-        runs[area] = job
+        runs.value += area to job
         job.start()
+    }
+
+    private fun endRun(area: String) {
+        val run = runs.value[area]
+        runs.value -= area
+        run?.cancel()
     }
 
     /**
@@ -402,7 +417,7 @@ class OfflineMaps(
     private fun stateOf(handle: Any): PackState? = packs.firstOrNull { it.handle === handle }?.progress?.state
 
     fun delete(id: String) {
-        runs.remove(id)?.cancel()
+        endRun(id)
         val listed = packs.filter { it.areaId == id }.map { it.handle }
         val area = listed + createdFor.remove(id).orEmpty().filter { handle -> listed.none { it === handle } }
         deleted += id

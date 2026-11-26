@@ -65,6 +65,7 @@ class OfflinePlaceIndexerTest {
     }
 
     private val maps = MutableStateFlow<OfflineMapsState>(OfflineMapsState.Loading)
+    private val fetching = MutableStateFlow(false)
     private val store = FakeStore()
     private val tiles = FakeTiles()
 
@@ -76,7 +77,7 @@ class OfflinePlaceIndexerTest {
 
     private fun TestScope.start() {
         val dispatcher = StandardTestDispatcher(testScheduler)
-        OfflinePlaceIndexer(maps, store, tiles, backgroundScope, io = dispatcher).start()
+        OfflinePlaceIndexer(maps, fetching, store, tiles, backgroundScope, io = dispatcher).start()
         runCurrent()
     }
 
@@ -110,6 +111,21 @@ class OfflinePlaceIndexerTest {
             runCurrent()
             assertEquals(0, tiles.opened)
             maps.value = OfflineMapsState.Ready(listOf(map("a", OfflineMapStatus.Ready), map("b", OfflineMapStatus.Paused(10))))
+            runCurrent()
+            assertEquals(setOf("a"), store.stored.keys)
+        }
+
+    @Test
+    fun noAreaIsReadWhileACheckFetchesTilesAndItsAreaStaysReady() =
+        runTest {
+            tiles.areas["a"] = listOf("Café Rosa")
+            fetching.value = true
+            start()
+            maps.value = OfflineMapsState.Ready(listOf(map("a", OfflineMapStatus.Ready)))
+            runCurrent()
+            assertEquals(0, tiles.opened)
+            // The walk's end alone, with the list as it was, starts the read.
+            fetching.value = false
             runCurrent()
             assertEquals(setOf("a"), store.stored.keys)
         }

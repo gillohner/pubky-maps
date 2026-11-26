@@ -60,7 +60,7 @@ fun startOfflinePlaceIndexer(
             openCopy = { AndroidSqliteDriver(MapLibreLayout, context, it.path) },
         )
     scope.launch(Dispatchers.IO) { tiles.deleteCopy() }
-    OfflinePlaceIndexer(maps.state, index, tiles, scope).start()
+    OfflinePlaceIndexer(maps.state, maps.fetchingChanges, index, tiles, scope).start()
 }
 
 /**

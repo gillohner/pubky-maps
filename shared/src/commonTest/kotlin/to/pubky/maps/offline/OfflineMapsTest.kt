@@ -2,6 +2,7 @@ package to.pubky.maps.offline
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -189,6 +190,8 @@ class OfflineMapsTest {
     fun aReadyAreaIsWalkedAgainAndStaysReadyWhenNothingChanged() =
         runTest(UnconfinedTestDispatcher()) {
             val (store, offline) = readyArea()
+            val fetching = ArrayList<Boolean>()
+            backgroundScope.launch { offline.fetchingChanges.collect { fetching += it } }
             advanceTimeBy(FIRST_CHECK)
             runCurrent()
             assertEquals(listOf(light), store.resumed)
@@ -209,6 +212,8 @@ class OfflineMapsTest {
             runCurrent()
             assertFalse(offline.downloading)
             assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
+            // MapLibre may write tiles for the whole check, also between its two walks.
+            assertEquals(listOf(false, true, false), fetching)
 
             assertEquals(emptyList(), store.updating())
             assertEquals(0, offline.maps().single().newDataAt)

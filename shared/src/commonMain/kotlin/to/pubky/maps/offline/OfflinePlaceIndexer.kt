@@ -6,6 +6,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -49,13 +50,16 @@ interface OfflinePlaceStore {
  * Keeps [store] in step with the offline maps ([maps]): the places of an area are read from its
  * tiles once it is Ready, read again once it is Ready with other map data than they were read from
  * ([OfflineMap.newDataAt], kept with them, so an update that finished while the app was closed or
- * during a read is not missed), and deleted with the area. Tiles are read only while no area
- * downloads (MapLibre writes them then). A read is tried again after [retry]: up to [MAX_TRIES]
+ * during a read is not missed), and deleted with the area. A read starts only while no area shows
+ * as downloading and no download or check runs ([fetching], also a check's walk that leaves its
+ * area Ready), as MapLibre writes the tiles then; a write that starts during the read makes [tiles]
+ * report them busy. A read is tried again after [retry]: up to [MAX_TRIES]
  * times per area and process when the tiles fail (no pack of the area, an unknown layout), up to
  * [MAX_BUSY_TRIES] times per process when they are busy (each try copies MapLibre's database).
  */
 class OfflinePlaceIndexer(
     private val maps: StateFlow<OfflineMapsState>,
+    private val fetching: Flow<Boolean>,
     private val store: OfflinePlaceStore,
     private val tiles: AreaTiles,
     private val scope: CoroutineScope,
@@ -80,13 +84,16 @@ class OfflinePlaceIndexer(
                     .filterIsInstance<OfflineMapsState.Ready>()
                     .map { it.maps }
                     .distinctUntilChanged()
-            combine(lists, tries) { list, _ -> list }
+            combine(lists, fetching, tries) { list, writing, _ -> list to writing }
                 .conflate()
-                .collect { sync(it) }
+                .collect { (list, writing) -> sync(list, writing) }
         }
     }
 
-    private suspend fun sync(maps: List<OfflineMap>) {
+    private suspend fun sync(
+        maps: List<OfflineMap>,
+        writing: Boolean,
+    ) {
         val stored =
             try {
                 store.areas()
@@ -97,7 +104,7 @@ class OfflinePlaceIndexer(
             }
         val listed = maps.map { it.id }.toSet()
         (stored.keys - listed).forEach { area -> runCatching { store.delete(area) } }
-        if (maps.any { it.status is OfflineMapStatus.Downloading }) return
+        if (writing || maps.any { it.status is OfflineMapStatus.Downloading }) return
         // Each with the map data it has now: an update that ends during the read changes it again.
         val wanted =
             maps
