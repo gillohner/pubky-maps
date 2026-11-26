@@ -170,11 +170,13 @@ class OfflineMaps(
 
     /**
      * Downloads [bounds] in each style of [styleUrls] (the first is the one on screen) and closes the
-     * picker. [bounds] must fit in one download ([fitsInOneDownload]).
+     * picker. [bounds] must fit in one download ([fitsInOneDownload]). The area is named after
+     * [place] (the town the map labels in it), else after its centre.
      */
     fun download(
         bounds: AreaBounds,
         styleUrls: List<String>,
+        place: String? = null,
     ) {
         require(fitsInOneDownload(bounds)) { "The area is larger than one download" }
         _picking.value = false
@@ -182,7 +184,7 @@ class OfflineMaps(
         val metadata =
             PackMetadata(
                 area = newId(),
-                name = areaName(bounds),
+                name = place ?: areaName(bounds),
                 createdAt = clock.now().toEpochMilliseconds(),
                 west = bounds.west,
                 south = bounds.south,
@@ -523,7 +525,7 @@ internal fun areas(
             )
         }.sortedByDescending { it.createdAt }
 
-/** "Map around 47.38° N, 8.54° E": the offline map is named after the centre of its area. */
+/** "Map around 47.38° N, 8.54° E": the name of an offline map whose area has no town the map labels. */
 internal fun areaName(bounds: AreaBounds): String {
     fun degrees(value: Double): String {
         val hundredths = (abs(value) * 100).roundToInt()
