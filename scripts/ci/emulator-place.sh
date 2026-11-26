@@ -22,6 +22,31 @@ log="$out/requests.jsonl"
 # shellcheck source=scripts/ci/emulator-lib.sh
 source "$here/emulator-lib.sh"
 
+# Waits up to $2 seconds for a node whose text starts with $1 (the kind line carries the distance
+# once location is granted: "Café · 790 m"); prints its centre.
+wait_for_start() {
+    local deadline=$((SECONDS + $2)) dump
+    while ((SECONDS < deadline)); do
+        dump=$(dump_ui "wait")
+        handle_anr_dialog "$dump" >&2
+        if python3 -I - "$dump" "$1" <<'PY'; then return 0; fi
+import re, sys, xml.etree.ElementTree as ET
+try:
+    root = ET.parse(sys.argv[1]).getroot()
+except ET.ParseError:
+    sys.exit(1)
+for node in root.iter("node"):
+    if (node.get("text") or "").startswith(sys.argv[2]):
+        x1, y1, x2, y2 = map(int, re.findall(r"\d+", node.get("bounds")))
+        print((x1 + x2) // 2, (y1 + y2) // 2)
+        sys.exit(0)
+sys.exit(1)
+PY
+        sleep 2
+    done
+    return 1
+}
+
 python3 -I "$here/place_fixture_server.py" "$port" "$root/shared/src/commonTest/fixtures/place" "$log" &
 server=$!
 trap 'kill $server 2> /dev/null || true' EXIT
@@ -45,10 +70,6 @@ adb shell chmod 644 /data/local/tmp/pubky-maps-settings.json
 adb shell run-as "$pkg" mkdir -p files/datastore
 adb shell run-as "$pkg" cp /data/local/tmp/pubky-maps-settings.json files/datastore/settings.json
 adb shell run-as "$pkg" rm -f no_backup/place-cache.db no_backup/place-cache.db-journal
-# Directions start from the user's position: the permission is granted up front (the dialog is the
-# my-location button's, tested in the smoke test) and the GPS is put at Zürich HB below.
-adb shell pm grant "$pkg" android.permission.ACCESS_FINE_LOCATION
-adb shell pm grant "$pkg" android.permission.ACCESS_COARSE_LOCATION
 # The map opens at the whole world, not where an earlier test left it.
 adb shell run-as "$pkg" rm -f no_backup/map-view.json
 # A log buffer large enough to keep StrictMode's reports from the start until the end.
@@ -56,22 +77,31 @@ adb logcat -G 16M || true
 adb logcat -c || true
 adb logcat -b crash -c || true
 
+# The emulator's GPS at Zürich HB, sent again every 2 s: Android hands a fix only to listeners
+# already registered.
+( for _ in $(seq 1 90); do adb emu geo fix 8.5403 47.3779 > /dev/null 2>&1 || true; sleep 2; done ) &
+gps=$!
+# The tests after this one start without location access, as a fresh install does.
+revoke_location() {
+    adb shell pm revoke "$pkg" android.permission.ACCESS_FINE_LOCATION > /dev/null 2>&1 || true
+    adb shell pm revoke "$pkg" android.permission.ACCESS_COARSE_LOCATION > /dev/null 2>&1 || true
+}
+trap 'kill $server $gps 2> /dev/null || true; revoke_location' EXIT
+# Directions start from the user's position: the permission is granted up front (the dialog is the
+# my-location button's, tested in the smoke test) and the GPS is put at Zürich HB above.
+adb shell pm grant "$pkg" android.permission.ACCESS_FINE_LOCATION
+adb shell pm grant "$pkg" android.permission.ACCESS_COARSE_LOCATION
 started=$(adb shell am start -W -a android.intent.action.VIEW -d "'https://www.openstreetmap.org/node/270803095'" -p "$pkg" 2>&1) || true
 if grep -q "Error" <<< "$started"; then fail "the link did not reach the app: $started"; fi
 
 wait_for "Conditorei schober" 60 > /dev/null || fail "no place page for the Conditorei Schober"
-wait_for "Café" 15 > /dev/null || fail "the place page does not say what the place is (the Pinakes card)"
+wait_for_start "Café" 15 > /dev/null || fail "the place page does not say what the place is (the Pinakes card)"
 wait_for "Tags on Pubky" 20 > /dev/null || fail "no Pubky tags on the place page (Nexus)"
 wait_for "coffee" 5 > /dev/null || fail "the coffee tag is missing"
 sleep 3
 screenshot place-half
 check_alive "place page"
 
-# The emulator's GPS at Zürich HB, sent again every 2 s: Android hands a fix only to listeners
-# already registered.
-( for _ in $(seq 1 60); do adb emu geo fix 8.5403 47.3779 > /dev/null 2>&1 || true; sleep 2; done ) &
-gps=$!
-trap 'kill $server $gps 2> /dev/null || true' EXIT
 xy=$(wait_for "Directions" 10) || fail "no Directions on the place page"
 adb shell input tap $xy
 wait_for "5 min · 1.4 km" 40 > /dev/null || fail "no route time and length after Directions"
