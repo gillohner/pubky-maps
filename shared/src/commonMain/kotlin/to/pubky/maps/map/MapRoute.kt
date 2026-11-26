@@ -470,10 +470,16 @@ private fun rememberAreaPicker(
             if (bounds != null && shownFrame != null && !naming) {
                 naming = true
                 scope.launch {
-                    // The labels the map draws now, read before the picker closes.
-                    offline.download(bounds, styleUrls, place = mapState.placeNameIn(shownFrame))
-                    naming = false
-                    onDownloadStarted()
+                    try {
+                        // The labels the map draws now, read before the picker closes.
+                        val place = mapState.placeNameIn(shownFrame)
+                        // Back or Cancel while they were read: the pick is over, nothing downloads.
+                        if (!offline.picking.value) return@launch
+                        offline.download(bounds, styleUrls, place = place)
+                        onDownloadStarted()
+                    } finally {
+                        naming = false
+                    }
                 }
             }
         },
@@ -481,7 +487,10 @@ private fun rememberAreaPicker(
     )
 }
 
-/** The name of the most important town the map labels under [frame] ([areaPlaceName]); null without one. */
+/**
+ * The name of the most important town the map labels in [frame] ([areaPlaceName]), counting only
+ * places whose point is in the frame; null without one.
+ */
 private suspend fun MapState.placeNameIn(frame: DpRect): String? {
     val layers =
         style.layers
@@ -501,8 +510,10 @@ private suspend fun MapState.placeNameIn(frame: DpRect): String? {
     val centreX = (frame.left + frame.right) / 2
     val centreY = (frame.top + frame.bottom) / 2
     val labels =
-        features.map { feature ->
+        features.mapNotNull { feature ->
             val at = (feature.geometry as? Point)?.coordinates?.let { screenLocationFromPosition(it) }
+            // A label that only reaches into the frame is of a place outside the area.
+            if (at != null && (at.x < frame.left || at.x > frame.right || at.y < frame.top || at.y > frame.bottom)) return@mapNotNull null
             PlaceLabel(
                 properties = feature.properties.strings(),
                 distance = at?.let { hypot((it.x - centreX).value, (it.y - centreY).value).toDouble() } ?: Double.MAX_VALUE,

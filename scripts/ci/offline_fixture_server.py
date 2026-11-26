@@ -5,9 +5,9 @@ must check again at every load, as OpenFreeMap's does after an hour), whose tile
 current release of the map data: GET /release/<n> moves them, as a map server does with each release.
 Every tile is one water polygon over the whole tile, so a drawn map is the styles' water colour and a
 missing tile the background colour, and a grid of points labelled as the city "Fixture Town"
-(OpenMapTiles' place layer, drawn as dots in the water colour), for the name of a downloaded area. Each tile answers after a short wait, so parallel requests
-overlap; every request is logged as one JSON line (path, User-Agent, how many tile requests were
-open at once).
+(OpenMapTiles' place layer, drawn as dots in the water colour), for the name of a downloaded area.
+Each tile answers after a short wait, so parallel requests overlap; every request is logged as one
+JSON line (path, User-Agent, how many tile requests were open at once).
 
 Usage: offline_fixture_server.py <port> <request log>
 """

@@ -17,7 +17,7 @@ data class PlaceLabel(
 
 /**
  * The name of an offline area: the most important place the map labels in it ("Bern", "Lugano"), as
- * Google Maps and CoMaps name downloaded areas after their place. A city comes before a town, a town
+ * Google Maps names a downloaded area after its place. A city comes before a town, a town
  * before a village, a village before the parts of a town. Countries, regions and islands are left
  * out: one name for every area in them, or for none of the towns on them. Among places of one kind
  * the larger one wins (Shortbread's `population`, OpenMapTiles' `rank`), then the one nearest the

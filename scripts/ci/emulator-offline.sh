@@ -5,9 +5,9 @@
 # and the dark style until the list says Ready under the name of the town the map labels in it, with
 # the app's User-Agent, never more than 4 tile requests at once and no tile twice. Then the server
 # moves its tiles to a new release and the app, started far from the area, updates the area by
-# itself. With the server gone the area draws in
-# light and dark (the fixture's water colour, not the bare background), also after three theme
-# switches in one process (which count MainActivity's instances for StrictMode). Delete removes it.
+# itself. With the server gone the area draws in light and dark (the fixture's water colour, not the
+# bare background), also after three theme switches in one process (which count MainActivity's
+# instances for StrictMode). Delete removes it.
 # Usage: emulator-offline.sh <apk> <out dir>
 set -euo pipefail
 
