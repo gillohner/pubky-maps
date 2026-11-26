@@ -16,7 +16,9 @@ that the block works, then:
 - Settings and the Account page show the cached name, tags and saved place;
 - (`synonym` case) a place saved in airplane mode waits in the outbox, which keeps a JobScheduler
   job; with the app closed (off screen, its process killed) and the network back, Android starts the
-  app's process for that job (OutboxJobService).
+  app's process for that job (OutboxJobService). The homeserver stays unreachable, so that run cannot
+  send: with the app closed and killed again, Android runs the job again after its backoff and
+  starts the app once more.
 
 Usage: synonym-blocked.py <apk> <session fixture json> <synonym|openfreemap> <out dir>
 """
@@ -196,6 +198,7 @@ def outbox_wakes_the_closed_app(dev):
         time.sleep(3)
     jobs = dev.shell(f"dumpsys jobscheduler {PKG}", timeout=60)
     (dev.out / "jobs-after.txt").write_text(jobs)
+    (dev.out / "standby-bucket.txt").write_text(dev.shell(f"am get-standby-bucket {PKG}") + "\n")
     if not after:
         dev.fail("with the network back, the closed app was not started for its waiting write (jobs-after.txt)")
     # ActivityManager names why it started the process: "Start proc <pid>:<pkg>/... for service {<job
@@ -213,6 +216,60 @@ def outbox_wakes_the_closed_app(dev):
     if dev.wait_for("Show my location", 60) is None:
         dev.fail("the map screen did not appear after the outbox job ran")
     dev.check_alive("map after the outbox job")
+    outbox_retries_the_closed_app(dev)
+
+
+def outbox_retries_the_closed_app(dev):
+    """The homeserver stays unreachable: a run of the job killed with the app closed is run again after its backoff."""
+    # The run Android started when the network came back cannot send (every Synonym host is blocked),
+    # so it is still going (one minute) or has asked to be run again after its backoff.
+    dev.shell("input keyevent KEYCODE_HOME")
+    time.sleep(2)
+    before = app_pid(dev)
+    if not before:
+        dev.fail("the app's process is not running before it is killed again")
+    jobs = dev.shell(f"dumpsys jobscheduler {PKG}", timeout=60)
+    (dev.out / "jobs-retry-before.txt").write_text(jobs)
+    starts_before = len(STARTED.findall(jobs))
+    dev.shell(f"run-as {PKG} kill {before}")
+    deadline = time.time() + 20
+    while time.time() < deadline and app_pid(dev) == before:
+        time.sleep(1)
+    if app_pid(dev) == before:
+        dev.fail(f"the app's process {before} did not end")
+    log("the app is closed while its write still cannot be sent")
+    # Backoff 30 s, doubling per failed run: the second and third runs come within 2 minutes.
+    # The job's state is kept every 30 s, so a missed run can be read from the artifacts.
+    start = time.time()
+    after = ""
+    snapshot = 0
+    while time.time() < start + 300:
+        after = app_pid(dev)
+        if after and after != before:
+            break
+        if time.time() >= start + 30 * snapshot:
+            jobs = dev.shell(f"dumpsys jobscheduler {PKG}", timeout=60)
+            (dev.out / f"jobs-retry-{30 * snapshot:03d}s.txt").write_text(jobs)
+            snapshot += 1
+        time.sleep(3)
+    jobs = dev.shell(f"dumpsys jobscheduler {PKG}", timeout=60)
+    (dev.out / "jobs-retry-after.txt").write_text(jobs)
+    (dev.out / "standby-bucket.txt").write_text(dev.shell(f"am get-standby-bucket {PKG}") + "\n")
+    if not after or after == before:
+        dev.fail(f"the killed app was not started again for its waiting write (pid {before}; jobs-retry-*.txt)")
+    log_lines = dev.adb("logcat", "-d", "-b", "all", check=False, timeout=120).splitlines()
+    reasons = [line for line in log_lines
+               if JOB_SERVICE in line and (f"Start proc {after}:" in line or f",{after}," in line)]
+    (dev.out / "outbox-retry.txt").write_text("\n".join(reasons) + "\n")
+    if not reasons:
+        dev.fail(f"process {after} was not started for the outbox job (outbox-retry.txt, logcat.txt)")
+    if len(STARTED.findall(jobs)) <= starts_before:
+        dev.fail(f"no new run of the outbox job after the kill ({starts_before} before; jobs-retry-after.txt)")
+    if not REGISTERED.search(jobs):
+        dev.fail("the outbox job is gone while the write still waits (jobs-retry-after.txt)")
+    log(f"Android started the killed app again (pid {before} -> {after}) for its outbox job, "
+        f"{time.time() - start:.0f} s after the kill")
+
 
 if __name__ == "__main__":
     try:
