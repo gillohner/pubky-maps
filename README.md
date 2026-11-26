@@ -42,7 +42,8 @@ again when nothing changed. MapLibre keeps the offline maps and the map
 cache in one database in the no-backup folder. The map's Pubky places of each area (the places
 people referenced on Pubky) are fetched from Pinakes as soon as the area is in the list, at most
 10,000 per area, and fetched again once a day on a network Android does not count as metered; when
-Pinakes cannot be reached, the map shows them in the downloaded areas.
+Pinakes cannot be reached, the map shows them in the downloaded areas. These requests tell Pinakes
+which areas are downloaded (the area widened to a 1/16° grid), also while the user looks elsewhere.
 
 Settings:
 

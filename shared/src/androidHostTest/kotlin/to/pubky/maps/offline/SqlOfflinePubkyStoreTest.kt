@@ -50,6 +50,8 @@ class SqlOfflinePubkyStoreTest {
         assertEquals(emptyList(), reopened.placesIn(GeoBox(8.5, 47.32, 8.51, 47.33), limit = 10))
         // No kept area overlaps.
         assertNull(reopened.placesIn(GeoBox(7.4, 46.9, 7.5, 47.0), limit = 10))
+        // The next cell of the grid only touches the kept area: what the map shows stays.
+        assertNull(reopened.placesIn(GeoBox(8.5625, 47.3125, 8.625, 47.4375), limit = 10))
         again.close()
     }
 
@@ -63,6 +65,18 @@ class SqlOfflinePubkyStoreTest {
         store.delete("zh")
         assertEquals(emptyMap(), store.areas())
         assertNull(store.placesIn(zurich, limit = 10))
+        driver.close()
+    }
+
+    @Test
+    fun aPlaceOfTwoAreasIsShownAsTheAreaFetchedLastHasIt() {
+        val (driver, store) = open()
+        val centre = GeoBox(8.5, 47.3125, 8.625, 47.375)
+        store.replace("centre", centre, fetchedAt = 2_000, places = listOf(kunsthaus.copy(name = "Kunsthaus Zürich")))
+        store.replace("zh", zurich, fetchedAt = 1_000, places = listOf(kunsthaus))
+        assertEquals(listOf("Kunsthaus Zürich"), store.placesIn(zurich, limit = 10)?.map { it.name })
+        store.replace("zh", zurich, fetchedAt = 3_000, places = listOf(kunsthaus.copy(name = "Kunsthaus")))
+        assertEquals(listOf("Kunsthaus"), store.placesIn(zurich, limit = 10)?.map { it.name })
         driver.close()
     }
 

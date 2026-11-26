@@ -100,7 +100,7 @@ private class KeptArea(
         limit: Long,
     ): List<MapPlace>? {
         asked += box
-        val overlaps = area.west <= box.east && area.east >= box.west && area.south <= box.north && area.north >= box.south
+        val overlaps = area.west < box.east && area.east > box.west && area.south < box.north && area.north > box.south
         if (!overlaps) return null
         return places.filter { it.lat in box.south..box.north && it.lon in box.west..box.east }.take(limit.toInt())
     }

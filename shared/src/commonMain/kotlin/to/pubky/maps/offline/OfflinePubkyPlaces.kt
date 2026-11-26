@@ -59,10 +59,13 @@ interface OfflinePubkyStore : KeptPubkyPlaces {
  * connection: an area's places are fetched from Pinakes ([data]) once it is listed (downloading or
  * not: the map tiles do not need to be there), fetched again after [refresh] on a network Android does
  * not count as metered ([unmetered]), and deleted with the area. The box asked for is the area widened
- * to the layer's grid ([MapPlacesLayer.GRID_DEGREES]), so it says no more of where the user looks
- * than the layer's own requests. A fetch takes at most [MAX_PAGES] pages, one every [pageGap] (an
- * area of a city stays well within Pinakes' 120 requests a minute next to the layer and search).
- * When Pinakes cannot be reached the areas are tried again after [retry], with the places kept so far.
+ * to the layer's grid ([MapPlacesLayer.GRID_DEGREES]); unlike the layer's requests, which go out only
+ * while the user looks at a place, these tell Pinakes which areas are downloaded, once at the
+ * download and then once a day, whether or not the user looks there. A fetch takes at most
+ * [MAX_PAGES] pages; one request goes out every [requestGap] at most, also between areas, so
+ * many areas stay far below Pinakes' 120 requests a minute next to the layer and search (a 429 puts the
+ * server on hold for them too). An area that fails is tried again after [retry], after the others
+ * on later tries; a sync stops at its second failure (no connection fails every area alike).
  */
 class OfflinePubkyPlaces(
     private val maps: StateFlow<OfflineMapsState>,
@@ -74,10 +77,16 @@ class OfflinePubkyPlaces(
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val refresh: Duration = REFRESH,
     private val retry: Duration = RETRY,
-    private val pageGap: Duration = PAGE_GAP,
+    private val requestGap: Duration = REQUEST_GAP,
 ) {
     /** Counts the ticks of [retry], so the same list of areas is looked at again. */
     private val ticks = MutableStateFlow(0)
+
+    /** Areas whose last fetch in this process failed: they go after the others. */
+    private val failing = mutableSetOf<String>()
+
+    /** Requests of the running sync; each after the first waits [requestGap]. */
+    private var requests = 0
 
     fun start() {
         scope.launch {
@@ -102,26 +111,34 @@ class OfflinePubkyPlaces(
         val kept = onDisk { store.areas() } ?: return
         val listed = areas.map { it.first }.toSet()
         (kept.keys - listed).forEach { area -> onDisk { store.delete(area) } }
-        for ((area, bounds) in areas) {
+        failing.retainAll(listed)
+        requests = 0
+        var failures = 0
+        for ((area, bounds) in areas.sortedBy { it.first in failing }) {
             val now = clock.now().toEpochMilliseconds()
             val fetchedAt = kept[area]
             val due = fetchedAt == null || ((now - fetchedAt).milliseconds >= refresh && unmetered())
             if (!due) continue
             val box = GeoBox(bounds.west, bounds.south, bounds.east, bounds.north).snappedOutward(MapPlacesLayer.GRID_DEGREES)
-            // Unreachable: the other areas would fail too; all are tried again on the next tick.
-            val places = fetch(box) ?: return
+            val places = fetch(box)
+            if (places == null) {
+                failing += area
+                if (++failures >= 2) return
+                continue
+            }
+            failing -= area
             // An area deleted during the fetch is in the next list, which deletes it again.
             onDisk { store.replace(area, box, now, places) }
         }
     }
 
-    /** The places in [box], at most [MAX_PAGES] pages of them; null when Pinakes cannot be reached. */
+    /** The places in [box], at most [MAX_PAGES] pages of them; null when Pinakes did not answer. */
     private suspend fun fetch(box: GeoBox): List<MapPlace>? {
         val places = mutableListOf<MapPlace>()
         var cursor: String? = null
         var pages = 0
         do {
-            if (pages > 0) delay(pageGap)
+            if (requests++ > 0) delay(requestGap)
             when (val answer = data.placesIn(box, cursor)) {
                 is SourceAnswer.Answered -> {
                     places += answer.value.places
@@ -155,7 +172,8 @@ class OfflinePubkyPlaces(
 
         val RETRY = 15.minutes
 
-        val PAGE_GAP = 500.milliseconds
+        /** 40 requests a minute at most, a third of Pinakes' limit. */
+        val REQUEST_GAP = 1500.milliseconds
 
         /** Up to 10,000 places per area (pages of 500). */
         const val MAX_PAGES = 20
@@ -202,7 +220,7 @@ class SqlOfflinePubkyStore(
                 west = box.west,
                 east = box.east,
                 limit = limit,
-            ) { uri, name, lat, lon, type, category ->
+            ) { uri, name, lat, lon, type, category, _ ->
                 MapPlace(uri, name, lat, lon, type, category)
             }.executeAsList()
     }
