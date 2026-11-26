@@ -13,6 +13,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import to.pubky.maps.ui.PubkyMapsTheme
 import to.pubky.maps.write.Kept
 import to.pubky.maps.write.ListChoice
@@ -29,6 +30,7 @@ import to.pubky.maps.write.SavedScreenState
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w412dp-h915dp")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class SavedAndListsTest {
     @get:Rule
     val compose = createComposeRule()
@@ -46,6 +48,7 @@ class SavedAndListsTest {
                             places =
                                 listOf(
                                     SavedRow(osm, "Conditorei Schober", Kept.Private),
+                                    SavedRow(lindenhof, "Lindenhof", Kept.Private, pending = true),
                                     SavedRow("geo:47.36667,8.55", null, Kept.Phone),
                                 ),
                             lists =
@@ -69,10 +72,12 @@ class SavedAndListsTest {
         compose.onNodeWithText("Conditorei Schober").assertExists()
         // A place without a name is still told by its link.
         compose.onNodeWithText("47.36667, 8.55").assertExists()
+        // One not sent yet still says so.
+        compose.onNodeWithText("Not sent yet", substring = true).assertExists()
         compose.onNodeWithText("Coffee in Zürich").performClick()
-        compose.onNodeWithText("Lindenhof").assertExists()
         // The saved row and the list entry both have the name; neither shows the OpenStreetMap id or the link.
         compose.onAllNodesWithText("Conditorei Schober").assertCountEquals(2)
+        compose.onAllNodesWithText("Lindenhof").assertCountEquals(2)
         compose.onAllNodesWithText("OpenStreetMap node 270803095").assertCountEquals(0)
         compose.onAllNodesWithText("maps.app.goo.gl/x1").assertCountEquals(0)
     }
