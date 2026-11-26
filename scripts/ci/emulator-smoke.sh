@@ -353,20 +353,23 @@ check_reopened_view() {
     # A pan, then the map leaves the screen at once, before its camera has rested for 1 s: it stores
     # the last view it showed. Each pan moves the finger up by 1,200 px (about 460 dp, about 0.013
     # degrees of latitude at zoom 14), so the map shows a view further south; the finger rests before
-    # it lifts (each input call takes a few hundred ms), so the map does not fling on. A first pan
-    # must be stored after its rest: it shows that gestures reach the camera, and gives the
-    # software-drawn map time to draw (it can stall for 8 s after a start, and a pan in a stall may
-    # not reach the camera before it leaves).
+    # it lifts (each input call takes a few hundred ms), so the map mostly does not fling on; when
+    # it does, the view is up to a few pans further (south_of). A first pan must be stored after its
+    # rest: it shows that gestures reach the camera, and gives the software-drawn map time to draw
+    # (it can stall for 8 s after a start, and a pan in a stall may not reach the camera before it
+    # leaves). That pan flings too when it lands in the stall (2 and 4 pans' worth in runs
+    # 45879166390 and 45879110548, each with an 8 s frame at the lift), so its range is south_of's.
     # The "lift" line is logged just before the finger lifts, so the camera's rest starts after it.
     pan_up() {
         adb shell "input motionevent DOWN 540 1800; input motionevent MOVE 540 1400; input motionevent MOVE 540 1000; input motionevent MOVE 540 600"
         adb shell "log -t PubkyMapsSmoke 'lift $1'; input motionevent UP 540 600; $2"
     }
     pan_up first ""
+    range=$(south_of "$(view_lat reopened)")
     stored=false
     for _ in $(seq 1 15); do
         sleep 2
-        if expect_view rested 47.35 47.365; then stored=true; break; fi
+        if expect_view rested $range; then stored=true; break; fi
     done
     $stored || fail "the view after a pan was not stored once the camera rested; see map-view-rested.json"
     last=$(view_lat rested)
