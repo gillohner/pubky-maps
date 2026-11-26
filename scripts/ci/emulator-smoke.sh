@@ -321,7 +321,8 @@ check_reopened_view() {
     # before it lifts (each input call takes a few hundred ms), so the map does not fling on. This
     # start has no launcher intent, so Back finishes the activity (from the launcher, Android 12+ only
     # moves the task back and the rest still runs). The time from the finger's lift to the
-    # activity's destroy is printed: only under 1 s does the 1 s rest not store the view by itself.
+    # activity's destroy is printed for the log (1.2-1.5 s on CI); the rest starts only once the map
+    # reports its camera idle, so a build without the save on leaving loses the view even at 1.2 s.
     adb shell "input motionevent DOWN 540 1800; input motionevent MOVE 540 1400; input motionevent MOVE 540 1000; input motionevent MOVE 540 600"
     adb shell "input motionevent UP 540 600; log -t PubkyMapsSmoke lifted; input keyevent KEYCODE_BACK"
     sleep 3
