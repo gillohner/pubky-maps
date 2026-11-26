@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Checks scripts/release/edge-commit.py: an edge run builds main's head when main moved on with the
 same release.yml, and keeps its own commit otherwise; its GitHub calls (against a fake `gh`) compare
-in the right direction and fall back to its own commit when GitHub cannot be asked. CI: android.yml,
-build job.
+in the right direction, fall back to its own commit when GitHub cannot be asked, and build nothing
+when the edge release already has the build of the chosen commit. CI: android.yml, build job.
 
 Usage: edge-commit-check.py
 """
@@ -38,18 +38,21 @@ for status in ("behind", "diverged"):
     expect(sha == old and why.startswith("warning::"), f"main's head {status}: {sha[:7]} {why}")
 
 # main() against a fake `gh`: GitHub's answers for main at `new`, one commit after `old`.
+# RELEASE is the edge release's answer ("<target commit> <has the feed>"), unset: there is none.
 FAKE_GH = f"""#!/usr/bin/env python3
-import sys
+import os, sys
 path = sys.argv[2]
-if "FAIL" in __import__("os").environ:
+if "FAIL" in os.environ:
     sys.exit("gh: HTTP 503")
 answers = {{
     "repos/o/r/commits/main": "{new}",
     "repos/o/r/compare/{old}...{new}": "ahead",
-    "repos/o/r/compare/{new}...{old}": "behind",
+    "repos/o/r/compare/{new}...{new}": "identical",
     "repos/o/r/contents/.github/workflows/release.yml?ref={old}": "{workflow}",
     "repos/o/r/contents/.github/workflows/release.yml?ref={new}": "{workflow}",
 }}
+if "RELEASE" in os.environ:
+    answers["repos/o/r/releases/tags/edge"] = os.environ["RELEASE"]
 if path not in answers:
     sys.exit("gh: no answer for " + path)
 print(answers[path])
@@ -66,12 +69,20 @@ def run_main(run_sha, **env):
     return out.returncode, out.stdout, out.stderr
 
 
-code, out, err = run_main(old)
-expect(code == 0 and out == f"sha={new}\n" and "notice::" in err, f"main() of an older run: {code} {out!r} {err!r}")
-code, out, err = run_main(new)
-expect(code == 0 and out == f"sha={new}\n", f"main() of main's head: {code} {out!r} {err!r}")
-code, out, err = run_main(old, FAIL="1")
-expect(code == 0 and out == f"sha={old}\n" and "HTTP 503" in err, f"main() without GitHub: {code} {out!r} {err!r}")
+def check_main(what, run_sha, want_sha, want_build, *, notice, warning="", **env):
+    code, out, err = run_main(run_sha, **env)
+    ok = (code == 0 and out == f"sha={want_sha}\nbuild={want_build}\n" and notice in err
+          and (warning in err if warning else "warning::" not in err))
+    expect(ok, f"main() {what}: {code} {out!r} {err!r}")
+
+
+check_main("of an older run", old, new, "true", RELEASE=f"{old} true", notice="notice::main moved on to 2f1fe8f")
+check_main("of main's head", new, new, "true", RELEASE=f"{old} true", notice="notice::2f1fe8f is main's head")
+check_main("when edge has the head's build", old, new, "false", RELEASE=f"{new} true", notice="nothing to build")
+check_main("when edge has the head's commit but no feed", new, new, "true", RELEASE=f"{new} false",
+           notice="notice::2f1fe8f is main's head")
+check_main("without an edge release", new, new, "true", notice="no live edge build")
+check_main("without GitHub", old, old, "true", FAIL="1", notice="no live edge build", warning="HTTP 503")
 
 if failures:
     for f in failures:

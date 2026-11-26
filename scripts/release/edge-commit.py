@@ -15,14 +15,20 @@ release.yml, which might not build the newer commit). When GitHub cannot be aske
 commit and warns. publish.sh then publishes such a build only when its commit comes after the one
 edge has, so edge never goes back; it can stay behind main until the next push to main.
 
+When edge already has a build of the chosen commit (the release's target commit, which publish.sh
+sets once that build's update feed is up), there is nothing to build: the run of a commit that an
+earlier run already built as main's head would otherwise publish the same code again under a higher
+versionCode, and edge installs would be offered it as an update.
+
 Usage: edge-commit.py <owner/repo> <this run's commit>   (GH_TOKEN for `gh api`)
-Prints `sha=<commit>` for $GITHUB_OUTPUT; notices and warnings go to stderr.
+Prints `sha=<commit>` and `build=true|false` for $GITHUB_OUTPUT; notices and warnings go to stderr.
 """
 import re
 import subprocess
 import sys
 
 WORKFLOW = ".github/workflows/release.yml"
+TAG, FEED = "edge", "update-edge.json"
 
 
 def choose(run_sha: str, head_sha: str, status: str, run_workflow: str, head_workflow: str) -> tuple[str, str]:
@@ -44,6 +50,11 @@ def gh(path: str, jq: str) -> str:
     return out.stdout.strip()
 
 
+def reason(e: Exception) -> str:
+    lines = (getattr(e, "stderr", None) or str(e)).strip().splitlines()
+    return lines[-1] if lines else type(e).__name__
+
+
 def main() -> None:
     repo, run_sha = sys.argv[1], sys.argv[2]
     try:
@@ -54,13 +65,23 @@ def main() -> None:
         run_workflow = gh(f"repos/{repo}/contents/{WORKFLOW}?ref={run_sha}", ".sha")
         head_workflow = gh(f"repos/{repo}/contents/{WORKFLOW}?ref={head_sha}", ".sha")
     except (subprocess.SubprocessError, OSError, ValueError) as e:
-        why = (getattr(e, "stderr", None) or str(e)).strip().splitlines()[-1:] or [type(e).__name__]
-        print(f"::warning::could not ask GitHub for main's head ({why[0]}); building {run_sha[:7]}", file=sys.stderr)
-        print(f"sha={run_sha}")
-        return
-    sha, why = choose(run_sha, head_sha, status, run_workflow, head_workflow)
-    print(f"::{why}", file=sys.stderr)
+        print(f"::warning::could not ask GitHub for main's head ({reason(e)}); building {run_sha[:7]}", file=sys.stderr)
+        sha = run_sha
+    else:
+        sha, why = choose(run_sha, head_sha, status, run_workflow, head_workflow)
+        print(f"::{why}", file=sys.stderr)
     print(f"sha={sha}")
+    try:
+        live = gh(f"repos/{repo}/releases/tags/{TAG}", f'.target_commitish + " " + (any(.assets[]; .name == "{FEED}") | tostring)')
+    except (subprocess.SubprocessError, OSError) as e:
+        # No edge release yet, or GitHub cannot be asked: build; publish.sh decides.
+        print(f"::notice::no live {TAG} build to compare with ({reason(e)})", file=sys.stderr)
+        live = ""
+    if live == f"{sha} true":
+        print(f"::notice::the {TAG} release already has the build of {sha[:7]}; nothing to build", file=sys.stderr)
+        print("build=false")
+    else:
+        print("build=true")
 
 
 if __name__ == "__main__":

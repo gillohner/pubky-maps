@@ -1,7 +1,7 @@
 name: release
 # Signed releases on GitHub (scripts/release/):
 # - every push to main replaces the `edge` pre-release with a build of main's head when the run
-#   starts (its tag moves to that commit; scripts/release/edge-commit.py);
+#   starts, unless edge already has it (its tag moves to that commit; scripts/release/edge-commit.py);
 # - a `v<x.y.z>` tag makes that release (the tag must match pubkymaps.version in gradle.properties);
 # - a manual run builds any branch and replaces the `dev` pre-release, which is how changes to the
 #   release are tried before they merge. It never touches `edge` or a version.
@@ -48,13 +48,15 @@ jobs:
       version_name: ${{ steps.v.outputs.version_name }}
       feed_name: ${{ steps.v.outputs.feed_name }}
       sha: ${{ steps.commit.outputs.sha }}
+      build: ${{ steps.commit.outputs.build }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       # Every job builds and publishes this commit. An edge run builds main's head, so a run queued
       # after a newer commit's run (GitHub cancels a pending run when another is queued) never
-      # publishes an older commit than main's (scripts/release/edge-commit.py).
+      # publishes an older commit than main's, and builds nothing when edge already has a build of
+      # that commit (scripts/release/edge-commit.py).
       - id: commit
         name: the commit to build
         shell: bash
@@ -64,7 +66,7 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/main ]; then
             python3 -I scripts/release/edge-commit.py "$GITHUB_REPOSITORY" "$GITHUB_SHA" | tee -a "$GITHUB_OUTPUT"
           else
-            echo "sha=$GITHUB_SHA" | tee -a "$GITHUB_OUTPUT"
+            printf 'sha=%s\nbuild=true\n' "$GITHUB_SHA" | tee -a "$GITHUB_OUTPUT"
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -78,6 +80,8 @@ jobs:
 
   build:
     needs: meta
+    # sign, publish and install-published need this job, so they are skipped with it.
+    if: needs.meta.outputs.build == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:

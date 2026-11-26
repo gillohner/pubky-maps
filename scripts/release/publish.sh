@@ -3,10 +3,13 @@
 #
 # - `edge` and `dev`: a pre-release whose tag moves to the built commit (BUILD_SHA). A build with a
 #   lower versionCode than the one the release already has (a re-run of an old run) publishes nothing;
-#   neither does an edge build of a commit that does not come after the edge tag's commit (a run that
-#   kept its own, older commit: edge-commit.py). The release stays up while its
-#   files are replaced; the update feed and SHA256SUMS go last, so a feed never names a file that is
-#   not there yet, and files of older builds are removed only after the new feed is up.
+#   neither does an edge build of a commit that does not come after the commit of edge's live build
+#   (a run that kept its own, older commit: edge-commit.py). The release stays up while its files are
+#   replaced; the update feed and SHA256SUMS go last, so a feed never names a file that is not there
+#   yet, and files of older builds are removed only after the new feed is up. Only then the release's
+#   target commit, title and notes name this build: its target commit is always the commit of the
+#   live feed (the tag may have failed to move, below), which is what the edge check above and
+#   edge-commit.py compare with.
 # - `v<x.y.z>`: the release of that existing tag, made as a draft, filled, then published, so
 #   releases/latest/download/update.json never points at a release without its feed. GitHub picks
 #   which release is "latest" by version (a backport does not take it over).
@@ -30,6 +33,16 @@ upload() {
     gh release upload "$tag" "$@" --clobber -R "$repo" && return 0
     echo "::warning::upload failed (attempt $i); trying again"
     sleep $((i * 15))
+  done
+  return 1
+}
+
+# A read of GitHub's API, tried three times; it fails the run when GitHub does not answer.
+api() {
+  for i in 1 2 3; do
+    gh api "$@" && return 0
+    echo "::warning::gh api $1 failed (attempt $i); trying again" >&2
+    sleep $((i * 10))
   done
   return 1
 }
@@ -70,23 +83,25 @@ case $tag in
         exit 0
       fi
       if [ "$tag" = edge ]; then
-        at=$(gh api "repos/$repo/git/ref/tags/$tag" --jq .object.sha)
-        if [ "$at" != "$sha" ] && [ "$(gh api "repos/$repo/compare/$at...$sha" --jq .status)" != ahead ]; then
-          echo "::warning::the $tag release is at ${at::7}, which ${sha::7} does not come after; nothing published"
+        # Separate assignments, so a failed call fails the run instead of comparing an empty answer.
+        at=$(api "repos/$repo/releases/tags/$tag" --jq .target_commitish)
+        status=$(api "repos/$repo/compare/$at...$sha" --jq .status)
+        if [ "$status" != ahead ] && [ "$status" != identical ]; then
+          echo "::warning::the $tag release has a build of ${at::7}, and ${sha::7} does not come after it ($status); nothing published"
           [ -z "${GITHUB_OUTPUT:-}" ] || echo "published=false" >> "$GITHUB_OUTPUT"
           exit 0
         fi
       fi
       move_tag
-      # A release whose tag was gone for a moment is a draft again: publish it, at this commit.
-      gh release edit "$tag" -R "$repo" --title "$title" --notes-file "$notes" --target "$sha" \
-        --prerelease --latest=false --draft=false
+      # A release whose tag was gone for a moment is a draft again: publish it.
+      gh release edit "$tag" -R "$repo" --prerelease --latest=false --draft=false
     else
       gh release create "$tag" -R "$repo" --prerelease --latest=false --target "$sha" --title "$title" --notes-file "$notes"
     fi
     mapfile -t files < <(find "$dist" -maxdepth 1 -type f ! -name "$feed" ! -name SHA256SUMS | sort)
     upload "${files[@]}"
     upload "$dist/$feed" "$dist/SHA256SUMS"
+    gh release edit "$tag" -R "$repo" --title "$title" --notes-file "$notes" --target "$sha"
     keep=$(cd "$dist" && ls)
     for a in $(gh release view "$tag" -R "$repo" --json assets -q '.assets[].name'); do
       grep -qxF "$a" <<< "$keep" || gh release delete-asset "$tag" "$a" -R "$repo" --yes
