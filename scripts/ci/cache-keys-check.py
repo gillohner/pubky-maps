@@ -18,7 +18,7 @@ runners get "429 Too Many Requests". So:
   every run under an old one; it has no restore key, which would carry every older jar into each new
   key;
 - no test asks Robolectric for another Android version than robolectric.properties (@Config sdk,
-  minSdk, maxSdk), since the key would not see it.
+  minSdk, maxSdk), and no other robolectric.properties exists, since the key would not see either.
 
 Usage: cache-keys-check.py [workflow.yml ...]   (default: every file in .github/workflows)
 """
@@ -29,7 +29,7 @@ from pathlib import Path
 ROBOLECTRIC_JARS = "~/.m2/repository/org/robolectric"
 ROBOLECTRIC_PROPERTIES = "androidApp/src/test/resources/robolectric.properties"
 ROBOLECTRIC_KEY_FILES = ("gradle/libs.versions.toml", ROBOLECTRIC_PROPERTIES)
-TEST_SOURCES = "androidApp/src/test*/**/*.kt"
+TEST_SOURCES = ("androidApp/src/test*/**/*.kt", "androidApp/src/test*/**/*.java")
 COMMENT = r"(?:[ \t]+#.*)?"
 
 
@@ -117,7 +117,7 @@ def check(workflows):
                         for name in ROBOLECTRIC_KEY_FILES:
                             if not re.search(rf"hashFiles\([^)]*['\"]{re.escape(name)}['\"]", key):
                                 problems.append(f"{where}: the Robolectric cache key does not hash {name}: {key}")
-                        if "/restore@" not in uses and field(step, "restore-keys"):
+                        if field(step, "restore-keys"):
                             problems.append(f"{where}: the Robolectric cache has restore keys")
                 if re.search(r"actions/cache(/save)?@", uses):
                     paths = field(step, "path")
@@ -148,9 +148,11 @@ def check(workflows):
 
 
 def config_blocks(text):
-    """The argument text of each @Config(...) annotation in a Kotlin file."""
+    """The argument text of each @Config(...) annotation in a Kotlin or Java file, string literals
+    blanked so that a parenthesis inside one does not end the annotation."""
+    text = re.sub(r'"(?:[^"\\\n]|\\.)*"', '""', text)
     blocks = []
-    for m in re.finditer(r"@Config\s*\(", text):
+    for m in re.finditer(r"@(?:org\.robolectric\.annotation\.)?Config\s*\(", text):
         depth, i = 1, m.end()
         while i < len(text) and depth:
             depth += {"(": 1, ")": -1}.get(text[i], 0)
@@ -159,19 +161,21 @@ def config_blocks(text):
     return blocks
 
 
-def sdk_problems(properties, sources):
-    """Problems with the Android version of the Robolectric tests: robolectric.properties text and
-    {path: Kotlin text} of the tests."""
-    m = re.search(r"(?m)^[ \t]*sdk[ \t]*[=:][ \t]*(\d+)[ \t]*$", properties or "")
+def sdk_problems(properties, sources, others=()):
+    """Problems with the Android version of the Robolectric tests: robolectric.properties text,
+    {path: Kotlin or Java text} of the tests and the paths of any other robolectric.properties."""
+    problems = [f"{other}: sets Robolectric options outside {ROBOLECTRIC_PROPERTIES}, which the cache key does not hash"
+                for other in others]
+    m = re.search(r"(?m)^[ \t]*sdk[ \t]*[=: \t][ \t]*(\d+(?:[ \t]*,[ \t]*\d+)*)[ \t]*\r?$", properties or "")
     if not m:
-        return [f"{ROBOLECTRIC_PROPERTIES}: no sdk=<number> line"]
-    sdk = m.group(1)
-    problems = []
+        return problems + [f"{ROBOLECTRIC_PROPERTIES}: no sdk=<number> line"]
+    sdk = m.group(1).replace(" ", "").replace("\t", "")
+    allowed = set(sdk.split(","))
     for path, text in sorted(sources.items()):
         for block in config_blocks(text):
             for name, values in re.findall(r"\b(sdk|minSdk|maxSdk)\s*=\s*(\[[^\]]*\]|intArrayOf\([^)]*\)|[\w.]+)", block):
                 found = re.findall(r"[\w.]+", re.sub(r"^intArrayOf", "", values))
-                if found != [sdk]:
+                if not found or not set(found) <= allowed:
                     problems.append(f"{path}: @Config {name} = {values} is not sdk={sdk} of {ROBOLECTRIC_PROPERTIES}")
     return problems
 
@@ -208,6 +212,11 @@ jobs:
           ~/.gradle/caches/modules-2
         key: >-
           gradle-${{ hashFiles('x') }}
+    - uses: actions/cache/restore@v6
+      with:
+        path: ~/.m2/repository/org/robolectric
+        key: r-${{ hashFiles('gradle/libs.versions.toml', 'androidApp/src/test/resources/robolectric.properties') }}
+        restore-keys: r-
   tests:
     steps:
       - run: |
@@ -232,7 +241,7 @@ jobs: # one saver per cache
           path: ~/.m2/repository
           key: >-
             m2-${{ hashFiles('gradle/libs.versions.toml',
-            "androidApp/src/test/resources/robolectric.properties") }}
+            'androidApp/src/test/resources/robolectric.properties') }}
       - run: ./gradlew --continue check verifyRoborazziDirectDebug  # all of it
       - uses: Swatinem/rust-cache@v2
         with:
@@ -264,11 +273,12 @@ def self_check():
                      "a.yml job build: the first restore key", "a.yml job tests: runs the tests but does not cache",
                      f"a.yml job build: the Robolectric cache key does not hash {ROBOLECTRIC_PROPERTIES}",
                      "a.yml job build: the Robolectric cache has restore keys",
+                     "a.yml job release: the Robolectric cache has restore keys",
                      "the cargo cache 'android-app' is saved by a.yml job build, a.yml job release"):
         if not any(expected in p for p in found):
             failures.append(f"self-check: not found: {expected} (found {found})")
-    if len(found) != 7:
-        failures.append(f"self-check: expected 7 problems, found {found}")
+    if len(found) != 8:
+        failures.append(f"self-check: expected 8 problems, found {found}")
     wrong = check({"a": OWN})
     if wrong:
         failures.append(f"self-check: a correct workflow was refused: {wrong}")
@@ -278,23 +288,30 @@ def self_check():
         "C.kt": "@Config(minSdk = 34)\nclass C\n@Config(sdk = intArrayOf(36, 37))\nfun c() {}",
         "D.kt": "@Config(sdk = [Build.VERSION_CODES.BAKLAVA])\nclass D",
         "E.kt": "val sdk = [35]\n@Config(qualifiers = PHONE)\nclass E",
+        "F.kt": "@org.robolectric.annotation.Config(qualifiers = \"a)b\", sdk = [35])\nclass F",
+        "G.java": "@Config(sdk = 34)\nclass G {}",
     }
-    found = sdk_problems("# tests\nsdk=36\n", sources)
-    expected = ["B.kt: @Config sdk = [35]", "C.kt: @Config minSdk = 34", "C.kt: @Config sdk = intArrayOf(36, 37)",
-                "D.kt: @Config sdk = [Build.VERSION_CODES.BAKLAVA]"]
+    found = sdk_problems("# tests\r\nsdk=36\r\n", sources, ["x/robolectric.properties"])
+    expected = ["x/robolectric.properties: sets Robolectric options outside", "B.kt: @Config sdk = [35]",
+                "C.kt: @Config minSdk = 34", "C.kt: @Config sdk = intArrayOf(36, 37)",
+                "D.kt: @Config sdk = [Build.VERSION_CODES.BAKLAVA]", "F.kt: @Config sdk = [35]", "G.java: @Config sdk = 34"]
+    found = [p if " is not " in p else p.split(" " + ROBOLECTRIC_PROPERTIES)[0] for p in found]
     if [p.split(" is not ")[0] for p in found] != expected:
         failures.append(f"self-check: Robolectric SDK problems {found}, expected {expected}")
     if sdk_problems("sdk=", {}) != [f"{ROBOLECTRIC_PROPERTIES}: no sdk=<number> line"]:
         failures.append("self-check: a robolectric.properties without an sdk was accepted")
+    if sdk_problems("sdk = 35, 36", {"H.kt": "@Config(sdk = [35, 36])\nclass H"}):
+        failures.append("self-check: tests on the SDKs of robolectric.properties were refused")
     return failures
 
 
 def main(args):
     files = [Path(a) for a in args] or sorted(Path(".github/workflows").glob("*.yml"))
     properties = Path(ROBOLECTRIC_PROPERTIES)
+    sources = {str(f): f.read_text() for pattern in TEST_SOURCES for f in sorted(Path(".").glob(pattern))}
+    others = [str(f) for f in sorted(Path("androidApp/src").glob("**/robolectric.properties")) if f != properties]
     failures = (self_check() + check({f.stem: f.read_text() for f in files})
-                + sdk_problems(properties.read_text() if properties.exists() else None,
-                               {str(f): f.read_text() for f in sorted(Path(".").glob(TEST_SOURCES))}))
+                + sdk_problems(properties.read_text() if properties.exists() else None, sources, others))
     for f in failures:
         print("FAIL " + f)
     if failures:
