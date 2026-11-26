@@ -16,7 +16,8 @@ import kotlin.math.roundToLong
  * A named place in the map tiles of an offline area: a point of interest, a town or district, a
  * street, a peak or a lake. [key] and [value] are the OpenStreetMap tag it stands for as far as the
  * tile says (`amenity`/`cafe`, `place`/`village`, `highway`/`primary`); [category] is the label the
- * map gives it when tapped.
+ * map gives it when tapped; [locality] the district and town it lies in ([Localities]), set once the
+ * area's places are stored.
  */
 data class OfflinePlace(
     val name: String,
@@ -25,6 +26,7 @@ data class OfflinePlace(
     val value: String,
     val category: String?,
     val point: GeoPoint,
+    val locality: String? = null,
 ) {
     /** The kind of place in Photon's words, for its zoom and icon: `city`, `district`, `locality`, `street`, or null. */
     internal val photonType: String?

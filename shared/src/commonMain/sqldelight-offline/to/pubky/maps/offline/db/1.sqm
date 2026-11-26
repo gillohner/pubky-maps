@@ -1,0 +1,7 @@
+-- Version 2: each place's district and town (locality). The places are read again from the
+-- tiles: emptying the areas makes the indexer read every one anew.
+
+ALTER TABLE place ADD COLUMN locality TEXT;
+DELETE FROM word;
+DELETE FROM place;
+DELETE FROM area;

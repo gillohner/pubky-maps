@@ -276,7 +276,9 @@ adb shell input tap $xy
 sleep 1
 adb shell input text bakery
 wait_for "Fixture Bakery" 30 > /dev/null || fail "search without a connection did not find the offline area's places"
-wait_for "Search is offline: these places are from your offline maps. Addresses need a connection." 5 > /dev/null ||
+# The town it lies in comes from the tiles' place labels (a Fixture Town label is in every tile).
+wait_for "Bakery · Fixture Town" 5 > /dev/null || fail "an offline result does not say which town it is in"
+wait_for "Search is offline: these places are from your offline maps. Street addresses need a connection." 5 > /dev/null ||
     fail "search does not say its results come from the offline maps"
 screenshot offline-search
 check_alive "search in the offline maps"

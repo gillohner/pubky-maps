@@ -16,8 +16,9 @@ import to.pubky.maps.search.normalizeForMatch
 /** Search in the places of the offline areas, for when the search servers cannot be reached. */
 fun interface OfflinePlaceSearch {
     /**
-     * The places matching [query] (every word starts a word of the name or the category, accents and
-     * case ignored), nearest to the map centre first; null when no offline area can be searched.
+     * The places matching [query] (every word starts a word of the name, the category or the
+     * locality, accents and case ignored), nearest to the map centre first; null when no offline
+     * area can be searched.
      */
     suspend fun search(
         query: String,
@@ -38,7 +39,10 @@ class SqlOfflinePlaceIndex(
 
     override fun areas(): Map<String, Long> = queries.areas().executeAsList().associate { it.id to it.new_data_at }
 
-    /** Stores the places of [area] in place of those it had; a place seen twice ([OfflinePlace.sameness]) is stored once. */
+    /**
+     * Stores the places of [area] in place of those it had, each with its locality ([Localities])
+     * from the area's place labels; a place seen twice ([OfflinePlace.sameness]) is stored once.
+     */
     override fun replace(
         area: String,
         newDataAt: Long,
@@ -46,23 +50,40 @@ class SqlOfflinePlaceIndex(
     ) = queries.transaction {
         removeArea(area)
         val seen = HashSet<String>()
+        // The labels are known only once every tile is read: the places are stored first, keeping
+        // their row and point (a few MB for the largest area one download may take), then named.
+        val labels = ArrayList<Pair<Long, OfflinePlace>>()
+        val others = PlacePoints()
         for (place in places) {
             if (!seen.add(place.sameness)) continue
-            queries.insertPlace(
-                area = area,
-                name = place.name,
-                osm_type = place.osm?.type?.name,
-                osm_id = place.osm?.id,
-                tag_key = place.key,
-                tag_value = place.value,
-                category = place.category,
-                lat = place.point.lat,
-                lon = place.point.lon,
-            )
-            val id = queries.lastPlaceId().executeAsOne()
-            wordsOf(place).forEach { queries.insertWord(it, id) }
+            val id = insert(area, place)
+            if (place.key == "place") labels += id to place else others.add(id, place.point.lat, place.point.lon)
         }
+        val localities = Localities(labels.map { it.second })
+        for ((id, label) in labels) localities.of(label)?.let { queries.setLocality(it, id) }
+        others.forEach { id, lat, lon -> localities.at(lat, lon)?.let { queries.setLocality(it, id) } }
         queries.putArea(area, newDataAt)
+    }
+
+    private fun insert(
+        area: String,
+        place: OfflinePlace,
+    ): Long {
+        queries.insertPlace(
+            area = area,
+            name = place.name,
+            osm_type = place.osm?.type?.name,
+            osm_id = place.osm?.id,
+            tag_key = place.key,
+            tag_value = place.value,
+            category = place.category,
+            lat = place.point.lat,
+            lon = place.point.lon,
+            locality = place.locality,
+        )
+        val id = queries.lastPlaceId().executeAsOne()
+        wordsOf(place).forEach { queries.insertWord(it, id) }
+        return id
     }
 
     override fun delete(area: String) = queries.transaction { removeArea(area) }
@@ -82,10 +103,7 @@ class SqlOfflinePlaceIndex(
             val typed = normalizeForMatch(query)
             val words = typed.split(' ').filter { it.isNotEmpty() }.distinct()
             if (words.isEmpty()) return@withContext emptyList()
-            // The rarest word (often the name, not the category every restaurant has) finds the
-            // fewest places through the index; the others filter them.
             val counts = words.associateWith { queries.countWordFrom(it, it.until()).executeAsOne() }
-            val rarest = words.minBy { counts.getValue(it) }
             val centre = area.centre
 
             val place = {
@@ -99,24 +117,45 @@ class SqlOfflinePlaceIndex(
                 category: String?,
                 lat: Double,
                 lon: Double,
+                locality: String?,
                 ->
-                OfflinePlace(name, osmOf(osmType, osmId), key, value, category, GeoPoint(lat, lon))
+                OfflinePlace(name, osmOf(osmType, osmId), key, value, category, GeoPoint(lat, lon), locality)
             }
-            val starting = queries.withWordFrom(rarest, rarest.until(), centre.lat, centre.lon, CANDIDATES, place).executeAsList()
-            val found =
-                if (counts.getValue(rarest) <= CANDIDATES) {
-                    starting
-                } else {
-                    // Too many start with it for the nearest few hundred to hold every one: those
-                    // with the word itself ("Uster", not "Usterstrasse") are looked up too.
-                    (starting + queries.withWord(rarest, centre.lat, centre.lon, CANDIDATES, place).executeAsList())
-                        .distinct()
-                        .sortedBy { distanceMeters(it.point, centre) }
-                }
+
+            /** The places nearest [at] with a word of their name or category that starts with [word]. */
+            fun named(
+                word: String,
+                at: GeoPoint,
+            ): List<OfflinePlace> {
+                val starting = queries.withWordFrom(word, word.until(), at.lat, at.lon, CANDIDATES, place).executeAsList()
+                if (counts.getValue(word) <= CANDIDATES) return starting
+                // Too many start with it for the nearest few hundred to hold every one: those with
+                // the word itself ("Uster", not "Usterstrasse") are looked up too.
+                return starting + queries.withWord(word, at.lat, at.lon, CANDIDATES, place).executeAsList()
+            }
+
+            // Every word looks up the places it names, the rarest first (often the name, not the
+            // category every restaurant has); a word too common to look up cheaply only filters.
+            // A place's district and town are not in the index, so its own word finds it and the
+            // others may match where it lies: "bahnhofstrasse winterthur", and a town's name finds
+            // the town and its streets, not every shop in it.
+            val asked = words.sortedBy { counts.getValue(it) }.filterIndexed { i, w -> i == 0 || counts.getValue(w) <= COMMON }
+            val nearCentre = asked.flatMap { named(it, centre) }
+            // "cafe uster": the other words, common ones too (but not one or two letters still being
+            // typed), are looked up around the town or district as well, which can be farther than
+            // the nearest few hundred cafés.
+            val town =
+                nearCentre
+                    .filter { it.key == "place" && Localities.names(it.value) }
+                    .filter { wordsOf(it.copy(category = null)).let { own -> own.size < words.size && words.containsAll(own) } }
+                    .minByOrNull { distanceMeters(it.point, centre) }
+            val aroundTown = words.filter { it in asked || it.length >= MIN_COMMON_LETTERS }
+            val nearTown = town?.let { t -> (aroundTown - wordsOf(t.copy(category = null))).flatMap { named(it, t.point) } }.orEmpty()
+            val found = (nearCentre + nearTown).distinct().sortedBy { distanceMeters(it.point, centre) }
             val matching =
                 found
                     .filter { place ->
-                        val placeWords = wordsOf(place)
+                        val placeWords = wordsOf(place) + localityWords(place.locality)
                         words.all { w -> placeWords.any { it.startsWith(w) } }
                     }.withoutRepeatedPieces()
             // A place named exactly as typed passes the cut also when farther than the others: the ranking puts it first.
@@ -130,6 +169,12 @@ class SqlOfflinePlaceIndex(
 
         /** Places handed to the ranking, which shows the best of them. */
         const val RESULTS = 30
+
+        /** A word in more places than this ("s" while typing "strasse") is not looked up unless it is the rarest. */
+        const val COMMON = 5_000L
+
+        /** A common word shorter than this is not looked up around a town either. */
+        const val MIN_COMMON_LETTERS = 3
     }
 }
 
@@ -141,6 +186,40 @@ internal fun wordsOf(place: OfflinePlace): Set<String> =
     (normalizeForMatch(place.name).split(' ') + normalizeForMatch(place.category.orEmpty()).split(' '))
         .filter { it.isNotEmpty() }
         .toSet()
+
+/** The words of a place's locality ("Hottingen, Zürich"), which find it too: "bahnhofstrasse winterthur". */
+internal fun localityWords(locality: String?): Set<String> =
+    normalizeForMatch(locality.orEmpty()).split(' ').filter { it.isNotEmpty() }.toSet()
+
+/** Rows and points of places, in arrays: an area can have a hundred thousand. */
+private class PlacePoints {
+    private var ids = LongArray(INITIAL)
+    private var points = DoubleArray(2 * INITIAL)
+    private var size = 0
+
+    fun add(
+        id: Long,
+        lat: Double,
+        lon: Double,
+    ) {
+        if (size == ids.size) {
+            ids = ids.copyOf(2 * size)
+            points = points.copyOf(4 * size)
+        }
+        ids[size] = id
+        points[2 * size] = lat
+        points[2 * size + 1] = lon
+        size++
+    }
+
+    fun forEach(action: (id: Long, lat: Double, lon: Double) -> Unit) {
+        for (i in 0 until size) action(ids[i], points[2 * i], points[2 * i + 1])
+    }
+
+    private companion object {
+        const val INITIAL = 1024
+    }
+}
 
 private fun osmOf(
     type: String?,

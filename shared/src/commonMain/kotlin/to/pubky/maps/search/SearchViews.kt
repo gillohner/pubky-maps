@@ -305,7 +305,7 @@ internal fun statusLine(state: SearchState): String? =
             if (state.results.isEmpty() && state.resultsAreCurrent) {
                 "Search is offline, and nothing in your offline maps matches “${state.query.trim()}”."
             } else {
-                "Search is offline: these places are from your offline maps. Addresses need a connection."
+                "Search is offline: these places are from your offline maps. Street addresses need a connection."
             }
         }
 
@@ -314,7 +314,7 @@ internal fun statusLine(state: SearchState): String? =
         }
 
         state.photon == SourceState.Unreachable && state.offlineMaps == SourceState.Answered -> {
-            "Photon is not answering: places and streets come from your offline maps, addresses are missing."
+            "Photon is not answering: places and streets come from your offline maps, street addresses are missing."
         }
 
         state.photon == SourceState.Unreachable -> {
@@ -417,7 +417,7 @@ private fun RecentRow(
             headlineContent = { Text(place?.title ?: entry.query, maxLines = 1, overflow = TextOverflow.Ellipsis) },
             supportingContent =
                 place?.let { p ->
-                    listOfNotNull(p.category, p.address).joinToString(" · ").takeIf { it.isNotEmpty() }?.let { detail ->
+                    listOfNotNull(p.category, p.address ?: p.locality).joinToString(" · ").takeIf { it.isNotEmpty() }?.let { detail ->
                         { Text(detail, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                     }
                 },
@@ -473,7 +473,7 @@ internal fun resultDetail(result: SearchResult): String {
         if (place.source == PlaceSource.Coordinates) {
             place.name?.let { place.point?.let { p -> "${p.lat}, ${p.lon}" } }
         } else {
-            place.address
+            place.address ?: place.locality
         }
     return listOfNotNull(place.category, second).joinToString(" · ")
 }

@@ -46,6 +46,11 @@ data class PlaceRef(
     val address: String? = null,
     /** What kind of place it is, in words ("Museum", "Street"), when a source says. */
     val category: String? = null,
+    /**
+     * The district and town it lies in ("Hottingen, Zürich"), from the offline map's labels, shown
+     * where an [address] is when there is none.
+     */
+    val locality: String? = null,
 ) {
     /** True when [point] is the place, so the map pins it: not a map view, not a search near it. */
     val pinned: Boolean get() = point != null && !pointIsView && query == null

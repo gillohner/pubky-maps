@@ -61,11 +61,21 @@ tiles (points of interest, towns and districts, streets, peaks, lakes) into its 
 release before's tiles stay linked to an area whose packs could not be replaced, from a copy of
 MapLibre's database taken while no
 download or update check fetches tiles (MapLibre's own SQLite writes the file; a second SQLite in the
-process must not open it); a copy taken during a write is refused and taken again later. When Photon cannot be reached, search answers from these places: every typed word starts a word
-of the name or the category, looked up by the rarest of them, nearest first (a place named exactly as
-typed also when farther than the others), merged with Pinakes when it answers. The list says the places are from the
-offline maps and that addresses need a connection, and the map's credits stand under them. Deleting
-an area deletes its places.
+process must not open it); a copy taken during a write is refused and taken again later. Each place
+gets the district and town it lies in from the area's own place labels: the nearest of each, its
+distance divided by how far a label of its kind reaches (a city 12 km, a town 5 km, a village 2 km,
+a suburb 2.5 km, a quarter 1.2 km), so a place near a boundary can be named after the neighbour.
+When Photon cannot be reached, search answers from these places: every typed word starts a word of
+the name, the category or the district and town ("bahnhofstrasse winterthur"), and at least one of
+the name or category, so a town's name finds the town and its streets, not every shop in it. The
+rarest word, and every other word that is not in thousands of places, looks them up nearest first;
+when the query names a town or district, the other words are looked up around it too ("cafe uster"
+from Zürich). A place named exactly as typed passes also when farther than the others, and a town's
+label before the places named after it. They are merged with Pinakes when it answers. A result
+shows its district and town where an address goes, and so does its page until its Pinakes card
+gives the street address; the list says the places are from the offline maps and that street
+addresses need a connection, and the map's credits stand under them. Deleting an area deletes its
+places.
 
 Settings:
 

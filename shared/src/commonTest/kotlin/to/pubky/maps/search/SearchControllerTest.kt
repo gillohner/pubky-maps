@@ -167,6 +167,7 @@ class SearchControllerTest {
                         "museum",
                         "Museum",
                         GeoPoint(47.3703, 8.5481),
+                        locality = "Hottingen, Zürich",
                     ),
                     OfflinePlace("Kunsthausstrasse", null, "highway", "minor", "Street", GeoPoint(47.37, 8.548)),
                 )
@@ -182,16 +183,21 @@ class SearchControllerTest {
             assertEquals(PlaceSource.Map, museum.place.source)
             assertEquals("https://www.openstreetmap.org/way/26405421", museum.place.uri)
             assertEquals("Museum", museum.place.category)
+            // The district and town the tiles' labels give it stand as its address.
+            assertEquals("Hottingen, Zürich", museum.place.locality)
+            assertEquals("Museum · Hottingen, Zürich", resultDetail(museum))
             assertEquals(PlaceKind.Culture, museum.kind)
             assertEquals(Prominence.Landmark, museum.prominence)
             val street = s.results[1]
             assertEquals(PlaceKind.Street, street.kind)
             assertEquals(16.0, street.place.zoom)
             assertTrue(street.place.uri.startsWith("geo:47.37"), street.place.uri)
+            assertEquals(null, street.place.locality)
+            assertEquals("Street", resultDetail(street))
             // Online search is still missing: the map's line says so.
             assertEquals(setOf(ServicePart.Search), health.missing.value)
             assertEquals(
-                "Search is offline: these places are from your offline maps. Addresses need a connection.",
+                "Search is offline: these places are from your offline maps. Street addresses need a connection.",
                 statusLine(s),
             )
         }
@@ -236,7 +242,7 @@ class SearchControllerTest {
         runTest {
             search.photonDown = true
             val card = Fixtures.pinakes("kunsthaus").first { it.osm != null }
-            offlinePlaces = listOf(OfflinePlace("Kunsthaus", card.osm, "tourism", "museum", "Museum", card.point))
+            offlinePlaces = listOf(OfflinePlace("Kunsthaus", card.osm, "tourism", "museum", "Museum", card.point, "Hottingen, Zürich"))
             val c = controller()
             c.onQueryChange("kunsthaus", area)
             advanceUntilIdle()
@@ -246,8 +252,11 @@ class SearchControllerTest {
             assertEquals(1, rows.size)
             assertTrue(rows.single().onPubky)
             assertEquals("Museum", rows.single().place.category)
+            // A Pinakes card has no address: the offline place's district and town stand for it.
+            assertEquals("Hottingen, Zürich", rows.single().place.locality)
+            assertEquals("Museum · Hottingen, Zürich", resultDetail(rows.single()))
             assertEquals(
-                "Photon is not answering: places and streets come from your offline maps, addresses are missing.",
+                "Photon is not answering: places and streets come from your offline maps, street addresses are missing.",
                 statusLine(c.state.value),
             )
         }

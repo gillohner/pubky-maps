@@ -25,8 +25,14 @@ fun PlacePageState.categoryText(): String? {
 /** The page's title: the card's name, else what the place was opened as. */
 val PlacePageState.title: String get() = card?.name ?: place.title
 
-/** The address line: the opener's (Photon's is the most complete), else the card's. */
-val PlacePageState.address: String? get() = place.address ?: card?.address
+/**
+ * The address line: the opener's (Photon's is the most complete), else the card's, else the
+ * district and town the offline map gave the place.
+ */
+val PlacePageState.address: String? get() = streetAddress ?: place.locality
+
+/** The postal address alone, which a long press on the line copies: not the district and town. */
+val PlacePageState.streetAddress: String? get() = place.address ?: card?.address
 
 /**
  * The line under what the place is: its address, else its coordinates (unless the title is them),
