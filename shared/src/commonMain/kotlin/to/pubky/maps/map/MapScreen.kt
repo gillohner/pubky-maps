@@ -177,7 +177,7 @@ fun MapScreen(
                 if (mapUnavailable) MapUnavailableNotice(onRetry = onRetryMap)
                 if (missing.isNotEmpty()) DegradedBanner(missing)
             }
-            if (pagePanel && placePage != null) {
+            if (pagePanel) {
                 placePage.panel(
                     Modifier
                         .align(Alignment.TopStart)
@@ -248,7 +248,7 @@ fun MapScreen(
                 )
             }
         }
-        if (pageSheet && placePage != null) {
+        if (pageSheet) {
             // The place sheet at the bottom edge, the credits and my location riding on it (hidden while
             // the sheet takes the whole screen), up to under the search bar.
             val insets = WindowInsets.safeDrawing.asPaddingValues()

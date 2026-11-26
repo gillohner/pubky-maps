@@ -92,6 +92,7 @@ change the decision safely.
 ## Conventions
 
 - Kotlin official style, ktlint enforced. Composables are PascalCase.
+- No compiler warnings in non-test Kotlin: they fail the build. Fix the cause; a `@Suppress` carries its reason.
 - No dead code and no stubs that pretend a feature works. A control is shown only when it works.
 - Conventional commit messages (`feat(map): ...`, `fix: ...`, `ci: ...`).
 - Docs describe the code as it is: no plans, no history.

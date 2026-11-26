@@ -133,7 +133,7 @@ internal fun ownData(
     val posts = mutableListOf<OwnPost>()
     phone.saved.forEach { saved["phone|" + normalize(it.place)] = SavedEntry(normalize(it.place), Kept.Phone, it.name) }
     phone.lists.forEach { ownLists[it.uri] = it.copy(items = it.items.map(normalize)) }
-    if (signedIn && cached != null) {
+    if (signedIn) {
         cached.tags.forEach { tag ->
             val place = normalize(tag.place)
             tags[place to tag.label] = OwnTag(place, tag.label)
@@ -175,7 +175,7 @@ internal fun ownData(
     }
     return OwnData(
         viewer = viewer.takeIf { signedIn },
-        known = signedIn && cached?.refreshedAt != null,
+        known = signedIn && cached.refreshedAt != null,
         tags = tags.values.toList(),
         saved = saved.values.sortedBy { (it.name ?: it.place).lowercase() },
         lists = ownLists.values.toList(),

@@ -22,4 +22,9 @@ subprojects {
             exclude { it.file.path.contains("/build/") }
         }
     }
+    // A warning in the app's own code fails the build (a deprecated call, a check that is always
+    // true), so none piles up unseen; test code is left out, its warnings fail nothing.
+    tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask<*>>().configureEach {
+        if (!name.contains("Test")) compilerOptions.allWarningsAsErrors.set(true)
+    }
 }
