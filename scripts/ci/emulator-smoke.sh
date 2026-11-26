@@ -354,7 +354,7 @@ check_reopened_view() {
     # the last view it showed. Each pan moves the finger up by 1,200 px (about 460 dp, about 0.013
     # degrees of latitude at zoom 14), so the map shows a view further south; the finger rests before
     # it lifts (each input call takes a few hundred ms), so the map mostly does not fling on; when
-    # it does, the view is up to a few pans further (south_of). A first pan must be stored after its
+    # it does, south_of allows up to 0.1 degrees (about 7 pans). A first pan must be stored after its
     # rest: it shows that gestures reach the camera, and gives the software-drawn map time to draw
     # (it can stall for 8 s after a start, and a pan in a stall may not reach the camera before it
     # leaves). That pan flings too when it lands in the stall (2 and 4 pans' worth in runs
