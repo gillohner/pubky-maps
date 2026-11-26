@@ -34,13 +34,17 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -111,8 +115,8 @@ data class MapSearch(
  * results show as pins and in a list (a sheet at the bottom on a phone, the panel on a wide screen).
  * [search] is null where search is not available. While [areaPicker] is set, the map shows only the
  * area picker over it. While a place page shows, [onUncoveredMap] is given the part of the map it
- * leaves in view (under the search bar, above the sheet and the controls riding on it, or beside the
- * panel and above the credits), in the map's dp; null while none shows.
+ * leaves in view (under the search bar and the notices under it, above the sheet and the controls
+ * riding on it, or beside the panel and above the credits), in the map's dp; null while none shows.
  */
 @Composable
 fun MapScreen(
@@ -139,8 +143,14 @@ fun MapScreen(
         val pagePanel = placePage != null && wide
         val screenHeight = maxHeight
         val report by rememberUpdatedState(onUncoveredMap)
+        // The map unavailable notice and the degraded banner under the bar cover the map: the room
+        // starts under them (they are 0 dp tall when none shows).
+        var bannersHeight by remember { mutableStateOf(0.dp) }
+        val density = LocalDensity.current
+        val roomTop = uncoveredMapTop(WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding(), bannersHeight)
         // The phone sheet's room is known only once the sheet is placed (it reports it then).
-        val panelRoom = if (pagePanel && areaPicker == null) panelUncoveredMap(maxWidth, maxHeight, LocalLayoutDirection.current) else null
+        val panelRoom =
+            if (pagePanel && areaPicker == null) panelUncoveredMap(maxWidth, maxHeight, roomTop, LocalLayoutDirection.current) else null
         if (!pageSheet || areaPicker != null) SideEffect { report(panelRoom) }
         map()
         if (areaPicker != null) {
@@ -183,7 +193,8 @@ fun MapScreen(
                         .align(if (panelShown) Alignment.TopEnd else Alignment.TopCenter)
                         .padding(top = TopControlSize + MapControlMargin)
                         .padding(start = if (panelShown) SidePanelWidth + MapControlMargin else 0.dp)
-                        .widthIn(max = 480.dp),
+                        .widthIn(max = 480.dp)
+                        .onSizeChanged { bannersHeight = with(density) { it.height.toDp() } },
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -273,7 +284,7 @@ fun MapScreen(
             PlaceSheetWithControls(
                 topSpace = underBar,
                 bottomSpace = insets.calculateBottomPadding() + 8.dp,
-                onMapBottom = { bottom -> report(DpRect(0.dp, underBar, screenWidth, bottom)) },
+                onMapBottom = { bottom -> report(DpRect(0.dp, roomTop, screenWidth, bottom)) },
                 controls = {
                     if (!placePage.full) {
                         Box(Modifier.padding(horizontal = MapControlMargin).padding(bottom = 8.dp)) {
@@ -294,13 +305,27 @@ fun MapScreen(
 }
 
 /**
- * The map beside the place panel of a wide screen of [width] x [height]: under the search bar, past
- * the panel's side, above my location and the credits, inside the safe area.
+ * Where the map left in view starts, under a safe area of [safeTop]: under the search bar, or under
+ * the notices below it when they are [bannersHeight] tall (each of them reaches across the map
+ * beside a panel too, as wide as a phone).
+ */
+internal fun uncoveredMapTop(
+    safeTop: Dp,
+    bannersHeight: Dp,
+): Dp {
+    val underBar = safeTop + MapControlMargin + TopControlSize + 8.dp
+    return if (bannersHeight > 0.dp) underBar + MapControlMargin + bannersHeight else underBar
+}
+
+/**
+ * The map beside the place panel of a wide screen of [width] x [height]: from [top], past the
+ * panel's side, above my location and the credits, inside the safe area.
  */
 @Composable
 private fun panelUncoveredMap(
     width: Dp,
     height: Dp,
+    top: Dp,
     direction: LayoutDirection,
 ): DpRect {
     val insets = WindowInsets.safeDrawing.asPaddingValues()
@@ -309,7 +334,7 @@ private fun panelUncoveredMap(
     val panelEdge = MapControlMargin + SidePanelWidth
     return DpRect(
         left = if (direction == LayoutDirection.Ltr) left + panelEdge else left,
-        top = insets.calculateTopPadding() + MapControlMargin + TopControlSize + 8.dp,
+        top = top,
         right = if (direction == LayoutDirection.Ltr) right else right - panelEdge,
         bottom = height - insets.calculateBottomPadding() - MapControlMargin - BottomControlsHeight,
     )

@@ -11,6 +11,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.LayoutDirection
@@ -41,6 +42,7 @@ import to.pubky.maps.place.PlaceRef
 import to.pubky.maps.place.PlaceSheet
 import to.pubky.maps.place.PlaceSource
 import to.pubky.maps.place.SheetStop
+import to.pubky.maps.status.ServicePart
 import to.pubky.maps.ui.PubkyMapsTheme
 
 /**
@@ -88,6 +90,8 @@ class UncoveredMapTest {
     private fun show(
         placeShown: Boolean,
         direction: LayoutDirection = LayoutDirection.Ltr,
+        missing: Set<ServicePart> = emptySet(),
+        mapUnavailable: Boolean = false,
     ) {
         shown = placeShown
         compose.setContent {
@@ -99,8 +103,9 @@ class UncoveredMapTest {
                                 .mapStyles(darkTheme = false)
                                 .first()
                                 .attribution,
-                        mapUnavailable = false,
+                        mapUnavailable = mapUnavailable,
                         onRetryMap = {},
+                        missing = missing,
                         onMyLocation = {},
                         onOpenSettings = {},
                         placePage =
@@ -189,5 +194,31 @@ class UncoveredMapTest {
         shown = false
         compose.waitForIdle()
         assertNull(reported)
+    }
+
+    /** Where the text of the lowest notice under the bar, found by [text], ends (in dp). */
+    private fun bannerBottom(text: String) =
+        compose
+            .onAllNodesWithText(text, substring = true)
+            .fetchSemanticsNodes()
+            .maxOf { it.boundsInRoot.bottom } / compose.density.density
+
+    @Test
+    @Config(qualifiers = "w412dp-h915dp-notnight-mdpi")
+    fun onAPhoneTheMapInViewStartsUnderTheBannersUnderTheBar() {
+        show(placeShown = true, missing = setOf(ServicePart.Pinakes))
+        val banner = bannerBottom(ServicePart.Pinakes.missingText)
+        val room = checkNotNull(reported)
+        // The banner's own padding (8 dp) under its text, then the 8 dp gap the bar has too.
+        assertEquals(banner + 16f, room.top.value, 1f)
+    }
+
+    @Test
+    @Config(qualifiers = "w1280dp-h800dp-notnight-mdpi")
+    fun onAWideScreenTheMapInViewStartsUnderTheMapUnavailableNoticeAndTheBanner() {
+        show(placeShown = true, missing = setOf(ServicePart.Pinakes), mapUnavailable = true)
+        val banner = bannerBottom(ServicePart.Pinakes.missingText)
+        val room = checkNotNull(reported)
+        assertEquals(banner + 16f, room.top.value, 1f)
     }
 }

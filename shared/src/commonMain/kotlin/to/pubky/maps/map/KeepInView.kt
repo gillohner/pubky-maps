@@ -6,9 +6,15 @@ import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.transformLatest
+import kotlinx.coroutines.launch
+import to.pubky.maps.links.GeoPoint
 
 /**
  * How close to the edge of the uncovered map a place still counts as in view: its pin (a 24 dp dot)
@@ -42,17 +48,14 @@ internal fun panIntoView(
 
 /**
  * Where on the screen the camera's centre goes so that a tapped place at [point] shows in [room] of
- * a map of [size]: null when it is in view already, when its point on the screen is unknown, or when
- * [userMoved] the map since the place opened (where the user put the map is theirs).
+ * a map of [size]: null when it is in view already or its point on the screen is unknown.
  */
 internal fun keepInViewCentre(
     point: DpOffset?,
     room: DpRect,
     size: DpSize,
-    userMoved: Boolean,
 ): DpOffset? {
-    if (userMoved || point == null) return null
-    val shift = panIntoView(point, room) ?: return null
+    val shift = point?.let { panIntoView(it, room) } ?: return null
     return DpOffset(size.width / 2 + shift.x, size.height / 2 + shift.y)
 }
 
@@ -76,4 +79,62 @@ internal fun <T : Any> settled(rooms: Flow<T?>): Flow<T> =
         if (room == null) return@transformLatest
         delay(ROOM_SETTLE_MS)
         emit(room)
+    }
+
+/** The map a tapped place is kept in view on: MapLibre's camera in [MapRoute], a fake in tests. */
+internal interface KeepInViewMap {
+    /** The map's size on the screen; null before it is laid out. */
+    val size: DpSize?
+
+    /** The camera is moving (our own pan, a fling): a room seen meanwhile is left alone. */
+    val moving: Boolean
+
+    /** Where [point] is on the screen; null when it cannot be projected. */
+    fun screenPoint(point: GeoPoint): DpOffset?
+
+    /** Moves the camera so that what is now at [centre] on the screen is in the middle of the map. */
+    suspend fun centreOn(centre: DpOffset)
+}
+
+/**
+ * Keeps the place [uri] tapped at [point] in view while its sheet or panel opens: each time the map
+ * left in view ([rooms], see [settled]) has settled, a place it hides moves to its middle, once per
+ * place and map size ([kept] and [onKept], see [keptInViewKey]); nothing once [userMoved] the map
+ * (where the user put the map is theirs).
+ *
+ * The sheet's lowest height is its header, which grows when the place's card or a part's failure
+ * arrives, mostly after the first room has settled. So a room that shows the place counts as final
+ * only once [pageDone] (every part of the page answered or failed): before that, a later, smaller
+ * room is checked again. After it, dragging the sheet over the place moves nothing, as in Google Maps.
+ * Runs until cancelled (the place closes or another is tapped).
+ */
+internal suspend fun keepTappedInView(
+    uri: String,
+    point: GeoPoint,
+    rooms: Flow<DpRect?>,
+    pageDone: Flow<Boolean>,
+    userMoved: Flow<Boolean>,
+    map: KeepInViewMap,
+    kept: () -> String?,
+    onKept: (String) -> Unit,
+): Unit =
+    coroutineScope {
+        var moved = false
+        launch {
+            userMoved.first { it }
+            moved = true
+        }
+        val roomsAndDone = combine(rooms, pageDone) { room, done -> room?.let { it to done } }.distinctUntilChanged()
+        settled(roomsAndDone).collect { (room, done) ->
+            val size = map.size ?: return@collect
+            val key = keptInViewKey(uri, size)
+            if (moved || kept() == key || map.moving) return@collect
+            val centre = keepInViewCentre(map.screenPoint(point), room, size)
+            if (centre != null) {
+                onKept(key)
+                map.centreOn(centre)
+            } else if (done) {
+                onKept(key)
+            }
+        }
     }
