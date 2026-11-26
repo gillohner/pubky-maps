@@ -23,6 +23,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import kotlin.time.Duration.Companion.seconds
 
@@ -49,10 +50,24 @@ class OutboxJobTest {
             assertEquals(JobInfo.NETWORK_TYPE_ANY, job.networkType)
             assertTrue("kept over a restart of the phone", job.isPersisted)
             assertEquals(JobInfo.BACKOFF_POLICY_EXPONENTIAL, job.backoffPolicy)
+            assertTrue("never held back to batch it with other apps' jobs", job.isExpedited)
 
             waiting.value = false
             assertNull("sent or signed out: nothing to wake the app for", jobs.getPendingJob(OUTBOX_JOB_ID))
         }
+
+    @Test
+    fun withTheExpeditedQuotaUsedUpTheJobIsARegularOne() {
+        shadowOf(jobs).failExpeditedJob(true)
+
+        scheduleOutboxJob(context)
+
+        val job = jobs.getPendingJob(OUTBOX_JOB_ID)
+        assertNotNull("a regular job instead of none", job)
+        assertFalse(job!!.isExpedited)
+        assertEquals(JobInfo.NETWORK_TYPE_ANY, job.networkType)
+        assertTrue(job.isPersisted)
+    }
 
     @Test
     fun aJobThatIsAlreadyThereIsNotScheduledAgain() =

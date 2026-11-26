@@ -70,9 +70,20 @@ internal fun followOutbox(
         }
     }
 
-/** Schedules the job anew: a new job starts with no failures, so its first backoff is the shortest again. */
+/**
+ * Schedules the job anew: a new job starts with no failures, so its first backoff is the shortest again.
+ *
+ * Expedited from Android 12 on: Android holds a regular network job of an app that is not on screen
+ * back to batch it with others (on the API 35 emulator a run killed with the app closed was
+ * registered again, ready with every constraint met, and not started in 5 minutes), and expedited
+ * jobs are never held back so. When the app's expedited quota is used up Android refuses one, so a
+ * regular job is scheduled instead; a run Android reschedules stays expedited while quota is left.
+ */
 internal fun scheduleOutboxJob(context: Context) {
-    context.getSystemService(JobScheduler::class.java)?.schedule(outboxJob(context))
+    val jobs = context.getSystemService(JobScheduler::class.java) ?: return
+    if (jobs.schedule(outboxJob(context, expedited = true)) != JobScheduler.RESULT_SUCCESS) {
+        jobs.schedule(outboxJob(context, expedited = false))
+    }
 }
 
 /**
@@ -104,14 +115,20 @@ internal fun rescheduleAfterStop(
     return false
 }
 
-internal fun outboxJob(context: Context): JobInfo =
-    JobInfo
-        .Builder(OUTBOX_JOB_ID, ComponentName(context, OutboxJobService::class.java))
-        .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
-        // Writes made just before the phone was switched off go out after it starts again.
-        .setPersisted(true)
-        .setBackoffCriteria(BACKOFF_MS, JobInfo.BACKOFF_POLICY_EXPONENTIAL)
-        .build()
+internal fun outboxJob(
+    context: Context,
+    expedited: Boolean,
+): JobInfo {
+    val job =
+        JobInfo
+            .Builder(OUTBOX_JOB_ID, ComponentName(context, OutboxJobService::class.java))
+            .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+            // Writes made just before the phone was switched off go out after it starts again.
+            .setPersisted(true)
+            .setBackoffCriteria(BACKOFF_MS, JobInfo.BACKOFF_POLICY_EXPONENTIAL)
+    if (expedited && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) job.setExpedited(true)
+    return job.build()
+}
 
 /**
  * Sends what waits: asks the account and the outbox to try now ([sendNow]), again every [again],

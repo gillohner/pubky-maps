@@ -13,7 +13,8 @@ name: android
 # When the app, the core or CI changed, synonym-blocked runs the app with every Synonym host
 # unreachable (scripts/ci/synonym-blocked.py): the map, the cached account and the degraded banner,
 # a place saved in airplane mode waits and Android starts the closed app for it when the network is
-# back (the outbox job), and a second time with the first map style blocked too.
+# back (the outbox job), and again after the job's backoff when that run was killed with the
+# homeserver still unreachable; and a second time with the first map style blocked too.
 # Each of these tests on the debug APK fails when StrictMode caught our code reading disk on the
 # main thread or leaking a resource (scripts/ci/strict_mode.py); network on the main thread crashes
 # the app.
