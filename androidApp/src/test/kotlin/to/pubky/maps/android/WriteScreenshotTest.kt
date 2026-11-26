@@ -342,6 +342,13 @@ class WriteScreenshotTest {
     @Test
     fun postPageTabletDark() = capture("write-post", Device.Tablet, dark = true) { PostPageShot() }
 
+    /** At the largest font size (200 %) the "Public" note goes under its badge, on the page's whole width. */
+    @Test
+    fun postPageLargeFontPhoneLight() = capture("write-post", Device.Phone, dark = false, largeFont = true) { PostPageShot() }
+
+    @Test
+    fun postPageLargeFontPhoneDark() = capture("write-post", Device.Phone, dark = true, largeFont = true) { PostPageShot() }
+
     @Composable
     private fun PhotoPageEmptyShot() {
         PhotoPage(PhotoPageState(placeName = "Conditorei Schober"), {}, {}, {}, {}, {}, {})
