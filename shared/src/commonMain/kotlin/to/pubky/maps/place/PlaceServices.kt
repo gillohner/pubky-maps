@@ -10,11 +10,13 @@ import to.pubky.maps.map.MapPlacesLayer
 
 /**
  * Place pages as the app runs them: the page controller and the map's Pubky places layer, for the life
- * of the process (rotation keeps an open page).
+ * of the process (rotation keeps an open page), and Pinakes and Nexus through the user's server lists
+ * ([data]) for keeping the offline areas' Pubky places.
  */
 class PlaceServices(
     val pages: PlacePageController,
     val layer: MapPlacesLayer,
+    val data: PlaceData,
 )
 
 /** What "Open in" offers for a place, and how an entry is opened; none where map links are missing. */

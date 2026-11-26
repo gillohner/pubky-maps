@@ -1,0 +1,58 @@
+-- The Pubky places of each offline area (the places people referenced on Pubky, from Pinakes), so
+-- the map's Pubky places layer shows them without a connection. Public data only.
+
+CREATE TABLE area (
+    -- The offline area's id (OfflineMap.id).
+    id TEXT NOT NULL PRIMARY KEY,
+    -- When its places were fetched, epoch milliseconds.
+    fetched_at INTEGER NOT NULL,
+    -- The box that was asked for, in degrees.
+    west REAL NOT NULL,
+    south REAL NOT NULL,
+    east REAL NOT NULL,
+    north REAL NOT NULL
+);
+
+CREATE TABLE area_place (
+    area TEXT NOT NULL,
+    uri TEXT NOT NULL,
+    name TEXT,
+    lat REAL NOT NULL,
+    lon REAL NOT NULL,
+    -- The schema.org type, e.g. Museum.
+    type TEXT,
+    -- OpenStreetMap's key/value category, e.g. amenity/cafe.
+    category TEXT,
+    PRIMARY KEY (area, uri)
+);
+
+CREATE INDEX area_place_lat ON area_place(lat);
+
+areas:
+SELECT id, fetched_at FROM area;
+
+putArea:
+INSERT OR REPLACE INTO area(id, fetched_at, west, south, east, north) VALUES (?, ?, ?, ?, ?, ?);
+
+putPlace:
+INSERT OR REPLACE INTO area_place(area, uri, name, lat, lon, type, category) VALUES (?, ?, ?, ?, ?, ?, ?);
+
+deleteArea:
+DELETE FROM area WHERE id = ?;
+
+deletePlaces:
+DELETE FROM area_place WHERE area = ?;
+
+-- Areas on the same grid often share an edge: one that only touches does not overlap.
+overlapping:
+SELECT COUNT(*) FROM area WHERE west < :east AND east > :west AND south < :north AND north > :south;
+
+-- A place kept by two overlapping areas counts once, as the area fetched last has it (SQLite takes
+-- the other columns from the row of the one max()).
+placesIn:
+SELECT p.uri, p.name, p.lat, p.lon, p.type, p.category, max(a.fetched_at) AS fetched_at
+FROM area_place p JOIN area a ON a.id = p.area
+WHERE p.lat BETWEEN :south AND :north AND p.lon BETWEEN :west AND :east
+GROUP BY p.uri
+ORDER BY p.uri
+LIMIT :limit;
