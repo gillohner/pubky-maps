@@ -16,7 +16,8 @@ import kotlin.math.roundToLong
  * A named place in the map tiles of an offline area: a point of interest, a town or district, a
  * street, a peak or a lake. [key] and [value] are the OpenStreetMap tag it stands for as far as the
  * tile says (`amenity`/`cafe`, `place`/`village`, `highway`/`primary`); [category] is the label the
- * map gives it when tapped.
+ * map gives it when tapped; [locality] the district and town it lies in ([Localities]), set once the
+ * area's places are stored.
  */
 data class OfflinePlace(
     val name: String,
@@ -25,6 +26,7 @@ data class OfflinePlace(
     val value: String,
     val category: String?,
     val point: GeoPoint,
+    val locality: String? = null,
 ) {
     /** The kind of place in Photon's words, for its zoom and icon: `city`, `district`, `locality`, `street`, or null. */
     internal val photonType: String?
@@ -99,7 +101,10 @@ private fun placeOf(
 
         "place", "place_labels" -> {
             val kind = properties["class"] ?: properties["kind"] ?: return null
-            if (kind in SKIPPED_PLACES) null else place("place", kind)
+            // Shortbread calls the capitals among its cities `capital` and `state_capital`, where
+            // OpenMapTiles keeps `city`: stored as cities, they name the places around them
+            // ("Museum · Hottingen, Zürich") and are found as cities.
+            if (kind in SKIPPED_PLACES) null else place("place", if (kind in CAPITALS) "city" else kind)
         }
 
         "transportation_name", "street_labels" -> {
@@ -198,6 +203,9 @@ private val SHORTBREAD_KEYS = listOf("amenity", "shop", "tourism", "leisure", "h
 
 /** Place labels too large for a search inside a downloaded area. */
 private val SKIPPED_PLACES = setOf("continent", "country", "state", "province")
+
+/** Shortbread's kinds of the capitals among its cities (OpenMapTiles has no such class). */
+private val CAPITALS = setOf("capital", "state_capital")
 
 /** Line labels that are not streets: railways, ferries, lifts, pistes. */
 private val NOT_STREETS = setOf("rail", "transit", "ferry", "aerialway", "ski", "railway", "subway", "tram", "light_rail")

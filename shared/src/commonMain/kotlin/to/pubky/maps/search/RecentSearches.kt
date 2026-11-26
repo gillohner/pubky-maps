@@ -196,6 +196,7 @@ private data class StoredPlace(
     val zoom: Double? = null,
     val address: String? = null,
     val category: String? = null,
+    val locality: String? = null,
 )
 
 private fun RecentSearch.toStored() =
@@ -218,6 +219,7 @@ private fun RecentSearch.toStored() =
                     zoom = it.zoom,
                     address = it.address,
                     category = it.category,
+                    locality = it.locality,
                 )
             },
     )
@@ -240,6 +242,7 @@ private fun StoredRecent.toRecent(): RecentSearch? {
                 zoom = stored.zoom,
                 address = stored.address,
                 category = stored.category,
+                locality = stored.locality,
             ),
     )
 }

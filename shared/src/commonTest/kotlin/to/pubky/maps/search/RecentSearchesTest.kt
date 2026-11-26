@@ -69,7 +69,9 @@ class RecentSearchesTest {
 
     @Test
     fun theFileKeepsTextsAndPlaces() {
-        val entries = listOf(RecentSearch("kunsthaus", kunsthaus), RecentSearch("47.37, 8.54"))
+        // A place picked from the offline maps keeps its district and town.
+        val offline = kunsthaus.copy(source = PlaceSource.Map, address = null, locality = "Hottingen, Zürich")
+        val entries = listOf(RecentSearch("kunsthaus", kunsthaus), RecentSearch("47.37, 8.54"), RecentSearch("kunst", offline))
         assertEquals(entries, decodeRecentSearches(encodeRecentSearches(entries)))
     }
 

@@ -174,7 +174,7 @@ fun PlaceHeader(
         Column(Modifier.padding(end = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             val facts = listOfNotNull(page.categoryText(), context.distance)
             if (facts.isNotEmpty()) Text(facts.joinToString(" · "), style = MaterialTheme.typography.bodyMedium)
-            page.detailText(context.provider)?.let { DetailLine(it, page.address) }
+            page.detailText(context.provider)?.let { DetailLine(it, page.streetAddress) }
             page.osm
                 ?.openingHours
                 ?.let(OpeningSchedule::parse)
@@ -618,8 +618,8 @@ private fun CoordinatesRow(coordinates: String) {
 }
 
 /**
- * The line under what the place is (its address, else its coordinates, and where a link came from). When it
- * holds an address, a long press copies the address alone, as in CoMaps and OsmAnd; TalkBack offers it as
+ * The line under what the place is (its address, else its district and town, else its coordinates, and where
+ * a link came from). When it holds a postal address, a long press copies the address alone, as in CoMaps and OsmAnd; TalkBack offers it as
  * the long-press action. The line then says "Address copied" for a moment: Android 12 and older show
  * nothing when an app copies, and a long press has no other mark of having worked.
  */

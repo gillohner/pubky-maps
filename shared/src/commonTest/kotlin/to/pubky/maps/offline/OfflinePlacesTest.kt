@@ -145,6 +145,30 @@ class OfflinePlacesTest {
     }
 
     @Test
+    fun aShortbreadCapitalIsACityThatNamesThePlacesAroundIt() {
+        val found =
+            places(
+                mapOf(
+                    "pois" to listOf(TestFeature(11, mapOf("name" to "Kunsthaus", "tourism" to "museum"), listOf(3000 to 3000))),
+                    "place_labels" to
+                        listOf(
+                            TestFeature(77_771, mapOf("name" to "Zürich", "kind" to "state_capital"), listOf(2000 to 2000)),
+                            TestFeature(77_772, mapOf("name" to "Bern", "kind" to "capital"), listOf(100 to 100)),
+                            TestFeature(77_773, mapOf("name" to "Hottingen", "kind" to "quarter"), listOf(3100 to 3100)),
+                        ),
+                ),
+            )
+        assertEquals(
+            listOf("Zürich" to "place=city", "Bern" to "place=city", "Hottingen" to "place=quarter"),
+            found.filter { it.key == "place" }.map { it.name to "${it.key}=${it.value}" },
+        )
+        assertEquals("city", found.single { it.name == "Zürich" }.photonType)
+        assertTrue(Localities.names(found.single { it.name == "Zürich" }.value))
+        // Both are cities: the nearer names the museum.
+        assertEquals("Hottingen, Zürich", Localities(found).of(found.single { it.name == "Kunsthaus" }))
+    }
+
+    @Test
     fun aPlaceCountsInTheTileThatHoldsItNotInItsNeighboursBuffer() {
         val found =
             places(

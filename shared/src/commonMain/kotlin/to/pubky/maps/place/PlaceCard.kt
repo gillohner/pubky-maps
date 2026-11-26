@@ -139,11 +139,11 @@ internal val PlaceRef.offlineNote: String?
         }
 
 /**
- * The address, else the coordinates of a pinned place unless the title already is them (a view or a
- * search has none).
+ * The address, else the district and town, else the coordinates of a pinned place unless the title
+ * already is them (a view or a search has none).
  */
 internal fun PlaceRef.detailLine(): String? {
-    if (address != null) return address
+    (address ?: locality)?.let { return it }
     if (!pinned) return null
     val point = point ?: return null
     val coordinates = "${formatCoordinate(point.lat)}, ${formatCoordinate(point.lon)}"

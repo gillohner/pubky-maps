@@ -43,6 +43,7 @@ val PlaceRefSaver: Saver<PlaceRef?, Any> =
                     place.zoom,
                     place.address,
                     place.category,
+                    place.locality,
                 )
             }
         },
@@ -63,6 +64,7 @@ val PlaceRefSaver: Saver<PlaceRef?, Any> =
                     zoom = saved[7] as? Double,
                     address = saved[8] as? String,
                     category = saved[9] as? String,
+                    locality = saved.getOrNull(10) as? String,
                 )
             }
         },

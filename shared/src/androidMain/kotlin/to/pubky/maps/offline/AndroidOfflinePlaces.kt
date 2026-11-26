@@ -24,9 +24,10 @@ import java.util.zip.GZIPInputStream
 import java.util.zip.InflaterInputStream
 
 /**
- * The places of the offline areas, in the no-backup folder (they are built again from the tiles).
- * Write-ahead logging lets a search read while an area's places are being written, which takes one
- * transaction of up to tens of seconds.
+ * The places of the offline areas, in the no-backup folder (they are built again from the tiles: a
+ * new version of the database empties it, and the places are read again). Write-ahead logging lets
+ * a search read while an area's places are being written, which takes one transaction of up to
+ * tens of seconds.
  */
 fun androidOfflinePlaceIndex(context: Context): SqlOfflinePlaceIndex =
     SqlOfflinePlaceIndex(

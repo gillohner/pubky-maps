@@ -157,16 +157,190 @@ class OfflinePlaceIndexDatabaseTest {
     }
 
     @Test
+    fun placesKeepTheirDistrictAndTownAndAreFoundByThem() {
+        val index = index()
+        index.replace(
+            "a",
+            0,
+            sequenceOf(
+                place("Kunsthaus Zürich", 47.3703, 8.5481, osm = 1, key = "tourism", value = "museum", category = "Museum"),
+                place("Bahnhofstrasse", 47.3720, 8.5390, key = "highway", value = "minor", category = "Street"),
+                place("Bahnhofstrasse", 47.4995, 8.7235, key = "highway", value = "minor", category = "Street"),
+                // The labels come after the places they name, as the tiles give them in any order.
+                place("Zürich", 47.3700, 8.5400, osm = 10, key = "place", value = "city", category = null),
+                place("Hottingen", 47.3700, 8.5600, osm = 11, key = "place", value = "quarter", category = null),
+                place("Winterthur", 47.5000, 8.7240, osm = 12, key = "place", value = "town", category = null),
+            ),
+        )
+        val all = runBlocking { index.search("bahnhofstrasse", zurich) }!!
+        assertEquals(listOf("Zürich", "Winterthur"), all.map { it.locality })
+        assertEquals(listOf(47.4995), runBlocking { index.search("bahnhofstrasse winterthur", zurich) }!!.map { it.point.lat })
+        assertEquals(listOf("Hottingen, Zürich"), runBlocking { index.search("kunsthaus", zurich) }!!.map { it.locality })
+        // A district's label is in its town; a town's label in nothing.
+        assertEquals(listOf("Zürich"), runBlocking { index.search("hottingen", zurich) }!!.map { it.locality })
+        assertEquals(listOf(null), runBlocking { index.search("winterthur", zurich) }!!.map { it.locality })
+        // A district's or town's name alone finds the district or town, not every place in it.
+        assertEquals(listOf("Hottingen"), index.find("hottingen"))
+        assertEquals(listOf("Winterthur"), index.find("winterthur"))
+    }
+
+    @Test
+    fun aTownIsFoundByTheStartOfItsNameAmongThePlacesThatLieInIt() {
+        val index = index()
+        val shops =
+            (0 until 450).map { i ->
+                place("Shop $i", 47.3700 + i * 0.00001, 8.5400, osm = i + 100L, value = "shop", category = "Shop")
+            }
+        index.replace(
+            "a",
+            0,
+            (
+                shops +
+                    place("Zürichstrasse", 47.3600, 8.5300, key = "highway", value = "minor", category = "Street") +
+                    place("Zürich", 47.3500, 8.5400, osm = 1, key = "place", value = "city", category = null)
+            ).asSequence(),
+        )
+        // Every shop lies in Zürich and is nearer the map centre than the label and the street.
+        assertEquals(setOf("Zürich"), runBlocking { index.search("shop", zurich) }!!.map { it.locality }.toSet())
+        assertEquals(setOf("Zürich", "Zürichstrasse"), index.find("zur")?.toSet())
+        assertEquals(listOf("Zürich", "Zürichstrasse"), index.find("zürich"))
+    }
+
+    @Test
+    fun aTownComesBeforeThePlacesNamedAfterIt() {
+        val index = index()
+        // 450 stops named after the town, all nearer the map centre than its label.
+        val stops =
+            (0 until 450).map { i ->
+                place(
+                    "Zürich, Halt $i",
+                    47.3700 + i * 0.00001,
+                    8.5400,
+                    osm = i + 100L,
+                    key = "highway",
+                    value = "bus_stop",
+                    category = "Bus stop",
+                )
+            }
+        val city = place("Zürich", 47.3200, 8.5400, osm = 1, key = "place", value = "city", category = null)
+        index.replace("a", 0, (stops + city + place("Café Rosa", 47.3210, 8.5410, osm = 2)).asSequence())
+        assertEquals("Zürich", index.find("zürich")?.first())
+        // And the other words of a query naming it still match the places in it (the lookup
+        // around a town is theOtherWordsAreLookedUpAroundATownNamed's).
+        assertEquals(listOf("Café Rosa"), index.find("cafe zurich"))
+    }
+
+    @Test
+    fun aShortbreadCapitalNamesThePlacesInItAndIsLookedUpAround() {
+        val index = index()
+        // A VersaTiles (Shortbread) tile over Zürich, whose label is a `state_capital`.
+        val tile =
+            vectorTile(
+                mapOf(
+                    "pois" to
+                        listOf(
+                            TestFeature(11, mapOf("name" to "Kunsthaus", "tourism" to "museum"), listOf(3000 to 3000)),
+                            TestFeature(21, mapOf("name" to "Café Rosa", "amenity" to "cafe"), listOf(3050 to 3050)),
+                        ),
+                    "place_labels" to
+                        listOf(
+                            TestFeature(31, mapOf("name" to "Zürich", "kind" to "state_capital"), listOf(2000 to 2000)),
+                            TestFeature(41, mapOf("name" to "Hottingen", "kind" to "quarter"), listOf(3100 to 3100)),
+                        ),
+                ),
+            )
+        // The map is on Winterthur, 20 km away, among 450 cafés of its own.
+        val winterthur = SearchArea(GeoPoint(47.5000, 8.7240), zoom = 14.0, halfDiagonalMeters = 3_000.0)
+        val near = (0 until 450).map { i -> place("Café $i", 47.5000 + i * 0.00001, 8.7240, osm = i + 100L) }
+        index.replace("a", 0, (near + placesOfTile(14, 8580, 5737, decodeVectorTile(tile))).asSequence())
+        val museum = runBlocking { index.search("kunsthaus", winterthur) }!!
+        assertEquals(listOf("Hottingen, Zürich"), museum.map { it.locality })
+        assertEquals("city", runBlocking { index.search("zürich", winterthur) }!!.first().photonType)
+        // "cafe zurich" looks around the capital, past the cafés nearer the map.
+        assertEquals(listOf("Café Rosa"), runBlocking { index.search("cafe zurich", winterthur) }!!.map { it.name })
+    }
+
+    @Test
+    fun theOtherWordsAreLookedUpAroundATownNamed() {
+        val index = index()
+        // 450 cafés around the map centre, and two in Uster, 20 km away.
+        val near = (0 until 450).map { i -> place("Café $i", 47.3700 + i * 0.00001, 8.5400, osm = i + 100L) }
+        index.replace(
+            "a",
+            0,
+            (
+                near +
+                    place("Café Uster", 47.3500, 8.7200, osm = 1) +
+                    place("Café am Stadtpark", 47.3510, 8.7210, osm = 2) +
+                    place("Uster", 47.3505, 8.7205, osm = 3, key = "place", value = "town", category = null)
+            ).asSequence(),
+        )
+        assertEquals(setOf("Café Uster", "Café am Stadtpark"), index.find("cafe uster")?.toSet())
+        assertEquals(listOf("Café am Stadtpark"), index.find("cafe stadtpark uster"))
+    }
+
+    @Test
+    fun aVersionOneDatabaseIsEmptiedSoItsAreasAreReadAgain() {
+        val driver = JdbcSqliteDriver("jdbc:sqlite:${File(dir, "v1.db").path}", Properties())
+        // The schema the first released offline places had.
+        listOf(
+            "CREATE TABLE area (id TEXT NOT NULL PRIMARY KEY, new_data_at INTEGER NOT NULL)",
+            "CREATE TABLE place (id INTEGER PRIMARY KEY AUTOINCREMENT, area TEXT NOT NULL, name TEXT NOT NULL, osm_type TEXT, " +
+                "osm_id INTEGER, tag_key TEXT NOT NULL, tag_value TEXT NOT NULL, category TEXT, lat REAL NOT NULL, lon REAL NOT NULL)",
+            "CREATE INDEX place_area ON place(area)",
+            "CREATE TABLE word (word TEXT NOT NULL, place INTEGER NOT NULL)",
+            "CREATE INDEX word_word ON word(word)",
+            "CREATE INDEX word_place ON word(place)",
+            "INSERT INTO area VALUES ('a', 5)",
+            "INSERT INTO place VALUES (1, 'a', 'Café Rosa', 'node', 1, 'amenity', 'cafe', 'Café', 47.37, 8.54)",
+            "INSERT INTO word VALUES ('rosa', 1)",
+        ).forEach { driver.execute(null, it, 0) }
+        assertEquals(2L, OfflinePlacesDatabase.Schema.version)
+
+        OfflinePlacesDatabase.Schema.migrate(driver, 1, OfflinePlacesDatabase.Schema.version)
+
+        val index = SqlOfflinePlaceIndex(driver, io = Dispatchers.Unconfined)
+        // No area: the indexer reads every Ready area's places again, now with their localities.
+        assertEquals(emptyMap(), index.areas())
+        index.replace(
+            "a",
+            6,
+            sequenceOf(
+                place("Café Rosa", 47.3700, 8.5410, osm = 1),
+                place("Zürich", 47.3700, 8.5400, osm = 10, key = "place", value = "city", category = null),
+            ),
+        )
+        assertEquals(listOf("Zürich"), runBlocking { index.search("rosa", zurich) }!!.map { it.locality })
+    }
+
+    @Test
     fun aCityOfPlacesIsSearchedWellUnderATenthOfASecond() {
         val index = index()
         val places =
             (0 until 60_000).asSequence().map { i ->
                 place("Place $i ${WORDS[i % WORDS.size]}", 47.30 + (i % 300) * 0.0005, 8.45 + (i / 300) * 0.0008, osm = i.toLong() + 1)
             }
-        index.replace("a", 0, places)
+        // A town every 2 km, so each place has a locality.
+        val towns =
+            (0 until 64).asSequence().map { i ->
+                place(
+                    TOWNS[i % TOWNS.size],
+                    47.30 + (i % 8) * 0.018,
+                    8.45 + (i / 8) * 0.026,
+                    osm = 1_000_000L + i,
+                    key = "place",
+                    value = "town",
+                    category = null,
+                )
+            }
+        val stored = measureTime { index.replace("a", 0, places + towns) }
+        println("60,064 places stored in $stored")
         index.find("bäckerei")
         val took = measureTime { assertEquals(30, index.find("bäck")?.size) }
         assertTrue(took.inWholeMilliseconds < 100, "search took $took")
+        // Two words, one a town's: looked up around the map centre and around the town.
+        val inTown = measureTime { assertEquals(30, index.find("bäck ${TOWNS[0]}")?.size) }
+        assertTrue(inTown.inWholeMilliseconds < 100, "search in a town took $inTown")
     }
 
     @Test
@@ -355,5 +529,6 @@ class OfflinePlaceIndexDatabaseTest {
 
     private companion object {
         val WORDS = listOf("Bäckerei", "Café", "Apotheke", "Kiosk", "Metzgerei", "Bar")
+        val TOWNS = listOf("Uster", "Wetzikon", "Dübendorf", "Wallisellen", "Kloten", "Bülach", "Horgen", "Thalwil")
     }
 }

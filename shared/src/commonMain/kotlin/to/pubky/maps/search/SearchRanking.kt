@@ -189,6 +189,7 @@ object SearchRanking {
                     osm = place.osm,
                     source = PlaceSource.Map,
                     zoom = zoomFor(place.photonType),
+                    locality = place.locality,
                     category = place.category,
                 ),
             prominence = prominenceOf(place.key, place.value),
@@ -202,7 +203,12 @@ object SearchRanking {
     ): SearchResult {
         val row = fromPinakes(card)
         return row.copy(
-            place = row.place.copy(zoom = zoomFor(place.photonType), category = place.category ?: row.place.category),
+            place =
+                row.place.copy(
+                    zoom = zoomFor(place.photonType),
+                    locality = place.locality,
+                    category = place.category ?: row.place.category,
+                ),
             prominence = prominenceOf(place.key, place.value),
             kind = placeKindOf(place.key, place.value, place.photonType).takeIf { it != PlaceKind.Other } ?: row.kind,
         )
@@ -237,7 +243,7 @@ object SearchRanking {
         result: SearchResult,
     ): Double {
         val place = result.place
-        val text = textMatch(normalizedQuery, place.title, place.address)
+        val text = textMatch(normalizedQuery, place.title, place.address ?: place.locality)
         val near = place.point?.let { 1.0 / (1.0 + distanceMeters(area.centre, it) / area.proximityScaleMeters) } ?: 0.0
         val order = listOfNotNull(result.photonRank, result.pinakesRank).maxOfOrNull { 1.0 / (1.0 + it) } ?: 0.0
         val social =

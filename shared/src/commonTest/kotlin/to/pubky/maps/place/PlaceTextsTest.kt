@@ -34,6 +34,48 @@ class PlaceTextsTest {
     }
 
     @Test
+    fun aStreetAddressBeatsTheDistrictAndTownOfTheOfflineMap() {
+        val place =
+            PlaceRef(
+                "https://www.openstreetmap.org/way/26405421",
+                "Kunsthaus Zürich",
+                GeoPoint(47.3703, 8.5481),
+                null,
+                PlaceSource.Map,
+                locality = "Hottingen, Zürich",
+            )
+        // Picked from the offline maps: the district and town are all the page has.
+        assertEquals("Hottingen, Zürich", PlacePageState(place).address)
+        assertEquals("Hottingen, Zürich", PlacePageState(place).detailText(provider = null))
+        // They are no postal address to copy.
+        assertNull(PlacePageState(place).streetAddress)
+        // Opened again online: the card's street address replaces them.
+        val card =
+            PlaceCardInfo(
+                id = "1",
+                uri = place.uri,
+                name = "Kunsthaus Zürich",
+                type = "Museum",
+                category = null,
+                address = "Heimplatz 1, 8001 Zürich",
+                lat = 47.3703,
+                lon = 8.5481,
+                description = null,
+                image = null,
+                credits = emptyList(),
+                attribution = null,
+                alsoOn = emptyList(),
+                refs = emptyList(),
+                collections = 0,
+                facts = emptyMap(),
+            )
+        assertEquals("Heimplatz 1, 8001 Zürich", PlacePageState(place, card = card).address)
+        assertEquals("Heimplatz 1, 8001 Zürich", PlacePageState(place, card = card).streetAddress)
+        // Photon's address, when the place has one, still comes first.
+        assertEquals("Heimplatz 1", PlacePageState(place.copy(address = "Heimplatz 1"), card = card).address)
+    }
+
+    @Test
     fun theDetailsShowTheCoordinatesOnlyWhenThePointIsThePlace() {
         val point = GeoPoint(47.3778612, 8.5403200)
         val place = PlaceRef("https://www.openstreetmap.org/node/1", "Kunsthaus", point, null, PlaceSource.Map)

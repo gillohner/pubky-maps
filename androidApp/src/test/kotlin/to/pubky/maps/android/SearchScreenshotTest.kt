@@ -382,9 +382,26 @@ class SearchScreenshotTest {
                         "museum",
                         "Museum",
                         GeoPoint(47.3702, 8.5480),
+                        locality = "Hottingen, Zürich",
                     ),
-                    OfflinePlace("Kunsthausstrasse", null, "highway", "minor", "Street", GeoPoint(47.3697, 8.5486)),
-                    OfflinePlace("Kunsthaus Bar", OsmId(OsmType.Node, 4_012_345_678), "amenity", "bar", "Bar", GeoPoint(47.3705, 8.5476)),
+                    OfflinePlace(
+                        "Kunsthausstrasse",
+                        null,
+                        "highway",
+                        "minor",
+                        "Street",
+                        GeoPoint(47.3697, 8.5486),
+                        locality = "Hottingen, Zürich",
+                    ),
+                    OfflinePlace(
+                        "Kunsthaus Bar",
+                        OsmId(OsmType.Node, 4_012_345_678),
+                        "amenity",
+                        "bar",
+                        "Bar",
+                        GeoPoint(47.3705, 8.5476),
+                        locality = "Altstadt, Zürich",
+                    ),
                 )
             val area = SearchArea(here, zoom = 15.0, halfDiagonalMeters = 1_500.0)
             return SearchState(

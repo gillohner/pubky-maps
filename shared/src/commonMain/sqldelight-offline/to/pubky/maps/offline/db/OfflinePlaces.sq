@@ -18,7 +18,9 @@ CREATE TABLE place (
     tag_value TEXT NOT NULL,
     category TEXT,
     lat REAL NOT NULL,
-    lon REAL NOT NULL
+    lon REAL NOT NULL,
+    -- The district and town it lies in, "Hottingen, Zürich" (Localities); null when no label reaches it
+    locality TEXT
 );
 
 CREATE INDEX place_area ON place(area);
@@ -41,7 +43,10 @@ putArea:
 INSERT OR REPLACE INTO area(id, new_data_at) VALUES (?, ?);
 
 insertPlace:
-INSERT INTO place(area, name, osm_type, osm_id, tag_key, tag_value, category, lat, lon) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT INTO place(area, name, osm_type, osm_id, tag_key, tag_value, category, lat, lon, locality) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+setLocality:
+UPDATE place SET locality = ? WHERE id = ?;
 
 lastPlaceId:
 SELECT last_insert_rowid();
@@ -70,9 +75,10 @@ WHERE word.word >= :from AND word.word < :until
 ORDER BY (place.lat - :lat) * (place.lat - :lat) + (place.lon - :lon) * (place.lon - :lon)
 LIMIT :limit;
 
--- The places with the word itself, nearest to the point first.
+-- The places with the word itself, town and district labels first (the stops named after a town
+-- must not crowd out the town), then nearest to the point first.
 withWord:
 SELECT DISTINCT place.* FROM word JOIN place ON place.id = word.place
 WHERE word.word = :word
-ORDER BY (place.lat - :lat) * (place.lat - :lat) + (place.lon - :lon) * (place.lon - :lon)
+ORDER BY place.tag_key = 'place' DESC, (place.lat - :lat) * (place.lat - :lat) + (place.lon - :lon) * (place.lon - :lon)
 LIMIT :limit;
