@@ -316,21 +316,35 @@ check_reopened_view() {
     check_alive "map reopened"
     expect_view reopened || fail "the map did not open where it was left (stored view changed); see map-view-reopened.json"
     # A pan, then Back at once: the map leaves the screen before its camera has rested for 1 s and
-    # stores the last view it showed. The finger moves up by 1,200 px (about 460 dp, about 0.013
-    # degrees of latitude at zoom 14), so the map shows a view south of Zürich. The finger rests
-    # before it lifts (each input call takes a few hundred ms), so the map does not fling on. This
-    # start has no launcher intent, so Back finishes the activity (from the launcher, Android 12+ only
-    # moves the task back and the rest still runs). The time from the finger's lift to the
+    # stores the last view it showed. Each pan moves the finger up by 1,200 px (about 460 dp, about
+    # 0.013 degrees of latitude at zoom 14), so the map shows a view further south; the finger rests
+    # before it lifts (each input call takes a few hundred ms), so the map does not fling on. A first
+    # pan must be stored after its rest: it shows that gestures reach the camera, and gives the
+    # software-drawn map time to draw (it can stall for 8 s after a start, and a pan in a stall may
+    # not reach the camera before Back). The second pan's view must then be south of the first's.
+    # This start has no launcher intent, so Back finishes the activity (from the launcher, Android
+    # 12+ only moves the task back and the rest still runs). The time from the finger's lift to the
     # activity's destroy is printed for the log (1.2-1.5 s on CI); the rest starts only once the map
-    # reports its camera idle, so a build without the save on leaving loses the view even at 1.2 s.
-    adb shell "input motionevent DOWN 540 1800; input motionevent MOVE 540 1400; input motionevent MOVE 540 1000; input motionevent MOVE 540 600"
-    adb shell "input motionevent UP 540 600; log -t PubkyMapsSmoke lifted; input keyevent KEYCODE_BACK"
+    # reports its camera idle, so a build without the save on leaving loses the view even then.
+    pan_up() {
+        adb shell "input motionevent DOWN 540 1800; input motionevent MOVE 540 1400; input motionevent MOVE 540 1000; input motionevent MOVE 540 600"
+        adb shell "input motionevent UP 540 600; log -t PubkyMapsSmoke lifted${1:-}"
+    }
+    pan_up
+    stored=false
+    for _ in $(seq 1 15); do
+        sleep 2
+        if expect_view rested 47.35 47.365; then stored=true; break; fi
+    done
+    $stored || fail "the view after a pan was not stored once the camera rested; see map-view-rested.json"
+    sleep 5
+    pan_up "; input keyevent KEYCODE_BACK"
     sleep 3
     check_no_crash "back right after a pan"
     adb logcat -d -v epoch -b main -b events > "$out/logcat-pan-back.txt" || true
     awk '/PubkyMapsSmoke.*lifted/ { up = $1 } up && /wm_on_destroy_called.*MainActivity/ { printf "lift to destroy: %d ms\n", ($1 - up) * 1000; exit }' \
         "$out/logcat-pan-back.txt"
-    expect_view panned 47.30 47.365 || fail "the view at Back right after a pan was not stored; see map-view-panned.json"
+    expect_view panned 47.30 47.35 || fail "the view at Back right after a pan was not stored; see map-view-panned.json"
 }
 if adb shell run-as "$pkg" true > /dev/null 2>&1; then
     check_reopened_view
