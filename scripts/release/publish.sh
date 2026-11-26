@@ -6,10 +6,11 @@
 #   neither does an edge build of a commit that does not come after the commit of edge's live build
 #   (a run that kept its own, older commit: edge-commit.py). The release stays up while its files are
 #   replaced; the update feed and SHA256SUMS go last, so a feed never names a file that is not there
-#   yet, and files of older builds are removed only after the new feed is up. Only then the release's
-#   target commit, title and notes name this build: its target commit is always the commit of the
+#   yet. Only then the release's target commit, title and notes name this build, and only then the
+#   files of older builds are removed: after a complete publish its target commit is the commit of the
 #   live feed (the tag may have failed to move, below), which is what the edge check above and
-#   edge-commit.py compare with.
+#   edge-commit.py compare with. A run that fails after the feed is up fails red, with the release
+#   still naming the build before and keeping its files, until the next publish.
 # - `v<x.y.z>`: the release of that existing tag, made as a draft, filled, then published, so
 #   releases/latest/download/update.json never points at a release without its feed. GitHub picks
 #   which release is "latest" by version (a backport does not take it over).
@@ -17,6 +18,9 @@
 # GitHub refuses to let a job's own token move a tag across commits that change workflow files. Only
 # then the tag is deleted and made again at this commit; if that is refused too, it is put back and
 # the run only warns (the release's files are still this build's; its title names it).
+#
+# Every upload to a release and every edit of it is tried again when GitHub fails it (each gives the
+# same release when made twice); one that still fails after five tries fails the run.
 #
 # In GitHub Actions it writes `published=true` (or `false` when it published nothing) to the step's
 # outputs, so the job that installs the published APK runs only when there is one.
@@ -28,13 +32,23 @@ tag=$1 title=$2 notes=$3 dist=$4 feed=$5
 repo=$GITHUB_REPOSITORY
 sha=${BUILD_SHA:?the commit dist/ was built from}
 
-upload() {
+# A change on GitHub (`gh <args>`), tried five times. Notes go to stderr, so a caller can drop the
+# answer.
+change_gh() {
+  local i
   for i in 1 2 3 4 5; do
-    gh release upload "$tag" "$@" --clobber -R "$repo" && return 0
-    echo "::warning::upload failed (attempt $i); trying again"
-    sleep $((i * 15))
+    gh "$@" && return 0
+    if [ "$i" -lt 5 ]; then
+      echo "::warning::gh $* failed (attempt $i); trying again" >&2
+      sleep $((i * 15))
+    fi
   done
+  echo "::error::gh $* failed five times" >&2
   return 1
+}
+
+upload() {
+  change_gh release upload "$tag" "$@" --clobber -R "$repo"
 }
 
 # A read from GitHub (`gh <args>`), tried three times; it fails the run when GitHub does not answer.
@@ -101,14 +115,14 @@ case $tag in
       fi
       move_tag
       # A release whose tag was gone for a moment is a draft again: publish it.
-      gh release edit "$tag" -R "$repo" --prerelease --latest=false --draft=false
+      change_gh release edit "$tag" -R "$repo" --prerelease --latest=false --draft=false
     else
       gh release create "$tag" -R "$repo" --prerelease --latest=false --target "$sha" --title "$title" --notes-file "$notes"
     fi
     mapfile -t files < <(find "$dist" -maxdepth 1 -type f ! -name "$feed" ! -name SHA256SUMS | sort)
     upload "${files[@]}"
     upload "$dist/$feed" "$dist/SHA256SUMS"
-    gh release edit "$tag" -R "$repo" --title "$title" --notes-file "$notes" --target "$sha"
+    change_gh release edit "$tag" -R "$repo" --title "$title" --notes-file "$notes" --target "$sha"
     keep=$(cd "$dist" && ls)
     for a in $(gh release view "$tag" -R "$repo" --json assets -q '.assets[].name'); do
       grep -qxF "$a" <<< "$keep" || gh release delete-asset "$tag" "$a" -R "$repo" --yes
@@ -123,7 +137,7 @@ case $tag in
     upload "$dist/$feed" "$dist/SHA256SUMS"
     id=$(gh api "repos/$repo/releases/tags/$tag" --jq .id 2> /dev/null ||
       gh api "repos/$repo/releases" --jq ".[] | select(.tag_name == \"$tag\") | .id" | head -1)
-    gh api -X PATCH "repos/$repo/releases/$id" -F draft=false -F prerelease=false -f make_latest=legacy > /dev/null
+    change_gh api -X PATCH "repos/$repo/releases/$id" -F draft=false -F prerelease=false -f make_latest=legacy > /dev/null
     ;;
   *)
     echo "::error::publish: no release channel for tag $tag" >&2
