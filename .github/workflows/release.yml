@@ -77,8 +77,10 @@ jobs:
           path: |
             ~/.gradle/caches/modules-2
             ~/.gradle/wrapper/dists
-          key: gradle-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', '**/*.gradle.kts') }}
-          restore-keys: gradle-
+          key: gradle-release-build-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties', '**/*.gradle.kts') }}
+          restore-keys: |
+            gradle-release-build-
+            gradle-
       - name: Gradle wrapper
         run: |
           for i in 1 2 3; do
