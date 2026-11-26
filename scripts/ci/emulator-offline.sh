@@ -132,8 +132,23 @@ cp "$log" "$out/download.jsonl"
 # other side of the world, so the map itself fetches none of the area's new tiles: only the app's
 # check for updates (20 s after the start) can.
 curl -fsS "http://127.0.0.1:$port/release/2" > /dev/null
-# The app checks only on a network without a data cap (the emulator's Wi-Fi).
-adb shell dumpsys connectivity | grep -m 2 -E "NOT_METERED|Active default network" || echo "no unmetered network reported"
+# On a metered network a check stops as soon as it finds the new release: the update needs the
+# emulator's Wi-Fi as the default network.
+adb shell svc wifi enable || true
+default_network() {
+    local dump id
+    dump=$(adb shell dumpsys connectivity 2> /dev/null) || return 1
+    id=$(sed -n 's/.*Active default network: \([0-9]*\).*/\1/p' <<< "$dump" | sed -n 1p)
+    [ -n "$id" ] || return 1
+    grep -E "network\{$id\}" <<< "$dump" | sed -n 1p
+}
+network=""
+for _ in $(seq 1 15); do
+    network=$(default_network) || network=""
+    grep -q NOT_METERED <<< "$network" && break
+    sleep 2
+done
+echo "default network: ${network:-none reported}" | cut -c 1-300
 : > "$log"
 open_at "-33.8688,151.2093?z=16"
 # Exit 3: not yet. The map's flight to Sydney may fetch a low-zoom tile of the area itself (MapLibre's
@@ -167,7 +182,7 @@ PY
     sleep 5
 done
 cp "$log" "$out/update.jsonl"
-[ -n "$updated" ] || fail "the app did not update the offline map to the server's new tiles"
+[ -n "$updated" ] || fail "the app did not update the offline map to the server's new tiles (default network: ${network:-none reported})"
 open_offline_maps
 wait_ready offline-updated 60 || fail "the updated offline map is not Ready"
 check_alive "offline map updated"

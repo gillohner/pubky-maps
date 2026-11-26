@@ -317,7 +317,7 @@ class OfflineMapsTest {
         }
 
     @Test
-    fun readyAreasAreCheckedOnlyOnANetworkWithoutADataCap() =
+    fun onMobileDataACheckOnlyFindsOutThatThereIsAnUpdate() =
         runTest(UnconfinedTestDispatcher()) {
             var unmetered = false
             val store = FakeStore()
@@ -325,14 +325,54 @@ class OfflineMapsTest {
             offline.download(zurich, listOf(light))
             store.progress(light, PackProgress(PackState.Complete, 100, 100))
             store.resumed.clear()
-            advanceTimeBy(FIRST_CHECK + CHECK_INTERVAL)
+            store.paused.clear()
+            advanceTimeBy(FIRST_CHECK)
             runCurrent()
-            assertEquals(emptyList(), store.resumed)
+            // Nothing new: the walk ends as on Wi-Fi.
+            assertEquals(listOf(light), store.resumed)
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
+            assertEquals(listOf(light), store.paused)
 
+            // A new release: the walk is paused once it is still downloading.
+            advanceTimeBy(CHECK_INTERVAL - QUIET_CHECK)
+            runCurrent()
+            assertEquals(listOf(light, light), store.resumed)
+            store.progress(light, PackProgress(PackState.Downloading, 5, 100))
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            assertEquals(listOf(light, light), store.paused)
+            store.progress(light, PackProgress(PackState.Complete, 100, 100))
+            assertEquals(OfflineMapStatus.Paused(100, update = true), offline.maps().single().status)
+            assertFalse(offline.downloading)
+            advanceTimeBy(CHECK_INTERVAL)
+            runCurrent()
+            assertEquals(2, store.resumed.size)
+
+            // On Wi-Fi the next check goes on with it.
             unmetered = true
             advanceTimeBy(CHECK_INTERVAL)
             runCurrent()
+            assertEquals(listOf(light, light, light), store.resumed)
+        }
+
+    @Test
+    fun anUpdateStoppedAtTheLimitDoesNotGoOnWithTheNextStyle() =
+        runTest(UnconfinedTestDispatcher()) {
+            val (store, offline) = readyArea()
+            advanceTimeBy(FIRST_CHECK)
+            runCurrent()
+            store.progress(light, PackProgress(PackState.Downloading, 21, 100))
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            store.progress(light, PackProgress(PackState.Downloading, 2_996, 4_000, 1_000_000, 2_996, 1_000_000))
+            assertEquals(listOf(light, dark, light), store.paused)
+            // MapLibre counts the release before's tiles too and may report the stopped update complete.
+            store.progress(light, PackProgress(PackState.Complete, 4_000, 4_000, 1_000_000, 4_000, 1_000_000))
             assertEquals(listOf(light), store.resumed)
+            assertEquals(OfflineMapStatus.TooLarge, offline.maps().single().status)
+            assertFalse(offline.downloading)
         }
 
     @Test
