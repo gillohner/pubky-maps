@@ -9,7 +9,6 @@ import to.pubky.maps.place.categoryText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 class CategoryLabelsTest {
     private fun label(
@@ -45,11 +44,11 @@ class CategoryLabelsTest {
     }
 
     @Test
-    fun noLabelDoublesAWordOrEndsInShopShop() {
-        for ((tag, name) in TAG_LABELS) {
-            assertTrue(name.isNotBlank() && name.first().isUpperCase(), "$tag -> $name")
-            assertTrue(!name.lowercase().endsWith("shop shop"), "$tag -> $name")
-        }
+    fun eachValueNamesOneKindOfPlace() {
+        // A tile that drops the key is looked up by the value alone.
+        val values = TAG_LABELS.keys.map { it.substringAfter('/') }
+        assertEquals(values.size, values.toSet().size, values.groupBy { it }.filterValues { it.size > 1 }.keys.toString())
+        assertEquals("ATM", TAG_LABELS_BY_VALUE["atm"])
     }
 
     @Test

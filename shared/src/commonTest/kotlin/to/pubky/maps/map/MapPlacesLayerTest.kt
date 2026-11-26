@@ -231,6 +231,13 @@ class MapPlacesLayerTest {
         assertEquals("https://www.openstreetmap.org/relation/3768127", museum.uri)
         assertEquals("Museum", museum.category)
         assertEquals(PlaceSource.Map, museum.source)
+        // OpenMapTiles groups OSM values under classes of its own; the value still names the place.
+        val atm = tappedPlace(12345671, mapOf("name" to "UBS", "class" to "atm", "subclass" to "atm"), point)!!
+        assertEquals("ATM", atm.category)
+        val books = tappedPlace(12345681, mapOf("name" to "Orell Füssli", "class" to "library", "subclass" to "books"), point)!!
+        assertEquals("Bookshop", books.category)
+        val cafe = tappedPlace(12345691, mapOf("name" to "Schober", "class" to "cafe", "subclass" to "cafe"), point)!!
+        assertEquals("Café", cafe.category)
         // Shortbread (VersaTiles) names the kind by its OSM key.
         val school = tappedPlace(273068472, mapOf("name" to "Rämibühl", "amenity" to "school"), point)!!
         assertEquals("School", school.category)

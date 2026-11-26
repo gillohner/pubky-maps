@@ -15,6 +15,7 @@ import to.pubky.maps.place.PlaceData
 import to.pubky.maps.place.PlaceRef
 import to.pubky.maps.place.PlaceSource
 import to.pubky.maps.search.SourceAnswer
+import to.pubky.maps.search.TAG_LABELS_BY_VALUE
 import to.pubky.maps.search.categoryOf
 import to.pubky.maps.search.osmIdFromUrl
 import to.pubky.maps.search.schemaTypeLabel
@@ -205,7 +206,7 @@ fun tappedPlace(
     val osm = id?.let(::osmIdOfTileFeature) ?: return null
     val name = (properties["name"] ?: properties["name_int"])?.trim()?.ifEmpty { null } ?: return null
     val category =
-        properties["subclass"]?.let { categoryOf(properties["class"] ?: "amenity", it, photonType = null) }
+        properties["subclass"]?.let { TAG_LABELS_BY_VALUE[it] ?: categoryOf(properties["class"] ?: "amenity", it, photonType = null) }
             ?: listOf("amenity", "shop", "tourism", "leisure", "historic", "office", "man_made")
                 .firstNotNullOfOrNull { key -> properties[key]?.let { categoryOf(key, it, photonType = null) } }
             ?: properties["kind"]?.let { categoryOf("place", it, photonType = null) }

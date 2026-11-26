@@ -2,8 +2,10 @@ package to.pubky.maps.search
 
 // What a place is called for an OpenStreetMap tag whose value does not read as a name by itself.
 // `categoryOf` turns other values into words ("bus_stop" -> "Bus stop") and adds "shop" to other
-// shop values ("gift" -> "Gift shop"). The names are the nouns Google Maps, CoMaps and OsmAnd show
-// for these places ("Bakery", not "Bakery shop"), in British English as the rest of the app.
+// shop values ("gift" -> "Gift shop"). The names are nouns as map apps name such places ("Bakery",
+// where the generic rule said "Bakery shop"), in British English as the rest of the app, except
+// where the British word means something else: shop=chemist sells toiletries, not medicine (that is
+// amenity=pharmacy), so it is "Drugstore", not "Chemist".
 
 /** Labels by OSM `key/value`, for tags that the generic rules would word badly. */
 internal val TAG_LABELS: Map<String, String> =
@@ -56,8 +58,9 @@ internal val TAG_LABELS: Map<String, String> =
         "shop/video_games" to "Video game shop",
         "shop/hearing_aids" to "Hearing aid shop",
         // Other tags whose value is an abbreviation, a plural or not the usual name.
+        "amenity/cafe" to "Café",
         "amenity/atm" to "ATM",
-        "amenity/bbq" to "Barbecue",
+        "amenity/bbq" to "Barbecue grill",
         "amenity/townhall" to "Town hall",
         "amenity/doctors" to "Doctor",
         "amenity/veterinary" to "Vet",
@@ -68,3 +71,10 @@ internal val TAG_LABELS: Map<String, String> =
         "aeroway/aerodrome" to "Airport",
         "leisure/pitch" to "Sports pitch",
     )
+
+/**
+ * [TAG_LABELS] by value alone, for tiles that put an OSM value under a class of their own instead of
+ * its key (OpenMapTiles: `class=atm`, `subclass=atm`; `class=library`, `subclass=books`). Each value
+ * is in [TAG_LABELS] once, so it names one kind of place.
+ */
+internal val TAG_LABELS_BY_VALUE: Map<String, String> = TAG_LABELS.mapKeys { (tag, _) -> tag.substringAfter('/') }

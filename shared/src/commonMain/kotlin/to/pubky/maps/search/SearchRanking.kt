@@ -364,7 +364,6 @@ internal fun categoryOf(
         key == "building" && value == "yes" -> "Building"
         key == "shop" && value == "yes" -> "Shop"
         key == "shop" -> "${humanize(value)} shop"
-        key == "amenity" && value == "cafe" -> "Café"
         key == "boundary" -> null
         value == "yes" -> humanize(key)
         else -> humanize(value)
