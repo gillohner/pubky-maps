@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.Color
 import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
 import com.github.takahirom.roborazzi.RoborazziComposeOptions
 import com.github.takahirom.roborazzi.captureRoboImage
+import com.github.takahirom.roborazzi.fontScale
 import com.github.takahirom.roborazzi.size
 import com.github.takahirom.roborazzi.uiMode
 import kotlinx.datetime.LocalDate
@@ -90,15 +91,18 @@ class WriteScreenshotTest {
         name: String,
         device: Device,
         dark: Boolean,
+        largeFont: Boolean = false,
         content: @Composable () -> Unit,
     ) {
         val theme = if (dark) "dark" else "light"
+        val variant = if (largeFont) "-large-font" else ""
         captureRoboImage(
-            filePath = "screenshots/$name-${device.name.lowercase()}-$theme.png",
+            filePath = "screenshots/$name$variant-${device.name.lowercase()}-$theme.png",
             roborazziComposeOptions =
                 RoborazziComposeOptions {
                     size(widthDp = device.widthDp, heightDp = device.heightDp)
                     uiMode(if (dark) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO)
+                    if (largeFont) fontScale(2f)
                 },
         ) {
             PubkyMapsTheme { content() }
@@ -348,6 +352,15 @@ class WriteScreenshotTest {
     @Test
     fun photoPageEmptyTabletDark() = capture("write-photo-choose", Device.Tablet, dark = true) { PhotoPageEmptyShot() }
 
+    /** At the largest font size (200 %) "Take a photo" goes below "Choose a photo", its label whole. */
+    @Test
+    fun photoPageEmptyLargeFontPhoneLight() =
+        capture("write-photo-choose", Device.Phone, dark = false, largeFont = true) { PhotoPageEmptyShot() }
+
+    @Test
+    fun photoPageEmptyLargeFontPhoneDark() =
+        capture("write-photo-choose", Device.Phone, dark = true, largeFont = true) { PhotoPageEmptyShot() }
+
     @Composable
     private fun PhotoPageReadyShot() {
         PhotoPage(
@@ -379,6 +392,14 @@ class WriteScreenshotTest {
 
     @Test
     fun photoPageReadyTabletDark() = capture("write-photo-ready", Device.Tablet, dark = true) { PhotoPageReadyShot() }
+
+    @Test
+    fun photoPageReadyLargeFontPhoneLight() =
+        capture("write-photo-ready", Device.Phone, dark = false, largeFont = true) { PhotoPageReadyShot() }
+
+    @Test
+    fun photoPageReadyLargeFontPhoneDark() =
+        capture("write-photo-ready", Device.Phone, dark = true, largeFont = true) { PhotoPageReadyShot() }
 
     @Composable
     private fun ListPageShot() {

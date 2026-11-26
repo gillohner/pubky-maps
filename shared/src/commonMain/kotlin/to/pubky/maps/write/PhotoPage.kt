@@ -3,7 +3,7 @@ package to.pubky.maps.write
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -123,7 +123,10 @@ fun PhotoPage(
             }
         }
         state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // The buttons wrap: side by side when both fit, else "Take a photo" goes below. Squeezed into
+        // the width the first one leaves, its label would break into one syllable per line at a
+        // large font.
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = onChoose, enabled = !state.preparing) {
                 Icon(WriteIcons.Gallery, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
