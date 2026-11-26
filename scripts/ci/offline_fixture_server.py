@@ -5,9 +5,11 @@ must check again at every load, as OpenFreeMap's does after an hour), whose tile
 current release of the map data: GET /release/<n> moves them, as a map server does with each release.
 Every tile is one water polygon over the whole tile, so a drawn map is the styles' water colour and a
 missing tile the background colour, and a grid of points labelled as the city "Fixture Town"
-(OpenMapTiles' place layer, drawn as dots in the water colour), for the name of a downloaded area.
-Each tile answers after a short wait, so parallel requests overlap; every request is logged as one
-JSON line (path, User-Agent, how many tile requests were open at once).
+(OpenMapTiles' place layer, drawn as dots in the water colour), for the name of a downloaded area;
+every zoom 14 tile also holds a point of interest named "Fixture Bakery" (OpenMapTiles' poi layer, an
+id of its own per tile), for search in the offline area. Each tile answers after a short wait, so
+parallel requests overlap; every request is logged as one JSON line (path, User-Agent, how many tile
+requests were open at once).
 
 Usage: offline_fixture_server.py <port> <request log>
 """
@@ -102,6 +104,22 @@ def place_layer() -> bytes:
     return field(3, layer + varint(5 << 3) + varint(4096))
 
 
+def bakery_layer(x: int, y: int) -> bytes:
+    """OpenMapTiles' poi layer with one bakery in the middle of tile 14/x/y (OSM node id x*100000+y)."""
+    keys = [b"name", b"class", b"subclass"]
+    values = [b"Fixture Bakery", b"shop", b"bakery"]
+    geometry = [1 | 1 << 3, zigzag(2048), zigzag(2048)]
+    feature = (
+        varint(1 << 3) + varint((x * 100000 + y) * 10 + 1)
+        + field(2, b"".join(varint(v) for v in (0, 0, 1, 1, 2, 2)))
+        + varint(3 << 3) + varint(1)
+        + field(4, b"".join(varint(v) for v in geometry))
+    )
+    layer = varint(15 << 3) + varint(2) + field(1, b"poi") + field(2, feature)
+    layer += b"".join(field(3, key) for key in keys) + b"".join(field(4, field(1, value)) for value in values)
+    return field(3, layer + varint(5 << 3) + varint(4096))
+
+
 TILE = water_tile() + place_layer()
 
 
@@ -143,7 +161,11 @@ class Handler(BaseHTTPRequestHandler):
             time.sleep(0.3)
             with lock:
                 open_tiles -= 1
-            self.send(200, TILE, "application/x-protobuf")
+            parts = self.path.split("?")[0].removesuffix(".pbf").split("/")
+            body = TILE
+            if len(parts) == 6 and parts[3] == "14":
+                body = TILE + bakery_layer(int(parts[4]), int(parts[5]))
+            self.send(200, body, "application/x-protobuf")
         else:
             self.log_line({})
             self.send(404, b"", "text/plain")

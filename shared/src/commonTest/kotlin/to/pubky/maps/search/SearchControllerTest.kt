@@ -8,6 +8,11 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import to.pubky.maps.links.GeoPoint
+import to.pubky.maps.links.OsmId
+import to.pubky.maps.links.OsmType
+import to.pubky.maps.offline.OfflinePlace
+import to.pubky.maps.offline.OfflinePlaceSearch
 import to.pubky.maps.place.PlaceSource
 import to.pubky.maps.status.ServiceHealth
 import to.pubky.maps.status.ServicePart
@@ -55,7 +60,17 @@ class SearchControllerTest {
 
     private val health = ServiceHealth()
 
-    private fun TestScope.controller(viewer: String? = null) = SearchController(search, recents, this, viewer = { viewer }, health = health)
+    /** The offline maps' places: [offlinePlaces] for every query, null as when no area can be searched. */
+    private var offlinePlaces: List<OfflinePlace>? = null
+    private val offlineQueries = ArrayList<String>()
+    private val offline =
+        OfflinePlaceSearch { query, _ ->
+            offlineQueries += query
+            offlinePlaces
+        }
+
+    private fun TestScope.controller(viewer: String? = null) =
+        SearchController(search, recents, this, viewer = { viewer }, health = health, offline = offline)
 
     private fun SearchController.type(text: String) {
         for (i in 1..text.length) onQueryChange(text.take(i), area)
@@ -136,6 +151,105 @@ class SearchControllerTest {
             advanceUntilIdle()
             assertTrue(c.state.value.offline)
             assertEquals(emptyList<SearchResult>(), c.state.value.results)
+        }
+
+    @Test
+    fun withoutPhotonTheOfflineMapsAnswer() =
+        runTest {
+            search.photonDown = true
+            search.pinakesDown = true
+            offlinePlaces =
+                listOf(
+                    OfflinePlace(
+                        "Kunsthaus Zürich",
+                        OsmId(OsmType.Way, 26_405_421),
+                        "tourism",
+                        "museum",
+                        "Museum",
+                        GeoPoint(47.3703, 8.5481),
+                    ),
+                    OfflinePlace("Kunsthausstrasse", null, "highway", "minor", "Street", GeoPoint(47.37, 8.548)),
+                )
+            val c = controller()
+            c.onQueryChange("kunsthaus", area)
+            advanceUntilIdle()
+            val s = c.state.value
+            assertEquals(listOf("kunsthaus"), offlineQueries)
+            assertEquals(SourceState.Answered, s.offlineMaps)
+            assertTrue(s.offline)
+            assertEquals(listOf("Kunsthaus Zürich", "Kunsthausstrasse"), s.results.map { it.place.title })
+            val museum = s.results.first()
+            assertEquals(PlaceSource.Map, museum.place.source)
+            assertEquals("https://www.openstreetmap.org/way/26405421", museum.place.uri)
+            assertEquals("Museum", museum.place.category)
+            assertEquals(PlaceKind.Culture, museum.kind)
+            assertEquals(Prominence.Landmark, museum.prominence)
+            val street = s.results[1]
+            assertEquals(PlaceKind.Street, street.kind)
+            assertEquals(16.0, street.place.zoom)
+            assertTrue(street.place.uri.startsWith("geo:47.37"), street.place.uri)
+            // Online search is still missing: the map's line says so.
+            assertEquals(setOf(ServicePart.Search), health.missing.value)
+            assertEquals(
+                "Search is offline: these places are from your offline maps. Addresses need a connection.",
+                statusLine(s),
+            )
+        }
+
+    @Test
+    fun theOfflineMapsAreAskedOnlyWhenPhotonFails() =
+        runTest {
+            offlinePlaces = emptyList()
+            val c = controller()
+            c.onQueryChange("kunsthaus", area)
+            advanceUntilIdle()
+            assertEquals(emptyList<String>(), offlineQueries)
+            assertEquals(SourceState.Idle, c.state.value.offlineMaps)
+        }
+
+    @Test
+    fun withoutOfflineMapsSearchSaysItIsOffline() =
+        runTest {
+            search.photonDown = true
+            search.pinakesDown = true
+            offlinePlaces = null
+            val c = controller()
+            c.onQueryChange("kunsthaus", area)
+            advanceUntilIdle()
+            assertEquals(SourceState.Idle, c.state.value.offlineMaps)
+            assertEquals(
+                "Search is offline: neither Photon nor Pinakes is answering. Check your connection or the server lists in Settings.",
+                statusLine(c.state.value),
+            )
+            offlinePlaces = emptyList()
+            c.onQueryChange("kunsthaus museum", area)
+            advanceUntilIdle()
+            assertEquals(SourceState.Answered, c.state.value.offlineMaps)
+            assertEquals(
+                "Search is offline, and nothing in your offline maps matches “kunsthaus museum”.",
+                statusLine(c.state.value),
+            )
+        }
+
+    @Test
+    fun anOfflinePlaceJoinsThePinakesCardOfItsElement() =
+        runTest {
+            search.photonDown = true
+            val card = Fixtures.pinakes("kunsthaus").first { it.osm != null }
+            offlinePlaces = listOf(OfflinePlace("Kunsthaus", card.osm, "tourism", "museum", "Museum", card.point))
+            val c = controller()
+            c.onQueryChange("kunsthaus", area)
+            advanceUntilIdle()
+            val rows =
+                c.state.value.results
+                    .filter { it.place.osm == card.osm }
+            assertEquals(1, rows.size)
+            assertTrue(rows.single().onPubky)
+            assertEquals("Museum", rows.single().place.category)
+            assertEquals(
+                "Photon is not answering: places and streets come from your offline maps, addresses are missing.",
+                statusLine(c.state.value),
+            )
         }
 
     @Test

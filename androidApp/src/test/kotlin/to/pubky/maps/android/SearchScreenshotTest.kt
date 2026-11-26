@@ -20,12 +20,14 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.GraphicsMode
+import to.pubky.maps.config.AttributionLink
 import to.pubky.maps.config.ServerDefaults
 import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.links.OsmId
 import to.pubky.maps.links.OsmType
 import to.pubky.maps.map.MapScreen
 import to.pubky.maps.map.MapSearch
+import to.pubky.maps.offline.OfflinePlace
 import to.pubky.maps.place.PlaceCard
 import to.pubky.maps.place.PlaceRef
 import to.pubky.maps.place.PlaceSource
@@ -33,7 +35,9 @@ import to.pubky.maps.search.PlaceKind
 import to.pubky.maps.search.Prominence
 import to.pubky.maps.search.RecentSearch
 import to.pubky.maps.search.SearchActions
+import to.pubky.maps.search.SearchArea
 import to.pubky.maps.search.SearchMode
+import to.pubky.maps.search.SearchRanking
 import to.pubky.maps.search.SearchResult
 import to.pubky.maps.search.SearchState
 import to.pubky.maps.search.SourceState
@@ -198,6 +202,7 @@ class SearchScreenshotTest {
     @Composable
     private fun Map(
         state: SearchState,
+        credits: List<AttributionLink> = ServerDefaults.lists.searchAttribution(),
         card: (@Composable () -> Unit)? = null,
     ) {
         val dark = isSystemInDarkTheme()
@@ -218,7 +223,7 @@ class SearchScreenshotTest {
                     recents,
                     userLocation = here,
                     actions = SearchActions(),
-                    credits = ServerDefaults.lists.searchAttribution(),
+                    credits = credits,
                 ),
         ) {
             Box(
@@ -364,6 +369,49 @@ class SearchScreenshotTest {
                 ),
             )
         }
+
+    /** No connection: the places come from an offline area around Zürich's main station. */
+    private val fromOfflineMaps: SearchState
+        get() {
+            val offline =
+                listOf(
+                    OfflinePlace(
+                        "Kunsthaus Zürich",
+                        OsmId(OsmType.Relation, 3768127),
+                        "tourism",
+                        "museum",
+                        "Museum",
+                        GeoPoint(47.3702, 8.5480),
+                    ),
+                    OfflinePlace("Kunsthausstrasse", null, "highway", "minor", "Street", GeoPoint(47.3697, 8.5486)),
+                    OfflinePlace("Kunsthaus Bar", OsmId(OsmType.Node, 4_012_345_678), "amenity", "bar", "Bar", GeoPoint(47.3705, 8.5476)),
+                )
+            val area = SearchArea(here, zoom = 15.0, halfDiagonalMeters = 1_500.0)
+            return SearchState(
+                mode = SearchMode.Editing,
+                query = "kunsthaus",
+                resultsQuery = "kunsthaus",
+                results = SearchRanking.rank("kunsthaus", area, emptyList(), emptyList(), offline),
+                photon = SourceState.Unreachable,
+                pinakes = SourceState.Unreachable,
+                offlineMaps = SourceState.Answered,
+            )
+        }
+
+    @Composable
+    private fun OfflineMapsResults() = Map(fromOfflineMaps, credits = ServerDefaults.lists.mapAttribution())
+
+    @Test
+    fun offlineMapsPhoneLight() = capture("search-offline-maps", Device.Phone, dark = false) { OfflineMapsResults() }
+
+    @Test
+    fun offlineMapsPhoneDark() = capture("search-offline-maps", Device.Phone, dark = true) { OfflineMapsResults() }
+
+    @Test
+    fun offlineMapsTabletLight() = capture("search-offline-maps", Device.Tablet, dark = false) { OfflineMapsResults() }
+
+    @Test
+    fun offlineMapsTabletDark() = capture("search-offline-maps", Device.Tablet, dark = true) { OfflineMapsResults() }
 
     @Test
     fun pinakesMissingPhoneLight() =

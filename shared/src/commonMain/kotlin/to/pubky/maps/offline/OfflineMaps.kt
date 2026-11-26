@@ -5,13 +5,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -31,6 +34,12 @@ data class OfflineMap(
     val bytes: Long,
     /** The area on the map; null when MapLibre lost the pack's metadata. */
     val bounds: AreaBounds? = null,
+    /**
+     * When a check last stored new map data for the area (epoch milliseconds), 0 when it has the
+     * data of its first download only. It changes with every update that fetched tiles, also one
+     * fast enough never to show as updating.
+     */
+    val newDataAt: Long = 0,
 )
 
 sealed interface OfflineMapStatus {
@@ -107,7 +116,7 @@ class OfflineMaps(
     private val halted = mutableSetOf<Any>()
 
     /** The download or check that runs for an area: its packs one after the other. */
-    private val runs = mutableMapOf<String, Job>()
+    private val runs = MutableStateFlow<Map<String, Job>>(emptyMap())
 
     /**
      * Packs a check resumed less than [QUIET_CHECK] ago. They were complete before, so until then a
@@ -121,8 +130,18 @@ class OfflineMaps(
     /** Checked areas that are fetching new map data: they show as updating. */
     private val updating = MutableStateFlow<Set<String>>(emptySet())
 
+    /** Requests of downloads that got new data from the map server ([fetchedNewData]). */
+    private val fetches = MutableStateFlow(0L)
+
     /** Read on MapLibre's threads for every request: a plain read of the packs downloading or being checked. */
     val downloading: Boolean get() = started.value.isNotEmpty()
+
+    /**
+     * Whether MapLibre may be writing tiles: a pack downloads ([downloading]) or a download or check
+     * runs, also between its styles and during a check's walk that leaves the area Ready.
+     */
+    val fetchingChanges: Flow<Boolean> =
+        combine(started, runs) { packs, areas -> packs.isNotEmpty() || areas.isNotEmpty() }.distinctUntilChanged()
 
     private val _picking = MutableStateFlow(false)
 
@@ -160,6 +179,16 @@ class OfflineMaps(
                 delay(CHECK_INTERVAL)
             }
         }
+    }
+
+    /**
+     * A request of a download or check got new data from the map server ([OfflineMapResources]);
+     * called on any thread. A check's walk during which this happens stored new map data, also when
+     * it ends within [QUIET_CHECK] and never shows as updating. Another area's walk at the same time
+     * counts too, so an area may be marked new without new data: its places are only read again.
+     */
+    fun fetchedNewData() {
+        fetches.update { it + 1 }
     }
 
     fun startPicking() {
@@ -231,7 +260,7 @@ class OfflineMaps(
     fun pause(id: String) {
         _problem.value = null
         held += id
-        runs.remove(id)?.cancel()
+        endRun(id)
         packs.filter { it.areaId == id && it.handle in started.value }.forEach { stop(it.handle) }
     }
 
@@ -253,7 +282,7 @@ class OfflineMaps(
      */
     internal fun checkForUpdates() {
         val wifi = unmetered()
-        areas(packs).filter { it.id !in runs && it.id !in held }.forEach { map ->
+        areas(packs).filter { it.id !in runs.value && it.id !in held }.forEach { map ->
             val area = packs.filter { it.areaId == map.id }
             val handles =
                 when {
@@ -290,13 +319,18 @@ class OfflineMaps(
         check: Boolean = false,
         probe: Boolean = false,
     ) {
-        runs.remove(area)?.cancel()
+        endRun(area)
         // Started once it is in [runs], so a run that ends at once also leaves it.
         val job =
             scope.launch(start = CoroutineStart.LAZY) {
                 try {
+                    // An update an earlier run left open (the app was closed, the user paused it)
+                    // may have stored its tiles already, so this walk fetching nothing proves no
+                    // update: it ends with new map data all the same.
+                    val leftOpen = handles.filter { handle -> packs.any { it.handle === handle && it.metadata?.updating == true } }
                     if (check) handles.forEach { mark(it) { m -> m.copy(updating = true) } }
                     for (handle in handles) {
+                        val fetchedBefore = fetches.value
                         if (check) walking += handle
                         halted -= handle
                         started.value += handle
@@ -312,7 +346,9 @@ class OfflineMaps(
                             walking -= handle
                             if (stateOf(handle) == PackState.Complete) {
                                 started.value -= handle
-                                mark(handle, done)
+                                mark(
+                                    handle,
+                                ) { done(it, fetches.value != fetchedBefore || handle in leftOpen, clock.now().toEpochMilliseconds()) }
                                 rest(handle)
                                 continue
                             }
@@ -326,18 +362,28 @@ class OfflineMaps(
                         // report an update stopped at the limit complete, as it counts the old tiles.
                         started.first { handle !in it }
                         if (handle in halted || stateOf(handle) != PackState.Complete) return@launch
-                        if (check) mark(handle, done)
+                        if (check) {
+                            mark(
+                                handle,
+                            ) { done(it, fetches.value != fetchedBefore || handle in leftOpen, clock.now().toEpochMilliseconds()) }
+                        }
                         rest(handle)
                     }
                 } finally {
                     walking.removeAll(handles.toSet())
                     checking.value -= area
                     updating.value -= area
-                    if (runs[area] === coroutineContext.job) runs.remove(area)
+                    if (runs.value[area] === coroutineContext.job) runs.value -= area
                 }
             }
-        runs[area] = job
+        runs.value += area to job
         job.start()
+    }
+
+    private fun endRun(area: String) {
+        val run = runs.value[area]
+        runs.value -= area
+        run?.cancel()
     }
 
     /**
@@ -371,22 +417,27 @@ class OfflineMaps(
     private fun stateOf(handle: Any): PackState? = packs.firstOrNull { it.handle === handle }?.progress?.state
 
     fun delete(id: String) {
-        runs.remove(id)?.cancel()
+        endRun(id)
         val listed = packs.filter { it.areaId == id }.map { it.handle }
         val area = listed + createdFor.remove(id).orEmpty().filter { handle -> listed.none { it === handle } }
         deleted += id
         _problem.value = null
         scope.launch {
-            try {
-                area.forEach { handle ->
+            area.forEach { handle ->
+                try {
                     store.pause(handle)
                     store.delete(handle)
-                    // Only now: until the pack is gone, its requests may still be on their way.
-                    started.value -= handle
-                    stopping.value -= handle
+                } catch (e: Exception) {
+                    _problem.value = "Couldn't delete the offline map: ${e.message ?: "the offline storage failed"}"
+                    // The pack stays: it leaves [started] as a paused one does, once it no longer
+                    // downloads, so the throttle and the place reads ([fetchingChanges]) end with it.
+                    if (handle !in started.value) return@forEach
+                    stopping.value += handle
+                    if (stateOf(handle) == PackState.Downloading) return@forEach
                 }
-            } catch (e: Exception) {
-                _problem.value = "Couldn't delete the offline map: ${e.message ?: "the offline storage failed"}"
+                // Only now: until the pack is gone or paused, its requests may still be on their way.
+                started.value -= handle
+                stopping.value -= handle
             }
         }
     }
@@ -450,8 +501,21 @@ internal val CHECK_INTERVAL = 30.minutes
 /** Long enough for MapLibre to walk a complete pack in its database and report it. */
 internal val QUIET_CHECK = 10.seconds
 
-/** A check's walk of a pack finished: the pack is up to date. */
-private val done: (PackMetadata) -> PackMetadata = { it.copy(updating = false, newData = false) }
+/**
+ * A check's walk of a pack finished: the pack is up to date. When the walk [fetched] tiles (or
+ * finished an update an earlier run left open), or an earlier walk of this update found new data,
+ * the pack has new map data from now on.
+ */
+private fun done(
+    metadata: PackMetadata,
+    fetched: Boolean,
+    now: Long,
+): PackMetadata =
+    metadata.copy(
+        updating = false,
+        newData = false,
+        newDataAt = if (fetched || metadata.newData) maxOf(now, metadata.newDataAt + 1) else metadata.newDataAt,
+    )
 
 private val StoredPack.areaId: String get() = metadata?.area ?: "pack-${handle.hashCode()}"
 
@@ -518,6 +582,7 @@ internal fun areas(
                             OfflineMapStatus.Paused(percent)
                         }
                     },
+                newDataAt = area.maxOf { it.metadata?.newDataAt ?: 0 },
                 // The styles of an area share its tiles: they are stored once. A check counts again from 0.
                 bytes =
                     maxOf(

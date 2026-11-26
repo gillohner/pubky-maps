@@ -29,7 +29,7 @@ class MapRuntimeStartTest {
         names.forEach { File(context.cacheDir, it).writeText("x") }
         val scope = TestScope()
 
-        configureMapRuntime(context, "test", scope) { false }
+        configureMapRuntime(context, "test", scope, downloading = { false }, fetchedNewData = {})
         assertEquals("nothing deleted while MapLibre is set up", names.sorted(), cacheFiles())
 
         scope.advanceUntilIdle()

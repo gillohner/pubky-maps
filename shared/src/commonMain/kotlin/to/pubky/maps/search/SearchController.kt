@@ -1,5 +1,6 @@
 package to.pubky.maps.search
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
@@ -9,6 +10,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import to.pubky.maps.offline.OfflinePlace
+import to.pubky.maps.offline.OfflinePlaceSearch
 import to.pubky.maps.place.PlaceRef
 import to.pubky.maps.place.PlaceSource
 import to.pubky.maps.place.formatCoordinate
@@ -44,6 +47,8 @@ data class SearchState(
     val results: List<SearchResult> = emptyList(),
     val photon: SourceState = SourceState.Idle,
     val pinakes: SourceState = SourceState.Idle,
+    /** The offline maps' places: asked when Photon cannot be reached; Idle when not asked or none can be searched. */
+    val offlineMaps: SourceState = SourceState.Idle,
     val selected: SearchResult? = null,
     /** Counts the times search itself set [query] (not typing), so the bar takes the new text. */
     val textSetBySearch: Int = 0,
@@ -64,7 +69,9 @@ data class SearchState(
  * Coordinates never go to the network. Photon and Pinakes are asked together and the list updates as
  * each answers, so a slow or failing source never holds back the other. With a [viewer] (the
  * signed-in user's pubky id), Pinakes ranks places the people they follow referenced higher. When
- * neither source answers, [health] names search as missing (the map's degraded line) until one does.
+ * Photon cannot be reached, the places of the offline maps ([offline]) answer in its place, so search
+ * still finds places, towns and streets in the downloaded areas without a connection. When neither
+ * online source answers, [health] names search as missing (the map's degraded line) until one does.
  */
 class SearchController(
     private val search: PlaceSearch,
@@ -73,6 +80,7 @@ class SearchController(
     private val viewer: () -> String? = { null },
     private val health: ServiceHealth? = null,
     private val debounce: Duration = DEBOUNCE,
+    private val offline: OfflinePlaceSearch? = null,
 ) {
     private val _state = MutableStateFlow(SearchState())
     val state: StateFlow<SearchState> = _state.asStateFlow()
@@ -284,14 +292,26 @@ class SearchController(
 
     private fun clearResults() =
         _state.update {
-            it.copy(results = emptyList(), resultsQuery = "", photon = SourceState.Idle, pinakes = SourceState.Idle)
+            it.copy(
+                results = emptyList(),
+                resultsQuery = "",
+                photon = SourceState.Idle,
+                pinakes = SourceState.Idle,
+                offlineMaps = SourceState.Idle,
+            )
         }
 
     private fun showOnly(
         result: SearchResult,
         query: String,
     ) = _state.update {
-        it.copy(results = listOf(result), resultsQuery = query, photon = SourceState.Idle, pinakes = SourceState.Idle)
+        it.copy(
+            results = listOf(result),
+            resultsQuery = query,
+            photon = SourceState.Idle,
+            pinakes = SourceState.Idle,
+            offlineMaps = SourceState.Idle,
+        )
     }
 
     /** Asks both sources; the list updates as each answers. */
@@ -308,10 +328,11 @@ class SearchController(
             _state.update {
                 if (!it.stillFor(query)) return@update it
                 it.copy(
-                    results = SearchRanking.rank(text, area, a.photon, a.pinakes),
+                    results = SearchRanking.rank(text, area, a.photon, a.pinakes, a.offline),
                     resultsQuery = query,
                     photon = a.photonState,
                     pinakes = a.pinakesState,
+                    offlineMaps = a.offlineState,
                 )
             }
             when {
@@ -338,7 +359,18 @@ class SearchController(
         coroutineScope {
             launch {
                 val answer = search.photon(text, area)
-                publish(answers.updateAndGet { it.copy(photon = answer.valueOrEmpty(), photonState = answer.state()) })
+                // Asked before Photon's failure shows, so the list goes straight to the offline places.
+                val places = if (answer is SourceAnswer.Unreachable) searchOffline(text, area) else null
+                publish(
+                    answers.updateAndGet {
+                        it.copy(
+                            photon = answer.valueOrEmpty(),
+                            photonState = answer.state(),
+                            offline = places.orEmpty(),
+                            offlineState = if (places != null) SourceState.Answered else SourceState.Idle,
+                        )
+                    },
+                )
             }
             launch {
                 val answer = search.pinakes(text, area, viewer())
@@ -347,11 +379,26 @@ class SearchController(
         }
     }
 
+    /** The offline maps' places for [text]; null when there are none to search or they cannot be read. */
+    private suspend fun searchOffline(
+        text: String,
+        area: SearchArea,
+    ): List<OfflinePlace>? =
+        try {
+            offline?.search(text, area)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+
     private data class Answers(
         val photon: List<PhotonPlace> = emptyList(),
         val pinakes: List<PinakesPlace> = emptyList(),
+        val offline: List<OfflinePlace> = emptyList(),
         val photonState: SourceState = SourceState.Loading,
         val pinakesState: SourceState = SourceState.Loading,
+        val offlineState: SourceState = SourceState.Idle,
     )
 
     companion object {

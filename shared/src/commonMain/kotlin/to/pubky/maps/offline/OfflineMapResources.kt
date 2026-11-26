@@ -30,7 +30,8 @@ import kotlin.time.Instant
  * to [OfflineLimits]: at most [OfflineLimits.PARALLEL_REQUESTS] of its requests at a time, each with
  * the app's User-Agent. MapLibre's own client sends up to 20 at once and cannot be told which
  * requests are a download's before it loads them, so while a download runs this provider loads
- * every http(s) resource, the map's own without a limit. Otherwise MapLibre loads them itself.
+ * every http(s) resource, the map's own without a limit. Otherwise MapLibre loads them itself. A
+ * download's request that gets new data from the map server is told to [fetchedNewData].
  *
  * The client is made by [createClient] on the first request this provider loads, which MapLibre
  * runs on a background thread: the provider is set up on the main thread at app start and most
@@ -41,6 +42,7 @@ class OfflineMapResources(
     createClient: () -> HttpClient,
     private val downloading: () -> Boolean,
     private val clock: Clock = Clock.System,
+    private val fetchedNewData: () -> Unit = {},
 ) : MapResourceProvider {
     private val client by lazy(createClient)
     private val downloads = Semaphore(OfflineLimits.PARALLEL_REQUESTS)
@@ -67,7 +69,8 @@ class OfflineMapResources(
         range: LongRange? = null,
     ): MapResourceLoad {
         val fetch = suspend { fetch(url, priorEtag, priorModified, range) }
-        return if (offline) downloads.withPermit { fetch() } else fetch()
+        if (!offline) return fetch()
+        return downloads.withPermit { fetch() }.also { if (it is MapResourceLoad.Bytes) fetchedNewData() }
     }
 
     /** One request, answered as MapLibre's own client would: the body with its cache headers, or why not. */

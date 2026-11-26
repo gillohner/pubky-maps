@@ -2,6 +2,8 @@ package to.pubky.maps.offline
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -29,6 +31,7 @@ class OfflineMapsTest {
         val resumed = ArrayList<String>()
         val paused = ArrayList<String>()
         var failCreate: String? = null
+        var failDelete = false
         val deleted = ArrayList<String>()
 
         /** Runs while the pack of a style is being created. */
@@ -66,6 +69,7 @@ class OfflineMapsTest {
         }
 
         override suspend fun delete(handle: Any) {
+            if (failDelete) error("disk full")
             deleted += (handle as Pack).styleUrl
             packs.value = PackStoreState.Ready(ready.filter { it.handle !== handle })
         }
@@ -189,6 +193,8 @@ class OfflineMapsTest {
     fun aReadyAreaIsWalkedAgainAndStaysReadyWhenNothingChanged() =
         runTest(UnconfinedTestDispatcher()) {
             val (store, offline) = readyArea()
+            val fetching = ArrayList<Boolean>()
+            backgroundScope.launch { offline.fetchingChanges.collect { fetching += it } }
             advanceTimeBy(FIRST_CHECK)
             runCurrent()
             assertEquals(listOf(light), store.resumed)
@@ -209,8 +215,11 @@ class OfflineMapsTest {
             runCurrent()
             assertFalse(offline.downloading)
             assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
+            // MapLibre may write tiles for the whole check, also between its two walks.
+            assertEquals(listOf(false, true, false), fetching)
 
             assertEquals(emptyList(), store.updating())
+            assertEquals(0, offline.maps().single().newDataAt)
 
             // And again later: MapLibre walks only a pack that is not active, so each rests once complete.
             assertEquals(listOf(light, dark, light, dark), store.paused)
@@ -241,6 +250,36 @@ class OfflineMapsTest {
             runCurrent()
             assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
             assertFalse(offline.downloading)
+            assertTrue(offline.maps().single().newDataAt > 0)
+        }
+
+    @Test
+    fun aWalkThatFetchesTilesWithinSecondsStaysReadyWithNewMapData() =
+        runTest(UnconfinedTestDispatcher()) {
+            val (store, offline) = readyArea()
+            advanceTimeBy(FIRST_CHECK)
+            runCurrent()
+            // A small area of a new release: its tiles come before the walk could show as updating.
+            store.progress(light, PackProgress(PackState.Downloading, 21, 100, 500_000, 20, 400_000))
+            offline.fetchedNewData()
+            store.progress(light, PackProgress(PackState.Complete, 100, 100, 3_000_000, 80, 2_500_000))
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
+            val first = offline.maps().single().newDataAt
+            assertTrue(first > 0)
+            // The dark style's walk shares the new tiles and fetches nothing: the time stays.
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            assertEquals(first, offline.maps().single().newDataAt)
+            assertFalse(offline.downloading)
+            // The next check finds nothing new.
+            advanceTimeBy(CHECK_INTERVAL)
+            runCurrent()
+            advanceTimeBy(QUIET_CHECK * 2)
+            runCurrent()
+            assertEquals(listOf(light, dark, light, dark), store.resumed)
+            assertEquals(first, offline.maps().single().newDataAt)
         }
 
     @Test
@@ -394,6 +433,16 @@ class OfflineMapsTest {
             assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
             assertEquals(emptyList(), store.updating())
             assertFalse(offline.downloading)
+            // The closed app's walk may have stored new tiles before it could tell: the area counts as new.
+            val newDataAt = offline.maps().single().newDataAt
+            assertTrue(newDataAt > 0)
+            // A later check that fetches nothing leaves it.
+            advanceTimeBy(CHECK_INTERVAL)
+            runCurrent()
+            advanceTimeBy(QUIET_CHECK * 2)
+            runCurrent()
+            assertEquals(listOf(light, dark, light, dark), store.resumed)
+            assertEquals(newDataAt, offline.maps().single().newDataAt)
         }
 
     @Test
@@ -552,6 +601,23 @@ class OfflineMapsTest {
             assertEquals(listOf(light), store.deleted)
             assertEquals(emptyList(), offline.maps())
             assertFalse(offline.downloading)
+        }
+
+    @Test
+    fun aDeleteThatFailsStillEndsTheThrottleOnceThePackIsPaused() =
+        runTest(UnconfinedTestDispatcher()) {
+            val store = FakeStore()
+            val offline = offlineMaps(store)
+            offline.download(zurich, listOf(light, dark))
+            store.progress(light, PackProgress(PackState.Downloading, 10, 100, 100_000, 10, 100_000))
+            store.failDelete = true
+            offline.delete("area-1")
+            assertEquals("Couldn't delete the offline map: disk full", offline.problem.value)
+            // Paused, not deleted: its requests may still be on their way until MapLibre says so.
+            assertTrue(offline.downloading)
+            store.progress(light, PackProgress(PackState.Paused, 10, 100, 100_000, 10, 100_000))
+            assertFalse(offline.downloading)
+            assertFalse(offline.fetchingChanges.first())
         }
 
     @Test

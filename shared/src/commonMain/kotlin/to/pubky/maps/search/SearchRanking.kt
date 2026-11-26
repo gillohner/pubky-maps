@@ -2,6 +2,7 @@ package to.pubky.maps.search
 
 import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.links.OsmId
+import to.pubky.maps.offline.OfflinePlace
 import to.pubky.maps.place.PlaceRef
 import to.pubky.maps.place.PlaceSource
 import to.pubky.maps.place.formatCoordinate
@@ -42,10 +43,12 @@ data class SearchResult(
 }
 
 /**
- * Merges Photon's and Pinakes' answers and orders them.
+ * Merges Photon's and Pinakes' answers (and the offline maps' places, asked when Photon cannot be
+ * reached) and orders them.
  *
  * Merge: a Pinakes card and a Photon result that are the same OpenStreetMap element become one row
- * that keeps the Pinakes card (its link, name and point) and Photon's address and category.
+ * that keeps the Pinakes card (its link, name and point) and Photon's address and category; an
+ * offline place adds its category to the Pinakes card of its element the same way.
  *
  * Ranking, every part from 0 to 1:
  * - text: how the title matches the query: equal 1.0, starts with it as whole words 0.9, holds
@@ -78,9 +81,10 @@ object SearchRanking {
         area: SearchArea,
         photon: List<PhotonPlace>,
         pinakes: List<PinakesPlace>,
+        offline: List<OfflinePlace> = emptyList(),
     ): List<SearchResult> {
         val q = normalizeForMatch(query)
-        return merge(photon, pinakes)
+        return merge(photon, pinakes, offline)
             .map { it.copy(score = score(q, area, it)) }
             .sortedWith(compareByDescending<SearchResult> { it.score }.thenBy { it.place.title })
             .withoutRepeatedStops()
@@ -90,6 +94,7 @@ object SearchRanking {
     internal fun merge(
         photon: List<PhotonPlace>,
         pinakes: List<PinakesPlace>,
+        offline: List<OfflinePlace> = emptyList(),
     ): List<SearchResult> {
         // Several Pinakes cards can be one OSM element (its OSM card and its Wikidata card): the OSM
         // card speaks for it, else the better ranked one.
@@ -126,7 +131,14 @@ object SearchRanking {
             val card = place.osm?.let { pinakesByOsm[it] }
             rows += if (card != null) merged(place, card) else fromPhoton(place)
         }
-        for ((osm, card) in pinakesByOsm) if (osm !in photonOsm) rows += fromPinakes(card)
+        val offlineOsm = HashSet<OsmId>()
+        for (place in offline) {
+            val osm = place.osm
+            if (osm != null && (osm in photonOsm || !offlineOsm.add(osm))) continue
+            val card = osm?.let { pinakesByOsm[it] }
+            rows += if (card != null) merged(place, card) else fromOffline(place)
+        }
+        for ((osm, card) in pinakesByOsm) if (osm !in photonOsm && osm !in offlineOsm) rows += fromPinakes(card)
         for (card in pinakesOther) rows += fromPinakes(card)
         return rows
     }
@@ -166,6 +178,35 @@ object SearchRanking {
             prominence = prominenceOf(card.type),
             kind = placeKindOf(card.typePath),
         )
+
+    private fun fromOffline(place: OfflinePlace) =
+        SearchResult(
+            place =
+                PlaceRef(
+                    uri = place.osm?.url ?: geoUri(place.point),
+                    name = place.name,
+                    point = place.point,
+                    osm = place.osm,
+                    source = PlaceSource.Map,
+                    zoom = zoomFor(place.photonType),
+                    category = place.category,
+                ),
+            prominence = prominenceOf(place.key, place.value),
+            kind = placeKindOf(place.key, place.value, place.photonType),
+        )
+
+    /** A Pinakes card with the category and kind the offline map gives its element. */
+    private fun merged(
+        place: OfflinePlace,
+        card: PinakesPlace,
+    ): SearchResult {
+        val row = fromPinakes(card)
+        return row.copy(
+            place = row.place.copy(zoom = zoomFor(place.photonType), category = place.category ?: row.place.category),
+            prominence = prominenceOf(place.key, place.value),
+            kind = placeKindOf(place.key, place.value, place.photonType).takeIf { it != PlaceKind.Other } ?: row.kind,
+        )
+    }
 
     private fun merged(
         place: PhotonPlace,
