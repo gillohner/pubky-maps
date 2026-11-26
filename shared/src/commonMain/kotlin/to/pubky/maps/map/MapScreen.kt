@@ -309,7 +309,7 @@ private fun panelUncoveredMap(
     val panelEdge = MapControlMargin + SidePanelWidth
     return DpRect(
         left = if (direction == LayoutDirection.Ltr) left + panelEdge else left,
-        top = insets.calculateTopPadding() + MapControlMargin + TopControlSize,
+        top = insets.calculateTopPadding() + MapControlMargin + TopControlSize + 8.dp,
         right = if (direction == LayoutDirection.Ltr) right else right - panelEdge,
         bottom = height - insets.calculateBottomPadding() - MapControlMargin - BottomControlsHeight,
     )

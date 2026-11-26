@@ -356,27 +356,29 @@ fun MapRoute(
     var uncoveredMap by remember { mutableStateOf<DpRect?>(null) }
     // A place tapped on the map opens its sheet or panel over the map, maybe over the place: once the
     // sheet has opened, a place it hides moves to the middle of the map left in view, as in Google
-    // Maps. Once per tap (saved): a rotation or a return from Settings leaves the map where it is, and
-    // a map the user is moving stays theirs. Search picks and links centre the map themselves.
+    // Maps. Once per tap and map size (saved, see keptInViewKey); not after the user moved the map.
+    // Search picks and links centre the map themselves.
     var keptInView by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(tapped == null) { if (tapped == null) keptInView = null }
     val tappedShown = tapped?.takeIf { shown?.place?.uri == it.uri }
     LaunchedEffect(tappedShown) {
-        val place = tappedShown
-        if (place == null) {
-            if (tapped == null) keptInView = null
-            return@LaunchedEffect
-        }
+        val place = tappedShown ?: return@LaunchedEffect
         val point = place.point ?: return@LaunchedEffect
-        if (keptInView == place.uri) return@LaunchedEffect
-        val room = settled(snapshotFlow { uncoveredMap }).first()
-        keptInView = place.uri
-        if (movedSinceShown || mapState.isCameraMoving) return@LaunchedEffect
-        val size = mapState.viewport?.size ?: return@LaunchedEffect
-        val at = mapState.screenLocationFromPosition(Position(longitude = point.lon, latitude = point.lat)) ?: return@LaunchedEffect
-        val shift = panIntoView(at, room) ?: return@LaunchedEffect
-        val centre =
-            mapState.positionFromScreenLocation(DpOffset(size.width / 2 + shift.x, size.height / 2 + shift.y)) ?: return@LaunchedEffect
-        mapState.animateCamera(CameraUpdate(center = centre))
+        var userMoved = false
+        launch {
+            snapshotFlow { mapState.isCameraMoving && mapState.cameraMoveReason == CameraMoveReason.Gesture }.first { it }
+            userMoved = true
+        }
+        settled(snapshotFlow { uncoveredMap }).collect { room ->
+            val size = mapState.viewport?.size ?: return@collect
+            val key = keptInViewKey(place.uri, size)
+            if (keptInView == key || mapState.isCameraMoving) return@collect
+            keptInView = key
+            val at = mapState.screenLocationFromPosition(Position(longitude = point.lon, latitude = point.lat))
+            val centre = keepInViewCentre(at, room, size, userMoved) ?: return@collect
+            val target = mapState.positionFromScreenLocation(centre) ?: return@collect
+            mapState.animateCamera(CameraUpdate(center = target))
+        }
     }
     val placePage = places?.let { rememberPlacePage(it, shown, mapSearch?.userLocation, onSharePlace, openIn, writes, onWrite) }
     // The area on screen goes offline in the style on screen and the other theme's of the same server.

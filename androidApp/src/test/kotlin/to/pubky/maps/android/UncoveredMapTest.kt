@@ -2,15 +2,18 @@ package to.pubky.maps.android
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.DpRect
+import androidx.compose.ui.unit.LayoutDirection
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
@@ -82,40 +85,45 @@ class UncoveredMapTest {
     private var reports = 0
     private var shown by mutableStateOf(true)
 
-    private fun show(placeShown: Boolean) {
+    private fun show(
+        placeShown: Boolean,
+        direction: LayoutDirection = LayoutDirection.Ltr,
+    ) {
         shown = placeShown
         compose.setContent {
-            PubkyMapsTheme {
-                MapScreen(
-                    attribution =
-                        ServerDefaults.lists
-                            .mapStyles(darkTheme = false)
-                            .first()
-                            .attribution,
-                    mapUnavailable = false,
-                    onRetryMap = {},
-                    onMyLocation = {},
-                    onOpenSettings = {},
-                    placePage =
-                        if (shown) {
-                            PlacePageSlot(
-                                full = false,
-                                sheet = {
-                                    maxHeight,
-                                    inset,
-                                    ->
-                                    PlaceSheet(page, context, actions, SheetStop.Peek, {}, maxHeight, bottomInset = inset)
-                                },
-                                panel = { modifier -> PlacePanel(page, context, actions, modifier) },
-                            )
-                        } else {
-                            null
+            CompositionLocalProvider(LocalLayoutDirection provides direction) {
+                PubkyMapsTheme {
+                    MapScreen(
+                        attribution =
+                            ServerDefaults.lists
+                                .mapStyles(darkTheme = false)
+                                .first()
+                                .attribution,
+                        mapUnavailable = false,
+                        onRetryMap = {},
+                        onMyLocation = {},
+                        onOpenSettings = {},
+                        placePage =
+                            if (shown) {
+                                PlacePageSlot(
+                                    full = false,
+                                    sheet = {
+                                        maxHeight,
+                                        inset,
+                                        ->
+                                        PlaceSheet(page, context, actions, SheetStop.Peek, {}, maxHeight, bottomInset = inset)
+                                    },
+                                    panel = { modifier -> PlacePanel(page, context, actions, modifier) },
+                                )
+                            } else {
+                                null
+                            },
+                        onUncoveredMap = {
+                            reported = it
+                            reports++
                         },
-                    onUncoveredMap = {
-                        reported = it
-                        reports++
-                    },
-                ) { Box(Modifier.fillMaxSize()) }
+                    ) { Box(Modifier.fillMaxSize()) }
+                }
             }
         }
         compose.waitForIdle()
@@ -147,9 +155,22 @@ class UncoveredMapTest {
         val close = bounds("Close")
         val myLocation = bounds("Show my location")
         assertTrue("the room starts at ${room.left}, the panel ends after ${close.right}", room.left >= close.right)
+        // The panel's edge: the margin and its width.
+        assertEquals(412f, room.left.value, 0f)
         assertTrue("the room ends at ${room.bottom}, my location starts at ${myLocation.top}", room.bottom <= myLocation.top)
         assertTrue("the room starts at ${room.top}, under the bar at ${bounds("Settings").bottom}", room.top >= bounds("Settings").bottom)
         assertEquals(1280f, room.right.value, 0f)
+    }
+
+    @Test
+    @Config(qualifiers = "w1280dp-h800dp-notnight-mdpi")
+    fun rightToLeftTheMapInViewIsOnTheOtherSideOfThePanel() {
+        show(placeShown = true, direction = LayoutDirection.Rtl)
+        val room = checkNotNull(reported)
+        val close = bounds("Close")
+        assertTrue("the room ends at ${room.right}, the panel starts before ${close.left}", room.right <= close.left)
+        assertEquals(1280f - 412f, room.right.value, 0f)
+        assertEquals(0f, room.left.value, 0f)
     }
 
     @Test

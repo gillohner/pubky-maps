@@ -2,6 +2,7 @@ package to.pubky.maps.map
 
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.DpRect
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,6 +13,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -53,6 +55,31 @@ class KeepInViewTest {
     fun aSheetThatTakesTheScreenMovesNothing() {
         assertNull(panIntoView(DpOffset(200.dp, 800.dp), DpRect(0.dp, 72.dp, 412.dp, 100.dp)))
         assertNull(panIntoView(DpOffset(200.dp, 800.dp), DpRect(0.dp, 72.dp, 412.dp, 40.dp)))
+    }
+
+    @Test
+    fun theCameraCentreMovesByThePlacesDistanceToTheMiddleOfTheRoom() {
+        val size = DpSize(412.dp, 915.dp)
+        // The map's middle (206, 457.5) moves by (94, 464).
+        assertEquals(DpOffset(300.dp, 921.5.dp), keepInViewCentre(DpOffset(300.dp, 800.dp), phone, size, userMoved = false))
+        assertNull(keepInViewCentre(DpOffset(200.dp, 300.dp), phone, size, userMoved = false))
+    }
+
+    @Test
+    fun aMapTheUserMovedOrAPlaceOffTheMapStaysWhereItIs() {
+        val size = DpSize(412.dp, 915.dp)
+        assertNull(keepInViewCentre(DpOffset(300.dp, 800.dp), phone, size, userMoved = true))
+        assertNull(keepInViewCentre(null, phone, size, userMoved = false))
+    }
+
+    @Test
+    fun aPlaceIsKeptInViewOncePerMapSize() {
+        val uri = "https://www.openstreetmap.org/node/270803095"
+        // The same place on the same map (the sheet dragged, back from Settings): already done.
+        assertEquals(keptInViewKey(uri, DpSize(412.dp, 915.dp)), keptInViewKey(uri, DpSize(412.dp, 915.dp)))
+        // Rotated or folded: the new layout may hide it, so it is checked again.
+        assertNotEquals(keptInViewKey(uri, DpSize(412.dp, 915.dp)), keptInViewKey(uri, DpSize(915.dp, 412.dp)))
+        assertNotEquals(keptInViewKey(uri, DpSize(412.dp, 915.dp)), keptInViewKey("geo:47.37,8.54", DpSize(412.dp, 915.dp)))
     }
 
     @Test

@@ -94,7 +94,8 @@ Settings:
 the base map (by its OpenStreetMap element) or a Pubky place on the map. On a phone the page is a
 sheet over the map (header only, half the screen, or the whole screen); on a wide screen a panel
 beside it. A place tapped on the map that its sheet or panel would hide moves to the middle of the
-map left in view once the sheet has opened (not while the user moves the map). It shows the name, what the place is, the distance and the address, Share and Open in
+map left in view once the sheet has opened, unless the user has moved the map since. It shows the
+name, what the place is, the distance and the address, Share and Open in
 (the apps switched on in Settings, installed ones first); the Pinakes card's photo and text with
 their credits; OpenStreetMap details from the card's facts when Pinakes serves them (opening hours with open or closed now, phone,
 website, wheelchair access, cuisine); Pubky tags with their counts and who tagged (people the user
