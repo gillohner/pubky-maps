@@ -70,6 +70,35 @@ class OutboxJobTest {
         }
 
     @Test
+    fun aRunStoppedByTheNetworkGoingLeavesAFreshJobWithoutBackoff() {
+        assertFalse("a new job instead of a backoff", rescheduleAfterStop(context, waits = true, connectivityLost = true))
+        assertNotNull(jobs.getPendingJob(OUTBOX_JOB_ID))
+    }
+
+    @Test
+    fun aRunStoppedForOtherReasonsRunsAgainAfterItsBackoff() {
+        assertTrue(rescheduleAfterStop(context, waits = true, connectivityLost = false))
+        assertNull("Android reschedules the stopped job itself", jobs.getPendingJob(OUTBOX_JOB_ID))
+    }
+
+    @Test
+    fun aStoppedRunWithNothingWaitingEnds() {
+        assertFalse(rescheduleAfterStop(context, waits = false, connectivityLost = true))
+        assertNull(jobs.getPendingJob(OUTBOX_JOB_ID))
+    }
+
+    @Test
+    fun aWriteMadeAsARunEndsGetsAJobAgain() {
+        afterRun(context, sent = false, waitsNow = true)
+        assertNull("a run that did not send is rescheduled by Android", jobs.getPendingJob(OUTBOX_JOB_ID))
+        afterRun(context, sent = true, waitsNow = false)
+        assertNull(jobs.getPendingJob(OUTBOX_JOB_ID))
+
+        afterRun(context, sent = true, waitsNow = true)
+        assertNotNull(jobs.getPendingJob(OUTBOX_JOB_ID))
+    }
+
+    @Test
     fun aRunAsksUntilNothingWaits() =
         runTest {
             var asked = 0

@@ -6,6 +6,7 @@ import android.app.job.JobScheduler
 import android.app.job.JobService
 import android.content.ComponentName
 import android.content.Context
+import android.os.Build
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -26,14 +27,17 @@ import kotlin.time.Duration.Companion.seconds
 internal const val OUTBOX_JOB_ID = 1
 
 /**
- * How long one run of the job tries to send: three minutes, well inside the ten Android gives a job,
- * long enough for a session restore and a few writes on a slow network.
+ * How long one run of the job tries to send: one minute, enough for a session restore and a few
+ * writes on a slow network. A homeserver that stays unreachable is tried again by Android after the
+ * backoff, not by a long run: a run holds a wakelock and uses the app's job quota, which Android
+ * refills slowly (and a used-up quota would delay the run when the homeserver is back).
  */
-internal val SEND_WINDOW: Duration = 3.minutes
+internal val SEND_WINDOW: Duration = 1.minutes
 
 /**
- * How often a run asks again: in the background the account tries an unreachable homeserver only
- * when asked (its timer runs in the foreground), so the job asks as the foreground timer would.
+ * When a run asks once more: in the background the account tries an unreachable homeserver only
+ * when asked (its own timer runs in the foreground), and a first try at the start of a run can come
+ * before the network works.
  */
 internal val SEND_AGAIN: Duration = 30.seconds
 
@@ -61,10 +65,44 @@ internal fun followOutbox(
                 jobs.cancel(OUTBOX_JOB_ID)
             } else if (jobs.getPendingJob(OUTBOX_JOB_ID) == null) {
                 // Scheduling the job again would stop a run of it (the run that started this process).
-                jobs.schedule(outboxJob(context))
+                scheduleOutboxJob(context)
             }
         }
     }
+
+/** Schedules the job anew: a new job starts with no failures, so its first backoff is the shortest again. */
+internal fun scheduleOutboxJob(context: Context) {
+    context.getSystemService(JobScheduler::class.java)?.schedule(outboxJob(context))
+}
+
+/**
+ * After a run sent everything ([sent]) and Android removed the job: a write made in the moment
+ * between ([waitsNow]) gets a job again, as [followOutbox] may not have seen the outbox empty.
+ */
+internal fun afterRun(
+    context: Context,
+    sent: Boolean,
+    waitsNow: Boolean,
+) {
+    if (sent && waitsNow) scheduleOutboxJob(context)
+}
+
+/**
+ * Whether Android should run a stopped run again after its backoff. Nothing waiting: no. The network
+ * went ([connectivityLost]): a new job instead, which runs as soon as the phone has one again (a
+ * patchy connection must not stretch the backoff to hours). Otherwise (Android needed the resources):
+ * yes.
+ */
+internal fun rescheduleAfterStop(
+    context: Context,
+    waits: Boolean,
+    connectivityLost: Boolean,
+): Boolean {
+    if (!waits) return false
+    if (!connectivityLost) return true
+    scheduleOutboxJob(context)
+    return false
+}
 
 internal fun outboxJob(context: Context): JobInfo =
     JobInfo
@@ -95,8 +133,10 @@ internal suspend fun sendWaiting(
 
 /**
  * Runs when the phone has a network while writes wait. Starting the process restores the session
- * and builds the outbox ([PubkyMapsApplication.onCreate]); the job then waits until it is sent, and
+ * and builds the outbox ([PubkyMapsApplication.onCreate]); the run then waits until it is sent, and
  * Android runs it again later (after [BACKOFF_MS], doubling) when the homeserver could not be reached.
+ * A run that starts while the app is open also asks the account to try now, which starts the
+ * account's own wait between retries over (at most twice a run).
  */
 class OutboxJobService : JobService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -112,14 +152,23 @@ class OutboxJobService : JobService() {
                         app.writes.flush()
                     }
                 jobFinished(params, !sent)
+                afterRun(this@OutboxJobService, sent, waitsNow = app.writes.waiting.value == true)
             }
         return true
     }
 
-    /** Android stopped the run (the network went, or its time ran out): it runs again unless nothing waits. */
+    /** Android stopped the run (the network went, or it needed the resources). */
     override fun onStopJob(params: JobParameters): Boolean {
         run?.cancel()
-        return (application as PubkyMapsApplication).writes.waiting.value != false
+        // Before Android 12 the reason is not told; most stops of a network job are the network going.
+        val connectivityLost =
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+                params.stopReason == JobParameters.STOP_REASON_CONSTRAINT_CONNECTIVITY
+        return rescheduleAfterStop(
+            this,
+            waits = (application as PubkyMapsApplication).writes.waiting.value != false,
+            connectivityLost = connectivityLost,
+        )
     }
 
     override fun onDestroy() {
