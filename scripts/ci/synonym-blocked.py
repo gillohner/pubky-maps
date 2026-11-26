@@ -250,8 +250,10 @@ def rerun_after_kill(jobs, since_kill):
     "android" (Android restarted the crashed job service itself and ran the job, and the new run set its
     own guard), or None while neither has happened.
 
-    Android does either: in run 45837259115 the same "Scheduling restart of crashed service" line was
-    followed by a restart 60 ms later on attempt 1 and by none on attempt 2, where the guard ran.
+    Android does either for the same kill: after "Scheduling restart of crashed service" it restarts the
+    service at once on some runs and not at all on others, where the guard runs. So a run of this test
+    does not always see the guard run; what the guard does when due is OutboxJobTest's (guardRun,
+    startJob).
     """
     restarts = [age for _, age in history(jobs, "START") if age < since_kill]
     if not restarts:
@@ -345,8 +347,8 @@ def outbox_retries_the_closed_app(dev):
         dev.fail(f"no run of the outbox job since the kill, {since_kill:.0f} s ago: neither Android nor the run's "
                  "guard job started it (jobs-retry-after.txt)")
     if not how:
-        dev.fail("the outbox job ran again after the kill, but its guard job did not run and the new run set "
-                 "no guard of its own (jobs-retry-after.txt)")
+        dev.fail("the outbox job ran again after the kill, but no dump showed the guard job run or a guard "
+                 "scheduled after the latest start (jobs-retry-*.txt)")
     log_lines = dev.adb("logcat", "-d", "-b", "all", check=False, timeout=120).splitlines()
     reasons = [line for line in log_lines
                if JOB_SERVICE in line and (f"Start proc {after}:" in line or f",{after}," in line)]

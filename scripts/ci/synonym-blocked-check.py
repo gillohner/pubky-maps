@@ -70,10 +70,21 @@ guard = dump([job(1, "6164734", "2s971ms"), job(2, "572afa3", "2s967ms")],
               entry("-2s974ms", "STOP", 2, " onStartJob returned false")])
 expect(blocked.rerun_after_kill(guard, 133.0), "guard", "the guard job ran (attempt 2)")
 
-# Attempt 2 before the guard was due: only the killed run in the history, the killed run's guard waits.
-waiting = dump([job(1, "a4f90f9", "2m30s"), job(2, "f55bef4", "2m21s")],
-               [entry("-1m0s468ms", "START", 1), entry("-50s", "STOP", 1, " unexpectedly disconnected")])
-expect(blocked.rerun_after_kill(waiting, 50.1), None, "no start since the kill")
+# Attempt 2, jobs-retry-000s.txt and jobs-retry-030s.txt: no restart, the killed run's start (before the
+# kill) and its guard (registered, not due yet) do not count.
+killed_start = dump([job(1, "2386ea8", "177ms"), job(2, "f55bef4", "9s983ms")],
+                    [entry("-10s660ms", "START", 1), entry("-192ms", "STOP", 1, " unexpectedly disconnected")])
+expect(blocked.rerun_after_kill(killed_start, 0.2), None, "no start since the kill (0 s)")
+waiting = dump([job(1, "2386ea8", "30s343ms"), job(2, "f55bef4", "40s149ms")],
+               [entry("-40s821ms", "START", 1), entry("-30s353ms", "STOP", 1, " unexpectedly disconnected")])
+expect(blocked.rerun_after_kill(waiting, 30.4), None, "no start since the kill (30 s)")
+
+# Made up: Android restarted the service, that run was stopped, and the next run has not set its guard
+# yet; a guard scheduled before the latest start is not that run's.
+second = dump([job(1, "b7bfa85", "5s"), job(2, "4632718", "39s")],
+              killed_run + [entry("-40s", "START", 1), entry("-6s", "STOP", 1, " stopped by the system"),
+                            entry("-5s", "START", 1)])
+expect(blocked.rerun_after_kill(second, 40.5), None, "a guard from before the latest start")
 
 for age, want in (("172ms", 0.172), ("30s523ms", 30.523), ("2m12s915ms", 132.915), ("1h0m1s", 3601.0),
                   ("1d0h0m0s0ms", 86400.0)):
