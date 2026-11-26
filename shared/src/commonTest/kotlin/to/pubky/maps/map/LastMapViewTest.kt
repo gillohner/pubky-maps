@@ -88,35 +88,74 @@ class LastMapViewTest {
             job.cancel()
         }
 
+    private fun still(view: MapView) = CameraReport(view.toCameraPosition(), moving = false, byGesture = false)
+
+    private fun dragged(view: MapView) = CameraReport(view.toCameraPosition(), moving = true, byGesture = true)
+
+    private fun animated(view: MapView) = CameraReport(view.toCameraPosition(), moving = true, byGesture = false)
+
+    private val onTheWay = MapView(lat = 46.7, lon = 8.7, zoom = 9.0)
+
     @Test
     fun aMapLeftBeforeItsRestSavesTheViewItShows() =
         runTest {
-            val camera = MutableStateFlow<CameraPosition?>(zurich.toCameraPosition())
+            val camera = MutableStateFlow(still(zurich))
             val saved = mutableListOf<MapView>()
             val job = launch { saveRestingViews(camera) { saved += it } }
             advanceTimeBy(VIEW_REST_MS + 1)
             assertEquals(listOf(zurich), saved)
             // A pan, then Back 300 ms after it ends: the map goes before the camera has rested.
-            camera.value = null
+            camera.value = dragged(onTheWay)
             advanceTimeBy(300)
-            camera.value = lugano.toCameraPosition()
+            camera.value = still(lugano)
             advanceTimeBy(300)
             job.cancelAndJoin()
             assertEquals(listOf(zurich, lugano), saved)
         }
 
     @Test
-    fun aMapLeftWhileTheCameraMovesSavesNothingMore() =
+    fun aMapLeftWhileTheUserStillMovesItSavesWhereTheGestureHadIt() =
         runTest {
-            val camera = MutableStateFlow<CameraPosition?>(zurich.toCameraPosition())
+            val camera = MutableStateFlow(still(zurich))
             val saved = mutableListOf<MapView>()
             val job = launch { saveRestingViews(camera) { saved += it } }
             advanceTimeBy(VIEW_REST_MS + 1)
-            // Back during a fling (or the move to a linked place): a view on the way is not where the user was.
-            camera.value = null
+            // Back right after a pan: the map still reports the camera as moving (the finger has just
+            // lifted, or the pan flings on), and the view is where the user had moved it.
+            camera.value = dragged(onTheWay)
+            advanceTimeBy(300)
+            camera.value = dragged(lugano)
+            advanceTimeBy(VIEW_REST_MS + 1)
+            assertEquals(listOf(zurich), saved, "a moving camera's view was stored as a rest")
+            job.cancelAndJoin()
+            assertEquals(listOf(zurich, lugano), saved)
+        }
+
+    @Test
+    fun aMapLeftDuringTheAppsOwnMoveSavesTheViewBeforeIt() =
+        runTest {
+            val camera = MutableStateFlow(still(zurich))
+            val saved = mutableListOf<MapView>()
+            var job = launch { saveRestingViews(camera) { saved += it } }
+            // Back during the move to a linked place, before the view the map opened at has rested: a
+            // view on the way is not where the user was, the one before the move is.
+            advanceTimeBy(300)
+            camera.value = animated(onTheWay)
             advanceTimeBy(300)
             job.cancelAndJoin()
             assertEquals(listOf(zurich), saved)
+            // A pan, then the app moves the camera (to the user's location) and the map leaves on the
+            // way: the pan's view is saved.
+            saved.clear()
+            camera.value = still(zurich)
+            job = launch { saveRestingViews(camera) { saved += it } }
+            advanceTimeBy(VIEW_REST_MS + 1)
+            camera.value = dragged(lugano)
+            advanceTimeBy(300)
+            camera.value = animated(onTheWay)
+            advanceTimeBy(300)
+            job.cancelAndJoin()
+            assertEquals(listOf(zurich, lugano), saved)
         }
 
     @Test
@@ -125,7 +164,7 @@ class LastMapViewTest {
             fileSystem.createDirectories(path.parent!!)
             withStore { store ->
                 advanceUntilIdle()
-                val camera = MutableStateFlow<CameraPosition?>(lugano.toCameraPosition())
+                val camera = MutableStateFlow(dragged(lugano))
                 val job = launch { saveRestingViews(camera, store::save) }
                 advanceTimeBy(300)
                 job.cancelAndJoin()

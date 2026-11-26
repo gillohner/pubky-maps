@@ -6,7 +6,9 @@ code also declares iOS targets, which are not built yet.
 The app shows a full-screen online map in light or dark (following the system), the user's location
 on request, a compass when the map is rotated, search, and Settings. The map opens where the user
 left it (centre, zoom, turn and tilt, stored on the phone only in the no-backup folder once the
-camera has rested for a second); the first start opens on the whole world.
+camera has rested for a second, or when the map leaves the screen: where the user's own gesture had
+it, also mid-pan or mid-fling, but not a view the app's own move to a place passes through); the
+first start opens on the whole world.
 
 **Search** (the bar at the top of the map) finds places, addresses, streets and towns as you type,
 from [Photon](https://github.com/komoot/photon) (OpenStreetMap data, biased to the map's centre) and
@@ -295,13 +297,13 @@ screenshots search with its pins, and the update probe screenshots each step of 
 ## Emulator tests in CI
 
 - Smoke test (`scripts/ci/emulator-smoke.sh`): the map draws, Settings opens, back returns, and
-  after a map link moved the map to Zürich the next start opens it there; a pan followed at once
-  by a theme switch or by Back still stores the new view; for the theme switch the view must be
-  first written within 1 s of MainActivity's destroy, itself within 1 s of the lift, so it was
-  stored on leaving and not by either map's 1 s rest. The app calls `reportFullyDrawn` once the
-  map has drawn its first whole view (MapLibre idle with a style from the list); the test reads
-  Android's "Displayed" and "Fully drawn" times of the first
-  start and of a restart (`scripts/ci/start_time.py`) and fails when the map took longer than the
+  after a map link moved the map to Zürich the next start opens it there; a theme switch during
+  a pan (the finger still down, so the map reports its camera moving) and Back right after a pan
+  still store the new view; for the theme switch the view must be first written within 1 s of
+  MainActivity's destroy, so it was stored on leaving and not by the new map's 1 s rest. The app
+  calls `reportFullyDrawn` once the map has drawn its first whole view (MapLibre idle with a style
+  from the list); the test reads Android's "Displayed" and "Fully drawn" times of the first start
+  and of a restart (`scripts/ci/start_time.py`) and fails when the map took longer than the
   budget set in `emulator-smoke.sh`.
 - Offline maps (`scripts/ci/emulator-offline.sh`, two tiny styles served on the runner): an area
   downloads from Settings → Offline maps until Ready, with at most 4 tile requests at a time, the
