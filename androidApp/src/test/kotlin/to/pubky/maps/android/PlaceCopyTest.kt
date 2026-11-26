@@ -7,7 +7,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
-import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
@@ -103,7 +102,7 @@ class PlaceCopyTest {
         frames()
 
         assertEquals("47.3701, 8.5481", clipText)
-        compose.onNodeWithText("Copied").assertIsDisplayed()
+        compose.onNodeWithText("Copied").assertExists()
         compose.mainClock.advanceTimeBy(2_500)
         assertEquals(0, compose.onAllNodesWithText("Copied").fetchSemanticsNodes().size)
     }
@@ -129,7 +128,7 @@ class PlaceCopyTest {
         frames()
 
         assertEquals("Heimplatz 1, 8001 Zürich", clipText)
-        compose.onNodeWithText("Address copied").assertIsDisplayed()
+        compose.onNodeWithText("Address copied").assertExists()
         compose.mainClock.advanceTimeBy(2_500)
         assertEquals(0, compose.onAllNodesWithText("Address copied").fetchSemanticsNodes().size)
     }

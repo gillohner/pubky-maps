@@ -368,7 +368,9 @@ fun PlaceSections(
         card?.image?.let { image -> CardImage(image, card.credit("image"), actions) }
         card?.description?.let { Description(it) }
         val osm = page.osm
-        val coordinates = page.coordinatesText
+        // The details come with the card: while it loads, a section of coordinates alone would grow and
+        // then jump when the card's rows arrive above them.
+        val coordinates = page.coordinatesText?.takeUnless { PlacePart.Card in page.loading }
         if (osm != null || coordinates != null) DetailsSection(osm, coordinates, context, actions)
         val writes = actions.writes
         val viewer = writes?.viewer ?: page.viewer
