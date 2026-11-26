@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
 import com.github.takahirom.roborazzi.RoborazziComposeOptions
 import com.github.takahirom.roborazzi.captureRoboImage
+import com.github.takahirom.roborazzi.fontScale
 import com.github.takahirom.roborazzi.size
 import com.github.takahirom.roborazzi.uiMode
 import kotlinx.datetime.LocalDate
@@ -82,15 +83,18 @@ class PlaceScreenshotTest {
         device: Device,
         dark: Boolean,
         imagesFail: Boolean = false,
+        largeFont: Boolean = false,
         content: @Composable () -> Unit,
     ) {
         val theme = if (dark) "dark" else "light"
+        val variant = if (largeFont) "-large-font" else ""
         captureRoboImage(
-            filePath = "screenshots/$name-${device.name.lowercase()}-$theme.png",
+            filePath = "screenshots/$name$variant-${device.name.lowercase()}-$theme.png",
             roborazziComposeOptions =
                 RoborazziComposeOptions {
                     size(widthDp = device.widthDp, heightDp = device.heightDp)
                     uiMode(if (dark) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO)
+                    if (largeFont) fontScale(2f)
                 },
         ) {
             PubkyMapsTheme {
@@ -327,6 +331,10 @@ class PlaceScreenshotTest {
 
     @Test
     fun richPeekPhoneLight() = capture("place-rich-peek", Device.Phone, dark = false) { Page(rich, SheetStop.Peek) }
+
+    @Test
+    fun richPeekLargeFontPhoneLight() =
+        capture("place-rich-peek", Device.Phone, dark = false, largeFont = true) { Page(rich, SheetStop.Peek) }
 
     @Test
     fun sparsePhoneLight() = capture("place-sparse", Device.Phone, dark = false) { Page(sparse) }
