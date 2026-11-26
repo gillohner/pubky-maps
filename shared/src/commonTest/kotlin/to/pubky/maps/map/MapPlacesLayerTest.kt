@@ -245,8 +245,8 @@ class MapPlacesLayerTest {
         assertEquals("Bicycle shop", bicycle.category)
         val wine = tappedPlace(12345721, mapOf("name" to "Riegger", "class" to "alcohol_shop", "subclass" to "wine"), point)!!
         assertEquals("Wine shop", wine.category)
-        val dealer = tappedPlace(12345731, mapOf("name" to "AMAG", "class" to "car", "subclass" to "car"), point)!!
-        assertEquals("Car dealer", dealer.category)
+        val parts = tappedPlace(12345731, mapOf("name" to "Auto Teile", "class" to "car", "subclass" to "car_parts"), point)!!
+        assertEquals("Car parts shop", parts.category)
         // A value OpenMapTiles takes from another key too goes by its class: an office of a charity is no shop.
         val office = tappedPlace(12345741, mapOf("name" to "Caritas", "class" to "office", "subclass" to "charity"), point)!!
         assertEquals("Charity", office.category)

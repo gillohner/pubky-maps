@@ -225,8 +225,9 @@ private fun omtKeyOf(
 ): String = if (subclass in OMT_SHOP_VALUES) "shop" else omtClass ?: "amenity"
 
 // The shop values of OpenMapTiles' POI layer (layers/poi/mapping.yaml, `def_poi_mapping_shop`),
-// without `charity` and `ice_cream`, which it also takes from `office` and `amenity`: such a subclass
-// goes by its class (`class=office`, `subclass=charity` is a charity's office, not a shop).
+// without `charity` and `ice_cream`, which it also takes from `office` and `amenity`. `charity` goes
+// by its class (`class=office`, `subclass=charity` is a charity's office, not a shop); `ice_cream`
+// is named by [TAG_LABELS_BY_VALUE] before its key is asked for.
 private val OMT_SHOP_VALUES =
     setOf(
         "accessories",
