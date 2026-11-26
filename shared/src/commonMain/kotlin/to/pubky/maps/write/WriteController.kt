@@ -370,7 +370,7 @@ class WriteController(
                 changed = true
             }
         }
-        // Not while signing out: the account's store is being cleared.
+        // Not while signing out: the account's store is about to be cleared.
         if (viewer != null && signedIn?.user?.publicKey == viewer) {
             val homeSaved = mine.saved.filter { it.kept != Kept.Phone }
             val unnamed =
