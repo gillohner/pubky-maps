@@ -15,13 +15,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.unit.Density
@@ -246,6 +251,51 @@ class ResultsSheetPeekTest {
         }
         compose.waitForIdle()
         assertTrue("the sheet starts at ${handleTop()}, above the middle $middle", handleTop() >= middle - 1.dp)
+    }
+
+    /** Twelve results, each with an address of its own, so the list scrolls at half height. */
+    private val many =
+        (1..12).map { n -> result("Museum $n", "Museum", "Teststrasse $n, 8001 Zürich", rank = n) }
+
+    @Test
+    fun aSheetLoweredWhileItsListIsScrolledShowsTheWholeFirstResult() {
+        show(fontScale = 1f, mutableStateOf(state(many)))
+        compose.onNode(hasScrollToIndexAction()).performScrollToIndex(6)
+        compose.waitForIdle()
+        lower()
+        assertWhole("Museum · Teststrasse 1, 8001 Zürich")
+        assertHidden("Museum · Teststrasse 2, 8001 Zürich")
+        assertHidden("Museum · Teststrasse 7, 8001 Zürich")
+    }
+
+    @Test
+    fun aNewResultAboveTheShownOneAtTheLowestHeightIsTheOneShown() {
+        val search = mutableStateOf(state(listOf(aarau)))
+        show(fontScale = 1f, search)
+        lower()
+        // The old first result is still there, now second: the sheet shows the new first one.
+        search.value = state(listOf(kunsthaus, aarau))
+        compose.waitForIdle()
+        assertWhole("Museum · Heimplatz 1, 8001 Zürich")
+        assertHidden("Museum · Aargauerplatz, 5000 Aarau")
+    }
+
+    @Test
+    @Config(qualifiers = "w412dp-h340dp")
+    fun onAShortScreenTheSheetHasNoLowestHeightOfItsOwn() {
+        // In split screen at twice the font size the first result alone takes more than half the window:
+        // a lowest height would look the same as half, so there is none, and a tap on the handle (or
+        // TalkBack's resize action) at once goes to full and back.
+        show(fontScale = 2f)
+        compose.onNodeWithContentDescription("Results list, half").performTouchInput {
+            swipe(center, center + Offset(0f, 200.dp.toPx()), durationMillis = 200)
+        }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Results list, half").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Results list, full").performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Results list, half").assertExists()
     }
 
     @Test
