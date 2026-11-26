@@ -13,16 +13,20 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -56,6 +60,12 @@ private val FallbackPeekHeight = 120.dp
 private val FlingVelocity = 400.dp
 
 /**
+ * The least a lowest height must lie below half the screen to be one of its own: a closer one would
+ * look like half, and the handle's tap or TalkBack's resize from it would seem to do nothing.
+ */
+private val PeekStep = HandleHeight
+
+/**
  * The results over the map on a phone, as in Google Maps and CoMaps: a sheet at the bottom that the
  * handle drags between its first row ([SheetHeight.Peek]), half the screen ([SheetHeight.Half], where
  * it opens) and the whole height below the search bar ([SheetHeight.Full]); tapping the handle steps
@@ -68,9 +78,12 @@ private val FlingVelocity = 400.dp
  *
  * The lowest height shows the handle and the whole first row, as Google Maps' collapsed results
  * show one whole result, above the navigation bar ([bottomInset], which the list stays above at
- * every height): [content] reports how far its first
+ * every height): [content] scrolls its list by the given state and reports how far its first
  * row reaches from its top (it grows with the font size and a long name or address), and the
- * sheet's lowest height follows it, never above half the screen.
+ * sheet's lowest height follows it, never above half the screen. When that leaves it not even
+ * [PeekStep] below half (a short window at a large font), the sheet has only half and full. At its
+ * lowest height the list is at its start, so a sheet lowered from a scrolled list, or given a new
+ * first result, shows that whole first row, not a part of a later one.
  */
 @Composable
 internal fun ResultsSheet(
@@ -79,23 +92,34 @@ internal fun ResultsSheet(
     bottomInset: Dp,
     above: @Composable () -> Unit,
     modifier: Modifier = Modifier,
-    content: @Composable (onFirstRowEnd: (Int) -> Unit) -> Unit,
+    content: @Composable (list: LazyListState, onFirstRowEnd: (Int) -> Unit) -> Unit,
 ) {
     val density = LocalDensity.current
     var firstRowEnd by remember { mutableIntStateOf(0) }
     val anchors =
         with(density) {
             val total = height.toPx()
+            val half = total / 2
             val peek = if (firstRowEnd > 0) HandleHeight.toPx() + firstRowEnd else FallbackPeekHeight.toPx()
+            val peekAt = total - (peek + bottomInset.toPx()).coerceAtMost(half)
             DraggableAnchors {
                 SheetHeight.Full at topSpace.toPx()
-                SheetHeight.Half at total / 2
-                SheetHeight.Peek at total - (peek + bottomInset.toPx()).coerceAtMost(total / 2)
+                SheetHeight.Half at half
+                if (peekAt - half >= PeekStep.toPx()) SheetHeight.Peek at peekAt
             }
         }
     val state = remember { AnchoredDraggableState(SheetHeight.Half, anchors) }
-    // New heights (a measured first row, a turned screen) keep the sheet at the height it is at.
-    SideEffect { state.updateAnchors(anchors, state.targetValue) }
+    // New heights (a measured first row, a turned screen) keep the sheet at the height it is at, or
+    // at half when that height is gone.
+    SideEffect { state.updateAnchors(anchors, state.targetValue.takeIf(anchors::hasPositionFor) ?: SheetHeight.Half) }
+    val list = rememberLazyListState()
+    // At the lowest height the list cannot scroll (a drag up raises the sheet first), so a list away
+    // from its start there was scrolled before the sheet came down, or kept a row it had shown above
+    // new results: back to the start, where the first row is measured and shown whole.
+    LaunchedEffect(state, list) {
+        val scrolled = { list.firstVisibleItemIndex != 0 || list.firstVisibleItemScrollOffset != 0 }
+        snapshotFlow { state.settledValue == SheetHeight.Peek && scrolled() }.collect { away -> if (away) list.scrollToItem(0) }
+    }
     val listDrag = remember(state, density) { ListDragsSheet(state, density) }
     val scope = rememberCoroutineScope()
     val step: () -> Unit = {
@@ -144,7 +168,7 @@ internal fun ResultsSheet(
                             }
                             // The list ends above the navigation bar, so at the lowest height nothing of the
                             // second row shows behind the bar; the sheet's own colour fills under it.
-                            Box(Modifier.padding(bottom = bottomInset).nestedScroll(listDrag)) { content { firstRowEnd = it } }
+                            Box(Modifier.padding(bottom = bottomInset).nestedScroll(listDrag)) { content(list) { firstRowEnd = it } }
                         }
                     }
                 },

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListLayoutInfo
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -172,6 +173,7 @@ fun SearchBar(
  * what is missing. [userLocation] gives each result its distance. [onFirstRowEnd], when given, hears
  * how far (in pixels, from the list's top) the first result reaches, with the lines above it, each
  * time it is laid out with the list at its top (the first row of any kind while there is no result).
+ * [listState] is the list's scroll position, for a container that moves it.
  */
 @Composable
 fun SearchList(
@@ -183,9 +185,9 @@ fun SearchList(
     contentPadding: PaddingValues = PaddingValues(0.dp),
     credits: List<AttributionLink> = emptyList(),
     onFirstRowEnd: ((Int) -> Unit)? = null,
+    listState: LazyListState = rememberLazyListState(),
 ) {
     val shownRecents = recentsFor(state, recents)
-    val listState = rememberLazyListState()
     if (onFirstRowEnd != null) {
         val report by rememberUpdatedState(onFirstRowEnd)
         val firstKey = if (shownRecents == null) state.results.firstOrNull()?.let { resultKey(it) } else null
