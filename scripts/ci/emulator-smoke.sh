@@ -303,8 +303,8 @@ sys.exit(0 if ok else 1)" "$out/map-view-$1.json" "$1" "${2:-47.36}" "${3:-47.38
 view_lat() {
     python3 -I -c "import json, sys; print(json.load(open(sys.argv[1], encoding='utf-8'))['view']['lat'])" "$out/map-view-$1.json"
 }
-# The latitude range of a pan's view: 0.005-0.03 degrees south of LAT.
-south_of() { python3 -I -c "import sys; lat = float(sys.argv[1]); print(lat - 0.03, lat - 0.005)" "$1"; }
+# The latitude range of a pan's view: 0.005-0.1 degrees south of LAT (a pan that flings goes further).
+south_of() { python3 -I -c "import sys; lat = float(sys.argv[1]); print(lat - 0.1, lat - 0.005)" "$1"; }
 # "MS EPOCH": milliseconds from the log line "lift NAME" to the next destroy of MainActivity, and
 # the destroy's time in seconds since 1970; nothing before that destroy.
 lift_to_destroy() {
@@ -404,10 +404,10 @@ check_reopened_view() {
         if [ -n "$written" ]; then write_ms=$(ms_after "$written" "$destroyed_at"); fi
         echo "theme switch $try: lift to destroy $lift_ms ms, destroy to the view's first write ${write_ms:-unknown} ms"
         range=$(south_of "$last")
-        if expect_view "switched-$try" $range; then
-            last=$(view_lat "switched-$try")
-            if ((lift_ms < 1000 && ${write_ms:-1000} < 1000)); then proved=true; break; fi
-        fi
+        moved=false
+        if expect_view "switched-$try" $range; then moved=true; fi
+        last=$(view_lat "switched-$try" 2> /dev/null || echo "$last")
+        if $moved && ((lift_ms < 1000 && ${write_ms:-1000} < 1000)); then proved=true; break; fi
     done
     $proved || fail "no theme switch right after a pan first wrote the view within 1 s of the destroy in 5 tries; see map-view-switched-*.json"
     if [ "$night" = yes ]; then
