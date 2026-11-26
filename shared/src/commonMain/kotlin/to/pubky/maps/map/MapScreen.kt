@@ -232,19 +232,21 @@ fun MapScreen(
             ResultsSheet(
                 height = screenHeight,
                 topSpace = insets.calculateTopPadding() + MapControlMargin + TopControlSize + 8.dp,
+                bottomInset = insets.calculateBottomPadding(),
                 above = {
                     Box(Modifier.padding(horizontal = MapControlMargin).padding(bottom = 8.dp)) {
                         BottomControls(attribution, onMyLocation, snackbarHostState)
                     }
                 },
-            ) {
+            ) { onFirstRowEnd ->
                 SearchList(
                     search.state,
                     search.recents,
                     search.userLocation,
                     search.actions,
-                    contentPadding = PaddingValues(bottom = insets.calculateBottomPadding() + 8.dp),
+                    contentPadding = PaddingValues(bottom = 8.dp),
                     credits = search.credits,
+                    onFirstRowEnd = onFirstRowEnd,
                 )
             }
         }
