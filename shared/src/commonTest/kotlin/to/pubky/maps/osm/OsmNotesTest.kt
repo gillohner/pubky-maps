@@ -55,6 +55,9 @@ class OsmNotesTest {
                     "ok" -> respond("""{"type":"Feature","properties":{"id":4711}}""", HttpStatusCode.OK, json)
                     "refused" -> respond("", HttpStatusCode.BadRequest, headersOf("Error", "Text is too long"))
                     "notFound" -> respond("<html>Not Found</html>", HttpStatusCode.NotFound)
+                    "page" -> respond("<html>Welcome</html>", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "text/html"))
+                    "empty" -> respond("", HttpStatusCode.NoContent)
+                    "otherJson" -> respond("""{"type":"FeatureCollection","features":[]}""", HttpStatusCode.OK, json)
                     "slow" -> throw HttpRequestTimeoutException(request.url.toString(), 15_000)
                     "noConnect" -> throw ConnectTimeoutException("connect timeout")
                     "busy" -> respond("", HttpStatusCode.TooManyRequests)
@@ -118,6 +121,22 @@ class OsmNotesTest {
             val answer = notes(listOf("https://a.test", "https://b.test", "https://c.test")) { behaviour.getValue(it) }.create(pin, "x")
             assertEquals(NoteAnswer.Sent, answer)
             assertEquals(3, sent.size)
+        }
+
+    @Test
+    fun aSuccessThatIsNotTheApisNewNoteHandsOver() =
+        runTest {
+            // A wrong address whose site answers every path, a proxy's empty 204, other JSON: no note was made.
+            val behaviour = mapOf("a.test" to "page", "b.test" to "empty", "c.test" to "otherJson", "d.test" to "ok")
+            val servers = listOf("https://a.test", "https://b.test", "https://c.test", "https://d.test")
+            assertEquals(NoteAnswer.Sent, notes(servers) { behaviour.getValue(it) }.create(pin, "x"))
+            assertEquals(4, sent.size)
+        }
+
+    @Test
+    fun onlySuccessesThatAreNotNotesAreUnreachable() =
+        runTest {
+            assertEquals(NoteAnswer.Unreachable, notes(listOf("https://a.test")) { "page" }.create(pin, "x"))
         }
 
     @Test

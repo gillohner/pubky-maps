@@ -191,7 +191,8 @@ has them (a point of its own, as a dropped pin, goes without the user's label) a
 the place's own point (a page whose point is only a map view or a search centre has no button), up
 to OpenStreetMap's 2000 characters. It goes through the OpenStreetMap API list (`api.openstreetmap.org`
 by default) without an account, so the note is public and anonymous. A server that cannot be reached,
-fails or answers not as the API does hands over to the next one; the API's refusal is shown with its
+fails or answers not as the API does (also a success that is not the new note, as a web page
+answering every address) hands over to the next one; the API's refusal is shown with its
 reason; a request with no answer in time is not sent elsewhere and the page says the note may be on
 the map already. A note that did not go keeps its text on the page to send again; notes need a
 connection. A note page Android brought back after stopping the app still thanks for a sent note, and

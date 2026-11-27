@@ -8,6 +8,8 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.UserAgent
 import io.ktor.client.request.forms.submitForm
 import io.ktor.client.request.header
+import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.URLBuilder
@@ -15,6 +17,9 @@ import io.ktor.http.appendPathSegments
 import io.ktor.http.isSuccess
 import io.ktor.http.parameters
 import kotlinx.coroutines.CancellationException
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.links.OsmId
 import to.pubky.maps.links.OsmType
@@ -114,8 +119,9 @@ fun osmNotesUrl(server: String): String = URLBuilder(server).apply { appendPathS
  * Notes through the OpenStreetMap API servers of the list, without an account: the API takes a note
  * from anyone and shows it as anonymous. The servers are asked in order ([servers] is read at every
  * note, so a settings change applies to the next one); a server that cannot be reached or fails
- * (no connection, a connect timeout, a 5xx, a 429, or a 4xx that is not the API's: no `Error` header,
- * as from a wrong address or a proxy) hands over to the next one. A server that refuses the note
+ * (no connection, a connect timeout, a 5xx, a 429, or an answer that is not the API's, as from a wrong
+ * address, a web site answering every path or a proxy: a 4xx without the API's `Error` header, a 2xx
+ * whose body is not the GeoJSON `Feature` of a new note) hands over to the next one. A server that refuses the note
  * itself (a 4xx with the API's `Error` header: text too long, anonymous notes off, the user's address
  * blocked) is the answer: another server would take the same request no differently. A request that
  * went out and timed out waiting for its answer is [NoteAnswer.NoAnswer], since the note may be on the
@@ -146,7 +152,8 @@ class HttpOsmNotes(
                 // The API says why it refuses in its "Error" header ("No text was given", "Text is too long").
                 val error = response.headers["Error"]?.trim()?.ifEmpty { null }
                 when {
-                    status.isSuccess() -> {
+                    // A 2xx that is not a new note (a web page, an empty answer) made none: the next server.
+                    status.isSuccess() && isNewNote(response) -> {
                         return NoteAnswer.Sent
                     }
 
@@ -170,6 +177,17 @@ class HttpOsmNotes(
         }
         return NoteAnswer.Unreachable
     }
+}
+
+/**
+ * Whether a 2xx is the note the API made: its body is a GeoJSON `Feature` (the API answers a new note
+ * with it). Anything else, such as a web page or an empty answer, made no note. The body is already
+ * read when the request returns (Ktor keeps a non-streamed body), so reading it here cannot time out.
+ */
+private suspend fun isNewNote(response: HttpResponse): Boolean {
+    val body = response.bodyAsText()
+    val feature = runCatching { Json.parseToJsonElement(body) as? JsonObject }.getOrNull()
+    return (feature?.get("type") as? JsonPrimitive)?.content == "Feature"
 }
 
 /** Timeouts of one note: the API answers in well under a second; longer means it is stuck. */
