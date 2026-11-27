@@ -613,6 +613,31 @@ class PlaceScreenshotTest {
             Page(rich, actions = directionsTo(foundRoute, stepsShown = true, shownStep = 1))
         }
 
+    /** The last step of the route back to the user, tapped: it arrives at their location, not at the place's pin. */
+    @Test
+    fun directionsBackArrivePhoneLight() =
+        capture("place-directions-back-arrive", Device.Phone, dark = false) {
+            Page(rich, SheetStop.Peek, directionsTo(foundRoute, TravelMode.Walk, stepsShown = true, shownStep = 8, reversed = true))
+        }
+
+    @Test
+    fun directionsBackArrivePhoneDark() =
+        capture("place-directions-back-arrive", Device.Phone, dark = true) {
+            Page(rich, SheetStop.Peek, directionsTo(foundRoute, TravelMode.Walk, stepsShown = true, shownStep = 8, reversed = true))
+        }
+
+    @Test
+    fun directionsBackArriveTabletLight() =
+        capture("place-directions-back-arrive", Device.Tablet, dark = false) {
+            Page(rich, actions = directionsTo(foundRoute, TravelMode.Walk, stepsShown = true, shownStep = 8, reversed = true))
+        }
+
+    @Test
+    fun directionsBackArriveTabletDark() =
+        capture("place-directions-back-arrive", Device.Tablet, dark = true) {
+            Page(rich, actions = directionsTo(foundRoute, TravelMode.Walk, stepsShown = true, shownStep = 8, reversed = true))
+        }
+
     @Test
     fun directionsStepsLargeFontPhoneLight() =
         capture("place-directions-steps", Device.Phone, dark = false, largeFont = true) {

@@ -25,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
@@ -250,7 +251,9 @@ fun DirectionsCard(
                 Column(Modifier.padding(end = 12.dp)) {
                     val marked = directions.shownStep
                     val step = directions.markedStep
-                    if (found != null && marked != null && step != null) StepPreview(step, marked, found.route.steps.size, ui.onStep)
+                    if (found != null && marked != null && step != null) {
+                        StepPreview(step, directions.stepIcon(step.turn), marked, found.route.steps.size, ui.onStep)
+                    }
                     // The buttons' labels start under the route's time; they wrap at a large font.
                     FlowRow(Modifier.offset(x = (-12).dp)) {
                         if (found != null) StepsButton(found.route.steps, directions.stepsShown, ui.onSteps)
@@ -294,14 +297,15 @@ private fun StepsButton(
 }
 
 /**
- * The step the map shows ([Directions.markedStep], at [index] of [count]), with buttons to the previous
- * and the next one, as Google Maps' step preview: on a phone the place header is the sheet's lowest
+ * The step the map shows ([Directions.markedStep], at [index] of [count], with its [icon]), with
+ * buttons to the previous and the next one, as Google Maps' step preview: on a phone the place header is the sheet's lowest
  * stop, so the user goes through the steps on the map without raising the sheet to the list. A new
  * step is read out.
  */
 @Composable
 private fun StepPreview(
     step: RouteStep,
+    icon: ImageVector,
     index: Int,
     count: Int,
     onStep: (Int) -> Unit,
@@ -312,7 +316,7 @@ private fun StepPreview(
         color = MaterialTheme.colorScheme.secondaryContainer,
     ) {
         Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(step.turn.icon, contentDescription = null)
+            Icon(icon, contentDescription = null)
             Spacer(Modifier.width(12.dp))
             Column(
                 Modifier.weight(1f).padding(vertical = 8.dp).semantics(mergeDescendants = true) {
@@ -333,19 +337,20 @@ private fun StepPreview(
 }
 
 /**
- * The route's [steps] ([Directions.shownSteps]): each with its turn's icon, its sentence and how far
- * the route then goes. A tap on a step shows it on the map ([onStep]), as in Google Maps' steps; the
- * tapped one ([shown]) is highlighted while the map marks it.
+ * The steps of the [directions]' route ([Directions.shownSteps]): each with its icon
+ * ([Directions.stepIcon]), its sentence and how far the route then goes. A tap on a step shows it on
+ * the map ([onStep]), as in Google Maps' steps; the tapped one ([Directions.shownStep]) is highlighted
+ * while the map marks it.
  */
 @Composable
 fun RouteStepList(
-    steps: List<RouteStep>,
-    shown: Int?,
+    directions: Directions,
     onStep: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier) {
-        steps.forEachIndexed { i, step ->
+        val shown = directions.shownStep
+        directions.shownSteps.forEachIndexed { i, step ->
             if (i > 0) HorizontalDivider(Modifier.padding(start = 56.dp, end = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
             val tapped = i == shown
             Row(
@@ -358,7 +363,7 @@ fun RouteStepList(
                 verticalAlignment = Alignment.Top,
             ) {
                 Icon(
-                    step.turn.icon,
+                    directions.stepIcon(step.turn),
                     contentDescription = null,
                     tint = if (tapped) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                 )

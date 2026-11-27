@@ -429,7 +429,7 @@ fun PlaceSections(
         val steps = directions?.directions?.shownSteps.orEmpty()
         if (directions != null && steps.isNotEmpty()) {
             SectionTitle("Steps")
-            RouteStepList(steps, directions.directions.shownStep, directions.onStep)
+            RouteStepList(directions.directions, directions.onStep)
         }
         val card = page.card
         if (page.cardLoading) LoadingBlock()
