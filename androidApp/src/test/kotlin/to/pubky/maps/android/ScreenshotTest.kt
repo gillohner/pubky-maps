@@ -290,6 +290,23 @@ class ScreenshotTest {
     fun mapUnavailablePhoneLight() = capture("map-unavailable", Device.Phone, dark = false) { Map(mapUnavailable = true) }
 
     @Test
+    fun mapUnavailablePhoneDark() = capture("map-unavailable", Device.Phone, dark = true) { Map(mapUnavailable = true) }
+
+    @Test
+    fun mapUnavailableTabletLight() = capture("map-unavailable", Device.Tablet, dark = false) { Map(mapUnavailable = true) }
+
+    @Test
+    fun mapUnavailableTabletDark() = capture("map-unavailable", Device.Tablet, dark = true) { Map(mapUnavailable = true) }
+
+    @Test
+    fun mapUnavailableLargeFontPhoneLight() =
+        capture("map-unavailable", Device.Phone, dark = false, largeFont = true) { Map(mapUnavailable = true) }
+
+    @Test
+    fun mapUnavailableLargeFontPhoneDark() =
+        capture("map-unavailable", Device.Phone, dark = true, largeFont = true) { Map(mapUnavailable = true) }
+
+    @Test
     fun settingsPhoneLight() = capture("settings", Device.Phone, dark = false) { Settings() }
 
     @Test
