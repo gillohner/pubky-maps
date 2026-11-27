@@ -106,6 +106,9 @@ area; an area that fails is asked again after 30 minutes, then twice as long aft
 to a day. A place page whose Pinakes card has no OSM details (no card could be loaded, Pinakes has
 none for the place, or its card brings none) shows the details kept for its
 element, and the offline note says when they were fetched; a card with OSM details shows only its own.
+A search result whose element has kept opening hours says under its address whether it is open now
+and when that changes ("Open · Closes 18:00" in green, "Closed · Opens Thu 10:00" in red), online
+too: Photon's and Pinakes' answers carry no hours.
 
 Settings:
 
@@ -211,7 +214,9 @@ the link text. The link the user had stays the place's URI.
   are fixed per build and not part of the user's settings.
 - Search (`shared/.../search/`): `SearchController` debounces typing (300 ms, nothing under 3
   characters), asks Photon and Pinakes together over Ktor and ranks the merged answers
-  (`SearchRanking`: text match, distance, each source's order, prominence, Pubky collections). The
+  (`SearchRanking`: text match, distance, each source's order, prominence, Pubky collections). Each
+  answer's elements are looked up in the offline areas' kept details (`KeptHours.kt`) before its
+  rows show, so a row has its opening hours from the start. The
   ranking is checked against a fixed Zürich query set with recorded answers
   (`shared/src/commonTest/fixtures/search/`, refreshed by `scripts/search/record-fixtures.py`).
   Requests carry `User-Agent: PubkyMaps/<version>`.

@@ -16,6 +16,7 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import com.github.takahirom.roborazzi.fontScale
 import com.github.takahirom.roborazzi.size
 import com.github.takahirom.roborazzi.uiMode
+import kotlinx.datetime.LocalDateTime
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -203,6 +204,7 @@ class SearchScreenshotTest {
     private fun Map(
         state: SearchState,
         credits: List<AttributionLink> = ServerDefaults.lists.searchAttribution(),
+        now: LocalDateTime? = null,
         card: (@Composable () -> Unit)? = null,
     ) {
         val dark = isSystemInDarkTheme()
@@ -224,6 +226,7 @@ class SearchScreenshotTest {
                     userLocation = here,
                     actions = SearchActions(),
                     credits = credits,
+                    now = now,
                 ),
         ) {
             Box(
@@ -370,7 +373,13 @@ class SearchScreenshotTest {
             )
         }
 
-    /** No connection: the places come from an offline area around Zürich's main station. */
+    /** Wednesday noon in Zürich: the museum is open, the bar opens in the evening. */
+    private val wednesdayNoon = LocalDateTime(2026, 11, 25, 12, 0)
+
+    /**
+     * No connection: the places come from an offline area around Zürich's main station, which keeps
+     * the opening hours of the museum and the bar.
+     */
     private val fromOfflineMaps: SearchState
         get() {
             val offline =
@@ -408,7 +417,14 @@ class SearchScreenshotTest {
                 mode = SearchMode.Editing,
                 query = "kunsthaus",
                 resultsQuery = "kunsthaus",
-                results = SearchRanking.rank("kunsthaus", area, emptyList(), emptyList(), offline),
+                results =
+                    SearchRanking.rank("kunsthaus", area, emptyList(), emptyList(), offline).map { result ->
+                        when (result.place.title) {
+                            "Kunsthaus Zürich" -> result.copy(openingHours = "Tu,Fr-Su 10:00-18:00; We,Th 10:00-20:00")
+                            "Kunsthaus Bar" -> result.copy(openingHours = "Mo-Sa 17:00-24:00")
+                            else -> result
+                        }
+                    },
                 photon = SourceState.Unreachable,
                 pinakes = SourceState.Unreachable,
                 offlineMaps = SourceState.Answered,
@@ -416,7 +432,7 @@ class SearchScreenshotTest {
         }
 
     @Composable
-    private fun OfflineMapsResults() = Map(fromOfflineMaps, credits = ServerDefaults.lists.mapAttribution())
+    private fun OfflineMapsResults() = Map(fromOfflineMaps, credits = ServerDefaults.lists.mapAttribution(), now = wednesdayNoon)
 
     @Test
     fun offlineMapsPhoneLight() = capture("search-offline-maps", Device.Phone, dark = false) { OfflineMapsResults() }
@@ -429,6 +445,10 @@ class SearchScreenshotTest {
 
     @Test
     fun offlineMapsTabletDark() = capture("search-offline-maps", Device.Tablet, dark = true) { OfflineMapsResults() }
+
+    @Test
+    fun offlineMapsLargeFontPhoneLight() =
+        capture("search-offline-maps", Device.Phone, dark = false, largeFont = true) { OfflineMapsResults() }
 
     @Test
     fun pinakesMissingPhoneLight() =

@@ -17,7 +17,8 @@ import java.util.Locale
  * the recent searches in the app's no-backup folder, so they never leave the phone, not even in an
  * Android backup. [viewer] is the signed-in user's pubky id (null when signed out), for Pinakes'
  * friends ranking; [health] gets search's outages for the map's degraded line; [offline] answers
- * from the offline maps' places when Photon cannot be reached. Create it once per process.
+ * from the offline maps' places when Photon cannot be reached; [hours] gives results the opening
+ * hours the offline areas keep. Create it once per process.
  */
 fun androidSearchServices(
     context: Context,
@@ -27,6 +28,7 @@ fun androidSearchServices(
     viewer: () -> String?,
     health: ServiceHealth,
     offline: OfflinePlaceSearch,
+    hours: KeptOpeningHours,
 ): SearchServices {
     val recents =
         DataStoreRecentSearchStore(
@@ -45,5 +47,6 @@ fun androidSearchServices(
         )
     // The controller's state lives on the main thread; requests run on Ktor's own IO threads.
     val controllerScope = CoroutineScope(scope.coroutineContext + Dispatchers.Main.immediate)
-    return SearchServices(SearchController(search, recents, controllerScope, viewer = viewer, health = health, offline = offline), recents)
+    val controller = SearchController(search, recents, controllerScope, viewer = viewer, health = health, offline = offline, hours = hours)
+    return SearchServices(controller, recents)
 }

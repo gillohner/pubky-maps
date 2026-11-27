@@ -64,9 +64,14 @@ import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.datetime.LocalDateTime
 import to.pubky.maps.config.AttributionLink
 import to.pubky.maps.links.GeoPoint
+import to.pubky.maps.place.OpeningLine
+import to.pubky.maps.place.OpeningSchedule
+import to.pubky.maps.place.OpeningText
 import to.pubky.maps.place.PlaceSource
+import to.pubky.maps.place.openingLine
 import to.pubky.maps.ui.AppIcons
 import to.pubky.maps.ui.rememberSafeLinkOpener
 import to.pubky.maps.write.WriteIcons
@@ -173,7 +178,8 @@ fun SearchBar(
  * what is missing. [userLocation] gives each result its distance. [onFirstRowEnd], when given, hears
  * how far (in pixels, from the list's top) the first result reaches, with the lines above it, each
  * time it is laid out with the list at its top (the first row of any kind while there is no result).
- * [listState] is the list's scroll position, for a container that moves it.
+ * [listState] is the list's scroll position, for a container that moves it. [now] (the phone's local
+ * time) says whether a result with kept opening hours is open; without it rows show no hours.
  */
 @Composable
 fun SearchList(
@@ -186,6 +192,7 @@ fun SearchList(
     credits: List<AttributionLink> = emptyList(),
     onFirstRowEnd: ((Int) -> Unit)? = null,
     listState: LazyListState = rememberLazyListState(),
+    now: LocalDateTime? = null,
 ) {
     val shownRecents = recentsFor(state, recents)
     if (onFirstRowEnd != null) {
@@ -232,7 +239,7 @@ fun SearchList(
             }
         } else {
             items(state.results, key = ::resultKey) { result ->
-                ResultRow(result, userLocation, selected = result == state.selected) { actions.onSelect(result) }
+                ResultRow(result, userLocation, now, selected = result == state.selected) { actions.onSelect(result) }
             }
             // The list may cover the map and its credits: the results' sources are named under them.
             if (state.results.isNotEmpty() && credits.isNotEmpty()) item(key = "credits") { CreditsLine(credits) }
@@ -353,7 +360,9 @@ private fun StatusLine(
 }
 
 /**
- * A search result: its name, then its kind and address. At normal size a usual name and address
+ * A search result: its name, then its kind and address, then whether it is open now when an offline
+ * area keeps its opening hours ("Open · Closes 18:00" in green, as Google Maps' result rows have it;
+ * the hours the place page shows, from the same element). At normal size a usual name and address
  * take one line each. They may wrap (name to 2 lines, kind and address to 3) so that at Android's
  * largest font a row still names the place and its town in full, as Google Maps' and OsmAnd's result
  * rows grow: the kind fills the first line and the address needs two more at 200 % beside the
@@ -363,15 +372,26 @@ private fun StatusLine(
 private fun ResultRow(
     result: SearchResult,
     userLocation: GeoPoint?,
+    now: LocalDateTime?,
     selected: Boolean,
     onClick: () -> Unit,
 ) {
     val place = result.place
+    val detail = resultDetail(result).takeIf { it.isNotEmpty() }
+    val schedule = remember(result.openingHours) { result.openingHours?.let(OpeningSchedule::parse) }
+    val opening = remember(schedule, now) { now?.let { schedule?.let { s -> openingLine(s.status(now), now) } } }
     ListItem(
         headlineContent = { Text(place.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
         supportingContent =
-            resultDetail(result).takeIf { it.isNotEmpty() }?.let { detail ->
-                { Text(detail, maxLines = 3, overflow = TextOverflow.Ellipsis) }
+            if (detail != null || opening != null) {
+                {
+                    Column {
+                        detail?.let { Text(it, maxLines = 3, overflow = TextOverflow.Ellipsis) }
+                        opening?.let { OpeningText(it) }
+                    }
+                }
+            } else {
+                null
             },
         leadingContent = { Icon(result.kind.icon, contentDescription = null) },
         trailingContent = {

@@ -69,8 +69,19 @@ class SearchControllerTest {
             offlinePlaces
         }
 
+    /** The opening hours the offline areas keep, by element; the elements each look-up asked for. */
+    private var keptHours: Map<OsmId, String> = emptyMap()
+    private var keptHoursFail = false
+    private val hoursAsked = ArrayList<Set<OsmId>>()
+    private val hours =
+        KeptOpeningHours { elements ->
+            hoursAsked += elements.toSet()
+            if (keptHoursFail) error("the offline places db cannot be read")
+            keptHours.filterKeys { it in elements }
+        }
+
     private fun TestScope.controller(viewer: String? = null) =
-        SearchController(search, recents, this, viewer = { viewer }, health = health, offline = offline)
+        SearchController(search, recents, this, viewer = { viewer }, health = health, offline = offline, hours = hours)
 
     private fun SearchController.type(text: String) {
         for (i in 1..text.length) onQueryChange(text.take(i), area)
@@ -259,6 +270,91 @@ class SearchControllerTest {
                 "Photon is not answering: places and streets come from your offline maps, street addresses are missing.",
                 statusLine(c.state.value),
             )
+        }
+
+    @Test
+    fun rowsCarryTheOpeningHoursKeptForTheirElement() =
+        runTest {
+            val museum = OsmId(OsmType.Relation, 3_768_127)
+            val stop = OsmId(OsmType.Node, 4_878_436_674)
+            keptHours = mapOf(museum to "Tu-Su 10:00-18:00", stop to "24/7")
+            val c = controller()
+            c.onQueryChange("kunsthaus", area)
+            advanceTimeBy(300 + 101)
+            // Photon's rows have their hours as soon as they show, before Pinakes answers.
+            val afterPhoton = c.state.value
+            assertEquals(SourceState.Loading, afterPhoton.pinakes)
+            assertEquals("Tu-Su 10:00-18:00", afterPhoton.results.single { it.place.osm == museum }.openingHours)
+            advanceUntilIdle()
+            val results = c.state.value.results
+            // The museum's row is now Pinakes' card (on Pubky) and keeps its hours.
+            val museumRow = results.single { it.place.osm == museum }
+            assertTrue(museumRow.onPubky)
+            assertEquals("Tu-Su 10:00-18:00", museumRow.openingHours)
+            assertEquals("24/7", results.single { it.place.osm == stop }.openingHours)
+            assertTrue(results.filter { it.place.osm != museum && it.place.osm != stop }.all { it.openingHours == null })
+            // One look-up per answer, for its elements only.
+            assertEquals(
+                listOf(
+                    Fixtures.photon("kunsthaus").mapNotNull { it.osm }.toSet(),
+                    Fixtures.pinakes("kunsthaus").mapNotNull { it.osm }.toSet(),
+                ),
+                hoursAsked,
+            )
+        }
+
+    @Test
+    fun aPinakesCardGetsItsKeptHoursWithoutPhoton() =
+        runTest {
+            search.photonDown = true
+            val museum = OsmId(OsmType.Relation, 3_768_127)
+            keptHours = mapOf(museum to "Tu-Su 10:00-18:00")
+            val c = controller()
+            c.onQueryChange("kunsthaus", area)
+            advanceUntilIdle()
+            val card =
+                c.state.value.results
+                    .single()
+            assertTrue(card.onPubky)
+            assertEquals("Tu-Su 10:00-18:00", card.openingHours)
+        }
+
+    @Test
+    fun offlinePlacesCarryTheirKeptOpeningHours() =
+        runTest {
+            search.photonDown = true
+            search.pinakesDown = true
+            val museum = OsmId(OsmType.Way, 26_405_421)
+            offlinePlaces =
+                listOf(
+                    OfflinePlace("Kunsthaus Zürich", museum, "tourism", "museum", "Museum", GeoPoint(47.3703, 8.5481)),
+                    OfflinePlace("Kunsthausstrasse", null, "highway", "minor", "Street", GeoPoint(47.37, 8.548)),
+                )
+            keptHours = mapOf(museum to "Tu-Su 10:00-18:00")
+            val c = controller()
+            c.onQueryChange("kunsthaus", area)
+            advanceUntilIdle()
+            assertEquals(
+                listOf("Tu-Su 10:00-18:00", null),
+                c.state.value.results
+                    .map { it.openingHours },
+            )
+            // Pinakes' empty answer has no element to look up.
+            assertEquals(listOf(setOf(museum)), hoursAsked)
+        }
+
+    @Test
+    fun unreadableKeptHoursLeaveTheRowsWithout() =
+        runTest {
+            keptHoursFail = true
+            keptHours = Fixtures.photon("kunsthaus").mapNotNull { it.osm }.associateWith { "24/7" }
+            val c = controller()
+            c.onQueryChange("kunsthaus", area)
+            advanceUntilIdle()
+            val results = c.state.value.results
+            assertTrue(results.isNotEmpty())
+            assertTrue(results.all { it.openingHours == null })
+            assertEquals(SourceState.Answered, c.state.value.photon)
         }
 
     @Test
