@@ -60,6 +60,19 @@ private fun isPrivateFolderLookup(frame: StackTraceElement): Boolean =
     frame.className == "android.app.ContextImpl" && frame.methodName in setOf("ensurePrivateDirExists", "getDataDir")
 
 /**
+ * MapLibre making its process runtime, which loads its native library from the APK. The app makes it
+ * in the background as its map screen is created (`startMapRuntime`), so the main thread reading disk
+ * for it means that start came too late or was lost: it is held against our code wherever the call
+ * came from. Only for the main thread's own kinds: a leak's stack is where the resource was opened,
+ * which for a library's leak is the background start.
+ */
+private fun isMapRuntimeStart(frame: StackTraceElement): Boolean =
+    frame.className == "org.maplibre.compose.map.DefaultMapRuntime" && frame.methodName == "getInstance"
+
+/** The kinds of violation the main thread's policy raises for disk work there. */
+private val mainThreadDiskKinds = setOf("DiskReadViolation", "DiskWriteViolation", "UnbufferedIoViolation")
+
+/**
  * The class named by an instance count violation's message ("class to.pubky.maps.android.MainActivity;
  * instances=2; limit=1"). StrictMode raises it for a leaked activity: when an activity is destroyed
  * and, after a garbage collection, more instances of its class are in memory than the app still runs
@@ -72,7 +85,9 @@ private val leakedClass = Regex("""^class ([\w.$]+); instances=""")
  * One log line for a violation: "ours" when the app's own code made the call, "app-folder" when
  * that call was only a lookup of the app's private folders, "library" when a library made it
  * (MapLibre, Ktor, ...); then the kind and the blamed frame. A leaked activity ([message] names its
- * class) is "ours" when the activity is one of ours, and is reported at its class.
+ * class) is "ours" when the activity is one of ours, and is reported at its class. Disk work on the
+ * main thread for MapLibre making its runtime is "ours", at the app code that asked for it, else at
+ * MapLibre's call.
  */
 internal fun strictModeReport(
     kind: String,
@@ -82,6 +97,11 @@ internal fun strictModeReport(
     val leaked = message?.let { leakedClass.find(it) }?.groupValues?.get(1)
     if (leaked != null) {
         return "${if (leaked.startsWith("to.pubky.maps.")) "ours" else "library"} $kind at $leaked"
+    }
+    val runtimeStart = if (kind in mainThreadDiskKinds) stack.indexOfFirst(::isMapRuntimeStart) else -1
+    if (runtimeStart >= 0) {
+        val asked = stack.drop(runtimeStart).firstOrNull { it.className.startsWith("to.pubky.maps.") }
+        return "ours $kind at ${asked ?: stack[runtimeStart]}"
     }
     val frame = blamedFrame(stack)
     val owner =

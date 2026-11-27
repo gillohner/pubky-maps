@@ -32,6 +32,7 @@ import to.pubky.maps.offline.androidOfflineMaps
 import to.pubky.maps.offline.androidOfflinePlacesDriver
 import to.pubky.maps.offline.androidOfflinePubkyStore
 import to.pubky.maps.offline.configureMapRuntime
+import to.pubky.maps.offline.startMapRuntime
 import to.pubky.maps.offline.startOfflinePlaceDetails
 import to.pubky.maps.offline.startOfflinePlaceIndexer
 import to.pubky.maps.offline.startOfflinePubkyPlaces
@@ -166,6 +167,9 @@ class PubkyMapsApplication : Application() {
             startOfflinePlaceDetails(this, scope, it, settingsRepository.settings, BuildConfig.VERSION_NAME, offlineDetails)
         }
     }
+
+    /** Makes MapLibre's runtime in the background; MainActivity calls it as it is created. */
+    fun prepareMapRuntime() = startMapRuntime(scope)
 
     /** The user's writes about places (tags, posts, photos, lists, saved places) and their outbox. */
     lateinit var writes: WriteController

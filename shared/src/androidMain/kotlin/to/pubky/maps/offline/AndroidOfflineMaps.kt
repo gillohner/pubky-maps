@@ -2,6 +2,7 @@ package to.pubky.maps.offline
 
 import android.content.Context
 import android.net.ConnectivityManager
+import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.io.files.Path
@@ -33,6 +34,24 @@ fun configureMapRuntime(
     DefaultMapRuntime.configure {
         cacheFile = Path(File(context.noBackupFilesDir, "maplibre.db").path)
         resourceProvider = OfflineMapResources({ offlineHttpClient(appVersion) }, downloading, fetchedNewData = fetchedNewData)
+    }
+}
+
+/**
+ * Makes MapLibre's runtime for the process in [scope], after [configureMapRuntime]. Making it loads
+ * MapLibre's native library (about 14 MB) and starts its thread. A screen with the map calls this
+ * as it is created, so the first composition, where the offline maps read their packs from the
+ * runtime, finds it made or waits only for the rest of its making, instead of loading the library on
+ * the main thread. Starts with no screen (the outbox job) never make it. A runtime that cannot be made
+ * is logged here and fails again where a screen uses it. StrictMode holds a runtime made on the main
+ * thread against our code (`StrictModeProvider.kt`).
+ */
+fun startMapRuntime(
+    scope: CoroutineScope,
+    make: () -> Unit = { DefaultMapRuntime.instance },
+) {
+    scope.launch {
+        runCatching(make).onFailure { Log.w("PubkyMapsMap", "MapLibre's runtime could not be made", it) }
     }
 }
 

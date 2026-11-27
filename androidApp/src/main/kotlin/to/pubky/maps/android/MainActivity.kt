@@ -28,6 +28,8 @@ class MainActivity : ComponentActivity() {
     private val incomingLinks = Channel<String>(Channel.BUFFERED)
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Before anything else, so MapLibre's native library loads while the activity is set up.
+        app.prepareMapRuntime()
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val appInfo = AppInfo(versionName = BuildConfig.VERSION_NAME, versionCode = BuildConfig.VERSION_CODE.toLong())
