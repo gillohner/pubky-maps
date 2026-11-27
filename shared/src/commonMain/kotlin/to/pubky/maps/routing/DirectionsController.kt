@@ -56,6 +56,9 @@ data class Directions(
 ) {
     /** The found route the map still has to fit, once per route. */
     val routeToFit: RouteStatus.Found? get() = (status as? RouteStatus.Found)?.takeIf { !routeFitted }
+
+    /** The steps the place page lists: the found route's, while the user has them open. */
+    val shownSteps: List<RouteStep> get() = if (stepsShown) (status as? RouteStatus.Found)?.route?.steps.orEmpty() else emptyList()
 }
 
 /**

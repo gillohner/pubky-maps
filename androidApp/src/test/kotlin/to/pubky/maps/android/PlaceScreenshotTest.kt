@@ -337,7 +337,14 @@ class PlaceScreenshotTest {
         directions =
             DirectionsUi(
                 directions =
-                    Directions(kunsthausRef.uri, kunsthausRef.point!!, mode, from = GeoPoint(47.3779, 8.5403), status, stepsShown),
+                    Directions(
+                        kunsthausRef.uri,
+                        kunsthausRef.point!!,
+                        mode,
+                        from = GeoPoint(47.3779, 8.5403),
+                        status,
+                        stepsShown = stepsShown,
+                    ),
                 onMode = {},
                 onSteps = {},
                 onClose = {},
@@ -511,6 +518,19 @@ class PlaceScreenshotTest {
     fun directionsStepsPhoneDark() =
         capture("place-directions-steps", Device.Phone, dark = true) {
             Page(rich, SheetStop.Full, directionsTo(foundRoute, stepsShown = true))
+        }
+
+    /** Open steps leave the lowest stop at the header with its route card: the map with the route stays in view. */
+    @Test
+    fun directionsStepsPeekPhoneLight() =
+        capture("place-directions-steps-peek", Device.Phone, dark = false) {
+            Page(rich, SheetStop.Peek, directionsTo(foundRoute, stepsShown = true))
+        }
+
+    @Test
+    fun directionsStepsPeekPhoneDark() =
+        capture("place-directions-steps-peek", Device.Phone, dark = true) {
+            Page(rich, SheetStop.Peek, directionsTo(foundRoute, stepsShown = true))
         }
 
     @Test

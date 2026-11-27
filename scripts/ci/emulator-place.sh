@@ -122,31 +122,21 @@ xy=$(wait_for "Walk" 5) || fail "no Walk mode in the directions"
 adb shell input tap $xy
 sleep 4
 check_alive "directions on foot"
-# The route's steps open under it (the fixture's turn instructions, as FOSSGIS gave them; the
-# fixture answers every mode with the same route).
+# The route's steps open under the header, the sheet raised to Full for them (the fixture's turn
+# instructions, as FOSSGIS gave them; the fixture answers every mode with the same route).
 xy=$(wait_for "Steps" 5) || fail "no Steps button under the route"
 adb shell input tap $xy
-found=""
-for _ in 1 2 3; do
-    if wait_for "Turn right onto Museumstrasse." 4 > /dev/null; then found=1; break; fi
-    adb shell input swipe 540 1700 540 1100 400
-    sleep 1
-done
-[ -n "$found" ] || fail "the route's steps did not open"
-sleep 1
+sleep 2
+wait_for "Show less of the place" 5 > /dev/null || fail "opening the steps did not raise the sheet to the top"
+wait_for "Turn right onto Museumstrasse." 5 > /dev/null || fail "the route's steps did not open"
 screenshot place-steps
 check_alive "steps"
-# Closed again so the page is as long as before; a swipe that raised the sheet leaves it at Full.
-if xy=$(wait_for "Hide steps" 3); then adb shell input tap $xy; sleep 1; fi
+# Closed again so the page is as long as before; the sheet stays at Full.
+xy=$(wait_for "Hide steps" 3) || fail "no Hide steps button"
+adb shell input tap $xy
+sleep 1
 kill $gps 2> /dev/null || true
-
-# Raised to Full, unless the steps' swipe did so already.
-if xy=$(wait_for "Show more of the place" 5); then
-    adb shell input tap $xy
-    sleep 2
-else
-    wait_for "Show less of the place" 3 > /dev/null || fail "no sheet handle"
-fi
+wait_for "Show less of the place" 3 > /dev/null || fail "closing the steps moved the sheet"
 found=""
 for _ in 1 2 3; do
     if wait_for "In 3 lists" 4 > /dev/null; then found=1; break; fi

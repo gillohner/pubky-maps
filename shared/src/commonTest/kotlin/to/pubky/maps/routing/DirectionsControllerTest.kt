@@ -254,6 +254,25 @@ class DirectionsControllerTest {
         }
 
     @Test
+    fun thePageListsTheFoundRoutesStepsOnlyWhileTheyAreOpen() =
+        runTest {
+            val steps = listOf(RouteStep("Drive north.", Turn.Depart, 35.0), RouteStep("You have arrived.", Turn.Arrive, 0.0))
+            val routing = FakeRouting { RouteAnswer.Found(route.copy(steps = steps), "s") }
+            routing.gate = CompletableDeferred()
+            val c = controller(routing)
+            c.start("osm:node/1", kunsthaus, here)
+            runCurrent()
+            c.showSteps(true)
+            // Open, but no route yet.
+            assertEquals(emptyList(), c.directions.value?.shownSteps)
+            routing.gate!!.complete(Unit)
+            advanceUntilIdle()
+            assertEquals(steps, c.directions.value?.shownSteps)
+            c.showSteps(false)
+            assertEquals(emptyList(), c.directions.value?.shownSteps)
+        }
+
+    @Test
     fun stepsWithoutDirectionsDoNothing() =
         runTest {
             val c = controller(FakeRouting { RouteAnswer.Found(route, "s") })

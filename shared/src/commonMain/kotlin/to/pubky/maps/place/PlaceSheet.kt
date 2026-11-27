@@ -118,6 +118,21 @@ fun PlaceSheet(
     val currentFlingVelocity by rememberUpdatedState(flingVelocity)
     val currentOnStopChange by rememberUpdatedState(onStopChange)
     val currentOnDragStart by rememberUpdatedState(onDragStart)
+    // Opening the route's steps raises the sheet to the top, where they are listed under the header:
+    // at the lower stops the header with its route card takes about all the sheet shows, so the list
+    // would open out of sight. Lowering the sheet again keeps them open and brings back the map.
+    // Remembered: the sheet recomposes on every frame of a drag, and new actions would recompose the page.
+    val sheetActions =
+        remember(actions) {
+            val ui = actions.directions ?: return@remember actions
+            actions.copy(
+                directions =
+                    ui.copy(onSteps = { shown ->
+                        ui.onSteps(shown)
+                        if (shown && currentStop != SheetStop.Full) currentOnStopChange(SheetStop.Full)
+                    }),
+            )
+        }
 
     fun dragBy(delta: Float) {
         if (dragged == null) currentOnDragStart()
@@ -194,7 +209,7 @@ fun PlaceSheet(
                     ),
             ) {
                 Handle(stop) { onStopChange(stops.afterTap(stop)) }
-                if (!headerScrolls) PlaceHeader(page, context, actions, Modifier.onSizeChanged { headerPx = it.height })
+                if (!headerScrolls) PlaceHeader(page, context, sheetActions, Modifier.onSizeChanged { headerPx = it.height })
             }
             Column(
                 Modifier
@@ -204,11 +219,11 @@ fun PlaceSheet(
                     .verticalScroll(pageScroll),
             ) {
                 // Dragged by the page's own scrolling (the nested scroll above), as the sections are.
-                if (headerScrolls) PlaceHeader(page, context, actions, Modifier.onSizeChanged { headerPx = it.height })
+                if (headerScrolls) PlaceHeader(page, context, sheetActions, Modifier.onSizeChanged { headerPx = it.height })
                 PlaceSections(
                     page,
                     context,
-                    actions,
+                    sheetActions,
                     Modifier
                         // The scroll viewport's minimum height is not the page's: measure the page itself.
                         .wrapContentHeight(Alignment.Top)

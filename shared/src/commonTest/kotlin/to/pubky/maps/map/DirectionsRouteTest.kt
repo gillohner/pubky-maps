@@ -10,6 +10,8 @@ import to.pubky.maps.config.ServerDefaults
 import to.pubky.maps.config.Service
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class DirectionsRouteTest {
     @Test
@@ -20,6 +22,16 @@ class DirectionsRouteTest {
         // A tablet: beside the panel.
         val wide = routeFitPadding(DpRect(424.dp, 80.dp, 1280.dp, 700.dp), DpSize(1280.dp, 800.dp))
         assertEquals(DpPadding(left = 456.dp, top = 112.dp, right = 32.dp, bottom = 132.dp), wide)
+    }
+
+    @Test
+    fun aRouteWaitsWhileThePageCoversTheMap() {
+        // The phone sheet at its top: the map left between the search bar and the sheet has no height.
+        assertFalse(roomHoldsRoute(DpRect(0.dp, 80.dp, 412.dp, 80.dp)))
+        assertFalse(roomHoldsRoute(DpRect(0.dp, 80.dp, 412.dp, 200.dp)))
+        // At its lowest stop, with the header and the route card.
+        assertTrue(roomHoldsRoute(DpRect(0.dp, 80.dp, 412.dp, 490.dp)))
+        assertTrue(roomHoldsRoute(DpRect(424.dp, 80.dp, 1280.dp, 800.dp)))
     }
 
     @Test

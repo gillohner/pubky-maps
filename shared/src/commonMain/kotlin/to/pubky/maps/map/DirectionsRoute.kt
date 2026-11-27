@@ -121,6 +121,17 @@ fun routeCredits(
 /** Room around a fitted route, past the map's edges of [room]. */
 private val ROUTE_MARGIN = 32.dp
 
+/** The least map, past [ROUTE_MARGIN] on each side, that a route is fitted into. */
+private val ROUTE_MIN_ROOM = 96.dp
+
+/**
+ * Whether [room] leaves enough map to fit a route into: not when the place page covers about all of
+ * it (the phone sheet at its top, as with the route's steps open), where the route would be framed in
+ * a strip of no height.
+ */
+internal fun roomHoldsRoute(room: DpRect): Boolean =
+    room.right - room.left >= ROUTE_MARGIN * 2 + ROUTE_MIN_ROOM && room.bottom - room.top >= ROUTE_MARGIN * 2 + ROUTE_MIN_ROOM
+
 /**
  * The padding that fits a route into [room], the map a place page leaves in view on a map of [size]:
  * a margin inside it. Without a room yet, the top and the bottom half are left as for search results.

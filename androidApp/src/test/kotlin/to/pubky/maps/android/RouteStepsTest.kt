@@ -11,6 +11,10 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.LocalTime
+import kotlinx.datetime.TimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -18,8 +22,13 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import to.pubky.maps.links.GeoPoint
+import to.pubky.maps.place.PlacePageActions
+import to.pubky.maps.place.PlacePageContext
+import to.pubky.maps.place.PlacePageState
+import to.pubky.maps.place.PlacePanel
+import to.pubky.maps.place.PlaceRef
+import to.pubky.maps.place.PlaceSource
 import to.pubky.maps.routing.Directions
-import to.pubky.maps.routing.DirectionsCard
 import to.pubky.maps.routing.DirectionsUi
 import to.pubky.maps.routing.Route
 import to.pubky.maps.routing.RouteStatus
@@ -28,12 +37,24 @@ import to.pubky.maps.routing.TravelMode
 import to.pubky.maps.routing.Turn
 import to.pubky.maps.ui.PubkyMapsTheme
 
-/** A found route's steps open and close behind the Steps button; each reads as one sentence with its distance. */
+/**
+ * A found route's steps open and close behind the Steps button, listed in the place page under its
+ * header; each reads as one sentence with its distance.
+ */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w412dp-h915dp")
 class RouteStepsTest {
     @get:Rule
     val compose = createComposeRule()
+
+    private val context =
+        PlacePageContext(
+            now = LocalDateTime(LocalDate.parse("2026-11-25"), LocalTime(12, 0)),
+            nowMillis = 1_795_608_000_000,
+            timeZone = TimeZone.UTC,
+            language = "en",
+            distance = null,
+        )
 
     private val here = GeoPoint(47.3779, 8.5403)
     private val kunsthaus = GeoPoint(47.3702, 8.5486)
@@ -55,15 +76,27 @@ class RouteStepsTest {
     ) {
         compose.setContent {
             PubkyMapsTheme(darkTheme = false) {
-                DirectionsCard(
-                    DirectionsUi(
-                        Directions("osm:node/1", kunsthaus, TravelMode.Car, here, status, stepsShown = shown()),
-                        onMode = {},
-                        onSteps = onSteps,
+                // The place page as on a tablet: its header with the route card, its sections under it.
+                PlacePanel(
+                    PlacePageState(PlaceRef("osm:node/1", "Kunsthaus", kunsthaus, null, PlaceSource.Pinakes), loading = emptySet()),
+                    context,
+                    PlacePageActions(
                         onClose = {},
-                        onRetry = {},
-                        onOpenSettings = null,
-                        credits = emptyList(),
+                        onShare = null,
+                        openIn = emptyList(),
+                        onOpenIn = {},
+                        onOpenLink = {},
+                        onLoadMorePosts = {},
+                        directions =
+                            DirectionsUi(
+                                Directions("osm:node/1", kunsthaus, TravelMode.Car, here, status, stepsShown = shown()),
+                                onMode = {},
+                                onSteps = onSteps,
+                                onClose = {},
+                                onRetry = {},
+                                onOpenSettings = null,
+                                credits = emptyList(),
+                            ),
                     ),
                 )
             }

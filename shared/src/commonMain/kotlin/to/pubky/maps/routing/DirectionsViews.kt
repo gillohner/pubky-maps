@@ -123,8 +123,8 @@ fun routeStatusText(directions: Directions): String? =
 
 /**
  * The directions on a place page: the modes, then the route's time and length (the map draws its
- * line) with its steps behind a button, or what stands in its way; the routing server's credits under
- * a found route.
+ * line) with the button that opens its steps ([RouteStepList]), or what stands in its way; the routing
+ * server's credits under a found route.
  */
 @Composable
 fun DirectionsCard(
@@ -190,7 +190,7 @@ fun DirectionsCard(
             if (found != null) {
                 // Outside the live region above: opening the steps is not read out as a new route.
                 Column(Modifier.padding(end = 12.dp)) {
-                    RouteSteps(found.route.steps, directions.stepsShown, ui.onSteps)
+                    StepsButton(found.route.steps, directions.stepsShown, ui.onSteps)
                     RouteCredits(ui.credits)
                 }
             }
@@ -199,11 +199,12 @@ fun DirectionsCard(
 }
 
 /**
- * The route's steps, behind a button as in Google Maps' directions: each with its turn's icon, its
- * sentence and how far the route then goes. Nothing when the server gave no steps.
+ * The button that opens the route's steps, as in Google Maps' directions; none when the server gave no
+ * steps. The list itself is [RouteStepList], in the page under the header: on a phone the header is
+ * the sheet's lowest stop, which a list inside it would stretch over the map.
  */
 @Composable
-private fun RouteSteps(
+private fun StepsButton(
     steps: List<RouteStep>,
     shown: Boolean,
     onSteps: (Boolean) -> Unit,
@@ -211,15 +212,22 @@ private fun RouteSteps(
     if (steps.isEmpty()) return
     TextButton(
         onClick = { onSteps(!shown) },
-        // Its label starts under the route's time, as the steps' icons do.
+        // Its label starts under the route's time.
         modifier = Modifier.offset(x = (-12).dp).semantics { stateDescription = if (shown) "Expanded" else "Collapsed" },
     ) {
         Text(if (shown) "Hide steps" else "Steps")
         Spacer(Modifier.width(4.dp))
         Icon(if (shown) RoutingIcons.ExpandLess else RoutingIcons.ExpandMore, contentDescription = null, modifier = Modifier.size(18.dp))
     }
-    if (!shown) return
-    Column {
+}
+
+/** The route's [steps] ([Directions.shownSteps]): each with its turn's icon, its sentence and how far the route then goes. */
+@Composable
+fun RouteStepList(
+    steps: List<RouteStep>,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier.padding(horizontal = 16.dp)) {
         steps.forEachIndexed { i, step ->
             if (i > 0) HorizontalDivider(Modifier.padding(start = 40.dp), color = MaterialTheme.colorScheme.outlineVariant)
             Row(
