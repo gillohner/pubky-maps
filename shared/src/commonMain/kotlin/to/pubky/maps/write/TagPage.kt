@@ -27,8 +27,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import to.pubky.maps.ui.AppIcons
 import to.pubky.maps.ui.NoteWithAction
+import to.pubky.maps.ui.TextIcon
 
 /** What the tag page shows: the user's own tags on the place (some maybe not sent yet) and labels to add with one tap. */
 data class TagPageState(
@@ -162,11 +164,11 @@ private fun PendingLegend(
     NoteWithAction(
         note = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
+                TextIcon(
                     WriteIcons.Pending,
                     contentDescription = null,
+                    size = 18.sp,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp),
                 )
                 Spacer(Modifier.width(8.dp))
                 NoteText(if (waiting) "${pendingText(true, busy)}: sent when it can be." else "Sending…")
