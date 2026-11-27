@@ -44,6 +44,23 @@ class SavedPinsTest {
     }
 
     @Test
+    fun aSavedPointOpensAsCoordinatesNotAsAPlaceOfTheMap() {
+        val pin = GeoPoint(47.37031, 8.55601)
+        // A dropped pin or typed coordinates, saved: still a point that no server hears of.
+        assertEquals(
+            PlaceRef("geo:47.37031,8.55601", "Home", pin, null, PlaceSource.Coordinates),
+            SavedEntry("geo:47.37031,8.55601", Kept.Phone, "Home", point = pin).toPlaceRef(),
+        )
+        // From the Saved page, which knows the link and the name: the point is the link's.
+        assertEquals(
+            PlaceRef("geo:47.35,8.55", null, GeoPoint(47.35, 8.55), null, PlaceSource.Coordinates),
+            savedPointPlace("geo:47.35,8.55", null),
+        )
+        assertNull(savedPointPlace(OSM, "Conditorei Schober"), "an OpenStreetMap place is read as its link is")
+        assertNull(savedPointPlace("geo:0,0?q=Kunsthaus", null), "a geo: search names no point")
+    }
+
+    @Test
     fun aSaveKeepsThePlacesOwnPointElseItsCardsNeverAMapView() {
         val pinned = PlaceRef(OSM, "Conditorei Schober", SCHOBER, null, PlaceSource.Map)
         assertEquals(SCHOBER, PlacePageState(pinned).placePoint)

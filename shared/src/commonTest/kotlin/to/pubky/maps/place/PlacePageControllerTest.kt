@@ -13,7 +13,11 @@ import to.pubky.maps.links.OsmId
 import to.pubky.maps.links.OsmType
 import to.pubky.maps.map.DROPPED_PIN
 import to.pubky.maps.map.droppedPin
+import to.pubky.maps.map.savedPointPlace
+import to.pubky.maps.map.toPlaceRef
 import to.pubky.maps.search.SourceAnswer
+import to.pubky.maps.write.Kept
+import to.pubky.maps.write.SavedEntry
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -463,6 +467,27 @@ class PlacePageControllerTest {
             assertEquals(DROPPED_PIN, page.place.category)
             assertEquals("Hottingen, Zürich", page.address)
             assertEquals(listOf<Pair<OsmId?, GeoPoint>>(null to GeoPoint(47.37031, 8.55601)), localities.asked)
+        }
+
+    @Test
+    fun aSavedPointReopenedFromItsPinOrTheSavedPageAsksNoServer() =
+        runTest {
+            val data = FakePlaceData()
+            val pages = controller(data, localities = Hottingen())
+            // A dropped pin saved (phone or homeserver), then opened again from its badge and from the Saved page.
+            val pin = SavedEntry("geo:47.37031,8.55601", Kept.Private, "Home", point = GeoPoint(47.37031, 8.55601))
+            pages.open(pin.toPlaceRef())
+            advanceUntilIdle()
+            pages.open(savedPointPlace("geo:47.37031,8.55601", "Home")!!)
+            advanceUntilIdle()
+            assertEquals(emptyList(), data.askedCards)
+            assertEquals(emptyList(), data.askedLinks)
+            assertEquals(
+                "Home",
+                pages.state.value!!
+                    .place.title,
+            )
+            assertEquals("Hottingen, Zürich", pages.state.value!!.address)
         }
 
     @Test

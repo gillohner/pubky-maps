@@ -152,7 +152,8 @@ the public lists that hold it; and the same place on other services ("Also on").
 its own and is hidden while it has nothing. What a page showed is kept on the phone, so a place
 reopens offline with a note saying when it was saved; the user's own tags and lists in it are shown
 only to the account that saw them. Typed coordinates and a dropped pin open a page without any
-request, and the map's Pubky places wait until the user moves the map while it is open.
+request, also when saved and reopened from their pin or the Saved page, and the map's Pubky places
+wait until the map is next moved: by a gesture while the page is open, or by any move after it closes.
 
 **Directions** on a place page ask for the user's position as the my-location button does (the
 permission only then) and route from there to the place by car, bike or on foot (car at first, then

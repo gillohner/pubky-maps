@@ -47,6 +47,27 @@ class LinkedPlacesTest {
         }
 
     @Test
+    fun aShownPlaceAsksTheCoreNothingAndReplacesALinkStillOpening() =
+        runTest(StandardTestDispatcher()) {
+            val links = FakeMapLinks { text -> openedLink(source = text, name = text) }
+            links.gate = CompletableDeferred()
+            val places = linkedPlaces(links)
+            places.open("geo:1,1", listOf("https://p1"))
+            runCurrent()
+            val before = places.state.value.placedAt
+            val home = PlaceRef("geo:47.37031,8.55601", "Home", GeoPoint(47.37031, 8.55601), null, PlaceSource.Coordinates)
+            places.show(home)
+            links.gate!!.complete(Unit)
+            runCurrent()
+            val state = places.state.value
+            assertEquals(home, state.place)
+            assertNull(state.provider)
+            assertFalse(state.opening)
+            assertTrue(state.placedAt != before, "the map moves to the shown place")
+            assertEquals(listOf("geo:1,1"), links.asked.map { it.first }, "the saved point went to no core and no Pinakes")
+        }
+
+    @Test
     fun aNewerLinkReplacesOneStillOpening() =
         runTest(StandardTestDispatcher()) {
             val links = FakeMapLinks { text -> openedLink(source = text, name = text) }

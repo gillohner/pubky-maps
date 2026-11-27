@@ -230,7 +230,7 @@ fun SavedRoute(
     signedIn: Boolean,
     refreshing: Boolean,
     onRefresh: () -> Unit,
-    onOpen: (String) -> Unit,
+    onOpen: (place: String, name: String?) -> Unit,
     onBack: () -> Unit,
 ) {
     val own by writes.own.collectAsStateWithLifecycle()
@@ -247,7 +247,7 @@ fun SavedRoute(
                 refreshing = refreshing || own.listsLoading,
                 signedIn = signedIn,
             ),
-        onOpen = onOpen,
+        onOpen = { place -> onOpen(place, own.saved.firstOrNull { it.place == place }?.name ?: own.names[place]) },
         onBack = onBack,
     )
 }

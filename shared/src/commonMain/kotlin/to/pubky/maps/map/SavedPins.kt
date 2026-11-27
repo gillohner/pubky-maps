@@ -23,10 +23,12 @@ import org.maplibre.spatialk.geojson.Feature
 import org.maplibre.spatialk.geojson.FeatureCollection
 import org.maplibre.spatialk.geojson.Point
 import org.maplibre.spatialk.geojson.Position
+import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.place.PlaceRef
 import to.pubky.maps.place.PlaceSource
 import to.pubky.maps.search.osmIdFromUrl
 import to.pubky.maps.write.SavedEntry
+import to.pubky.maps.write.geoLinkPoint
 
 /**
  * The purple of the user's saved places: apart from search's and the opened place's red, the teal
@@ -51,7 +53,22 @@ internal fun savedPins(saved: List<SavedEntry>): List<SavedEntry> = saved.filter
 
 /** The place page of a saved place's pin: the place as saved, where it was saved. */
 internal fun SavedEntry.toPlaceRef(): PlaceRef =
-    PlaceRef(uri = place, name = name, point = point, osm = osmIdFromUrl(place), source = PlaceSource.Map)
+    savedPointPlace(place, name, point)
+        ?: PlaceRef(uri = place, name = name, point = point, osm = osmIdFromUrl(place), source = PlaceSource.Map)
+
+/**
+ * The page of a saved place that is a point of its own, a `geo:` link (a dropped pin, typed
+ * coordinates), from its pin or the Saved page: [PlaceSource.Coordinates] as when it was saved, so
+ * it is asked of no server (a saved point can be the user's home). Null for any other place.
+ */
+internal fun savedPointPlace(
+    place: String,
+    name: String?,
+    point: GeoPoint? = null,
+): PlaceRef? {
+    val linked = geoLinkPoint(place) ?: return null
+    return PlaceRef(uri = place, name = name, point = point ?: linked, osm = null, source = PlaceSource.Coordinates)
+}
 
 /**
  * The user's saved places on the map, as Google Maps, CoMaps and OsmAnd show theirs with a coloured

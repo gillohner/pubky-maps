@@ -91,6 +91,15 @@ class LinkedPlaces(
             }
     }
 
+    /**
+     * Shows [place] as it is, read by no core and asked of no server: a saved point (a dropped pin,
+     * typed coordinates) that stays on the phone. Replaces a link still being read.
+     */
+    fun show(place: PlaceRef) {
+        job?.cancel()
+        _state.update { LinkedPlaceState(place = place, generation = it.generation + 1, placedAt = 2 * (it.generation + 1)) }
+    }
+
     /** Closes the place card. */
     fun close() {
         job?.cancel()

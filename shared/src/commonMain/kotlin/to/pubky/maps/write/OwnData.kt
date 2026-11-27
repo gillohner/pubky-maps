@@ -252,7 +252,7 @@ private fun pointOf(
 ): GeoPoint? = points[place] ?: geoLinkPoint(place)
 
 /** The point a `geo:` link names ("geo:47.37,8.54"); null for any other link, or a `geo:` search without one. */
-private fun geoLinkPoint(place: String): GeoPoint? =
+internal fun geoLinkPoint(place: String): GeoPoint? =
     if (place.startsWith("geo:", ignoreCase = true)) (parseGeoInput(place) as? GeoInput.Point)?.point else null
 
 /**

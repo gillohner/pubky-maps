@@ -34,6 +34,7 @@ import to.pubky.maps.links.OpenIn
 import to.pubky.maps.map.LastMapViewStore
 import to.pubky.maps.map.MapRoute
 import to.pubky.maps.map.StartView
+import to.pubky.maps.map.savedPointPlace
 import to.pubky.maps.offline.OfflineMaps
 import to.pubky.maps.offline.OfflineMapsScreen
 import to.pubky.maps.offline.offlineMapsSummary
@@ -432,10 +433,12 @@ private fun AppNavigation(
                     signedIn = signedIn != null && !signedIn.signingOut,
                     refreshing = signedIn?.refreshing == true,
                     onRefresh = { account?.controller?.refresh() },
-                    onOpen = { place ->
+                    onOpen = { place, name ->
                         navController.popBackStack(MapDestination, inclusive = false)
                         search?.controller?.close()
-                        links?.linkedPlaces?.open(place, pinakes)
+                        // A saved point stays on the phone; any other place is read as its link is.
+                        val point = savedPointPlace(place, name)
+                        if (point != null) links?.linkedPlaces?.show(point) else links?.linkedPlaces?.open(place, pinakes)
                     },
                     onBack = back,
                 )
