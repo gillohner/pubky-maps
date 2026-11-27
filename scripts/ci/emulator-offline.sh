@@ -6,8 +6,9 @@
 # the app's User-Agent, never more than 4 tile requests at once and no tile twice. Then the server
 # moves its tiles to a new release and the app, started far from the area, updates the area by
 # itself and replaces its packs, so no tile of the old release stays linked to it. With the server
-# gone the area draws in light and dark (the fixture's water colour, not the bare background), also
-# after three theme switches in one process (which count MainActivity's
+# gone the area draws in light and dark (the fixture's water colour, not the bare background) from
+# the styles' cached copies, which the fixture serves expired (light) and expired `must-revalidate` (dark), so no
+# style fails to load, also after three theme switches in one process (which count MainActivity's
 # instances for StrictMode), and search, whose servers are gone too, finds the area's places in the
 # offline maps, each saying whether it is open now from the opening hours the app kept for the area
 # from Overpass (the server's fixture), as soon as the download began, and the place page of one shows
@@ -250,9 +251,12 @@ done
 echo "$linked"
 ((rc == 0)) || fail "the update left the release before's tiles linked to the offline map: $linked"
 
-# Without the server the area still draws, in both themes.
+# Without the server the area still draws, in both themes. Each map load asks the server for its
+# style again (the fixture's are expired, the dark one `must-revalidate` too); the app keeps the cached copy, where
+# MapLibre's own answer, the error, would fail the style and the map would move on to nothing.
 kill "$server"
 wait "$server" 2> /dev/null || true
+gone=$(adb shell date +"'%m-%d %H:%M:%S.000'" | tr -d '\r')
 open_at "$zurich"
 wait_for "Settings" 30 > /dev/null || fail "the map screen did not appear offline"
 expect_water offline-light "#3c78d8"
@@ -274,14 +278,18 @@ expect_water offline-dark-recreated "#1c4587"
 sleep 5
 adb shell cmd uimode night no
 expect_water offline-light-recreated-again "#3c78d8"
+adb logcat -d -T "$gone" > "$out/logcat-without-server.txt" || fail "could not read the log without the server"
+failed=$(grep -E "loading style failed" "$out/logcat-without-server.txt") || true
+echo "five map loads without the server, styles failed to load: $(grep -c . <<< "$failed")"
+[ -z "$failed" ] || fail "a cached style failed to load without the server: ${failed:0:300}"
 check_alive "offline map drawn without a connection"
 
 # A theme switch while the area's update check walks its packs (from 20 s after a start, at least
 # 10 s per style), when the app's download client loads every request of the map too. The new map's
-# style and tiles are fresh in MapLibre's cache: asking the unreachable server for them again would
-# fail the style the map already drew, and the map would fall back to nothing (run 45865109025).
-# Whether the new map asks for its style again varies, but it always asks for the area's tiles: so
-# no style and no tile the area's packs hold may fail to load meanwhile (scripts/ci/tile_failures.py;
+# tiles are fresh in MapLibre's cache: asking the unreachable server for them again would fail them,
+# as it failed a fresh style the map already drew, which then fell back to nothing (run 45865109025;
+# the fixture's styles are expired now, kept from the cache as above). The new map always asks for
+# the area's tiles: so no style and no tile the area's packs hold may fail to load meanwhile (scripts/ci/tile_failures.py;
 # the source's TileJSON, served with max-age=0, is rightly asked again and fails). A tile outside the
 # area fails without a server and does not count: the start's world view, which a slow emulator can
 # still be drawing when the window opens. The screenshots wait 3 s, as a failed style blanks the map

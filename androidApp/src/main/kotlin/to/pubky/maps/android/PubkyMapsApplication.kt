@@ -183,6 +183,7 @@ class PubkyMapsApplication : Application() {
             scope,
             downloading = { offlineStarted?.downloading == true },
             fetchedNewData = { offlineStarted?.fetchedNewData() },
+            keepsCopy = { offlineStarted?.hasStyle(it) == true },
         )
         updates = startUpdater(this, serverConfigRepository)
         // Restores a stored session in the background; the map never waits for it.

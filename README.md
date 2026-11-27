@@ -49,7 +49,10 @@ counts the old release's tiles too); Resume goes on with it, and so does the nex
 unless the user paused it since the app started. An area marked so before the check found new
 data (the app was closed in the walk's first seconds) is walked on mobile data too: it is Ready
 again when nothing changed. MapLibre keeps the offline maps and the map
-cache in one database in the no-backup folder. The map's Pubky places of each area (the places
+cache in one database in the no-backup folder. When the phone has a network but the map server
+cannot be reached, an offline area's style stays drawn from its cached copy even once the copy has
+expired (OpenFreeMap's does a day after it was fetched), instead of failing and moving on to the
+next server, whose tiles are not on the phone; any other style still hands over to the next server. The map's Pubky places of each area (the places
 people referenced on Pubky) are fetched from Pinakes as soon as the area is in the list, at most
 10,000 per area, and fetched again once a day on a network Android does not count as metered; when
 Pinakes cannot be reached, the map shows them in the downloaded areas. Their tags and counts come
@@ -370,7 +373,8 @@ screenshots search with its pins, and the update probe screenshots each step of 
   downloads from Settings → Offline maps until Ready, with at most 4 tile requests at a time, the
   app's User-Agent and no tile twice; after the server moves its tiles to a new release the app
   updates the area by itself, and no tile of the old release is linked to it afterwards (read from a
-  copy of MapLibre's database); with the server gone the area draws in light and dark, and search
+  copy of MapLibre's database); with the server gone the area draws in light and dark (the light
+  style is served already expired, the dark one `must-revalidate` too, so both are kept from the cache), and search
   (its servers gone too) finds the bakery each fixture tile holds; it deletes.
 - Sign-in probe (`scripts/ci/sign-in-probe.py`): Pubky Ring cannot run in CI, so a fixture relay on
   the runner stands in for the sign-in relay. The probe opens Settings → Account, starts a sign-in,

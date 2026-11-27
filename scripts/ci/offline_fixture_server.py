@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Serves two tiny map styles (light.json, dark.json) for the emulator offline-maps test, so it needs
-no public network. Both styles take their vector source from source.json (a TileJSON that the map
-must check again at every load, as OpenFreeMap's does after an hour), whose tile addresses carry the
+no public network. The light style is served already expired (max-age=0, as OpenFreeMap's is a day
+after it was fetched), the dark one `must-revalidate` too (MapLibre holds it back until the server
+says it is unchanged), so each map load asks for them again and, with the server gone, the app must
+keep the cached copies. Both styles take their vector source from source.json (a TileJSON that the
+map must check again at every load, as OpenFreeMap's does after an hour), whose tile addresses carry the
 current release of the map data: GET /release/<n> moves them, as a map server does with each release.
 Every tile is one water polygon over the whole tile, so a drawn map is the styles' water colour and a
 missing tile the background colour, and a grid of points labelled as the city "Fixture Town"
@@ -31,6 +34,7 @@ open_tiles = 0
 release = 1
 
 WATER = {"/light.json": ("#f2efe9", "#3c78d8"), "/dark.json": ("#2b2d31", "#1c4587")}
+STYLE_CACHE = {"/light.json": "max-age=0", "/dark.json": "max-age=0, must-revalidate"}
 
 
 def style(background: str, water: str) -> dict:
@@ -171,11 +175,11 @@ class Handler(BaseHTTPRequestHandler):
         with open(log_path, "a", encoding="utf-8") as log:
             log.write(json.dumps({"path": self.path, "ua": self.headers.get("User-Agent", ""), **extra}) + "\n")
 
-    def send(self, status: int, body: bytes, content_type: str, max_age: int = 86400) -> None:
+    def send(self, status: int, body: bytes, content_type: str, max_age: int = 86400, cache: str = "") -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", f"max-age={max_age}")
+        self.send_header("Cache-Control", cache or f"max-age={max_age}")
         self.end_headers()
         self.wfile.write(body)
 
@@ -183,7 +187,7 @@ class Handler(BaseHTTPRequestHandler):
         global open_tiles, release
         if self.path in WATER:
             self.log_line({})
-            self.send(200, json.dumps(style(*WATER[self.path])).encode(), "application/json")
+            self.send(200, json.dumps(style(*WATER[self.path])).encode(), "application/json", cache=STYLE_CACHE[self.path])
         elif self.path == "/source.json":
             self.log_line({"release": release})
             tilejson = {
