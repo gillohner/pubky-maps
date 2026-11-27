@@ -37,6 +37,9 @@ internal class FakePlaceData : PlaceData {
     /** Replies Nexus has for the Schober (newest first), 20 per page. */
     var replies: List<PlacePost> = parseNexusPosts(PlaceFixtures.read("nexus-replies-schober.json"), PlaceFixtures.NEXUS)
 
+    /** The OSM details the Schober's card brings; null as the recorded card (Pinakes gives none today). */
+    var schoberFacts: Map<String, String>? = null
+
     private fun <T> pinakes(value: () -> T): SourceAnswer<T> =
         if (pinakesDown) SourceAnswer.Unreachable else SourceAnswer.Answered(value(), "p")
 
@@ -46,7 +49,13 @@ internal class FakePlaceData : PlaceData {
     override suspend fun card(uris: List<String>): SourceAnswer<PlaceCardInfo?> {
         cardGate?.await()
         return pinakes {
-            if (SCHOBER in uris) parsePinakesCard(PlaceFixtures.read("pinakes-card-schober.json")) else null
+            if (SCHOBER in uris) {
+                parsePinakesCard(PlaceFixtures.read("pinakes-card-schober.json")).let { card ->
+                    schoberFacts?.let { card.copy(facts = it) } ?: card
+                }
+            } else {
+                null
+            }
         }
     }
 
@@ -250,20 +259,47 @@ class PlacePageControllerTest {
         }
 
     @Test
-    fun aPageWithACardShowsOnlyTheCardsDetailsAlsoFromTheCache() =
+    fun aCardWithoutOsmDetailsShowsTheKeptOnesFreshAndFromTheCache() =
         runTest {
             val details = KeptRosa(everyElement = true)
             val cache = MemoryPlaceCache()
-            controller(FakePlaceData(), cache, details = details).apply { open(schober) }
+            val online = controller(FakePlaceData(), cache, details = details).apply { open(schober) }
+            advanceUntilIdle()
+            assertNotNull(online.state.value!!.card)
+            assertEquals(
+                "Mo-Su 08:00-18:00",
+                online.state.value!!
+                    .osm
+                    ?.openingHours,
+                "Pinakes gives the card no OSM details",
+            )
+            val pages = controller(FakePlaceData().apply { pinakesDown = true }, cache, details = details)
+            pages.open(schober)
+            advanceUntilIdle()
+            val page = pages.state.value!!
+            assertNotNull(page.card, "the cached card")
+            assertEquals("Mo-Su 08:00-18:00", page.osm?.openingHours)
+            assertEquals("+41 44 000 00 00", page.osm?.phone)
+            assertEquals(5_000, page.shownAt, "the kept details are older than the cached card")
+            assertEquals(listOf(schober.osm!!, schober.osm), details.asked)
+        }
+
+    @Test
+    fun aCardWithOsmDetailsShowsOnlyThemAlsoFromTheCache() =
+        runTest {
+            val details = KeptRosa(everyElement = true)
+            val cache = MemoryPlaceCache()
+            val withFacts = FakePlaceData().apply { schoberFacts = mapOf("opening_hours" to "Mo-Fr 07:00-19:00") }
+            controller(withFacts, cache, details = details).apply { open(schober) }
             advanceUntilIdle()
             val pages = controller(FakePlaceData().apply { pinakesDown = true }, cache, details = details)
             pages.open(schober)
             advanceUntilIdle()
-            assertEquals(emptyList(), details.asked, "the card is what Pinakes and OSM say of the place")
+            assertEquals(emptyList(), details.asked, "the card's OSM details win as a whole")
             val page = pages.state.value!!
-            assertNotNull(page.card)
             assertNull(page.keptDetails)
-            assertNull(page.osm, "the Schober's card has no OSM details")
+            assertEquals("Mo-Fr 07:00-19:00", page.osm?.openingHours)
+            assertNull(page.osm?.phone, "no field comes from the kept details")
         }
 
     @Test

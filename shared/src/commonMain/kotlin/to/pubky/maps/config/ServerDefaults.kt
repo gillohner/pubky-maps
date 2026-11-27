@@ -52,14 +52,9 @@ object ServerDefaults {
                     listOf(ServerEntry("Pinakes (development)", "https://8092--main--pinakes--gil.coder.riginode.xyz")),
                 Service.Nexus to
                     listOf(ServerEntry("Nexus (development)", "https://8080--main--pubky-staging--gil.coder.riginode.xyz")),
-                // Public Overpass instances that need no key (wiki.openstreetmap.org/wiki/Overpass_API).
-                // dresel.systems' default endpoint holds Europe only (fast for the Swiss and German
-                // areas the app starts with; elsewhere its empty answer hands over to the next server)
-                // and asks apps to name themselves (the app's User-Agent does) and to run at most 4
-                // queries at once; FOSSGIS' main instance holds the planet, allows 10,000 queries and
-                // 1 GB a day and is often at capacity; private.coffee holds the planet with no rate
-                // limit. Each server learns which areas the user keeps; VK Maps' instance is left out
-                // as an operator the user would not choose to tell that.
+                // Public Overpass instances that need no key. dresel.systems' default endpoint holds
+                // Europe only (fast for the Swiss and German areas the app starts with); elsewhere its
+                // empty answer hands over to the next server. FOSSGIS and private.coffee hold the planet.
                 Service.Overpass to
                     listOf(
                         ServerEntry("Overpass Europe (dresel.systems)", "https://ovp.dresel.systems/api/interpreter"),

@@ -139,15 +139,27 @@ def tile_of(lat: float, lon: float) -> tuple[int, int]:
     return x, y
 
 
+def bakery_point(x: int, y: int) -> tuple[float, float]:
+    """The point (lat, lon) of the bakery of zoom 14 tile x/y: the tile's middle."""
+    n = 2**14
+    lon = (x + 0.5) / n * 360 - 180
+    lat = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * (y + 0.5) / n))))
+    return lat, lon
+
+
 def overpass_answer(query: str) -> bytes:
-    """The bakeries of the zoom 14 tiles in the query's box, open 24/7 with a phone, as CSV of the
-    query's columns (type, id, then OSM tags), and the line its `make end; out;` gives."""
+    """The bakeries in the query's box (as Overpass, only those whose point is inside it, not every one
+    of a tile the box touches), open 24/7 with a phone, as CSV of the query's columns (type, id, then
+    OSM tags), and the line its `make end; out;` gives."""
     columns = re.search(r"\[out:csv\(([^;]*);", query).group(1).split(",")
     south, west, north, east = map(float, re.search(r"\[bbox:([^\]]*)\]", query).group(1).split(","))
     (west_x, north_y), (east_x, south_y) = tile_of(north, west), tile_of(south, east)
     rows = []
     for x in range(west_x, east_x + 1):
         for y in range(north_y, south_y + 1):
+            lat, lon = bakery_point(x, y)
+            if not (south <= lat <= north and west <= lon <= east):
+                continue
             tags = {"::type": "node", "::id": str(x * 100000 + y), '"opening_hours"': BAKERY_HOURS, '"phone"': BAKERY_PHONE}
             rows.append("\t".join(tags.get(column, "") for column in columns))
     rows.append("\t".join(["end", "1"] + [""] * (len(columns) - 2)))

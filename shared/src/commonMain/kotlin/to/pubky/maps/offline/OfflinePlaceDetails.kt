@@ -57,7 +57,10 @@ data class ElementDetails(
 
 /** Where the details of an area's places come from. */
 fun interface PlaceDetailsSource {
-    /** The details of the named elements in [bounds] that have any; unreachable when no server gave them whole. */
+    /**
+     * The details of the named elements in the zoom-14 tiles of [bounds] ([tileBounds]: what the area's
+     * map and place index hold) that have any; unreachable when no server gave them whole.
+     */
     suspend fun detailsIn(bounds: AreaBounds): SourceAnswer<List<ElementDetails>>
 }
 
@@ -231,7 +234,7 @@ class OverpassPlaceDetails(
         var empty = 0
         val answer =
             fallback.first(servers) { server ->
-                val response = client.submitForm(server, parameters { append("data", overpassDetailsQuery(bounds)) })
+                val response = client.submitForm(server, parameters { append("data", overpassDetailsQuery(tileBounds(bounds))) })
                 if (!response.status.isSuccess()) {
                     val retryAfter =
                         response.headers[HttpHeaders.RetryAfter]

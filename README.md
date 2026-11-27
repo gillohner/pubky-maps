@@ -94,7 +94,8 @@ deletes its places.
 
 **Place details without a connection:** once an area is listed, the app asks the Overpass list for
 the OpenStreetMap details of its named places (opening hours, phone, website, email, wheelchair
-access, cuisine, operator, floor, bitcoin payments: the tags a place page shows), as one query that
+access, cuisine, operator, floor, bitcoin payments: the tags a place page shows) in the area's
+whole zoom-14 tiles (what its map and place index hold), as one query that
 answers only those tags as CSV (a few MB for the largest area one download may take) and ends with
 an end line, so an answer a server cut off goes to the next server, as does an empty one (a server
 may hold one region only: the first default, dresel.systems, holds Europe); an area is kept with no
@@ -103,8 +104,9 @@ keeps. They are kept by element in
 `offline-places.db`, apart from the places read from the tiles, fetched again after a week on a
 network Android does not count as metered, one area at a time and 10 s apart, and deleted with the
 area; an area that fails is asked again after 30 minutes, then twice as long after each failure, up
-to a day. A place page with no Pinakes card (none could be loaded, or Pinakes has none for the place)
-shows the details kept for its element, and the offline note says when they were fetched.
+to a day. A place page whose Pinakes card has no OSM details (no card could be loaded, Pinakes has
+none for the place, or its card brings none, as today's cards do) shows the details kept for its
+element, and the offline note says when they were fetched; a card with OSM details shows only its own.
 
 Settings:
 
@@ -139,7 +141,7 @@ the page loads, once its growing header covers it; not after the user moved the 
 sheet. A search result or a link's place goes there in one move as its page opens. It shows the
 name, what the place is, the distance and the address, Share and Open in
 (the apps switched on in Settings, installed ones first); the Pinakes card's photo and text with
-their credits; OpenStreetMap details from the card's facts when Pinakes serves them, or, for a page with no card, those an offline area keeps (opening hours with open or closed now, phone,
+their credits; OpenStreetMap details from the card's facts when Pinakes serves them, or, when the card brings none, those an offline area keeps (opening hours with open or closed now, phone,
 website, wheelchair access, cuisine); Pubky tags with their counts and who tagged (people the user
 follows first, the user's own tags marked); photos and posts about the place from Nexus, newest first;
 the public lists that hold it; and the same place on other services ("Also on"). Each part loads on
