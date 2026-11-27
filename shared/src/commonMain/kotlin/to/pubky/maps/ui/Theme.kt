@@ -34,7 +34,8 @@ private val DarkColors =
  * The containers of what floats over the map: [control] for the search bar (and the area picker's bar
  * in its place) and the round buttons, [notice] for the lines saying what is missing (a step apart
  * from the controls above them), [card] for the card of a place opened from a link or search, and
- * [edge] around each of them and the area picker's card.
+ * [edge] around each of them, the area picker's card and the search and place panels of a wide screen
+ * (their fill stays `surface`, as the pages they hold).
  *
  * Light, a white control and its shadow stand out from the light map, so there is no edge. Dark, a
  * shadow does not show, and the default dark styles' land ranges from nearly black (OpenFreeMap

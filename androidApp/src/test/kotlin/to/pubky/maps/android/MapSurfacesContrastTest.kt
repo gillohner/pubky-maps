@@ -21,6 +21,10 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.LocalTime
+import kotlinx.datetime.TimeZone
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -34,22 +38,30 @@ import to.pubky.maps.links.LinkProvider
 import to.pubky.maps.map.AreaPickerUi
 import to.pubky.maps.map.MapScreen
 import to.pubky.maps.map.MapSearch
+import to.pubky.maps.map.PlacePageSlot
 import to.pubky.maps.place.PlaceCard
+import to.pubky.maps.place.PlacePageActions
+import to.pubky.maps.place.PlacePageContext
+import to.pubky.maps.place.PlacePageState
+import to.pubky.maps.place.PlacePanel
 import to.pubky.maps.place.PlaceRef
 import to.pubky.maps.place.PlaceSource
+import to.pubky.maps.search.RecentSearch
 import to.pubky.maps.search.SearchActions
+import to.pubky.maps.search.SearchMode
 import to.pubky.maps.search.SearchState
 import to.pubky.maps.status.ServicePart
 import to.pubky.maps.ui.PubkyMapsTheme
 
 /**
- * In dark mode every control, notice and card over the map, and the area picker's bar and card, has
- * an edge that stands out from the land of each default dark style: a shadow does not show on a dark
- * map, and those lands range from nearly black to dark grey, so the edge must carry the boundary. From
- * a point in each container's padding, where no icon or text is, the pixels are read outward across
- * its edge, and the most distinct one that is not the container's fill must reach 1.5:1 against the
- * land (without an edge: 1.36:1 on OpenFreeMap Dark, 1.04:1 on VersaTiles Colorful Dark for the
- * search bar and buttons). Runs once per default dark style.
+ * In dark mode every control, notice and card over the map, the area picker's bar and card, and the
+ * search and place panels of a wide screen, has an edge that stands out from the land of each default
+ * dark style: a shadow does not show on a dark map, and those lands range from nearly black to dark
+ * grey, so the edge must carry the boundary. From a point in each container's padding, where no icon
+ * or text is, the pixels are read outward across its edge, and the most distinct one that is not the
+ * container's fill must reach 1.5:1 against the land (without an edge: 1.36:1 on OpenFreeMap Dark,
+ * 1.04:1 on VersaTiles Colorful Dark for the search bar and buttons; 1.0:1 and 1.09:1 for the panels).
+ * Runs once per default dark style.
  * Native graphics, so the pixels are the ones a phone draws.
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
@@ -65,6 +77,8 @@ class MapSurfacesContrastTest(
     private val note = "The map could not load. Check your connection."
     private lateinit var density: Density
 
+    private val recent = "kunsthaus"
+
     private val place =
         PlaceRef(
             uri = "https://maps.app.goo.gl/AbCdEf123",
@@ -77,6 +91,8 @@ class MapSurfacesContrastTest(
     private fun showDark(
         placeCard: (@Composable () -> Unit)? = null,
         areaPicker: AreaPickerUi? = null,
+        search: SearchState = SearchState(),
+        placePage: PlacePageSlot? = null,
     ) {
         compose.setContent {
             density = LocalDensity.current
@@ -94,7 +110,8 @@ class MapSurfacesContrastTest(
                     missing = setOf(ServicePart.Homeserver),
                     placeCard = placeCard,
                     areaPicker = areaPicker,
-                    search = MapSearch(SearchState(), recents = emptyList(), userLocation = null, actions = SearchActions()),
+                    search = MapSearch(search, recents = listOf(RecentSearch(recent)), userLocation = null, actions = SearchActions()),
+                    placePage = placePage,
                 ) { Box(Modifier.fillMaxSize().background(land)) }
             }
         }
@@ -204,6 +221,54 @@ class MapSurfacesContrastTest(
         assertStandsOut("area picker's bar", screen.edgeFrom(cancel.left + 4.dp, cancel.middleY(), -1, 0, 8.dp))
         // The card from its 16 dp start padding, on the title's line, leftward across its edge.
         assertStandsOut("area picker's card", screen.edgeFrom(title.left - 8.dp, title.middleY(), -1, 0, 16.dp))
+    }
+
+    /**
+     * The start edge of the panel beside the wide screen's map, on the line of [text]: from 4 dp inside
+     * the panel leftward across its edge to 4 dp outside it. The panel's content starts 16 dp in, so
+     * the path holds only its fill, its edge and the map. The panel keeps the margin the Settings
+     * button keeps from the screen's end (both sit in the same safe-area box; the test screen has no
+     * side insets and is left to right).
+     */
+    private fun panelEdgeOnLineOf(text: String): Color {
+        val screen = compose.onRoot().captureToImage().toPixelMap()
+        val root = compose.onRoot().getUnclippedBoundsInRoot()
+        val settings = compose.onNodeWithContentDescription("Settings").getUnclippedBoundsInRoot()
+        val line = compose.onNodeWithText(text, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val panelStart = root.right - settings.right
+        return screen.edgeFrom(panelStart + 4.dp, line.middleY(), -1, 0, 8.dp)
+    }
+
+    @Test
+    @Config(qualifiers = "w1280dp-h800dp-night")
+    fun theSearchPanelOfAWideScreenOverTheDarkMapHasAnEdgeThatStandsOutFromItsLand() {
+        showDark(search = SearchState(mode = SearchMode.Editing))
+        assertStandsOut("search panel", panelEdgeOnLineOf(recent))
+    }
+
+    @Test
+    @Config(qualifiers = "w1280dp-h800dp-night")
+    fun thePlacePanelOfAWideScreenOverTheDarkMapHasAnEdgeThatStandsOutFromItsLand() {
+        val context =
+            PlacePageContext(
+                now = LocalDateTime(LocalDate.parse("2026-11-25"), LocalTime(12, 0)),
+                nowMillis = 1_795_608_000_000,
+                timeZone = TimeZone.UTC,
+                language = "en",
+                distance = null,
+            )
+        val actions =
+            PlacePageActions(onClose = {}, onShare = null, openIn = emptyList(), onOpenIn = {}, onOpenLink = {}, onLoadMorePosts = {})
+        val page = PlacePageState(place.copy(name = "Kunsthaus", osm = null), loading = emptySet())
+        showDark(
+            placePage =
+                PlacePageSlot(
+                    full = false,
+                    sheet = { _, _ -> },
+                    panel = { modifier -> PlacePanel(page, context, actions, modifier) },
+                ),
+        )
+        assertStandsOut("place panel", panelEdgeOnLineOf("Kunsthaus"))
     }
 
     private fun assertStandsOut(

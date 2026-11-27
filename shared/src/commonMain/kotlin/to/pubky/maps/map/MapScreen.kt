@@ -220,6 +220,7 @@ fun MapScreen(
                         .height(maxHeight - TopControlSize - 8.dp),
                 )
             } else if (searchPanel) {
+                // Floats over the map like the bar above it: the same edge in dark (MapSurfaces).
                 Surface(
                     modifier =
                         Modifier
@@ -229,6 +230,7 @@ fun MapScreen(
                             .heightIn(max = maxHeight - TopControlSize - 8.dp - BottomControlsHeight - MapControlMargin),
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surface,
+                    border = MapSurfaces.edge,
                     shadowElevation = 3.dp,
                 ) {
                     SearchList(
