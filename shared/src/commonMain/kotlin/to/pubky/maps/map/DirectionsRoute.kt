@@ -8,6 +8,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
@@ -81,19 +82,11 @@ internal fun rememberStartDirections(
 
                 MyLocationStep.RetryThenCenter -> {
                     directions.start(uri, to, null, reversed)
-                    val started = directions.directions.value
-                    scope.launch {
-                        val recovered =
-                            retryRecovers(
-                                retry = locationState::retry,
-                                unavailable = snapshotFlow { locationState.status is LocationTrackingStatus.Unavailable },
-                            )
-                        // Only for these directions, also in another mode or way round: closed and opened
-                        // again meanwhile, they are others.
-                        if (!recovered && started != null && directions.directions.value?.opening == started.opening) {
-                            directions.locationMissing(permissionOff = false)
-                        }
-                    }
+                    scope.retryLocationFor(
+                        directions = directions,
+                        retry = locationState::retry,
+                        unavailable = snapshotFlow { locationState.status is LocationTrackingStatus.Unavailable },
+                    )
                 }
 
                 MyLocationStep.ExplainPermissionOff -> {
@@ -195,4 +188,23 @@ internal fun routeFitPadding(
         right = right + marginAcross,
         bottom = bottom + marginDown,
     )
+}
+
+/**
+ * Restarts location for the directions open now (just started, waiting for the user's position) and
+ * says their position is missing when location is still unavailable after [LocationRetryGrace]
+ * ([retryRecovers]). Only for those directions, also once the user changed their mode or swapped
+ * them: closed (and maybe opened again) meanwhile, they are others.
+ */
+internal fun CoroutineScope.retryLocationFor(
+    directions: DirectionsController,
+    retry: () -> Unit,
+    unavailable: Flow<Boolean>,
+) {
+    // Read now: the retry runs later, after a tap that may have opened other directions.
+    val opening = directions.directions.value?.opening
+    launch {
+        if (retryRecovers(retry, unavailable)) return@launch
+        if (opening != null && directions.directions.value?.opening == opening) directions.locationMissing(permissionOff = false)
+    }
 }
