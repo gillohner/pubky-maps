@@ -124,6 +124,9 @@ class OfflineMaps(
     /** Packs the app paused (the user, a limit, a check off Wi-Fi) since they were last resumed. */
     private val halted = mutableSetOf<Any>()
 
+    /** Areas whose leftover [PackMetadata.replacing] pack is being settled ([settle]): a check waits for it. */
+    private val settling = mutableSetOf<String>()
+
     /** The download or check that runs for an area: its packs one after the other. */
     private val runs = MutableStateFlow<Map<String, Job>>(emptyMap())
 
@@ -298,18 +301,43 @@ class OfflineMaps(
      * area marked "Update paused" without known new data ([PackMetadata.newData]: the app was
      * closed during the first seconds of a walk) is walked on mobile data too, which makes it Ready
      * again when nothing changed and stores the new data when there is some. A pack left
-     * [PackMetadata.replacing] another by a process that ended is settled instead ([settle]).
+     * [PackMetadata.replacing] another by a process that ended is settled first ([settle]), and its
+     * area is checked once the settle has ended, also when the store refused it, so a leftover the
+     * store keeps refusing to settle does not keep its area from updates: it stays listed, hidden
+     * beside the pack it was to replace or walked as the area's pack of its style ([visible]).
      */
     internal fun checkForUpdates() {
         val leftovers =
             packs.filter { pack ->
-                pack.metadata?.replacing == true && pack.areaId !in runs.value && replacements.none { it === pack.handle }
+                pack.metadata?.replacing == true &&
+                    pack.areaId !in runs.value &&
+                    pack.areaId !in settling &&
+                    replacements.none { it === pack.handle }
             }
-        if (leftovers.isNotEmpty()) scope.launch { leftovers.forEach { settle(it) } }
-        val settling = leftovers.map { it.areaId }.toSet()
+        val leftoverAreas = leftovers.map { it.areaId }.toSet()
+        if (leftoverAreas.isNotEmpty()) {
+            // Until the settle has ended, so the two do not write the area's packs at once.
+            settling += leftoverAreas
+            scope.launch {
+                val unlisted =
+                    try {
+                        leftovers.filterNot { settle(it) }.map { it.areaId }.toSet()
+                    } finally {
+                        settling -= leftoverAreas
+                    }
+                // An area whose settled pack the store does not list yet is checked the next time.
+                checkAreas(leftoverAreas - unlisted)
+            }
+        }
+        checkAreas(null)
+    }
+
+    /** Checks the ready areas of [only] (every area when null) that nothing else runs for ([checkForUpdates]). */
+    private fun checkAreas(only: Set<String>?) {
         val wifi = unmetered()
-        // An area being settled is checked the next time, so the two do not write its packs at once.
-        areas(packs).filter { it.id !in runs.value && it.id !in held && it.id !in settling }.forEach { map ->
+        // A deleted area is still listed until the store has deleted its packs.
+        val due = areas(packs).filter { it.id !in runs.value && it.id !in held && it.id !in settling && it.id !in deleted }
+        due.filter { only == null || it.id in only }.forEach { map ->
             val area = areaPacks.filter { it.areaId == map.id }
             val handles =
                 when {
@@ -572,21 +600,30 @@ class OfflineMaps(
      * Settles a pack [PackMetadata.replacing] another that a process before this one left (or one
      * of this process, after the next start): when the pack it was to replace is still there, it
      * goes (that one has every tile it has); otherwise the old one was deleted already, and this one
-     * takes its place.
+     * takes its place. False when the store settled it but does not list it so within
+     * [SETTLE_LISTED]: a check would then read the pack as it was and mark it replacing again.
      */
-    private suspend fun settle(pack: StoredPack) {
+    private suspend fun settle(pack: StoredPack): Boolean {
         // One of this process stays as it is: the store's list of its old pack may be out of date.
-        if (replacements.any { it === pack.handle }) return
-        val metadata = pack.metadata ?: return
+        if (replacements.any { it === pack.handle }) return true
+        val metadata = pack.metadata ?: return true
         val replaced = packs.any { it !== pack && it.areaId == pack.areaId && it.style == pack.style && it.metadata?.replacing != true }
-        runCatching {
+        try {
             if (replaced) {
                 store.pause(pack.handle)
                 store.delete(pack.handle)
             } else {
                 store.setMetadata(pack.handle, metadata.copy(replacing = false))
             }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Refused: the pack stays as the store lists it, and the next check tries again.
+            return true
         }
+        return withTimeoutOrNull(SETTLE_LISTED) {
+            listed.first { list -> list.none { it.handle === pack.handle && it.metadata?.replacing == true } }
+        } != null
     }
 
     private fun stateOf(handle: Any): PackState? = packs.firstOrNull { it.handle === handle }?.progress?.state
@@ -679,6 +716,9 @@ internal val FIRST_CHECK = 20.seconds
 
 /** OpenFreeMap lets a map keep its sources for an hour; checking twice as often finds a change in time. */
 internal val CHECK_INTERVAL = 30.minutes
+
+/** How long the store may take to list a pack [OfflineMaps] settled: MapLibre reports it after the call returns. */
+internal val SETTLE_LISTED = 10.seconds
 
 /** Long enough for MapLibre to walk a complete pack in its database and report it. */
 internal val QUIET_CHECK = 10.seconds

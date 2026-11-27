@@ -1,5 +1,6 @@
 package to.pubky.maps.offline
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -36,6 +37,19 @@ class OfflineMapsTest {
         /** A pack whose delete fails. */
         var failDeleteOf: Any? = null
         val deleted = ArrayList<String>()
+
+        /** While set, a delete waits until it is completed (MapLibre's delete runs on its own thread). */
+        var deleteGate: CompletableDeferred<Unit>? = null
+
+        /** While true, metadata set is listed only at [listHeld], as MapLibre lists it after the call returns. */
+        var holdListing = false
+        private val held = ArrayList<() -> Unit>()
+
+        fun listHeld() {
+            holdListing = false
+            held.forEach { it() }
+            held.clear()
+        }
 
         /** Styles of the packs made to replace another ([PackStore.createLike]), in turn. */
         val replacements = ArrayList<String>()
@@ -101,6 +115,7 @@ class OfflineMapsTest {
         }
 
         override suspend fun delete(handle: Any) {
+            deleteGate?.await()
             if (failDelete || handle === failDeleteOf) error("disk full")
             deleted += (handle as Pack).styleUrl
             packs.value = PackStoreState.Ready(ready.filter { it.handle !== handle })
@@ -109,7 +124,17 @@ class OfflineMapsTest {
         override suspend fun setMetadata(
             handle: Any,
             metadata: PackMetadata,
-        ) = update(handle) { it.copy(metadata = metadata) }
+        ) {
+            if (holdListing) {
+                held += {
+                    update(
+                        handle,
+                    ) { it.copy(metadata = metadata) }
+                }
+            } else {
+                update(handle) { it.copy(metadata = metadata) }
+            }
+        }
 
         fun update(
             handle: Any,
@@ -654,6 +679,96 @@ class OfflineMapsTest {
             assertEquals(listOf(oldLight.handle, newDark.handle), store.all().map { it.handle })
             assertTrue(store.all().none { it.metadata?.replacing == true })
             assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
+        }
+
+    /** A ready area with a light pack's replacement an ended process left beside the old one. */
+    private fun TestScope.readyAreaWithALeftover(): Triple<FakeStore, OfflineMaps, StoredPack> {
+        val (store, offline) = readyArea()
+        val old = store.all().first { it.style == light }
+        val leftover = StoredPack(Pack(light), old.metadata!!.copy(replacing = true), old.progress, light)
+        store.packs.value = PackStoreState.Ready(store.all() + leftover)
+        return Triple(store, offline, leftover)
+    }
+
+    @Test
+    fun anAreaIsCheckedOnceItsLeftoverIsSettledNotWhileItIs() =
+        runTest(UnconfinedTestDispatcher()) {
+            val (store, offline, leftover) = readyAreaWithALeftover()
+            val gate = CompletableDeferred<Unit>()
+            store.deleteGate = gate
+            advanceTimeBy(FIRST_CHECK)
+            runCurrent()
+            // The settle deletes the leftover, as its old pack is still there: no walk until it has.
+            assertEquals(listOf(light, dark, light), store.paused)
+            assertEquals(emptyList(), store.resumed)
+            gate.complete(Unit)
+            runCurrent()
+            assertEquals(listOf(light), store.deleted)
+            assertTrue(store.all().none { it.handle === leftover.handle })
+            assertEquals(listOf(light), store.resumed)
+            assertTrue(offline.downloading)
+        }
+
+    @Test
+    fun aLeftoverTheStoreRefusesToSettleDoesNotKeepItsAreaFromUpdates() =
+        runTest(UnconfinedTestDispatcher()) {
+            val (store, offline, leftover) = readyAreaWithALeftover()
+            store.failDeleteOf = leftover.handle
+            advanceTimeBy(FIRST_CHECK)
+            runCurrent()
+            // The settle failed: the area is walked all the same.
+            assertEquals(listOf(light), store.resumed)
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            assertEquals(listOf(light, dark), store.resumed)
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            assertFalse(offline.downloading)
+            assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
+
+            // And at every later check of this process.
+            advanceTimeBy(CHECK_INTERVAL - QUIET_CHECK * 2)
+            runCurrent()
+            assertEquals(listOf(light, dark, light), store.resumed)
+            assertTrue(store.all().any { it.handle === leftover.handle })
+            assertEquals(emptyList(), store.deleted)
+        }
+
+    @Test
+    fun anAreaDeletedWhileItsLeftoverIsSettledIsNotWalked() =
+        runTest(UnconfinedTestDispatcher()) {
+            val (store, offline, _) = readyAreaWithALeftover()
+            val gate = CompletableDeferred<Unit>()
+            store.deleteGate = gate
+            advanceTimeBy(FIRST_CHECK)
+            runCurrent()
+            offline.delete("area-1")
+            runCurrent()
+            gate.complete(Unit)
+            runCurrent()
+            assertEquals(emptyList(), store.resumed)
+            assertEquals(emptyList(), store.all())
+            assertFalse(offline.downloading)
+            assertNull(offline.problem.value)
+        }
+
+    @Test
+    fun aSettledLeftoverIsWalkedOnlyOnceTheStoreListsItSettled() =
+        runTest(UnconfinedTestDispatcher()) {
+            // The light pack's old one went, the process ended before its replacement was unmarked.
+            val (store, offline) = readyArea()
+            val leftover = store.all().first { it.style == light }
+            store.update(leftover.handle) { it.copy(metadata = it.metadata!!.copy(replacing = true)) }
+            store.holdListing = true
+            advanceTimeBy(FIRST_CHECK)
+            runCurrent()
+            // Walked now, its mark would write back the replacing the store does not list as gone yet.
+            assertEquals(emptyList(), store.resumed)
+            store.listHeld()
+            runCurrent()
+            assertEquals(listOf(light), store.resumed)
+            assertTrue(store.all().none { it.metadata?.replacing == true })
+            assertEquals(listOf(light, dark), store.updating())
         }
 
     @Test
