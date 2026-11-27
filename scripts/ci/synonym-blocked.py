@@ -4,8 +4,8 @@
 The workflow starts the emulator with a DNS server on the runner (dnsmasq) that answers NXDOMAIN
 for *.pubky.app, *.pubky.org, *.synonym.to and *.coder.riginode.xyz (our development hosts), which
 covers Synonym's homeservers, Pkarr relays and sign-in relay; in the `openfreemap` case it also
-blocks tiles.openfreemap.org, the first map style. This script first checks from inside the phone
-that the block works, then:
+blocks tiles.openfreemap.org, the first map style. This script first waits until the phone's network
+has stayed up for a while (NETWORK_SETTLE_S) and checks from inside the phone that the block works, then:
 
 - seeds a signed-in account (debug builds read files/ci-fixture.json): a stored session made by
   core/examples/offline_session_fixture.rs, a cached profile name, two tags and a saved place;
@@ -66,19 +66,55 @@ def resolves(dev, host):
     return f"PING {host}" in out
 
 
+# How long the phone gets to have its network, and how long it must keep it before the test goes on.
+# The one drop seen came 2.2 s after Wi-Fi was validated and about 3 s after a passing check (run
+# 46040293875); 10 s covers that with room and costs about 12-16 s per case.
+NETWORK_WAIT_S = 120
+NETWORK_SETTLE_S = 10
+
+
+def await_network(resolves, hosts, wait=NETWORK_WAIT_S, settle=NETWORK_SETTLE_S, now=time.monotonic,
+                  sleep=time.sleep):
+    """Waits until every one of `hosts` has kept resolving (`resolves(host)`) for `settle` s; a check where
+    one does not starts the settle time again. Returns None then, or what was wrong when the network was
+    not up after `wait` s (a network that is up then gets its settle time, and fails on its next miss).
+
+    One check that resolves does not prove the phone has its network: after the emulator boots from its
+    snapshot, Wi-Fi can connect and drop again (run 46040293875 attempt 1: Wi-Fi validated at 17:45:24.8,
+    tiles.versatiles.org resolved at 17:45:27, the phone dropped Wi-Fi itself at 17:45:27.0, and the check
+    made right after that failed the test).
+    """
+    deadline = now() + wait
+    up_since = None
+    was_up = False
+    while True:
+        missing = [host for host in hosts if not resolves(host)]
+        checked = now()
+        if missing:
+            up_since = None
+        elif up_since is None:
+            up_since = was_up = checked
+        if up_since is not None and checked - up_since >= settle:
+            return None
+        if missing and checked >= deadline:
+            names = ", ".join(missing)
+            verb = "does" if len(missing) == 1 else "do"
+            if was_up:
+                return f"the phone's network did not stay up for {settle} s in {wait} s ({names} {verb} not resolve)"
+            return f"{names} {verb} not resolve on the phone after {wait} s"
+        sleep(2)
+
+
 def main():
     apk, fixture_file, case, out = sys.argv[1], Path(sys.argv[2]), sys.argv[3], sys.argv[4]
     dev = Device(out)
     blocked = BLOCKED + (["tiles.openfreemap.org"] if case == "openfreemap" else [])
     allowed = OPEN + ([] if case == "openfreemap" else ["tiles.openfreemap.org"])
 
-    # The block itself, from inside the phone: blocked names do not resolve, the others do.
-    deadline = time.time() + 120
-    while time.time() < deadline and not all(resolves(dev, h) for h in allowed):
-        time.sleep(3)
-    for host in allowed:
-        if not resolves(dev, host):
-            dev.fail(f"{host} does not resolve on the phone: no network, the test would prove nothing")
+    # The block itself, from inside the phone: the others resolve (and keep resolving), blocked names do not.
+    problem = await_network(lambda host: resolves(dev, host), allowed)
+    if problem:
+        dev.fail(f"{problem}: no network, the test would prove nothing")
     for host in blocked:
         if resolves(dev, host):
             dev.fail(f"{host} still resolves on the phone: the Synonym block does not work")
