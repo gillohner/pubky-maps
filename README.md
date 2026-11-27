@@ -210,7 +210,9 @@ too), which drops camera and phone details and, unless Photo locations is Public
 then uploaded and posted as an `image` post embedding the place, with alt text. Lists are the
 user's collections (read from their homeserver, public or private, or kept on the phone), 100
 places each. Save keeps the place privately on the homeserver or on the phone only, per the
-setting; the **Saved** screen (from the search page) lists saved places and lists, and the map
+setting; the **Saved** screen (from the search page) lists saved places and lists (bookmarks
+other Pubky apps keep in the same folder, such as pubky.app posts, are not places and are left
+out), and the map
 shows each saved place as a purple bookmark badge that opens it. The homeserver's bookmark holds
 only the link, so the place's name, point and summary (what and where it is, "Café · Napfgasse 4,
 8001 Zürich", as its page says once its card and offline district and town are in) are kept on the

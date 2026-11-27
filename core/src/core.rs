@@ -16,6 +16,7 @@ use crate::objects::{
     bookmark_needs_body, bookmark_object, bookmark_target_of, merge_bookmark, merge_tag,
     post_folder_id, post_version_of, post_versions_dir, root_of, tag_object,
 };
+use crate::place::may_be_map_place;
 use crate::secret::SecretValue;
 use crate::signin::{Outcome, SignInEvent, SignIns};
 
@@ -126,6 +127,10 @@ pub struct CollectionScan {
     /// what it knew of them, and the next scan reads them again.
     pub unread_post_ids: Vec<String>,
 }
+
+/// At most this many listing pages without a place are read by one `list_bookmarks` call
+/// (2000 bookmarks of other apps at the default page size).
+const MAX_SKIPPED_BOOKMARK_PAGES: usize = 20;
 
 /// At most this many posts are looked at by one list scan.
 const MAX_SCANNED_POSTS: usize = 2000;
@@ -424,6 +429,15 @@ async fn list_own(
         builder = builder.cursor(cursor);
     }
     Ok(to_page(builder.send().await?))
+}
+
+/// The place a stored bookmark points at, `None` when it is not a valid bookmark or its
+/// target cannot be a place on a map ([`may_be_map_place`]). `body` is needed only for the
+/// `~` form.
+fn saved_map_place(filename: &str, body: Option<&[u8]>) -> Option<String> {
+    bookmark_target_of(filename, body)
+        .ok()
+        .filter(|target| may_be_map_place(target))
 }
 
 /// One folder's read: its newest version as `(editId, JSON)`, `None` when it has none.
@@ -1132,37 +1146,50 @@ impl PubkyMapsCore {
     }
 
     /// Lists saved places. Normal-length places cost no extra request; entries that are not
-    /// valid bookmarks are skipped.
+    /// valid bookmarks, and bookmarks of other apps' Pubky objects (a pubky.app post: they
+    /// share the folder), are skipped. A listing page that holds
+    /// no place is followed by the next one, so an empty page is still the end; 20 pages in a
+    /// row without a place (2000 bookmarks at the default page size) end it too.
     pub async fn list_bookmarks(&self, options: ListOptions) -> Result<SavedPlacePage, CoreError> {
         let inner = Arc::clone(&self.inner);
         self.run(async move {
             let session = inner.session()?;
             let storage = session.storage();
             let dir = social_path(Root::Priv, PubkySocialBookmark::PATH_SEGMENT);
-            let page = list_own(&storage, &dir, &options).await?;
-            let mut places = Vec::with_capacity(page.entries.len());
-            for entry in page.entries {
-                let Some(filename) = bookmark_filename_of(&entry.path) else {
-                    continue;
-                };
-                let body = if bookmark_needs_body(filename) {
-                    match get_optional(&storage, &entry.path).await? {
-                        Some(body) => Some(body),
-                        None => continue,
+            let mut options = options;
+            let mut places = Vec::new();
+            for _ in 0..MAX_SKIPPED_BOOKMARK_PAGES {
+                let page = list_own(&storage, &dir, &options).await?;
+                for entry in page.entries {
+                    let Some(filename) = bookmark_filename_of(&entry.path) else {
+                        continue;
+                    };
+                    let body = if bookmark_needs_body(filename) {
+                        match get_optional(&storage, &entry.path).await? {
+                            Some(body) => Some(body),
+                            None => continue,
+                        }
+                    } else {
+                        None
+                    };
+                    if let Some(place) = saved_map_place(filename, body.as_deref()) {
+                        places.push(SavedPlace {
+                            place,
+                            path: entry.path,
+                        });
                     }
-                } else {
-                    None
-                };
-                if let Ok(place) = bookmark_target_of(filename, body.as_deref()) {
-                    places.push(SavedPlace {
-                        place,
-                        path: entry.path,
+                }
+                if !places.is_empty() || page.next_cursor.is_none() {
+                    return Ok(SavedPlacePage {
+                        places,
+                        next_cursor: page.next_cursor,
                     });
                 }
+                options.cursor = page.next_cursor;
             }
             Ok(SavedPlacePage {
                 places,
-                next_cursor: page.next_cursor,
+                next_cursor: None,
             })
         })
         .await
@@ -1220,6 +1247,47 @@ mod tests {
         assert_eq!(scan.collections[0].name, "Coffee");
         assert_eq!(scan.other_post_ids, vec![review.id]);
         assert_eq!(scan.unread_post_ids, vec!["0034A0000001".to_string()]);
+    }
+
+    #[test]
+    fn bookmarks_of_other_apps_pubky_objects_are_not_saved_places() {
+        let long_map_link = format!(
+            "https://www.google.com/maps/place/{}/@47.3703,8.548,17z",
+            "Kunsthaus".repeat(25)
+        );
+        let long_web_page = format!("https://example.com/{}", "x".repeat(200));
+        for place in [
+            "https://www.openstreetmap.org/node/270803095",
+            "geo:47.37687,8.54169",
+            "https://maps.app.goo.gl/3bTBxL9Sg2cXE6sq9",
+            "https://www.kunsthaus.ch/",
+            long_map_link.as_str(),
+            long_web_page.as_str(),
+        ] {
+            let stored = objects::bookmark_object(place).unwrap();
+            let body = serde_json::to_vec(&stored.bookmark).unwrap();
+            let body = bookmark_needs_body(&stored.filename).then_some(body.as_slice());
+            assert_eq!(
+                saved_map_place(&stored.filename, body).as_deref(),
+                Some(place),
+                "{place}"
+            );
+        }
+        let long_post = format!(
+            "pubky://{SCAN_AUTHOR}/pub/example.app/posts/{}",
+            "x".repeat(150)
+        );
+        for other in [
+            format!("pubky://{SCAN_AUTHOR}/pub/pubky.app/posts/0034A0000001"),
+            format!("pubky://{SCAN_AUTHOR}/pub/social/v1/posts/0034A0000001"),
+            long_post,
+        ] {
+            let stored = objects::bookmark_object(&other).unwrap();
+            let body = serde_json::to_vec(&stored.bookmark).unwrap();
+            let body = bookmark_needs_body(&stored.filename).then_some(body.as_slice());
+            assert_eq!(saved_map_place(&stored.filename, body), None, "{other}");
+        }
+        assert_eq!(saved_map_place("not-base64!", None), None);
     }
 
     #[test]

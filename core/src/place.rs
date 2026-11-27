@@ -96,6 +96,19 @@ pub fn normalize_place_uri(input: String) -> Result<String, CoreError> {
         .map_err(|()| CoreError::validation(format!("not a usable place URI: {normalized}")))
 }
 
+/// Whether a stored target (a bookmark's, a list item's) can be a place on a map: a link the
+/// map-link reader reads (OpenStreetMap element URLs, `geo:` URIs, Google, Apple, OsmAnd, ...
+/// links, short links included: the app keeps a place opened from a link under that link),
+/// or a web page, because a Pinakes place card can be one (the app keeps a card without an
+/// OpenStreetMap element under the card's URI, e.g. a museum's site). Other apps' own Pubky
+/// objects that share the folders (a pubky.app post, a profile) and other schemes are not.
+pub(crate) fn may_be_map_place(target: &str) -> bool {
+    let target = frozen_trim(target);
+    map_links::parse(target).is_some()
+        || has_scheme(target, "https://")
+        || has_scheme(target, "http://")
+}
+
 fn has_scheme(s: &str, scheme: &str) -> bool {
     s.get(..scheme.len())
         .is_some_and(|head| head.eq_ignore_ascii_case(scheme))
@@ -257,6 +270,40 @@ mod tests {
             "https://osm.org/go/0EEQjE--",
         ] {
             assert_eq!(norm(input), input, "{input}");
+        }
+    }
+
+    #[test]
+    fn map_links_and_web_pages_may_be_map_places() {
+        for target in [
+            "https://www.openstreetmap.org/node/270803095",
+            "https://osm.org/way/4",
+            "geo:47.37687,8.54169",
+            "GEO:47.3,8.5",
+            "geo:0,0?q=Bahnhofstrasse+1,+Z%C3%BCrich",
+            "https://www.google.com/maps/place/Kunsthaus+Z%C3%BCrich/@47.3703,8.548,17z",
+            "https://maps.app.goo.gl/3bTBxL9Sg2cXE6sq9",
+            "https://maps.apple.com/?ll=47.3703,8.548&q=Kunsthaus",
+            "om://map?ll=47.3703,8.548&n=Kunsthaus",
+            "https://www.kunsthaus.ch/",
+            "HTTP://example.com/an-article",
+        ] {
+            assert!(may_be_map_place(target), "{target}");
+        }
+    }
+
+    #[test]
+    fn other_apps_pubky_objects_are_not_map_places() {
+        for target in [
+            "pubky://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/pubky.app/posts/0034A0000001",
+            "pubky://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/social/v1/posts/0034A0000001",
+            "pubky://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/pubky.app/profile.json",
+            "mailto:someone@example.com",
+            "urn:isbn:9780141036144",
+            "geo:91,8",
+            "",
+        ] {
+            assert!(!may_be_map_place(target), "{target}");
         }
     }
 
