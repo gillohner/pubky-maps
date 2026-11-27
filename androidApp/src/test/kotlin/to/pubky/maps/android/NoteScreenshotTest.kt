@@ -23,7 +23,7 @@ import to.pubky.maps.ui.PubkyMapsTheme
 
 /**
  * Screenshots of the note page that reports a map problem to OpenStreetMap (phone 412x915 dp, tablet
- * 1280x800 dp, light and dark): written, not sent, sent, and at the largest font.
+ * 1280x800 dp, light and dark): written, not sent, sent, waiting for a connection, and at the largest font.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -105,6 +105,21 @@ class NoteScreenshotTest {
 
     @Test
     fun sentTabletDark() = capture("note-sent", Device.Tablet, dark = true) { Written(NoteSend.Sent) }
+
+    @Test
+    fun waitingPhoneLight() = capture("note-waiting", Device.Phone, dark = false) { Written(NoteSend.Waiting) }
+
+    @Test
+    fun waitingPhoneDark() = capture("note-waiting", Device.Phone, dark = true) { Written(NoteSend.Waiting) }
+
+    @Test
+    fun waitingTabletLight() = capture("note-waiting", Device.Tablet, dark = false) { Written(NoteSend.Waiting) }
+
+    @Test
+    fun waitingTabletDark() = capture("note-waiting", Device.Tablet, dark = true) { Written(NoteSend.Waiting) }
+
+    @Test
+    fun waitingLargeFontPhoneLight() = capture("note-waiting", Device.Phone, dark = false, largeFont = true) { Written(NoteSend.Waiting) }
 
     /** A dropped pin: no name, so the page names the point. */
     @Test

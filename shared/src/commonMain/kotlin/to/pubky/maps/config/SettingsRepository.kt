@@ -10,8 +10,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -34,6 +37,15 @@ interface SettingsRepository {
      */
     fun update(transform: (AppSettings) -> AppSettings): Job
 }
+
+/**
+ * The addresses of [service]'s list once the settings were read from the phone (the flow holds null
+ * until then): the user's list, or the defaults when the settings file was lost
+ * ([AppSettings.afterLostFile]). For requests the user did not start, such as a note sent from the
+ * outbox as the app starts: the built-in defaults read before the file could send to a server the
+ * user removed.
+ */
+suspend fun Flow<AppSettings?>.loadedServers(service: Service): List<String> = filterNotNull().first().servers[service].map { it.url }
 
 /**
  * Settings in one JSON file at [path], written atomically by AndroidX DataStore. A file that cannot

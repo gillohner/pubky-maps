@@ -25,9 +25,11 @@ import to.pubky.maps.links.OsmId
 import to.pubky.maps.links.OsmType
 import to.pubky.maps.osm.NoteAnswer
 import to.pubky.maps.osm.NoteController
+import to.pubky.maps.osm.NoteOutbox
 import to.pubky.maps.osm.NoteRoute
 import to.pubky.maps.osm.NoteTarget
 import to.pubky.maps.osm.OsmNotes
+import to.pubky.maps.osm.WaitingNote
 import to.pubky.maps.place.PlacePageActions
 import to.pubky.maps.place.PlacePageContext
 import to.pubky.maps.place.PlacePageState
@@ -137,6 +139,92 @@ class NotePageTest {
         controller = NoteController(notes, CoroutineScope(Dispatchers.Unconfined))
         restoration.emulateSavedInstanceStateRestore()
         compose.onNodeWithText(noAnswer).assertExists()
+    }
+
+    /** Answers each note with the next of [answers]. */
+    private class AnswerNotes(
+        vararg answers: NoteAnswer,
+    ) : OsmNotes {
+        private val left = answers.toMutableList()
+        val texts = ArrayList<String>()
+
+        override suspend fun create(
+            target: NoteTarget,
+            text: String,
+        ): NoteAnswer {
+            texts += text
+            return left.removeAt(0)
+        }
+    }
+
+    private class MemoryOutbox : NoteOutbox {
+        val notes = ArrayList<WaitingNote>()
+
+        override fun waiting() = notes.toList()
+
+        override fun put(note: WaitingNote) {
+            notes += note
+        }
+
+        override fun delete(id: String) {
+            notes.removeAll { it.id == id }
+        }
+
+        override fun setOnItsWay(
+            id: String,
+            onItsWay: Boolean,
+        ) {
+            notes.replaceAll { if (it.id == id) it.copy(onItsWay = onItsWay) else it }
+        }
+    }
+
+    private fun controller(
+        notes: OsmNotes,
+        outbox: NoteOutbox,
+    ) = NoteController(notes, CoroutineScope(Dispatchers.Unconfined), outbox, io = Dispatchers.Unconfined)
+
+    private val waitingTitle = "Your note waits on this phone"
+
+    @Test
+    fun aNoteWrittenOfflineWaitsOnThePhoneAndThePageThanksOnceItWent() {
+        val notes = AnswerNotes(NoteAnswer.Unreachable, NoteAnswer.Sent)
+        val outbox = MemoryOutbox()
+        val controller = controller(notes, outbox)
+        var closed = 0
+        compose.setContent { PubkyMapsTheme { NoteRoute(controller, schober, onClose = { closed++ }) } }
+        compose.onNodeWithText("What is wrong or missing?").performTextInput("Closed for good.")
+        compose.onNodeWithText("Send").performClick()
+        compose.onNodeWithText(waitingTitle).assertExists()
+        compose.onNodeWithText("Send").assertDoesNotExist()
+        assertEquals(listOf("Closed for good."), outbox.notes.map { it.text })
+        controller.flush()
+        compose.onNodeWithText("Thank you, your note is on the map").assertExists()
+        assertEquals(emptyList<WaitingNote>(), outbox.notes)
+        compose.onNodeWithText("Done").performClick()
+        assertEquals(1, closed)
+        assertEquals(2, notes.texts.size)
+    }
+
+    @Test
+    fun aWaitingNotePageRestoredAfterTheAppWasStoppedStillSaysItWaitsAndOffersNoSecondNote() {
+        val notes = AnswerNotes(NoteAnswer.Unreachable, NoteAnswer.Unreachable)
+        val outbox = MemoryOutbox()
+        var controller = controller(notes, outbox)
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent { PubkyMapsTheme { NoteRoute(controller, schober, onClose = {}) } }
+        compose.onNodeWithText("What is wrong or missing?").performTextInput("Closed for good.")
+        compose.onNodeWithText("Send").performClick()
+        compose.onNodeWithText(waitingTitle).assertExists()
+        // The new process reads the outbox and tries the note once more, still offline.
+        controller = controller(notes, outbox)
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithText(waitingTitle).assertExists()
+        compose.onNodeWithText("Send").assertDoesNotExist()
+        // A controller that does not know the note (none in its outbox): the page still remembers.
+        controller = NoteController(notes, CoroutineScope(Dispatchers.Unconfined))
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithText(waitingTitle).assertExists()
+        assertEquals(1, outbox.notes.size)
     }
 
     private val page =

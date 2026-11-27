@@ -51,9 +51,23 @@ private const val BACKOFF_MS = 30_000L
 internal val GUARD_DELAY: Duration = SEND_WINDOW + 30.seconds
 
 /**
- * While writes wait in the outbox ([waiting] true), a JobScheduler job is kept that Android runs as
+ * Whether anything waits, from whether writes ([writes]) and notes ([notes]) wait: true when one does,
+ * null while one of them is not known yet.
+ */
+internal fun anyWaiting(
+    writes: Boolean?,
+    notes: Boolean?,
+): Boolean? =
+    when {
+        writes == true || notes == true -> true
+        writes == null || notes == null -> null
+        else -> false
+    }
+
+/**
+ * While writes or notes to OpenStreetMap wait ([waiting] true, [anyWaiting]), a JobScheduler job is kept that Android runs as
  * soon as the phone has a network, also with the app closed and after a restart of the phone; it
- * starts the app's process, which restores the session and sends the outbox ([OutboxJobService]).
+ * starts the app's process, which restores the session and sends the outbox and the notes ([OutboxJobService]).
  * When nothing waits any more (sent, or signed out) the job is cancelled, and a run's guard job too.
  *
  * JobScheduler, not WorkManager: two jobs need no library, and WorkManager opens its own database
@@ -236,9 +250,10 @@ internal fun startJob(
 }
 
 /**
- * Runs when the phone has a network while writes wait. Starting the process restores the session
- * and builds the outbox ([PubkyMapsApplication.onCreate]); the run then waits until it is sent, and
- * Android runs it again later (after [BACKOFF_MS], doubling) when the homeserver could not be reached.
+ * Runs when the phone has a network while writes or notes wait. Starting the process restores the
+ * session and builds the outbox and the notes ([PubkyMapsApplication.onCreate]); the run then waits
+ * until they are sent, and Android runs it again later (after [BACKOFF_MS], doubling) when the
+ * homeserver or OpenStreetMap could not be reached.
  * Also runs a run's guard job ([OUTBOX_GUARD_JOB_ID], [guardRun]).
  * A run that starts while the app is open also asks the account and the outbox to try now, which
  * starts both their own waits between retries over (the account's session restore and the outbox's
@@ -261,11 +276,8 @@ class OutboxJobService : JobService() {
                 scope.launch {
                     runOutbox(
                         this@OutboxJobService,
-                        app.writes.waiting,
-                        sendNow = {
-                            app.account.controller.onNetworkAvailable()
-                            app.writes.flush()
-                        },
+                        app.outboxWaiting,
+                        sendNow = app::sendWaitingNow,
                         finish = { reschedule -> jobFinished(params, reschedule) },
                     )
                 }
@@ -277,7 +289,7 @@ class OutboxJobService : JobService() {
         run?.cancel()
         return rescheduleAfterStop(
             this,
-            waits = (application as PubkyMapsApplication).writes.waiting.value != false,
+            waits = (application as PubkyMapsApplication).outboxWaiting.value != false,
             connectivityLost =
                 connectivityLost(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) params.stopReason else null),
         )

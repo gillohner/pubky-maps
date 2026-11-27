@@ -54,8 +54,17 @@ sealed interface NoteAnswer {
         val reason: String,
     ) : NoteAnswer
 
-    /** No server of the list answered. */
+    /**
+     * No server of the list could be reached: the request reached none of them (no connection, no
+     * name, refused), so the note is on no server and can be sent again without becoming two.
+     */
     data object Unreachable : NoteAnswer
+
+    /**
+     * Not taken, and a server may have seen the request: one failed (a 5xx, a 429, an answer not from
+     * the API) or the connection broke after it went out. Sent again only by the user.
+     */
+    data object Failed : NoteAnswer
 
     /**
      * The request went out but no answer came in time: the server may have taken the note. Not asked
@@ -118,19 +127,23 @@ fun osmNotesUrl(server: String): String = URLBuilder(server).apply { appendPathS
 /**
  * Notes through the OpenStreetMap API servers of the list, without an account: the API takes a note
  * from anyone and shows it as anonymous. The servers are asked in order ([servers] is read at every
- * note, so a settings change applies to the next one); a server that cannot be reached or fails
- * (no connection, a connect timeout, a 5xx, a 429, or an answer that is not the API's, as from a wrong
- * address, a web site answering every path or a proxy: a 4xx without the API's `Error` header, a 2xx
- * whose body is not the GeoJSON `Feature` of a new note) hands over to the next one. A server that refuses the note
- * itself (a 4xx with the API's `Error` header: text too long, anonymous notes off, the user's address
- * blocked) is the answer: another server would take the same request no differently. A request that
- * went out and timed out waiting for its answer is [NoteAnswer.NoAnswer], since the note may be on the
- * map already. A failed note is not reported to the map's ServiceHealth line: it is the user's own
- * action, and its page says what happened.
+ * note, so a settings change applies to the next one, and may wait, as for the user's settings to be
+ * read from the phone); a server that cannot be reached or fails (no
+ * connection, a connection that timed out, a 5xx, a 429, or an answer that is not the API's, as from a
+ * wrong address, a web site answering every path or a proxy: a 4xx without the API's `Error` header, a
+ * 2xx whose body is not the GeoJSON `Feature` of a new note) hands over to the next one. A server that
+ * refuses the note itself (a 4xx with the API's `Error` header: text too long, anonymous notes off, the
+ * user's address blocked) is the answer: another server would take the same request no differently. A
+ * request that went out and timed out waiting for its answer is [NoteAnswer.NoAnswer], since the note
+ * may be on the map already. Which failures came before the request went out is the platform's to say
+ * ([failedBeforeSending]; Android's engine throws a plain socket timeout when connecting a note). When
+ * every server failed, the answer is [NoteAnswer.Unreachable] only if the request reached none of them,
+ * else [NoteAnswer.Failed]. A failed note is not reported to the map's ServiceHealth line: it is the
+ * user's own action, and its page says what happened.
  */
 class HttpOsmNotes(
     private val client: HttpClient,
-    private val servers: () -> List<String>,
+    private val servers: suspend () -> List<String>,
 ) : OsmNotes {
     override suspend fun create(
         target: NoteTarget,
@@ -142,6 +155,7 @@ class HttpOsmNotes(
                 append("lon", target.point.lon.toString())
                 append("text", noteText(target, text))
             }
+        var reachedOne = false
         for (server in servers()) {
             try {
                 val response =
@@ -161,21 +175,31 @@ class HttpOsmNotes(
                         return NoteAnswer.Refused(error)
                     }
 
-                    else -> {}
+                    else -> {
+                        reachedOne = true
+                    }
                 }
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: ConnectTimeoutException) {
-                // Never connected: nothing reached the server.
             } catch (e: HttpRequestTimeoutException) {
                 return NoteAnswer.NoAnswer
-            } catch (e: SocketTimeoutException) {
-                return NoteAnswer.NoAnswer
             } catch (e: Exception) {
-                // No connection: the next server.
+                when {
+                    // Never connected: nothing reached the server.
+                    e is ConnectTimeoutException || failedBeforeSending(e) -> {}
+
+                    e is SocketTimeoutException -> {
+                        return NoteAnswer.NoAnswer
+                    }
+
+                    // The next server; this one may have the request when it broke after connecting.
+                    else -> {
+                        reachedOne = true
+                    }
+                }
             }
         }
-        return NoteAnswer.Unreachable
+        return if (reachedOne) NoteAnswer.Failed else NoteAnswer.Unreachable
     }
 }
 
@@ -190,17 +214,34 @@ private suspend fun isNewNote(response: HttpResponse): Boolean {
     return (feature?.get("type") as? JsonPrimitive)?.content == "Feature"
 }
 
+/** Whether [e] failed a request before any of it went out, so no server can have the note. */
+internal expect fun failedBeforeSending(e: Throwable): Boolean
+
 /** Timeouts of one note: the API answers in well under a second; longer means it is stuck. */
 private const val CONNECT_TIMEOUT_MS = 5_000L
 private const val REQUEST_TIMEOUT_MS = 15_000L
 
 /** The HTTP client of notes: the platform engine and the app's User-Agent, as the OSM API usage policy asks. */
-fun osmHttpClient(appVersion: String): HttpClient =
+fun osmHttpClient(appVersion: String): HttpClient = osmHttpClient(appVersion, CONNECT_TIMEOUT_MS, REQUEST_TIMEOUT_MS)
+
+/**
+ * [osmHttpClient] with its timeouts. A read waits four times the request's whole time, so a request
+ * waiting for its answer always ends as a request timeout ([NoteAnswer.NoAnswer]: Android's engine then
+ * closes the connection, and the stalled read fails as closed), never as a socket timeout. On Android a
+ * socket timeout is then only ever one of connecting or of the TLS handshake, before the note went out
+ * ([failedBeforeSending]).
+ */
+internal fun osmHttpClient(
+    appVersion: String,
+    connectTimeoutMs: Long,
+    requestTimeoutMs: Long,
+): HttpClient =
     HttpClient(searchHttpEngine()) {
         expectSuccess = false
         install(UserAgent) { agent = searchUserAgent(appVersion) }
         install(HttpTimeout) {
-            connectTimeoutMillis = CONNECT_TIMEOUT_MS
-            requestTimeoutMillis = REQUEST_TIMEOUT_MS
+            connectTimeoutMillis = connectTimeoutMs
+            requestTimeoutMillis = requestTimeoutMs
+            socketTimeoutMillis = 4 * requestTimeoutMs
         }
     }

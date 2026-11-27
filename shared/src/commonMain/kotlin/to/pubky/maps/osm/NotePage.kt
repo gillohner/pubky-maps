@@ -41,6 +41,10 @@ fun notSentText(answer: NoteAnswer): String =
             "No answer in time: the note may be on the map already. Send it again only if it is not there tomorrow."
         }
 
+        NoteAnswer.Failed -> {
+            "Not sent: the server had a problem. Send it again later."
+        }
+
         NoteAnswer.Sent, NoteAnswer.Unreachable -> {
             "Not sent: no server could be reached. Check your connection and send it again."
         }
@@ -68,14 +72,25 @@ fun NotePage(
         place = target.name ?: target.pointText(),
         onClose = onClose,
         action =
-            if (send == NoteSend.Sent) {
+            if (send == NoteSend.Sent || send == NoteSend.Waiting) {
                 null
             } else {
                 { Button(onClick = onSend, enabled = !sending && canSendNote(target, text)) { Text(if (sending) "Sending" else "Send") } }
             },
     ) {
         if (send == NoteSend.Sent) {
-            Sent(onClose)
+            Done(
+                "Thank you, your note is on the map",
+                "OpenStreetMap's mappers see it at the place and fix the map there. That can take a few days.",
+                onClose,
+            )
+        } else if (send == NoteSend.Waiting) {
+            Done(
+                "Your note waits on this phone",
+                "No OpenStreetMap server could be reached. The app tries again by itself as soon as one can be, also when " +
+                    "it is closed.",
+                onClose,
+            )
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 KeptBadge(Kept.Public)
@@ -116,19 +131,24 @@ fun NotePage(
     }
 }
 
+/** The page once its note left it: sent, or waiting on the phone. */
 @Composable
-private fun Sent(onDone: () -> Unit) {
+private fun Done(
+    title: String,
+    text: String,
+    onDone: () -> Unit,
+) {
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
     ) {
         Text(
-            "Thank you, your note is on the map",
+            title,
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.semantics { heading() },
         )
         Text(
-            "OpenStreetMap's mappers see it at the place and fix the map there. That can take a few days.",
+            text,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -138,23 +158,26 @@ private fun Sent(onDone: () -> Unit) {
 
 /**
  * How far the page saw its note get, kept with its text: a page laid out anew after Android stopped the
- * app finds no note of its own in a new [NoteController], and must not offer the same public note again
- * as if it had never left. [MaybeSent]: on its way, or no answer came in time; it may be on the map.
+ * app finds no note of its own in a new [NoteController] (until its outbox was read, for a waiting
+ * note), and must not offer the same public note again as if it had never left. [MaybeSent]: on its
+ * way, or no answer came in time; it may be on the map. [Waiting]: in the outbox.
  */
-internal enum class SeenSend { MaybeSent, Sent }
+internal enum class SeenSend { MaybeSent, Sent, Waiting }
 
 /** What the page keeps of this send: a note refused or not reached by any server is not on the map and may go again. */
 internal fun NoteSend.seen(): SeenSend? =
     when (this) {
         NoteSend.Sending -> SeenSend.MaybeSent
         NoteSend.Sent -> SeenSend.Sent
+        NoteSend.Waiting -> SeenSend.Waiting
         is NoteSend.NotSent -> SeenSend.MaybeSent.takeIf { answer == NoteAnswer.NoAnswer }
     }
 
 /**
  * What the page shows: the controller's [live] send, else what the page [seen] before the app was
  * stopped. A note that may have arrived shows [NoteAnswer.NoAnswer]'s text: send again only if it is
- * not on the map.
+ * not on the map. A note seen waiting shows as waiting, also when the outbox has sent it since: it is
+ * never offered again.
  */
 internal fun shownSend(
     live: NoteSend?,
@@ -162,6 +185,7 @@ internal fun shownSend(
 ): NoteSend? =
     live ?: when (seen) {
         SeenSend.Sent -> NoteSend.Sent
+        SeenSend.Waiting -> NoteSend.Waiting
         SeenSend.MaybeSent -> NoteSend.NotSent(NoteAnswer.NoAnswer)
         null -> null
     }

@@ -134,9 +134,10 @@ class OsmNotesTest {
         }
 
     @Test
-    fun onlySuccessesThatAreNotNotesAreUnreachable() =
+    fun onlySuccessesThatAreNotNotesFailed() =
         runTest {
-            assertEquals(NoteAnswer.Unreachable, notes(listOf("https://a.test")) { "page" }.create(pin, "x"))
+            // A server answered, so the note is not kept to go again: something there may have it.
+            assertEquals(NoteAnswer.Failed, notes(listOf("https://a.test")) { "page" }.create(pin, "x"))
         }
 
     @Test
@@ -154,6 +155,7 @@ class OsmNotesTest {
         assertEquals("The server did not take the note: Text is too long.", notSentText(NoteAnswer.Refused("Text is too long")))
         assertEquals("The server did not take the note: Blocked.", notSentText(NoteAnswer.Refused("Blocked.")))
         assertEquals("Not sent: no server could be reached. Check your connection and send it again.", notSentText(NoteAnswer.Unreachable))
+        assertEquals("Not sent: the server had a problem. Send it again later.", notSentText(NoteAnswer.Failed))
         assertEquals(
             "No answer in time: the note may be on the map already. Send it again only if it is not there tomorrow.",
             notSentText(NoteAnswer.NoAnswer),
@@ -161,10 +163,21 @@ class OsmNotesTest {
     }
 
     @Test
-    fun noServerAnsweringIsUnreachable() =
+    fun noServerReachedIsUnreachable() =
         runTest {
-            assertEquals(NoteAnswer.Unreachable, notes(listOf("https://a.test", "https://b.test")) { "down" }.create(pin, "x"))
+            assertEquals(NoteAnswer.Unreachable, notes(listOf("https://a.test", "https://b.test")) { "noConnect" }.create(pin, "x"))
             assertEquals(2, sent.size)
+        }
+
+    @Test
+    fun everyServerFailingWhereOneMayHaveTheRequestIsFailedNotUnreachable() =
+        runTest {
+            // Each of these may have the note: a server error, a rate limit, a connection that broke after it went out.
+            for (failing in listOf("500", "busy", "notFound", "down")) {
+                val behaviour = mapOf("a.test" to failing, "b.test" to "noConnect")
+                val answer = notes(listOf("https://a.test", "https://b.test")) { behaviour.getValue(it) }.create(pin, "x")
+                assertEquals(NoteAnswer.Failed, answer, failing)
+            }
         }
 
     @Test

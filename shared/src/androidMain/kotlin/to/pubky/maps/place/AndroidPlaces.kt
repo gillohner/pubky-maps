@@ -5,12 +5,17 @@ import app.cash.sqldelight.driver.android.AndroidSqliteDriver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import to.pubky.maps.config.AppSettings
 import to.pubky.maps.config.Service
+import to.pubky.maps.config.loadedServers
 import to.pubky.maps.map.MapPlacesLayer
 import to.pubky.maps.offline.KeptPubkyPlaces
 import to.pubky.maps.osm.HttpOsmNotes
 import to.pubky.maps.osm.NoteController
+import to.pubky.maps.osm.SqlNoteOutbox
+import to.pubky.maps.osm.db.NoteOutboxDatabase
 import to.pubky.maps.osm.osmHttpClient
 import to.pubky.maps.place.db.PlaceCacheDatabase
 import to.pubky.maps.routing.DirectionsController
@@ -29,7 +34,8 @@ import java.io.File
  * no address names its district and town from the offline areas' labels ([localities]), a page
  * with no card shows the OSM details the offline areas keep ([details]), and directions to a place
  * come from the Valhalla servers of the list, and notes about a place go to the OpenStreetMap API
- * servers of the list. Create it once per process.
+ * servers of the list (a note no server could be reached for waits in the no-backup folder until the
+ * phone is online). Create it once per process.
  */
 fun androidPlaceServices(
     context: Context,
@@ -71,6 +77,17 @@ fun androidPlaceServices(
                 main,
                 health = health,
             ),
-        notes = NoteController(HttpOsmNotes(osmHttpClient(appVersion), servers = { servers(Service.OsmApi) }), main),
+        notes =
+            NoteController(
+                // Waiting notes go as the app starts: only to the user's own list, once it was read.
+                HttpOsmNotes(osmHttpClient(appVersion), servers = { settings.loadedServers(Service.OsmApi) }),
+                main,
+                outbox =
+                    SqlNoteOutbox(
+                        AndroidSqliteDriver(NoteOutboxDatabase.Schema, context, File(context.noBackupFilesDir, "note-outbox.db").path),
+                    ),
+                io = Dispatchers.IO,
+                ready = { settings.filterNotNull().first() },
+            ),
     )
 }

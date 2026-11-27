@@ -5,8 +5,13 @@ import android.net.ConnectivityManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import to.pubky.maps.BuildConfig
 import to.pubky.maps.account.AccountState
 import to.pubky.maps.account.AccountUi
@@ -175,6 +180,22 @@ class PubkyMapsApplication : Application() {
     lateinit var writes: WriteController
         private set
 
+    /**
+     * Whether writes or notes to OpenStreetMap wait for a connection, for the outbox job; null until
+     * both were read from the phone.
+     */
+    val outboxWaiting: StateFlow<Boolean?> by lazy {
+        combine(writes.waiting, places.notes?.waiting ?: MutableStateFlow(false), ::anyWaiting)
+            .stateIn(scope, SharingStarted.Eagerly, null)
+    }
+
+    /** Asks the account, the outbox and the notes to try now. */
+    fun sendWaitingNow() {
+        account.controller.onNetworkAvailable()
+        writes.flush()
+        places.notes?.flush()
+    }
+
     override fun onCreate() {
         super.onCreate()
         configureMapRuntime(
@@ -199,14 +220,11 @@ class PubkyMapsApplication : Application() {
                 settings = settingsRepository.settings,
             )
         // With the app closed too: a job Android runs when the phone has a network starts the process.
-        followOutbox(this, writes.waiting, scope)
-        // Writes that wait for a connection are sent as soon as the phone has one: the homeserver
-        // is tried again first (writes wait for it), then the outbox.
+        followOutbox(this, outboxWaiting, scope)
+        // Writes and notes that wait for a connection are sent as soon as the phone has one: the
+        // homeserver is tried again first (writes wait for it), then the outbox, and the notes.
         getSystemService(ConnectivityManager::class.java)?.registerDefaultNetworkCallback(
-            NetworkReturns {
-                account.controller.onNetworkAvailable()
-                writes.flush()
-            },
+            NetworkReturns(::sendWaitingNow),
         )
     }
 }
