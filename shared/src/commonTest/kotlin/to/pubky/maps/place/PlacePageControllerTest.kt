@@ -11,6 +11,8 @@ import kotlinx.coroutines.test.runTest
 import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.links.OsmId
 import to.pubky.maps.links.OsmType
+import to.pubky.maps.map.DROPPED_PIN
+import to.pubky.maps.map.droppedPin
 import to.pubky.maps.search.SourceAnswer
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.Test
@@ -32,6 +34,7 @@ internal class FakePlaceData : PlaceData {
     var cardGate: CompletableDeferred<Unit>? = null
     val viewers = mutableListOf<String?>()
     val askedLinks = mutableListOf<List<String>>()
+    val askedCards = mutableListOf<List<String>>()
     val replyPages = mutableListOf<Int>()
 
     /** Replies Nexus has for the Schober (newest first), 20 per page. */
@@ -47,6 +50,7 @@ internal class FakePlaceData : PlaceData {
         if (nexusDown) SourceAnswer.Unreachable else SourceAnswer.Answered(value(), "n")
 
     override suspend fun card(uris: List<String>): SourceAnswer<PlaceCardInfo?> {
+        askedCards += uris
         cardGate?.await()
         return pinakes {
             if (SCHOBER in uris) {
@@ -438,6 +442,27 @@ class PlacePageControllerTest {
             advanceUntilIdle()
             assertEquals("Hottingen, Zürich", pages.state.value!!.address)
             assertEquals(listOf<Pair<OsmId?, GeoPoint>>(null to typed.point!!), localities.asked)
+        }
+
+    @Test
+    fun aDroppedPinAsksNoServerAndSaysItsDistrictAndTown() =
+        runTest {
+            val localities = Hottingen()
+            val data = FakePlaceData()
+            val pages = controller(data, localities = localities)
+            val pin = droppedPin(47.37031, 8.55601)
+            pages.open(pin)
+            advanceUntilIdle()
+            val page = pages.state.value!!
+            // The point a long-press dropped can be the user's home: neither Pinakes nor Nexus hears of it.
+            assertEquals(emptyList(), data.askedCards)
+            assertEquals(emptyList(), data.askedLinks)
+            assertEquals(emptySet(), page.loading)
+            assertEquals(emptySet(), page.failed)
+            assertEquals("47.37031, 8.55601", page.place.title)
+            assertEquals(DROPPED_PIN, page.place.category)
+            assertEquals("Hottingen, Zürich", page.address)
+            assertEquals(listOf<Pair<OsmId?, GeoPoint>>(null to GeoPoint(47.37031, 8.55601)), localities.asked)
         }
 
     @Test

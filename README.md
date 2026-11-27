@@ -85,7 +85,7 @@ label before the places named after it. They are merged with Pinakes when it ans
 shows its district and town where an address goes, and so does its page until its Pinakes card
 gives the street address; the list says the places are from the offline maps and that street
 addresses need a connection, and the map's credits stand under them. A place opened from the map
-(a tapped point of interest, a Pubky pin, a saved place, a link) or typed coordinates without an
+(a tapped point of interest, a Pubky pin, a saved place, a link), a dropped pin or typed coordinates without an
 address get the same line on their page, unless a saved card gives the street address: the district
 and town stored with its OpenStreetMap element, else those the labels around its point give (a
 town's page is not named after the town), when the areas have a place within 500 m north, south,
@@ -135,7 +135,9 @@ Settings:
 - **Map data:** the credits of every map source.
 
 **Place pages** open from a search result, a link from another app, a point of interest tapped on
-the base map (by its OpenStreetMap element) or a Pubky place on the map. On a phone the page is a
+the base map (by its OpenStreetMap element), a Pubky place on the map, or a long-press anywhere on
+the map, which drops a pin there (also on a point of interest; not while an area is picked for
+download): its page is named by its coordinates and says "Dropped pin". On a phone the page is a
 sheet over the map (header only, half the screen, or the whole screen); on a wide screen a panel
 beside it. A place tapped on the map that its sheet or panel would hide moves to the middle of the
 map left in view (also under the notices below the search bar) once the sheet has opened, or, while
@@ -149,8 +151,8 @@ follows first, the user's own tags marked); photos and posts about the place fro
 the public lists that hold it; and the same place on other services ("Also on"). Each part loads on
 its own and is hidden while it has nothing. What a page showed is kept on the phone, so a place
 reopens offline with a note saying when it was saved; the user's own tags and lists in it are shown
-only to the account that saw them. Typed coordinates open a page without any request, and the
-map's Pubky places wait until the user moves the map away from the typed point.
+only to the account that saw them. Typed coordinates and a dropped pin open a page without any
+request, and the map's Pubky places wait until the user moves the map while it is open.
 
 **Directions** on a place page ask for the user's position as the my-location button does (the
 permission only then) and route from there to the place by car, bike or on foot (car at first, then

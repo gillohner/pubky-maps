@@ -5,7 +5,8 @@
 # map with the card's name and kind, the Pubky tags and the posts; the handle raises it to the whole
 # screen, where the lists holding the place show; back closes it. Directions, with location granted
 # and the emulator's GPS at Zürich HB, ask the fixture Valhalla for a route by car from there to the
-# place, show its time and draw it on the map; Walk asks again on foot. Checks that Pinakes, Nexus
+# place, show its time and draw it on the map; Walk asks again on foot. A long-press on the map then
+# drops a pin: its page is named by its coordinates and asks no server; back closes it. Checks that Pinakes, Nexus
 # and Valhalla were asked with the app's User-Agent, Nexus for every spelling people used for the place.
 # Usage: emulator-place.sh <apk> <out dir>
 set -euo pipefail
@@ -142,6 +143,20 @@ dump=$(dump_ui after-back)
 if centre_of "$dump" "Conditorei schober" > /dev/null; then fail "back did not close the place page"; fi
 centre_of "$dump" "Show my location" > /dev/null || fail "back did not return to the map"
 check_alive "after back"
+
+# A long-press on the map drops a pin there: the point's page, named by its coordinates (the map is
+# around the Schober, in Zürich), with Directions. The point is asked of no server.
+adb shell input swipe 540 900 540 900 1500
+wait_for_start "Dropped pin" 15 > /dev/null || fail "a long-press on the map dropped no pin"
+wait_for_start "47.3" 5 > /dev/null || fail "the dropped pin's page is not named by its coordinates"
+wait_for "Directions" 5 > /dev/null || fail "no Directions on the dropped pin's page"
+screenshot place-dropped-pin
+check_alive "dropped pin"
+if grep -q "geo:" "$log"; then fail "the dropped pin's point was sent to a server"; fi
+adb shell input keyevent KEYCODE_BACK
+sleep 2
+if wait_for_start "Dropped pin" 2 > /dev/null; then fail "back did not close the dropped pin's page"; fi
+check_alive "after the dropped pin"
 
 python3 -I - "$log" <<'PY' || fail "the place page did not ask Pinakes and Nexus as expected"
 import json, sys

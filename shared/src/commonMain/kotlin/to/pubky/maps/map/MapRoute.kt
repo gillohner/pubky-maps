@@ -26,6 +26,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.DpRect
@@ -169,7 +171,7 @@ fun MapRoute(
     var fallbackIndex by rememberSaveable(sources) { mutableIntStateOf(0) }
     val fallback = StyleFallback(sources, fallbackIndex)
     val locationState = rememberLocationState(provider = rememberDefaultLocationProvider())
-    // A point of interest or Pubky place tapped on the map; kept on rotation.
+    // A point of interest or Pubky place tapped on the map, or a pin dropped by a long-press; kept on rotation.
     var tapped by rememberSaveable(stateSaver = PlaceRefSaver) { mutableStateOf<PlaceRef?>(null) }
     // Only a place is pinned: a map view or a search near a point only moves the camera.
     val pinnedPoint by rememberUpdatedState(linkedPlace.place?.takeIf { it.pinned }?.point ?: tapped?.point)
@@ -297,7 +299,7 @@ fun MapRoute(
         mapState.animateCamera(CameraUpdate(center = target, zoom = mapState.cameraPosition.zoom + 2))
     }
     // The Pubky places layer asks Pinakes when the camera rests.
-    // Held while the page of typed coordinates is open and the user has not moved the map (see layerMayAsk).
+    // Held while the page of typed coordinates or a dropped pin is open and the user has not moved the map (see layerMayAsk).
     val layerHeld = remember { mutableStateOf(false) }
     if (places != null) {
         LaunchedEffect(mapState, places) {
@@ -492,6 +494,9 @@ fun MapRoute(
         onClosePlace()
         tapped = null
     }
+    // While the area picker is open the map only frames the area: a long-press drops no pin.
+    val pickingArea by rememberUpdatedState(areaPicker != null)
+    val haptics = LocalHapticFeedback.current
 
     MapScreen(
         attribution = (fallback.current ?: sources.first()).attribution,
@@ -560,6 +565,17 @@ fun MapRoute(
                                         }
                                     }
                                     ClickResult.Pass
+                                }
+                            }
+                            // Anywhere, also on a point of interest: the point itself, as in Google Maps.
+                            longClick {
+                                onEvent { event ->
+                                    if (places == null || pickingArea) return@onEvent ClickResult.Pass
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    search?.controller?.close()
+                                    onClosePlace()
+                                    tapped = droppedPin(event.position.latitude, event.position.longitude)
+                                    ClickResult.Consume
                                 }
                             }
                         }
@@ -825,7 +841,7 @@ private suspend fun MapState.tappedPoi(offset: DpOffset): PlaceRef? {
         tappedPlace(
             id = feature.id?.contentOrNull?.toLongOrNull(),
             properties = feature.properties.strings(),
-            point = GeoPoint(point.latitude.coerceIn(-90.0, 90.0), ((point.longitude + 540.0) % 360.0) - 180.0),
+            point = mapPoint(point.latitude, point.longitude),
         )
     }
 }
