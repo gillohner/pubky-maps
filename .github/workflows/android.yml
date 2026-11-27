@@ -97,6 +97,7 @@ jobs:
           python3 -I scripts/release/update-feed-check.py
           python3 -I scripts/ci/cache-keys-check.py
           python3 -I scripts/ci/start-time-check.py
+          python3 -I scripts/ci/tile-failures-check.py
           python3 -I scripts/ci/synonym-blocked-check.py
           python3 -I scripts/ci/gradle-advisories-check.py
       - name: check, screenshots, debug APK
