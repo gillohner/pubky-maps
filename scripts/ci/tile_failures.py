@@ -7,8 +7,8 @@ and a slow emulator's start can still be drawing it when the test's window opens
 this script does not read counts.
 
 Prints how many failures count and how many were tiles outside the area, then the lines that count.
-Exit 0: none counts; 1: some count; 2: the database is unreadable or holds no tile of an area, so there
-was nothing to check against.
+Exit 0: none counts; 1: some count; 2: the log or the database is unreadable, or the database holds no tile
+of an area, so there was nothing to check against.
 CI: emulator-offline.sh (theme switches during an update check); checked by tile-failures-check.py.
 
 Usage: tile_failures.py <logcat.txt> <maplibre.db>
@@ -55,8 +55,12 @@ def main(logcat_path, db_path):
     if not held:
         print(f"the MapLibre database {db_path} holds no tile of an offline area")
         return 2
-    with open(logcat_path, encoding="utf-8", errors="replace") as f:
-        counted, outside = failures(f.read().splitlines(), held)
+    try:
+        with open(logcat_path, encoding="utf-8", errors="replace") as f:
+            counted, outside = failures(f.read().splitlines(), held)
+    except OSError as e:
+        print(f"unreadable log {logcat_path}: {e}")
+        return 2
     print(f"{len(counted)} failed (styles, tiles of the area); {outside} tiles outside the area failed")
     for line in counted:
         print(line)

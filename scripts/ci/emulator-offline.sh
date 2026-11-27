@@ -302,8 +302,8 @@ age=$((SECONDS - app_started))
 adb logcat -d -T "$since" > "$out/logcat-during-check.txt" || fail "could not read the log of the theme switches"
 rc=0
 failed=$(python3 -I "$here/tile_failures.py" "$out/logcat-during-check.txt" "$out/maplibre-updated.db") || rc=$?
-echo "theme switches 23-${age} s after the start; meanwhile ${failed%%$'\n'*}"
 ((rc != 2)) || fail "could not check the failed loads against the area's tiles: $failed"
+echo "theme switches 23-${age} s after the start; meanwhile ${failed%%$'\n'*}"
 ((rc == 0)) || fail "the map's cached tiles or style failed to load during the update check's walk without a server: ${failed:0:400}"
 check_alive "theme switches during an update check"
 

@@ -3,7 +3,7 @@
 MapLibre's layout: a failed style and a failed tile of the area count (the lines of run 45960219840, the
 map asking the gone server for its cached tiles), a failed tile outside the area does not (a start's
 world view), nor does a tile in MapLibre's cache that no pack links; a tile line it cannot read counts;
-a database without an area's tile, or not a database, checks nothing and says so.
+a database without an area's tile, not a database, or no log checks nothing and says so.
 CI: android.yml, build job.
 
 Usage: tile-failures-check.py
@@ -87,6 +87,10 @@ torn = work / "torn.db"
 torn.write_bytes(b"not a database, " * 64)
 code, out = run([world], torn)
 expect(code == 2 and out.startswith("unreadable"), f"not a database: {code} {out}")
+out = io.StringIO()
+with contextlib.redirect_stdout(out):
+    code = tile_failures.main(work / "no-logcat.txt", area)
+expect(code == 2 and out.getvalue().startswith("unreadable log"), f"no log: {code} {out.getvalue()}")
 shutil.rmtree(work)
 
 if failures:
