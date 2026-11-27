@@ -52,7 +52,7 @@ class DirectionsRouteTest {
             advanceTimeBy(ROOM_SETTLE_MS * 4)
             runCurrent()
             assertNull(got)
-            // The sheet lowered to Half: a new, taller room every frame, the first ones already tall
+            // The sheet lowered to Half: a new, taller room every frame, from the second on tall
             // enough for a route.
             for (bottom in listOf(160, 240, 320, 400, 460)) {
                 rooms.value = DpRect(0.dp, 80.dp, 412.dp, bottom.dp)
@@ -80,13 +80,33 @@ class DirectionsRouteTest {
         }
 
     @Test
-    fun aRouteFoundBeforeThePageReportsARoomIsFittedAtOnce() =
+    fun aRouteFoundAsThePageIsLaidOutAnewWaitsForItsRoom() =
+        runTest {
+            // Back from Settings with the steps open: the sheet reports its room in its first frames.
+            val rooms = MutableStateFlow<DpRect?>(null)
+            var got: DpRect? = null
+            val job = launch { got = routeRoom(rooms) }
+            advanceTimeBy(100)
+            rooms.value = DpRect(0.dp, 80.dp, 412.dp, 80.dp)
+            advanceTimeBy(OPEN_ROOM_WAIT_MS * 4)
+            runCurrent()
+            assertNull(got)
+            assertTrue(job.isActive)
+            job.cancel()
+        }
+
+    @Test
+    fun aRouteWhosePageReportsNoRoomIsFittedToTheWholeMap() =
         runTest {
             var done = false
             launch {
                 assertNull(routeRoom(MutableStateFlow(null)))
                 done = true
             }
+            advanceTimeBy(OPEN_ROOM_WAIT_MS - 1)
+            runCurrent()
+            assertFalse(done)
+            advanceTimeBy(2)
             runCurrent()
             assertTrue(done)
         }

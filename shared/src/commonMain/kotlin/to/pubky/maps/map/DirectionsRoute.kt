@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.maplibre.compose.location.LocationPermission
 import org.maplibre.compose.location.LocationState
 import org.maplibre.compose.location.LocationTrackingStatus
@@ -135,17 +136,18 @@ internal fun roomHoldsRoute(room: DpRect): Boolean =
     room.right - room.left >= ROUTE_MARGIN * 2 + ROUTE_MIN_ROOM && room.bottom - room.top >= ROUTE_MARGIN * 2 + ROUTE_MIN_ROOM
 
 /**
- * The room a found route is fitted into, from [rooms] (the map its place page leaves in view): null at
- * once when the page has reported none yet, as before its first layout; else the first room that
- * holds the route ([roomHoldsRoute]) and stays the same for [settleMs]. The room is reported on every
- * frame of the sheet's move, so a route found with the sheet at its top waits for where the sheet
- * stops, not for the first frame of its way down that is tall enough.
+ * The room a found route is fitted into, from [rooms] (the map its place page leaves in view): the
+ * first room that holds the route ([roomHoldsRoute]) and stays the same for [settleMs]. The room is
+ * reported on every frame of the sheet's move, so a route found with the sheet at its top waits for
+ * where the sheet stops, not for the first frame of its way down that is tall enough. Null when the
+ * page reports no room within [OPEN_ROOM_WAIT_MS]: a page laid out anew (a rotation, a return from
+ * Settings) reports its room in its first frames, and the route is not fitted behind it meanwhile.
  */
 internal suspend fun routeRoom(
     rooms: Flow<DpRect?>,
     settleMs: Long = ROOM_SETTLE_MS,
 ): DpRect? {
-    if (rooms.first() == null) return null
+    withTimeoutOrNull(OPEN_ROOM_WAIT_MS) { rooms.filterNotNull().first() } ?: return null
     return settled(rooms, settleMs).first { roomHoldsRoute(it) }
 }
 
