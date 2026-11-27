@@ -67,6 +67,7 @@ import to.pubky.maps.search.SearchMode
 import to.pubky.maps.search.SearchState
 import to.pubky.maps.status.ServicePart
 import to.pubky.maps.ui.AppIcons
+import to.pubky.maps.ui.MapSurfaces
 import to.pubky.maps.ui.NoteWithAction
 import to.pubky.maps.ui.rememberSafeLinkOpener
 
@@ -477,7 +478,7 @@ private fun MapButton(
         onClick = onClick,
         modifier = modifier.size(size),
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        color = MapSurfaces.control,
         contentColor = if (tinted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
         shadowElevation = 3.dp,
     ) {
@@ -529,7 +530,7 @@ private fun MapUnavailableNotice(
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = MapSurfaces.notice,
         shadowElevation = 3.dp,
     ) {
         NoteWithAction(

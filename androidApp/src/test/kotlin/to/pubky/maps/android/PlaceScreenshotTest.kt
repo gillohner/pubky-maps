@@ -425,7 +425,7 @@ class PlaceScreenshotTest {
                 ),
         ) {
             Box(
-                modifier = Modifier.fillMaxSize().background(if (dark) Color(0xFF2B2D31) else Color(0xFFF2EFE9)),
+                modifier = Modifier.fillMaxSize().background(placeholderMapColor(dark)),
                 contentAlignment = Alignment.Center,
             ) {
                 Text("Map", color = if (dark) Color(0xFF8A8D93) else Color(0xFF9A968E))

@@ -12,6 +12,13 @@ import androidx.compose.ui.graphics.Color
 import to.pubky.maps.config.ServerDefaults
 import to.pubky.maps.map.MapScreen
 
+/**
+ * The colour standing in for the map in screenshots, the land of the default styles: light near
+ * OpenFreeMap Liberty's #F8F4F0, dark OpenFreeMap Dark's rgb(12,12,12). So the shots show how the
+ * controls and notices stand out from the map users see (a grey dark placeholder hid near-black ones).
+ */
+internal fun placeholderMapColor(dark: Boolean): Color = if (dark) Color(0xFF0C0C0C) else Color(0xFFF2EFE9)
+
 /** The map with [card] over a flat placeholder where MapLibre would draw. */
 @Composable
 internal fun PlaceholderMap(card: (@Composable () -> Unit)?) {
@@ -29,7 +36,7 @@ internal fun PlaceholderMap(card: (@Composable () -> Unit)?) {
         placeCard = card,
     ) {
         Box(
-            modifier = Modifier.fillMaxSize().background(if (dark) Color(0xFF2B2D31) else Color(0xFFF2EFE9)),
+            modifier = Modifier.fillMaxSize().background(placeholderMapColor(dark)),
             contentAlignment = Alignment.Center,
         ) {
             Text("Map", color = if (dark) Color(0xFF8A8D93) else Color(0xFF9A968E))

@@ -73,6 +73,7 @@ import to.pubky.maps.place.OpeningText
 import to.pubky.maps.place.PlaceSource
 import to.pubky.maps.place.openingLine
 import to.pubky.maps.ui.AppIcons
+import to.pubky.maps.ui.MapSurfaces
 import to.pubky.maps.ui.rememberSafeLinkOpener
 import to.pubky.maps.write.WriteIcons
 
@@ -121,7 +122,7 @@ fun SearchBar(
     Surface(
         modifier = modifier.heightIn(min = SearchBarHeight).fillMaxWidth(),
         shape = RoundedCornerShape(SearchBarHeight / 2),
-        color = if (elevated) MaterialTheme.colorScheme.surfaceContainerLowest else MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = if (elevated) MapSurfaces.control else MaterialTheme.colorScheme.surfaceContainerHigh,
         shadowElevation = if (elevated) 3.dp else 0.dp,
     ) {
         Row(Modifier.heightIn(min = SearchBarHeight), verticalAlignment = Alignment.CenterVertically) {

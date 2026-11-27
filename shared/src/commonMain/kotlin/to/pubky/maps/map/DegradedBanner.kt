@@ -16,6 +16,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import to.pubky.maps.status.ServicePart
 import to.pubky.maps.ui.AppIcons
+import to.pubky.maps.ui.MapSurfaces
 
 /** One line over the map naming what is missing; the map stays usable around it. */
 @Composable
@@ -26,7 +27,7 @@ internal fun DegradedBanner(
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = MapSurfaces.notice,
         contentColor = MaterialTheme.colorScheme.onSurface,
         shadowElevation = 3.dp,
     ) {
