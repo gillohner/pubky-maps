@@ -184,7 +184,9 @@ by default) without an account, so the note is public and anonymous. A server th
 fails or answers not as the API does hands over to the next one; the API's refusal is shown with its
 reason; a request with no answer in time is not sent elsewhere and the page says the note may be on
 the map already. A note that did not go keeps its text on the page to send again; notes need a
-connection.
+connection. A note page Android brought back after stopping the app still thanks for a sent note, and
+one whose note was on its way or got no answer in time says it may be on the map already, so neither
+offers the same note again as new.
 
 **Writing about a place** (signed in; a write that needs the homeserver opens the sign-in first and
 continues after it). The page's action row has Save, Tag, Post and Add to list; its sections have

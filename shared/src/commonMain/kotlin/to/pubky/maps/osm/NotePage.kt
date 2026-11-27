@@ -10,6 +10,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -135,7 +136,40 @@ private fun Sent(onDone: () -> Unit) {
     Button(onClick = onDone) { Text("Done") }
 }
 
-/** The note page on the live [notes]: the text and the page's name kept over the page being laid out anew. */
+/**
+ * How far the page saw its note get, kept with its text: a page laid out anew after Android stopped the
+ * app finds no note of its own in a new [NoteController], and must not offer the same public note again
+ * as if it had never left. [MaybeSent]: on its way, or no answer came in time; it may be on the map.
+ */
+internal enum class SeenSend { MaybeSent, Sent }
+
+/** What the page keeps of this send: a note refused or not reached by any server is not on the map and may go again. */
+internal fun NoteSend.seen(): SeenSend? =
+    when (this) {
+        NoteSend.Sending -> SeenSend.MaybeSent
+        NoteSend.Sent -> SeenSend.Sent
+        is NoteSend.NotSent -> SeenSend.MaybeSent.takeIf { answer == NoteAnswer.NoAnswer }
+    }
+
+/**
+ * What the page shows: the controller's [live] send, else what the page [seen] before the app was
+ * stopped. A note that may have arrived shows [NoteAnswer.NoAnswer]'s text: send again only if it is
+ * not on the map.
+ */
+internal fun shownSend(
+    live: NoteSend?,
+    seen: SeenSend?,
+): NoteSend? =
+    live ?: when (seen) {
+        SeenSend.Sent -> NoteSend.Sent
+        SeenSend.MaybeSent -> NoteSend.NotSent(NoteAnswer.NoAnswer)
+        null -> null
+    }
+
+/**
+ * The note page on the live [notes]: the text, the page's name and how far its note got kept over the
+ * page being laid out anew, also after Android stopped the app.
+ */
 @Composable
 fun NoteRoute(
     notes: NoteController,
@@ -144,7 +178,10 @@ fun NoteRoute(
 ) {
     val pageId = rememberSaveable { Random.nextLong().toULong().toString(36) }
     var text by rememberSaveable { mutableStateOf("") }
+    var seen by rememberSaveable { mutableStateOf<SeenSend?>(null) }
     val sends by notes.sends.collectAsStateWithLifecycle()
+    val live = sends[pageId]
+    LaunchedEffect(live) { if (live != null) seen = live.seen() }
     val close = {
         notes.forget(pageId)
         onClose()
@@ -154,8 +191,12 @@ fun NoteRoute(
         target = target,
         text = text,
         onTextChange = { text = it },
-        send = sends[pageId],
-        onSend = { notes.send(pageId, target, text) },
+        send = shownSend(live, seen),
+        onSend = {
+            // Kept before the send starts, so a state saved before the controller's answer is seen still has it.
+            seen = SeenSend.MaybeSent
+            notes.send(pageId, target, text)
+        },
         onClose = close,
     )
 }

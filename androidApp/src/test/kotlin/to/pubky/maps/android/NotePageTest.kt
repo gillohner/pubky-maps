@@ -2,11 +2,13 @@ package to.pubky.maps.android
 
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.datetime.LocalDate
@@ -42,8 +44,10 @@ class NotePageTest {
 
     private val schober = NoteTarget(GeoPoint(47.3722, 8.5446), "Conditorei Schober", OsmId(OsmType.Node, 270803095))
 
+    /** Answers every note with [answer], once [hold] lets it through when one is set. */
     private class FakeNotes(
         private val answer: NoteAnswer,
+        private val hold: CompletableDeferred<Unit>? = null,
     ) : OsmNotes {
         val sent = ArrayList<Pair<NoteTarget, String>>()
 
@@ -52,6 +56,7 @@ class NotePageTest {
             text: String,
         ): NoteAnswer {
             sent += target to text
+            hold?.await()
             return answer
         }
     }
@@ -83,6 +88,55 @@ class NotePageTest {
         compose.onNodeWithText("Not sent: no server could be reached. Check your connection and send it again.").assertExists()
         compose.onNodeWithText("Closed for good.").assertExists()
         compose.onNodeWithText("Send").assertIsEnabled()
+    }
+
+    @Test
+    fun aSentNotePageRestoredAfterTheAppWasStoppedStillThanksAndOffersNoSecondNote() {
+        val notes = FakeNotes(NoteAnswer.Sent)
+        // Android stopping the app takes the controller with it: the restored page meets a new one.
+        var controller = NoteController(notes, CoroutineScope(Dispatchers.Unconfined))
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent { PubkyMapsTheme { NoteRoute(controller, schober, onClose = {}) } }
+        compose.onNodeWithText("What is wrong or missing?").performTextInput("Closed for good.")
+        compose.onNodeWithText("Send").performClick()
+        compose.onNodeWithText("Thank you, your note is on the map").assertExists()
+        controller = NoteController(notes, CoroutineScope(Dispatchers.Unconfined))
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithText("Thank you, your note is on the map").assertExists()
+        compose.onNodeWithText("Send").assertDoesNotExist()
+        assertEquals(1, notes.sent.size)
+    }
+
+    @Test
+    fun aNotePageRestoredWhileItsNoteWasOnItsWaySaysItMayBeOnTheMapAlready() {
+        val notes = FakeNotes(NoteAnswer.Sent, hold = CompletableDeferred())
+        var controller = NoteController(notes, CoroutineScope(Dispatchers.Unconfined))
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent { PubkyMapsTheme { NoteRoute(controller, schober, onClose = {}) } }
+        compose.onNodeWithText("What is wrong or missing?").performTextInput("Closed for good.")
+        compose.onNodeWithText("Send").performClick()
+        compose.onNodeWithText("Sending").assertIsNotEnabled()
+        controller = NoteController(notes, CoroutineScope(Dispatchers.Unconfined))
+        restoration.emulateSavedInstanceStateRestore()
+        compose
+            .onNodeWithText("No answer in time: the note may be on the map already. Send it again only if it is not there tomorrow.")
+            .assertExists()
+        compose.onNodeWithText("Closed for good.").assertExists()
+    }
+
+    @Test
+    fun aNotePageRestoredAfterNoAnswerStillSaysTheNoteMayBeOnTheMap() {
+        val notes = FakeNotes(NoteAnswer.NoAnswer)
+        var controller = NoteController(notes, CoroutineScope(Dispatchers.Unconfined))
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent { PubkyMapsTheme { NoteRoute(controller, schober, onClose = {}) } }
+        compose.onNodeWithText("What is wrong or missing?").performTextInput("Closed for good.")
+        compose.onNodeWithText("Send").performClick()
+        val noAnswer = "No answer in time: the note may be on the map already. Send it again only if it is not there tomorrow."
+        compose.onNodeWithText(noAnswer).assertExists()
+        controller = NoteController(notes, CoroutineScope(Dispatchers.Unconfined))
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithText(noAnswer).assertExists()
     }
 
     private val page =
