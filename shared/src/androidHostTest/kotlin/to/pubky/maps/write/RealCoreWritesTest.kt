@@ -6,6 +6,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import to.pubky.maps.account.CoreFailure
 import to.pubky.maps.core.CollectionItem
+import to.pubky.maps.core.OwnCollection
 import to.pubky.maps.core.PubkyMapsCore
 import to.pubky.maps.core.buildBookmark
 import to.pubky.maps.core.buildCollection
@@ -101,6 +102,26 @@ class RealCoreWritesTest {
         val content = json(json(list.json)["content"]!!.jsonPrimitive.content)
         assertEquals("Where to sit with a book", content["description"]!!.jsonPrimitive.content, "the spec's field, as pubky.app reads it")
         assertFailsWith<CoreFailure> { writes.buildList(AUTHOR, "Coffee", "x".repeat(501), listOf(PLACE), private = false) }
+    }
+
+    @Test
+    fun aListReadFromTheHomeserverKeepsItsDescription() {
+        fun read(description: String?) =
+            OwnCollection(
+                "L1",
+                "L1",
+                "pubky://$AUTHOR/priv/social/v1/posts/L1",
+                true,
+                "Coffee",
+                description,
+                listOf(CollectionItem(PLACE, null)),
+            ).toOwnList()
+
+        assertEquals(
+            OwnList("pubky://$AUTHOR/priv/social/v1/posts/L1", Kept.Private, "Coffee", listOf(PLACE), description = "Where to sit"),
+            read(" Where to sit "),
+        )
+        assertEquals(null, read("  ").description, "a blank one is none")
     }
 
     @Test

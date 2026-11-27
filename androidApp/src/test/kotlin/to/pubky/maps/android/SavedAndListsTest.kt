@@ -3,6 +3,7 @@ package to.pubky.maps.android
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -13,6 +14,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.text.TextLayoutResult
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -360,7 +362,49 @@ class SavedAndListsTest {
         compose.onNode(create).assertIsEnabled()
         compose.onNodeWithText("$LIST_DESCRIPTION_MAX / $LIST_DESCRIPTION_MAX").assertExists()
 
+        state = state.copy(newDescription = "x".repeat(LIST_DESCRIPTION_MAX) + " ")
+        compose.onNode(create).assertIsEnabled()
+
+        state = state.copy(newDescription = "🍰".repeat(300))
+        compose.onNodeWithText("300 / $LIST_DESCRIPTION_MAX").assertExists()
+        compose.onNode(create).assertIsEnabled()
+
         state = state.copy(newDescription = "x".repeat(LIST_DESCRIPTION_MAX + 1))
         compose.onNode(create).assertIsNotEnabled()
+    }
+
+    @Test
+    fun anOpenedCollectionShowsAllOfItsDescription() {
+        val long =
+            "Quiet cafés with a seat by the window, good for an hour with a book or a laptop on a rainy afternoon, " +
+                "and a few that open early enough for a coffee before the first train."
+        compose.setContent {
+            PubkyMapsTheme(darkTheme = false) {
+                SavedScreen(
+                    state =
+                        SavedScreenState(
+                            places = emptyList(),
+                            lists = listOf(OwnList("phone:1", Kept.Phone, "Coffee", listOf(osm), description = long)),
+                        ),
+                    onOpen = { _, _ -> },
+                    onBack = {},
+                )
+            }
+        }
+
+        fun lines(): Int {
+            val layouts = mutableListOf<TextLayoutResult>()
+            compose
+                .onNodeWithText(long, useUnmergedTree = true)
+                .fetchSemanticsNode()
+                .config[SemanticsActions.GetTextLayoutResult]
+                .action!!
+                .invoke(layouts)
+            return layouts.single().lineCount.also { compose.waitForIdle() }
+        }
+        assertEquals("closed: two lines", 2, lines())
+
+        compose.onNodeWithText("Coffee").performClick()
+        assertTrue("opened: all of it (${lines()} lines)", lines() > 2)
     }
 }

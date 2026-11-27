@@ -32,6 +32,21 @@ const val LIST_NAME_MAX = 100
 /** The spec's limit for a list's description (`collection_description_max_length`). */
 const val LIST_DESCRIPTION_MAX = 500
 
+/**
+ * A description's length as the spec counts it: characters (code points, so an emoji is one) of the
+ * text that is sent, trimmed.
+ */
+internal fun descriptionLength(description: String): Int {
+    val sent = description.trim()
+    var count = 0
+    var i = 0
+    while (i < sent.length) {
+        i += if (sent[i].isHighSurrogate() && i + 1 < sent.length && sent[i + 1].isLowSurrogate()) 2 else 1
+        count++
+    }
+    return count
+}
+
 /** One of the user's lists on the list page. */
 data class ListChoice(
     val list: OwnList,
@@ -104,14 +119,15 @@ fun ListPage(
             )
             // Title and Description, as pubky.app's New Collection asks; the description shows under the
             // collection's name on the Bookmarks page and on pubky.app's collection cards.
+            val descriptionChars = descriptionLength(state.newDescription)
             OutlinedTextField(
                 value = state.newDescription,
                 onValueChange = onNewDescriptionChange,
                 label = { Text("Description (optional)") },
                 minLines = 2,
                 maxLines = 4,
-                isError = state.newDescription.length > LIST_DESCRIPTION_MAX,
-                supportingText = { Text("${state.newDescription.length} / $LIST_DESCRIPTION_MAX") },
+                isError = descriptionChars > LIST_DESCRIPTION_MAX,
+                supportingText = { Text("$descriptionChars / $LIST_DESCRIPTION_MAX") },
                 modifier = Modifier.fillMaxWidth(),
             )
             Column(Modifier.selectableGroup()) {
@@ -147,7 +163,7 @@ fun ListPage(
                     enabled =
                         state.newName.isNotBlank() &&
                             state.newName.length <= LIST_NAME_MAX &&
-                            state.newDescription.length <= LIST_DESCRIPTION_MAX,
+                            descriptionChars <= LIST_DESCRIPTION_MAX,
                 ) { Text("Create collection with this place") }
                 KeptBadge(state.newKept)
             }
