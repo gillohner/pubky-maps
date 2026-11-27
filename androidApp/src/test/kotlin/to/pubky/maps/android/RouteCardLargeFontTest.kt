@@ -34,9 +34,9 @@ import to.pubky.maps.routing.TravelMode
 import to.pubky.maps.ui.PubkyMapsTheme
 
 /**
- * The route card on a phone at twice the font size: every travel mode is shown whole (a row that
- * scrolled sideways cut "Walk" to "Wa"), and the swap button sits beside the line that says which way
- * the route goes, not in the modes' row.
+ * The route card on a phone at twice the font size: every travel mode is shown whole (none cut at
+ * the card's edge, as a row that scrolls sideways would cut "Walk" to "Wa"), and the swap button sits
+ * beside the line that says which way the route goes, not in the modes' row.
  */
 @RunWith(RobolectricTestRunner::class)
 // Real text measuring: the default graphics give every font size about the same width.

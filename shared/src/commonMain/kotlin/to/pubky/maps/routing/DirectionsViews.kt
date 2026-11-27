@@ -183,8 +183,8 @@ fun DirectionsCard(
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
         Column(Modifier.padding(start = 12.dp, top = 4.dp, bottom = 12.dp)) {
-            // The modes wrap rather than scroll: at a large font a scrolled row cut "Walk" to "Wa", a
-            // mode the user could not tell was there.
+            // The modes wrap rather than scroll: at a large font a row that scrolls would cut the last
+            // mode ("Wa"), one the user could not tell was there.
             Row(verticalAlignment = Alignment.Top) {
                 FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     for (mode in TravelMode.entries) {
@@ -213,25 +213,12 @@ fun DirectionsCard(
                         Text(routeWayText(directions), style = MaterialTheme.typography.bodyMedium)
                     } else {
                         routeStatusText(directions)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-                        val status = directions.status
-                        val settings = ui.onOpenSettings
-                        when {
-                            status is RouteStatus.NoLocation && status.permissionOff && settings != null -> {
-                                TextButton(onClick = settings) { Text("Settings") }
-                            }
-
-                            status is RouteStatus.NoLocation || status == RouteStatus.Unreachable -> {
-                                TextButton(onClick = ui.onRetry) { Text("Try again") }
-                            }
-
-                            else -> {}
-                        }
                     }
                 }
                 // Beside the line that says which way the route goes ("By car from your location"), as
                 // Google Maps' swap beside its start and destination fields: the way back from the place
-                // (home from a restaurant, a one-way street the other way) without leaving the page. Out
-                // of the modes' row, it no longer takes their width at a large font.
+                // (home from a restaurant, a one-way street the other way) without leaving the page. The
+                // modes' row keeps its width for the modes at a large font.
                 IconButton(
                     onClick = ui.onSwap,
                     modifier =
@@ -242,6 +229,20 @@ fun DirectionsCard(
                 ) {
                     Icon(RoutingIcons.SwapVert, contentDescription = "Swap start and destination")
                 }
+            }
+            // Under the status, not beside it: the swap button centres on the status line alone.
+            val status = directions.status
+            val settings = ui.onOpenSettings
+            when {
+                status is RouteStatus.NoLocation && status.permissionOff && settings != null -> {
+                    TextButton(onClick = settings) { Text("Settings") }
+                }
+
+                status is RouteStatus.NoLocation || status == RouteStatus.Unreachable -> {
+                    TextButton(onClick = ui.onRetry) { Text("Try again") }
+                }
+
+                else -> {}
             }
             val found = directions.status as? RouteStatus.Found
             if (found != null || directions.from != null) {
