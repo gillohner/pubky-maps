@@ -230,7 +230,7 @@ fun ListRoute(
 }
 
 /**
- * The Saved screen on the live [writes]; [onRefresh] reads the account again when it opens. [onOpen]
+ * The Bookmarks page on the live [writes]; [onRefresh] reads the account again when it opens. [onOpen]
  * hears the point's page for a place saved from the page of a point of its own ([savedPagePoint]).
  */
 @Composable

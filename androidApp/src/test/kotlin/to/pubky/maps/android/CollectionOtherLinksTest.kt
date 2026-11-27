@@ -3,6 +3,7 @@ package to.pubky.maps.android
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -73,7 +74,7 @@ class CollectionOtherLinksTest {
     @Test
     fun anOpenCollectionCountsTheLinksThatAreNotPlaces() {
         showSaved()
-        // Closed, a collection counts only its places.
+        // On the Bookmarks page, a collection counts only its places.
         compose.onNodeWithText("2 places").assertExists()
         compose.onAllNodesWithText("other link", substring = true).assertCountEquals(0)
 
@@ -81,10 +82,12 @@ class CollectionOtherLinksTest {
         compose.onNodeWithText("Lindenhof").assertExists()
         compose.onNodeWithText("3 other links not shown: they are not places.").assertExists()
 
+        compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithText("Weekend").performClick()
         compose.onNodeWithText("1 other link not shown: it is not a place.").assertExists()
         compose.onAllNodesWithText("3 other links", substring = true).assertCountEquals(0)
 
+        compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithText("Coffee in Zürich").performClick()
         compose.onAllNodesWithText("not shown", substring = true).assertCountEquals(0)
     }

@@ -4,13 +4,17 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -21,6 +25,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -32,11 +37,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import to.pubky.maps.links.GeoPoint
-import to.pubky.maps.place.PlaceIcons
 import to.pubky.maps.place.formatCoordinate
 import to.pubky.maps.ui.AppIcons
+import to.pubky.maps.ui.SystemBack
 
-/** A saved place or a list entry on the Saved screen: the place as stored, its name when known. */
+/** A bookmark or a collection entry on the Bookmarks page: the place as stored, its name when known. */
 data class SavedRow(
     val place: String,
     val name: String?,
@@ -48,25 +53,27 @@ data class SavedRow(
     val summary: String? = null,
 )
 
-/** What the Saved screen shows. */
+/** What the Bookmarks page shows. */
 data class SavedScreenState(
     val places: List<SavedRow>,
     val lists: List<OwnList>,
-    /** Names of places, for list entries. */
+    /** Names of places, for collection entries. */
     val names: Map<String, String> = emptyMap(),
-    /** What and where places are ([SavedRow.summary]), for list entries. */
+    /** What and where places are ([SavedRow.summary]), for collection entries. */
     val summaries: Map<String, String> = emptyMap(),
     /** The homeserver is being read again. */
     val refreshing: Boolean = false,
-    /** Signed in: saved places and lists on the homeserver are shown too. */
+    /** Signed in: bookmarks and collections on the homeserver are shown too. */
     val signedIn: Boolean = false,
 )
 
 private val MaxSavedWidth = 720.dp
 
 /**
- * The user's saved places and lists, from this phone's copy (refreshed from the homeserver when the
- * screen opens). A tap opens the place on the map, with the name the row shows.
+ * The user's bookmarks and collections, from this phone's copy (refreshed from the homeserver when the
+ * screen opens). A tap on a bookmark opens the place on the map, with the name the row shows; a tap on
+ * a collection opens its own page ([CollectionPage]), as Google Maps, CoMaps and OsmAnd open a list,
+ * and back (the arrow or the system back) returns here.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,106 +83,154 @@ fun SavedScreen(
     onBack: () -> Unit,
 ) {
     var openList by rememberSaveable { mutableStateOf<String?>(null) }
-    val placesToTellApart = rowsToTellApart(state.places.map { RowText(it.place, it.name, it.summary) })
-    val points = state.places.mapNotNull { row -> row.point?.let { row.place to it } }.toMap()
+    // Read from the state each time, so the page shows the collection as it changes; a collection
+    // that is gone (removed on another device) leaves its page for the Bookmarks page.
+    val open = openList?.let { uri -> state.lists.firstOrNull { it.uri == uri } }
+    // Forgotten once the collections are read without it, so it does not come back on screen by
+    // itself if a later read has it again. While there are none yet (a restored screen before this
+    // phone's copy is read) it is kept, so the page comes back.
+    LaunchedEffect(open, state.lists) { if (open == null && state.lists.isNotEmpty()) openList = null }
+    SystemBack(enabled = open != null) { openList = null }
+    // Here, not in BookmarksPage, which leaves while a collection is open: back finds the list where it was.
+    val bookmarksScroll = rememberLazyListState()
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Bookmarks") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(AppIcons.ArrowBack, contentDescription = "Back") } },
+                title = {
+                    Text(
+                        open?.name ?: "Bookmarks",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.semantics { heading() },
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = { if (open != null) openList = null else onBack() }) {
+                        Icon(AppIcons.ArrowBack, contentDescription = "Back")
+                    }
+                },
             )
         },
     ) { padding ->
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-            LazyColumn(contentPadding = padding, modifier = Modifier.widthIn(max = MaxSavedWidth).fillMaxWidth()) {
-                if (state.refreshing) item(key = "refreshing") { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-                item(key = "places-title") { Title("Places") }
-                if (state.places.isEmpty()) {
-                    item(key = "places-empty") {
-                        Hint("Places you bookmark show here. Tap Bookmark on a place's page.")
-                    }
-                }
-                items(state.places, key = { "place:${it.kept}:${it.place}" }) { row ->
-                    val where =
-                        whereText(row.place, row.point ?: points[row.place])
-                            .takeIf { RowText(row.place, row.name, row.summary).key() in placesToTellApart }
-                    PlaceRow(row, savedLine(row.summary, where), onOpen)
-                }
-                item(key = "lists-title") { Title("Your collections") }
-                if (state.lists.isEmpty()) {
-                    item(key = "lists-empty") { Hint("Collections you make show here. Tap Add to collection on a place's page.") }
-                }
-                state.lists.forEach { list ->
-                    item(key = "list:${list.uri}") {
-                        val expanded = openList == list.uri
-                        ListItem(
-                            headlineContent = { Text(list.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                            supportingContent = {
-                                Column {
-                                    // Under the name, as pubky.app's collection cards show it: two lines while
-                                    // closed, so a long one does not push the next collection away; all of it
-                                    // once opened.
-                                    list.description?.let {
-                                        Text(it, maxLines = if (expanded) Int.MAX_VALUE else 2, overflow = TextOverflow.Ellipsis)
-                                    }
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        KeptBadge(list.kept)
-                                        Text(if (list.items.size == 1) "1 place" else "${list.items.size} places")
-                                    }
-                                }
-                            },
-                            leadingContent = { Icon(WriteIcons.SavedList, contentDescription = null) },
-                            trailingContent = {
-                                Icon(
-                                    if (expanded) PlaceIcons.ExpandLess else PlaceIcons.ExpandMore,
-                                    contentDescription = if (expanded) "Hide its places" else "Show its places",
-                                )
-                            },
-                            modifier = Modifier.clickable { openList = if (expanded) null else list.uri },
-                        )
-                    }
-                    if (openList == list.uri) {
-                        val names = list.items.associateWith { list.names[it] ?: state.names[it] }
-                        val entriesToTellApart = rowsToTellApart(list.items.map { RowText(it, names[it], state.summaries[it]) })
-                        items(list.items, key = { "list:${list.uri}:$it" }) { place ->
-                            val name = names[place]
-                            val summary = state.summaries[place]
-                            val where =
-                                whereText(place, points[place]).takeIf { RowText(place, name, summary).key() in entriesToTellApart }
-                            val line = savedLine(summary, where)
-                            ListItem(
-                                headlineContent = { Text(name ?: placeText(place), maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                supportingContent =
-                                    line?.let {
-                                        { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                                    },
-                                modifier = Modifier.padding(start = 40.dp).clickable { onOpen(place, name) },
-                            )
-                        }
-                        // Another app's posts or profiles in the collection (pubky.app shares the folder): counted, not listed.
-                        if (list.otherItems > 0) {
-                            item(key = "list:${list.uri}:others") {
-                                val why = if (list.otherItems == 1) "it is not a place" else "they are not places"
-                                Text(
-                                    "${list.otherItemsText} not shown: $why.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(start = 56.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
-                                )
-                            }
-                        }
-                    }
-                }
-                if (!state.signedIn) {
-                    item(key = "signed-out") {
-                        Hint("Sign in to see the bookmarks and collections you keep on your homeserver.")
-                    }
-                }
+            if (open != null) {
+                CollectionPage(open, state, padding, onOpen)
+            } else {
+                BookmarksPage(state, padding, bookmarksScroll, onOpen, onOpenList = { openList = it })
             }
         }
+    }
+}
+
+@Composable
+private fun BookmarksPage(
+    state: SavedScreenState,
+    padding: PaddingValues,
+    scroll: LazyListState,
+    onOpen: (place: String, name: String?) -> Unit,
+    onOpenList: (uri: String) -> Unit,
+) {
+    val placesToTellApart = rowsToTellApart(state.places.map { RowText(it.place, it.name, it.summary) })
+    val points = state.places.mapNotNull { row -> row.point?.let { row.place to it } }.toMap()
+    LazyColumn(state = scroll, contentPadding = padding, modifier = Modifier.widthIn(max = MaxSavedWidth).fillMaxWidth()) {
+        if (state.refreshing) item(key = "refreshing") { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+        item(key = "places-title") { Title("Places") }
+        if (state.places.isEmpty()) {
+            item(key = "places-empty") {
+                Hint("Places you bookmark show here. Tap Bookmark on a place's page.")
+            }
+        }
+        items(state.places, key = { "place:${it.kept}:${it.place}" }) { row ->
+            val where =
+                whereText(row.place, row.point ?: points[row.place])
+                    .takeIf { RowText(row.place, row.name, row.summary).key() in placesToTellApart }
+            PlaceRow(row, savedLine(row.summary, where), onOpen)
+        }
+        item(key = "lists-title") { Title("Your collections") }
+        if (state.lists.isEmpty()) {
+            item(key = "lists-empty") { Hint("Collections you make show here. Tap Add to collection on a place's page.") }
+        }
+        items(state.lists, key = { "list:${it.uri}" }) { list ->
+            ListItem(
+                headlineContent = { Text(list.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                supportingContent = {
+                    Column {
+                        // Under the name, as pubky.app's collection cards show it: two lines here, so a
+                        // long one does not push the next collection away; all of it on its page.
+                        list.description?.let { Text(it, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+                        CollectionFacts(list)
+                    }
+                },
+                leadingContent = { Icon(WriteIcons.SavedList, contentDescription = null) },
+                modifier = Modifier.clickable(onClickLabel = "Open collection") { onOpenList(list.uri) },
+            )
+        }
+        if (!state.signedIn) {
+            item(key = "signed-out") {
+                Hint("Sign in to see the bookmarks and collections you keep on your homeserver.")
+            }
+        }
+    }
+}
+
+/**
+ * One collection's page: all of its description, where it is kept and how many places it holds, then
+ * its places (a tap opens one on the map) and a line for the items that are not places. Its name is
+ * the top bar's title, as Google Maps' list page puts the list's name at the top.
+ */
+@Composable
+private fun CollectionPage(
+    list: OwnList,
+    state: SavedScreenState,
+    padding: PaddingValues,
+    onOpen: (place: String, name: String?) -> Unit,
+) {
+    val points = state.places.mapNotNull { row -> row.point?.let { row.place to it } }.toMap()
+    val names = list.items.associateWith { list.names[it] ?: state.names[it] }
+    val entriesToTellApart = rowsToTellApart(list.items.map { RowText(it, names[it], state.summaries[it]) })
+    LazyColumn(contentPadding = padding, modifier = Modifier.widthIn(max = MaxSavedWidth).fillMaxWidth()) {
+        if (state.refreshing) item(key = "refreshing") { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+        item(key = "about") {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+            ) {
+                list.description?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
+                CollectionFacts(list)
+            }
+        }
+        if (list.items.isEmpty()) {
+            item(key = "empty") { Hint("No places in it yet. Tap Add to collection on a place's page.") }
+        }
+        // Keyed by position: a collection made elsewhere may hold the same link twice, and two equal keys crash the list.
+        itemsIndexed(list.items, key = { index, _ -> "item:$index" }) { _, place ->
+            val name = names[place]
+            val summary = state.summaries[place]
+            val where = whereText(place, points[place]).takeIf { RowText(place, name, summary).key() in entriesToTellApart }
+            val line = savedLine(summary, where)
+            ListItem(
+                headlineContent = { Text(name ?: placeText(place), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                supportingContent = line?.let { { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
+                leadingContent = { Icon(AppIcons.Place, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                modifier = Modifier.clickable { onOpen(place, name) },
+            )
+        }
+        // Another app's posts or profiles in the collection (pubky.app shares the folder): counted, not listed.
+        if (list.otherItems > 0) {
+            item(key = "others") {
+                val why = if (list.otherItems == 1) "it is not a place" else "they are not places"
+                Hint("${list.otherItemsText} not shown: $why.")
+            }
+        }
+    }
+}
+
+/** Where a collection is kept and how many places it holds ("Public · 2 places"). */
+@Composable
+private fun CollectionFacts(list: OwnList) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        KeptBadge(list.kept)
+        Text(if (list.items.size == 1) "1 place" else "${list.items.size} places")
     }
 }
 

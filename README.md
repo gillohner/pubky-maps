@@ -227,7 +227,8 @@ shows only its places; other Pubky apps' objects in it (pubky.app posts, profile
 shared) are counted under its places ("3 other links not shown") and kept when the app edits it, and
 a collection that holds only such objects is left out. Bookmark keeps the place privately on the homeserver or on the phone only, per the
 setting; the **Bookmarks** screen (from the search page) lists bookmarks and collections (bookmarks of
-other Pubky apps' objects in the same folder, such as pubky.app posts, are left out), and the map
+other Pubky apps' objects in the same folder, such as pubky.app posts, are left out); a collection
+opens as its own page with all of its description and its places, and back returns to Bookmarks. The map
 shows each bookmarked place as a purple bookmark badge that opens it. The homeserver's bookmark holds
 only the link, so the place's name, point and summary (what and where it is, "Café · Napfgasse 4,
 8001 Zürich", as its page says once its card and offline district and town are in) are kept on the
