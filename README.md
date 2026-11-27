@@ -154,7 +154,7 @@ name, what the place is, the distance and the address, Directions, Start here, S
 their credits; OpenStreetMap details from the card's facts when Pinakes serves them, or, when the card brings none, those an offline area keeps (opening hours with open or closed now, phone,
 website, wheelchair access, cuisine); Pubky tags with their counts and who tagged (people the user
 follows first, the user's own tags marked); photos and posts about the place from Nexus, newest first;
-the public collections that hold it, each with how many places it holds (other apps' objects in it, such as pubky.app posts, are not counted); and the same place on other services ("Also on"). Each part loads on
+the public collections that hold it, each with how many places it holds (other apps' objects in it, such as pubky.app posts, are not counted, and no count is shown when none of its items can be a place); and the same place on other services ("Also on"). Each part loads on
 its own and is hidden while it has nothing. What a page showed is kept on the phone, so a place
 reopens offline with a note saying when its copy is from; the user's own tags and collections in it are shown
 only to the account that saw them. Typed coordinates and a dropped pin open a page without any

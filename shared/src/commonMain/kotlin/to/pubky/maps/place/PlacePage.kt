@@ -1179,8 +1179,7 @@ private fun ListsSection(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     KeptBadge(list.kept)
                     Spacer(Modifier.width(8.dp))
-                    val places = if (list.items.size == 1) "1 place" else "${list.items.size} places"
-                    SmallText("Your collection · $places" + if (list.pending) " · not sent yet" else "")
+                    SmallText(placeListLine("Your collection", list.items.size) + if (list.pending) " · not sent yet" else "")
                 }
             }
         }
