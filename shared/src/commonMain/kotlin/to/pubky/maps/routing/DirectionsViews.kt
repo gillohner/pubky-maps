@@ -2,7 +2,6 @@ package to.pubky.maps.routing
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -13,7 +12,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -166,8 +164,8 @@ fun routeStatusText(directions: Directions): String? =
     }
 
 /**
- * The directions on a place page: the modes and the button that swaps start and destination, then the
- * route's time and length (the map draws its line) and which way it goes, with the button that opens
+ * The directions on a place page: the modes, then the route's time and length (the map draws its line)
+ * and which way it goes beside the button that swaps start and destination, then the button that opens
  * its steps ([RouteStepList]), or what stands in its way; the routing server's credits under a found
  * route. A step tapped in the list shows above the button with the
  * way to the previous and the next one ([StepPreview]). Directions from a chosen start
@@ -185,11 +183,10 @@ fun DirectionsCard(
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
         Column(Modifier.padding(start = 12.dp, top = 4.dp, bottom = 12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Row(
-                    Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
+            // The modes wrap rather than scroll: at a large font a row that scrolls would cut the last
+            // mode ("Wa"), one the user could not tell was there.
+            Row(verticalAlignment = Alignment.Top) {
+                FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     for (mode in TravelMode.entries) {
                         FilterChip(
                             selected = mode == directions.mode,
@@ -199,8 +196,29 @@ fun DirectionsCard(
                         )
                     }
                 }
-                // As in Google Maps' directions: the way back from the place (home from a restaurant,
-                // a one-way street the other way) without leaving the page.
+                IconButton(onClick = ui.onClose) { Icon(AppIcons.Close, contentDescription = "Close directions") }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(
+                    Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite },
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    val found = directions.status as? RouteStatus.Found
+                    if (found != null) {
+                        Text(
+                            "${durationText(found.route.seconds)} · ${formatDistance(found.route.meters)}",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Text(routeWayText(directions), style = MaterialTheme.typography.bodyMedium)
+                    } else {
+                        routeStatusText(directions)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                    }
+                }
+                // Beside the line that says which way the route goes ("By car from your location"), as
+                // Google Maps' swap beside its start and destination fields: the way back from the place
+                // (home from a restaurant, a one-way street the other way) without leaving the page. The
+                // modes' row keeps its width for the modes at a large font.
                 IconButton(
                     onClick = ui.onSwap,
                     modifier =
@@ -211,36 +229,20 @@ fun DirectionsCard(
                 ) {
                     Icon(RoutingIcons.SwapVert, contentDescription = "Swap start and destination")
                 }
-                IconButton(onClick = ui.onClose) { Icon(AppIcons.Close, contentDescription = "Close directions") }
             }
-            Column(
-                Modifier.padding(end = 12.dp).semantics { liveRegion = LiveRegionMode.Polite },
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                val found = directions.status as? RouteStatus.Found
-                if (found != null) {
-                    Text(
-                        "${durationText(found.route.seconds)} · ${formatDistance(found.route.meters)}",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Medium,
-                    )
-                    Text(routeWayText(directions), style = MaterialTheme.typography.bodyMedium)
-                } else {
-                    routeStatusText(directions)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-                    val status = directions.status
-                    val settings = ui.onOpenSettings
-                    when {
-                        status is RouteStatus.NoLocation && status.permissionOff && settings != null -> {
-                            TextButton(onClick = settings) { Text("Settings") }
-                        }
-
-                        status is RouteStatus.NoLocation || status == RouteStatus.Unreachable -> {
-                            TextButton(onClick = ui.onRetry) { Text("Try again") }
-                        }
-
-                        else -> {}
-                    }
+            // Under the status, not beside it: the swap button centres on the status line alone.
+            val status = directions.status
+            val settings = ui.onOpenSettings
+            when {
+                status is RouteStatus.NoLocation && status.permissionOff && settings != null -> {
+                    TextButton(onClick = settings) { Text("Settings") }
                 }
+
+                status is RouteStatus.NoLocation || status == RouteStatus.Unreachable -> {
+                    TextButton(onClick = ui.onRetry) { Text("Try again") }
+                }
+
+                else -> {}
             }
             val found = directions.status as? RouteStatus.Found
             if (found != null || directions.from != null) {
