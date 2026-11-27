@@ -370,4 +370,130 @@ class DirectionsControllerTest {
             assertNull(c.directions.value?.routeToFit)
             assertNotNull(c.directions.value?.stepTapToMoveTo)
         }
+
+    @Test
+    fun aSwapAsksForTheRouteFromThePlaceBackToTheUserAndASecondOneTurnsItAroundAgain() =
+        runTest {
+            val routing = FakeRouting { RouteAnswer.Found(route, "s") }
+            val c = controller(routing)
+            c.start("osm:node/1", kunsthaus, here)
+            advanceUntilIdle()
+            c.routeFitted(route)
+            c.swap()
+            assertEquals(RouteStatus.Finding, c.directions.value?.status)
+            advanceUntilIdle()
+            val back = c.directions.value!!
+            assertTrue(back.reversed)
+            assertTrue(back.status is RouteStatus.Found)
+            // The route back is fitted as a new route.
+            assertNotNull(back.routeToFit)
+            c.swap()
+            advanceUntilIdle()
+            assertEquals(false, c.directions.value?.reversed)
+            assertEquals(
+                listOf(
+                    Triple(here, kunsthaus, TravelMode.Car),
+                    Triple(kunsthaus, here, TravelMode.Car),
+                    Triple(here, kunsthaus, TravelMode.Car),
+                ),
+                routing.asked,
+            )
+        }
+
+    @Test
+    fun aSwapWhileThePositionIsAwaitedIsKeptForItsRoute() =
+        runTest {
+            val routing = FakeRouting { RouteAnswer.Found(route, "s") }
+            val c = controller(routing)
+            c.start("osm:node/1", kunsthaus, null)
+            c.swap()
+            assertEquals(RouteStatus.Locating, c.directions.value?.status)
+            assertTrue(routing.asked.isEmpty())
+            c.located(here)
+            advanceUntilIdle()
+            assertEquals(listOf(Triple(kunsthaus, here, TravelMode.Car)), routing.asked)
+            assertTrue(c.directions.value!!.reversed)
+        }
+
+    @Test
+    fun aSwapReplacesTheRequestStillRunning() =
+        runTest {
+            val routing = FakeRouting { RouteAnswer.Found(route, "s") }
+            routing.gate = CompletableDeferred()
+            val c = DirectionsController(routing, TestScope(StandardTestDispatcher(testScheduler)))
+            c.start("osm:node/1", kunsthaus, here)
+            runCurrent()
+            c.swap()
+            runCurrent()
+            routing.gate!!.complete(Unit)
+            advanceUntilIdle()
+            assertEquals(listOf(Triple(here, kunsthaus, TravelMode.Car), Triple(kunsthaus, here, TravelMode.Car)), routing.asked)
+            val directions = c.directions.value!!
+            assertTrue(directions.reversed)
+            assertTrue(directions.status is RouteStatus.Found)
+        }
+
+    @Test
+    fun theSwappedRouteKeepsItsOpenStepsAndModeButNotTheTappedStep() =
+        runTest {
+            val routing = FakeRouting { RouteAnswer.Found(route.copy(steps = steps), "s") }
+            val c = stepsOpen(routing)
+            c.selectMode(TravelMode.Walk)
+            advanceUntilIdle()
+            c.showStep(1)
+            c.swap()
+            assertNull(c.directions.value?.markedStep)
+            advanceUntilIdle()
+            val back = c.directions.value!!
+            assertEquals(TravelMode.Walk, back.mode)
+            assertTrue(back.stepsShown)
+            assertEquals(steps, back.shownSteps)
+            assertEquals(Triple(kunsthaus, here, TravelMode.Walk), routing.asked.last())
+        }
+
+    @Test
+    fun tryAgainKeepsTheWayRoundAndDirectionsOrTheNextPlaceStartFromTheUser() =
+        runTest {
+            val routing = FakeRouting { RouteAnswer.Found(route, "s") }
+            val c = controller(routing)
+            c.start("osm:node/1", kunsthaus, null)
+            c.locationMissing(permissionOff = false)
+            c.swap()
+            // Try again for the missing position starts the same directions anew, the same way round.
+            c.start("osm:node/1", kunsthaus, here, reversed = c.directions.value!!.reversed)
+            advanceUntilIdle()
+            assertTrue(c.directions.value!!.reversed)
+            assertEquals(Triple(kunsthaus, here, TravelMode.Car), routing.asked.last())
+            // The page's Directions again: to the place.
+            c.start("osm:node/1", kunsthaus, here)
+            advanceUntilIdle()
+            assertEquals(false, c.directions.value?.reversed)
+            assertEquals(Triple(here, kunsthaus, TravelMode.Car), routing.asked.last())
+            c.swap()
+            c.close()
+            c.start("osm:node/2", kunsthaus, here)
+            advanceUntilIdle()
+            assertEquals(false, c.directions.value?.reversed)
+            assertEquals(Triple(here, kunsthaus, TravelMode.Car), routing.asked.last())
+            // Without directions a swap does nothing.
+            c.close()
+            c.swap()
+            assertNull(c.directions.value)
+        }
+
+    @Test
+    fun eachStartIsAnotherOpeningAndItsOtherModesAndWayRoundAreTheSame() =
+        runTest {
+            val c = controller(FakeRouting { RouteAnswer.Found(route, "s") })
+            c.start("osm:node/1", kunsthaus, null)
+            val first = c.directions.value!!.opening
+            c.swap()
+            c.selectMode(TravelMode.Bike)
+            c.located(here)
+            advanceUntilIdle()
+            assertEquals(first, c.directions.value!!.opening)
+            c.close()
+            c.start("osm:node/1", kunsthaus, null)
+            assertTrue(c.directions.value!!.opening != first)
+        }
 }

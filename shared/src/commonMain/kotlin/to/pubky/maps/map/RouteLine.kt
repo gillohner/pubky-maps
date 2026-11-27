@@ -60,7 +60,7 @@ internal fun RouteLine(points: List<GeoPoint>) {
 
 /**
  * The route step the user tapped in the list: a white dot ringed in the route's blue on the line,
- * as Google Maps marks a step; apart from the red pin of the place at the route's end.
+ * as Google Maps marks a step; apart from the red pin of the place at one of the route's ends.
  */
 @Composable
 internal fun RouteStepMark(point: GeoPoint) {
