@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -35,7 +34,9 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.constrainWidth
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import to.pubky.maps.ui.AppIcons
+import to.pubky.maps.ui.TextIcon
 
 /** Write pages are capped at this width and centred on tablets, like the settings pages. */
 private val MaxWriteWidth = 640.dp
@@ -72,14 +73,14 @@ fun KeptBadge(
         modifier = modifier,
     ) {
         Row(Modifier.padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(
+            TextIcon(
                 when (kept) {
                     Kept.Public -> WriteIcons.Public
                     Kept.Private -> WriteIcons.Lock
                     Kept.Phone -> WriteIcons.PhoneOnly
                 },
                 contentDescription = null,
-                modifier = Modifier.size(14.dp),
+                size = 14.sp,
             )
             Spacer(Modifier.width(4.dp))
             Text(kept.badgeText, style = MaterialTheme.typography.labelLarge)

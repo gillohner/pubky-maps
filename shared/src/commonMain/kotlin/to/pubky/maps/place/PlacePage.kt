@@ -69,6 +69,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.delay
 import kotlinx.datetime.LocalDateTime
@@ -78,6 +79,7 @@ import to.pubky.maps.account.shortPubkyId
 import to.pubky.maps.links.LinkProvider
 import to.pubky.maps.links.OpenInAction
 import to.pubky.maps.ui.AppIcons
+import to.pubky.maps.ui.TextIcon
 import to.pubky.maps.write.Kept
 import to.pubky.maps.write.KeptBadge
 import to.pubky.maps.write.OwnList
@@ -262,10 +264,10 @@ private fun OfflineNote(
             else -> "Some Pubky details could not load."
         }
     Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(
+        TextIcon(
             AppIcons.CloudOff,
             contentDescription = null,
-            modifier = Modifier.size(16.dp),
+            size = 16.sp,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.width(6.dp))
@@ -866,10 +868,10 @@ private fun TagsSection(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             if (tag.label in pending) {
-                                Icon(
+                                TextIcon(
                                     WriteIcons.Pending,
                                     contentDescription = pendingText(writes?.waiting == true, writes?.busy == true),
-                                    modifier = Modifier.size(14.dp),
+                                    size = 14.sp,
                                 )
                                 Spacer(Modifier.width(4.dp))
                             }
@@ -891,7 +893,7 @@ private fun TagsSection(
                     modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = writes.onTag),
                 ) {
                     Row(Modifier.heightIn(min = 36.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(AppIcons.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        TextIcon(AppIcons.Add, contentDescription = null, size = 16.sp)
                         Spacer(Modifier.width(4.dp))
                         Text("Add tag", style = MaterialTheme.typography.labelLarge)
                     }
