@@ -1,0 +1,1525 @@
+{
+ "version": 8,
+ "sprite": [
+  {
+   "id": "base",
+   "url": "https://tiles.versatiles.org/assets/sprites/base"
+  }
+ ],
+ "sources": {
+  "versatiles-shortbread": {
+   "type": "vector",
+   "tiles": [
+    "https://tiles.versatiles.org/tiles/osm-vector/{z}/{x}/{y}"
+   ]
+  }
+ },
+ "layers": [
+  {
+   "id": "poi-amenity",
+   "type": "symbol",
+   "source-layer": "pois",
+   "filter": [
+    "to-boolean",
+    [
+     "get",
+     "amenity"
+    ]
+   ],
+   "minzoom": 14,
+   "layout": {
+    "icon-size": [
+     "interpolate",
+     [
+      "exponential",
+      2
+     ],
+     [
+      "zoom"
+     ],
+     16,
+     0.4,
+     20,
+     1.2
+    ],
+    "text-field": [
+     "get",
+     "name"
+    ],
+    "text-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     17,
+     0,
+     18,
+     11,
+     22,
+     13
+    ],
+    "text-anchor": "top",
+    "text-offset": [
+     0,
+     1.2
+    ],
+    "text-optional": true,
+    "symbol-placement": "point",
+    "icon-optional": true,
+    "icon-image": [
+     "match",
+     [
+      "get",
+      "amenity"
+     ],
+     "arts_centre",
+     "base:icon-art_gallery",
+     "clinic",
+     "base:icon-doctor",
+     "courthouse",
+     "base:icon-justice",
+     "food_court",
+     "base:icon-restaurant",
+     "public_building",
+     "base:icon-town_hall",
+     "university",
+     "base:icon-college",
+     "atm",
+     "base:icon-atm",
+     "bank",
+     "base:icon-bank",
+     "bar",
+     "base:icon-bar",
+     "bench",
+     "base:icon-bench",
+     "bicycle_rental",
+     "base:icon-bicycle_share",
+     "biergarten",
+     "base:icon-beer_mug",
+     "cafe",
+     "base:icon-cafe",
+     "car_rental",
+     "base:icon-car_rental",
+     "car_sharing",
+     "base:icon-car_rental",
+     "car_wash",
+     "base:icon-car_wash",
+     "cinema",
+     "base:icon-cinema",
+     "college",
+     "base:icon-college",
+     "community_centre",
+     "base:icon-community",
+     "dentist",
+     "base:icon-dentist",
+     "doctors",
+     "base:icon-doctor",
+     "drinking_water",
+     "base:icon-drinking_water",
+     "embassy",
+     "base:icon-embassy",
+     "fast_food",
+     "base:icon-fast_food",
+     "fire_station",
+     "base:icon-fire_station",
+     "fountain",
+     "base:icon-fountain",
+     "fuel",
+     "base:icon-fuel_pump",
+     "grave_yard",
+     "base:icon-cemetery",
+     "hospital",
+     "base:icon-hospital",
+     "hunting_stand",
+     "base:icon-hunting_stand",
+     "library",
+     "base:icon-library",
+     "marketplace",
+     "base:icon-marketplace",
+     "nightclub",
+     "base:icon-nightclub",
+     "nursing_home",
+     "base:icon-nursing_home",
+     "pharmacy",
+     "base:icon-pill",
+     "place_of_worship",
+     [
+      "match",
+      [
+       "get",
+       "religion"
+      ],
+      "christian",
+      "base:icon-latin_cross",
+      "muslim",
+      "base:icon-star_and_crescent",
+      "jewish",
+      "base:icon-star_of_david",
+      "buddhist",
+      "base:icon-dharma_wheel",
+      "hindu",
+      "base:icon-om",
+      "sikh",
+      "base:icon-khanda",
+      "taoist",
+      "base:icon-yin_yang",
+      "base:icon-person_kneeling_and_praying"
+     ],
+     "police",
+     "base:icon-police_officer",
+     "post_box",
+     "base:icon-postbox",
+     "post_office",
+     "base:icon-post",
+     "prison",
+     "base:icon-prison",
+     "pub",
+     "base:icon-pint_glass",
+     "recycling",
+     "base:icon-recycling",
+     "restaurant",
+     "base:icon-restaurant",
+     "school",
+     "base:icon-school",
+     "shelter",
+     "base:icon-shelter",
+     "telephone",
+     "base:icon-telephone",
+     "theatre",
+     "base:icon-theater",
+     "toilets",
+     "base:icon-restrooms",
+     "townhall",
+     "base:icon-town_hall",
+     "vending_machine",
+     "base:icon-vending_machine",
+     "veterinary",
+     "base:icon-veterinary",
+     "waste_basket",
+     "base:icon-waste_basket",
+     "base:transport-information"
+    ],
+    "text-font": [
+     "noto_sans_bold"
+    ]
+   },
+   "paint": {
+    "icon-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     16,
+     0,
+     17,
+     0.4
+    ],
+    "text-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     18,
+     0,
+     18.5,
+     0.4
+    ],
+    "icon-color": "rgb(102,102,102)",
+    "text-color": "rgb(102,102,102)",
+    "text-halo-color": "rgb(255,255,255)",
+    "text-halo-width": 0.5,
+    "text-halo-blur": 0.5
+   },
+   "source": "versatiles-shortbread"
+  },
+  {
+   "id": "poi-leisure",
+   "type": "symbol",
+   "source-layer": "pois",
+   "filter": [
+    "to-boolean",
+    [
+     "get",
+     "leisure"
+    ]
+   ],
+   "minzoom": 14,
+   "layout": {
+    "icon-size": [
+     "interpolate",
+     [
+      "exponential",
+      2
+     ],
+     [
+      "zoom"
+     ],
+     16,
+     0.4,
+     20,
+     1.2
+    ],
+    "text-field": [
+     "get",
+     "name"
+    ],
+    "text-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     17,
+     0,
+     18,
+     11,
+     22,
+     13
+    ],
+    "text-anchor": "top",
+    "text-offset": [
+     0,
+     1.2
+    ],
+    "text-optional": true,
+    "symbol-placement": "point",
+    "icon-optional": true,
+    "icon-image": [
+     "match",
+     [
+      "get",
+      "leisure"
+     ],
+     "dog_park",
+     "base:icon-dog",
+     "golf_course",
+     "base:icon-golf",
+     "ice_rink",
+     "base:icon-ice_rink",
+     "pitch",
+     "base:icon-pitch",
+     "playground",
+     "base:icon-seesaw",
+     "stadium",
+     "base:icon-stadium",
+     "swimming_pool",
+     "base:icon-swimming",
+     "water_park",
+     "base:icon-water_park",
+     "base:icon-sports"
+    ],
+    "text-font": [
+     "noto_sans_bold"
+    ]
+   },
+   "paint": {
+    "icon-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     16,
+     0,
+     17,
+     0.4
+    ],
+    "text-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     18,
+     0,
+     18.5,
+     0.4
+    ],
+    "icon-color": "rgb(102,102,102)",
+    "text-color": "rgb(102,102,102)",
+    "text-halo-color": "rgb(255,255,255)",
+    "text-halo-width": 0.5,
+    "text-halo-blur": 0.5
+   },
+   "source": "versatiles-shortbread"
+  },
+  {
+   "id": "poi-tourism",
+   "type": "symbol",
+   "source-layer": "pois",
+   "filter": [
+    "to-boolean",
+    [
+     "get",
+     "tourism"
+    ]
+   ],
+   "minzoom": 14,
+   "layout": {
+    "icon-size": [
+     "interpolate",
+     [
+      "exponential",
+      2
+     ],
+     [
+      "zoom"
+     ],
+     16,
+     0.4,
+     20,
+     1.2
+    ],
+    "text-field": [
+     "get",
+     "name"
+    ],
+    "text-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     17,
+     0,
+     18,
+     11,
+     22,
+     13
+    ],
+    "text-anchor": "top",
+    "text-offset": [
+     0,
+     1.2
+    ],
+    "text-optional": true,
+    "symbol-placement": "point",
+    "icon-optional": true,
+    "icon-image": [
+     "match",
+     [
+      "get",
+      "tourism"
+     ],
+     "artwork",
+     "base:icon-artwork",
+     "alpine_hut",
+     "base:icon-chalet",
+     "bed_and_breakfast",
+     "base:icon-lodging",
+     "camp_site",
+     "base:icon-campsite",
+     "caravan_site",
+     "base:icon-caravan",
+     "guest_house",
+     "base:icon-lodging",
+     "hostel",
+     "base:icon-lodging",
+     "hotel",
+     "base:icon-lodging",
+     "motel",
+     "base:icon-lodging",
+     "theme_park",
+     "base:icon-amusement_park",
+     "chalet",
+     "base:icon-chalet",
+     "information",
+     "base:transport-information",
+     "picnic_site",
+     "base:icon-picnic_site",
+     "viewpoint",
+     "base:icon-viewpoint",
+     "zoo",
+     "base:icon-zoo",
+     "base:transport-information"
+    ],
+    "text-font": [
+     "noto_sans_bold"
+    ]
+   },
+   "paint": {
+    "icon-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     16,
+     0,
+     17,
+     0.4
+    ],
+    "text-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     18,
+     0,
+     18.5,
+     0.4
+    ],
+    "icon-color": "rgb(102,102,102)",
+    "text-color": "rgb(102,102,102)",
+    "text-halo-color": "rgb(255,255,255)",
+    "text-halo-width": 0.5,
+    "text-halo-blur": 0.5
+   },
+   "source": "versatiles-shortbread"
+  },
+  {
+   "id": "poi-shop",
+   "type": "symbol",
+   "source-layer": "pois",
+   "filter": [
+    "to-boolean",
+    [
+     "get",
+     "shop"
+    ]
+   ],
+   "minzoom": 14,
+   "layout": {
+    "icon-size": [
+     "interpolate",
+     [
+      "exponential",
+      2
+     ],
+     [
+      "zoom"
+     ],
+     16,
+     0.4,
+     20,
+     1.2
+    ],
+    "text-field": [
+     "get",
+     "name"
+    ],
+    "text-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     17,
+     0,
+     18,
+     11,
+     22,
+     13
+    ],
+    "text-anchor": "top",
+    "text-offset": [
+     0,
+     1.2
+    ],
+    "text-optional": true,
+    "symbol-placement": "point",
+    "icon-optional": true,
+    "icon-image": [
+     "match",
+     [
+      "get",
+      "shop"
+     ],
+     "alcohol",
+     "base:icon-alcohol_shop",
+     "bakery",
+     "base:icon-bakery",
+     "beauty",
+     "base:icon-beauty",
+     "beverages",
+     "base:icon-beverages",
+     "books",
+     "base:icon-books",
+     "butcher",
+     "base:icon-butcher",
+     "chemist",
+     "base:icon-tube_and_toothbrush",
+     "clothes",
+     "base:icon-clothes",
+     "doityourself",
+     "base:icon-do_it_yourself",
+     "dry_cleaning",
+     "base:icon-dry_cleaning",
+     "florist",
+     "base:icon-florist",
+     "furniture",
+     "base:icon-furniture",
+     "garden_centre",
+     "base:icon-garden_center",
+     "general",
+     "base:icon-shop",
+     "gift",
+     "base:icon-gift",
+     "greengrocer",
+     "base:icon-greengrocer",
+     "hairdresser",
+     "base:icon-scissors_and_comb",
+     "hardware",
+     "base:icon-hardware",
+     "jewelry",
+     "base:icon-ring",
+     "kiosk",
+     "base:icon-newspaper",
+     "laundry",
+     "base:icon-laundry",
+     "newsagent",
+     "base:icon-newsagent",
+     "optician",
+     "base:icon-optician",
+     "outdoor",
+     "base:icon-outdoor",
+     "shoes",
+     "base:icon-shoes",
+     "sports",
+     "base:icon-sports",
+     "stationery",
+     "base:icon-stationery",
+     "toys",
+     "base:icon-rocking_horse",
+     "travel_agency",
+     "base:icon-travel_agent",
+     "video",
+     "base:icon-video",
+     "base:icon-shop"
+    ],
+    "text-font": [
+     "noto_sans_bold"
+    ]
+   },
+   "paint": {
+    "icon-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     16,
+     0,
+     17,
+     0.4
+    ],
+    "text-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     18,
+     0,
+     18.5,
+     0.4
+    ],
+    "icon-color": "rgb(102,102,102)",
+    "text-color": "rgb(102,102,102)",
+    "text-halo-color": "rgb(255,255,255)",
+    "text-halo-width": 0.5,
+    "text-halo-blur": 0.5
+   },
+   "source": "versatiles-shortbread"
+  },
+  {
+   "id": "poi-man_made",
+   "type": "symbol",
+   "source-layer": "pois",
+   "filter": [
+    "to-boolean",
+    [
+     "get",
+     "man_made"
+    ]
+   ],
+   "minzoom": 14,
+   "layout": {
+    "icon-size": [
+     "interpolate",
+     [
+      "exponential",
+      2
+     ],
+     [
+      "zoom"
+     ],
+     16,
+     0.4,
+     20,
+     1.2
+    ],
+    "text-field": [
+     "get",
+     "name"
+    ],
+    "text-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     17,
+     0,
+     18,
+     11,
+     22,
+     13
+    ],
+    "text-anchor": "top",
+    "text-offset": [
+     0,
+     1.2
+    ],
+    "text-optional": true,
+    "symbol-placement": "point",
+    "icon-optional": true,
+    "icon-image": [
+     "match",
+     [
+      "get",
+      "man_made"
+     ],
+     "lighthouse",
+     "base:icon-lighthouse",
+     "wastewater_plant",
+     "base:icon-wastewater",
+     "water_well",
+     "base:icon-drinking_water",
+     "water_works",
+     "base:icon-waterworks",
+     "surveillance",
+     "base:icon-surveillance",
+     "tower",
+     "base:icon-observation_tower",
+     "watermill",
+     "base:icon-watermill",
+     "windmill",
+     "base:icon-windmill",
+     "base:transport-information"
+    ],
+    "text-font": [
+     "noto_sans_bold"
+    ]
+   },
+   "paint": {
+    "icon-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     16,
+     0,
+     17,
+     0.4
+    ],
+    "text-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     18,
+     0,
+     18.5,
+     0.4
+    ],
+    "icon-color": "rgb(102,102,102)",
+    "text-color": "rgb(102,102,102)",
+    "text-halo-color": "rgb(255,255,255)",
+    "text-halo-width": 0.5,
+    "text-halo-blur": 0.5
+   },
+   "source": "versatiles-shortbread"
+  },
+  {
+   "id": "poi-historic",
+   "type": "symbol",
+   "source-layer": "pois",
+   "filter": [
+    "to-boolean",
+    [
+     "get",
+     "historic"
+    ]
+   ],
+   "minzoom": 14,
+   "layout": {
+    "icon-size": [
+     "interpolate",
+     [
+      "exponential",
+      2
+     ],
+     [
+      "zoom"
+     ],
+     16,
+     0.4,
+     20,
+     1.2
+    ],
+    "text-field": [
+     "get",
+     "name"
+    ],
+    "text-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     17,
+     0,
+     18,
+     11,
+     22,
+     13
+    ],
+    "text-anchor": "top",
+    "text-offset": [
+     0,
+     1.2
+    ],
+    "text-optional": true,
+    "symbol-placement": "point",
+    "icon-optional": true,
+    "icon-image": [
+     "match",
+     [
+      "get",
+      "historic"
+     ],
+     "castle",
+     "base:icon-castle",
+     "monument",
+     "base:icon-monument",
+     "wayside_shrine",
+     "base:icon-shrine",
+     "base:icon-historic"
+    ],
+    "text-font": [
+     "noto_sans_bold"
+    ]
+   },
+   "paint": {
+    "icon-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     16,
+     0,
+     17,
+     0.4
+    ],
+    "text-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     18,
+     0,
+     18.5,
+     0.4
+    ],
+    "icon-color": "rgb(102,102,102)",
+    "text-color": "rgb(102,102,102)",
+    "text-halo-color": "rgb(255,255,255)",
+    "text-halo-width": 0.5,
+    "text-halo-blur": 0.5
+   },
+   "source": "versatiles-shortbread"
+  },
+  {
+   "id": "poi-emergency",
+   "type": "symbol",
+   "source-layer": "pois",
+   "filter": [
+    "to-boolean",
+    [
+     "get",
+     "emergency"
+    ]
+   ],
+   "minzoom": 14,
+   "layout": {
+    "icon-size": [
+     "interpolate",
+     [
+      "exponential",
+      2
+     ],
+     [
+      "zoom"
+     ],
+     16,
+     0.4,
+     20,
+     1.2
+    ],
+    "text-field": [
+     "get",
+     "name"
+    ],
+    "text-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     17,
+     0,
+     18,
+     11,
+     22,
+     13
+    ],
+    "text-anchor": "top",
+    "text-offset": [
+     0,
+     1.2
+    ],
+    "text-optional": true,
+    "symbol-placement": "point",
+    "icon-optional": true,
+    "icon-image": [
+     "match",
+     [
+      "get",
+      "emergency"
+     ],
+     "defibrillator",
+     "base:icon-defibrillator",
+     "fire_hydrant",
+     "base:icon-hydrant",
+     "phone",
+     "base:icon-emergency_phone",
+     ""
+    ],
+    "text-font": [
+     "noto_sans_bold"
+    ]
+   },
+   "paint": {
+    "icon-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     16,
+     0,
+     17,
+     0.4
+    ],
+    "text-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     18,
+     0,
+     18.5,
+     0.4
+    ],
+    "icon-color": "rgb(102,102,102)",
+    "text-color": "rgb(102,102,102)",
+    "text-halo-color": "rgb(255,255,255)",
+    "text-halo-width": 0.5,
+    "text-halo-blur": 0.5
+   },
+   "source": "versatiles-shortbread"
+  },
+  {
+   "id": "poi-highway",
+   "type": "symbol",
+   "source-layer": "pois",
+   "filter": [
+    "to-boolean",
+    [
+     "get",
+     "highway"
+    ]
+   ],
+   "minzoom": 14,
+   "layout": {
+    "icon-size": [
+     "interpolate",
+     [
+      "exponential",
+      2
+     ],
+     [
+      "zoom"
+     ],
+     16,
+     0.4,
+     20,
+     1.2
+    ],
+    "text-field": [
+     "get",
+     "name"
+    ],
+    "text-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     17,
+     0,
+     18,
+     11,
+     22,
+     13
+    ],
+    "text-anchor": "top",
+    "text-offset": [
+     0,
+     1.2
+    ],
+    "text-optional": true,
+    "symbol-placement": "point",
+    "icon-optional": true,
+    "icon-image": [
+     "match",
+     [
+      "get",
+      "highway"
+     ],
+     "emergency_access_point",
+     "base:icon-emergency_access",
+     ""
+    ],
+    "text-font": [
+     "noto_sans_bold"
+    ]
+   },
+   "paint": {
+    "icon-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     16,
+     0,
+     17,
+     0.4
+    ],
+    "text-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     18,
+     0,
+     18.5,
+     0.4
+    ],
+    "icon-color": "rgb(102,102,102)",
+    "text-color": "rgb(102,102,102)",
+    "text-halo-color": "rgb(255,255,255)",
+    "text-halo-width": 0.5,
+    "text-halo-blur": 0.5
+   },
+   "source": "versatiles-shortbread"
+  },
+  {
+   "id": "poi-office",
+   "type": "symbol",
+   "source-layer": "pois",
+   "filter": [
+    "to-boolean",
+    [
+     "get",
+     "office"
+    ]
+   ],
+   "minzoom": 14,
+   "layout": {
+    "icon-size": [
+     "interpolate",
+     [
+      "exponential",
+      2
+     ],
+     [
+      "zoom"
+     ],
+     16,
+     0.4,
+     20,
+     1.2
+    ],
+    "text-field": [
+     "get",
+     "name"
+    ],
+    "text-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     17,
+     0,
+     18,
+     11,
+     22,
+     13
+    ],
+    "text-anchor": "top",
+    "text-offset": [
+     0,
+     1.2
+    ],
+    "text-optional": true,
+    "symbol-placement": "point",
+    "icon-optional": true,
+    "icon-image": [
+     "match",
+     [
+      "get",
+      "office"
+     ],
+     "diplomatic",
+     "base:icon-embassy",
+     ""
+    ],
+    "text-font": [
+     "noto_sans_bold"
+    ]
+   },
+   "paint": {
+    "icon-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     16,
+     0,
+     17,
+     0.4
+    ],
+    "text-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     18,
+     0,
+     18.5,
+     0.4
+    ],
+    "icon-color": "rgb(102,102,102)",
+    "text-color": "rgb(102,102,102)",
+    "text-halo-color": "rgb(255,255,255)",
+    "text-halo-width": 0.5,
+    "text-halo-blur": 0.5
+   },
+   "source": "versatiles-shortbread"
+  },
+  {
+   "id": "symbol-transit-bus",
+   "type": "symbol",
+   "source-layer": "public_transport",
+   "filter": [
+    "==",
+    [
+     "get",
+     "kind"
+    ],
+    "bus_stop"
+   ],
+   "layout": {
+    "text-field": [
+     "get",
+     "name"
+    ],
+    "symbol-placement": "point",
+    "icon-keep-upright": true,
+    "text-size": 10,
+    "icon-anchor": "bottom",
+    "text-anchor": "top",
+    "icon-image": "base:icon-bus",
+    "icon-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     16,
+     0.5,
+     18,
+     1
+    ],
+    "text-font": [
+     "noto_sans_regular"
+    ]
+   },
+   "paint": {
+    "icon-opacity": 0.7,
+    "icon-color": "rgb(102,98,106)",
+    "text-color": "rgb(102,98,106)",
+    "text-halo-color": "rgba(255,255,255,0.8)",
+    "text-halo-width": 2,
+    "text-halo-blur": 1
+   },
+   "minzoom": 16,
+   "source": "versatiles-shortbread"
+  },
+  {
+   "id": "symbol-transit-tram",
+   "type": "symbol",
+   "source-layer": "public_transport",
+   "filter": [
+    "==",
+    [
+     "get",
+     "kind"
+    ],
+    "tram_stop"
+   ],
+   "layout": {
+    "text-field": [
+     "get",
+     "name"
+    ],
+    "symbol-placement": "point",
+    "icon-keep-upright": true,
+    "text-size": 10,
+    "icon-anchor": "bottom",
+    "text-anchor": "top",
+    "icon-image": "base:transport-tram",
+    "icon-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     15,
+     0.5,
+     17,
+     1
+    ],
+    "text-font": [
+     "noto_sans_regular"
+    ]
+   },
+   "paint": {
+    "icon-opacity": 0.7,
+    "icon-color": "rgb(102,98,106)",
+    "text-color": "rgb(102,98,106)",
+    "text-halo-color": "rgba(255,255,255,0.8)",
+    "text-halo-width": 2,
+    "text-halo-blur": 1
+   },
+   "minzoom": 15,
+   "source": "versatiles-shortbread"
+  },
+  {
+   "id": "symbol-transit-station",
+   "type": "symbol",
+   "source-layer": "public_transport",
+   "filter": [
+    "in",
+    [
+     "get",
+     "kind"
+    ],
+    [
+     "literal",
+     [
+      "station",
+      "halt"
+     ]
+    ]
+   ],
+   "layout": {
+    "text-field": [
+     "get",
+     "name"
+    ],
+    "symbol-placement": "point",
+    "icon-keep-upright": true,
+    "text-size": 10,
+    "icon-anchor": "bottom",
+    "text-anchor": "top",
+    "icon-image": "base:icon-rail",
+    "icon-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     13,
+     0.5,
+     15,
+     1
+    ],
+    "text-font": [
+     "noto_sans_regular"
+    ]
+   },
+   "paint": {
+    "icon-opacity": 0.7,
+    "icon-color": "rgb(102,98,106)",
+    "text-color": "rgb(102,98,106)",
+    "text-halo-color": "rgba(255,255,255,0.8)",
+    "text-halo-width": 2,
+    "text-halo-blur": 1
+   },
+   "minzoom": 13,
+   "source": "versatiles-shortbread"
+  },
+  {
+   "id": "symbol-transit-airfield",
+   "type": "symbol",
+   "source-layer": "public_transport",
+   "filter": [
+    "all",
+    [
+     "==",
+     [
+      "get",
+      "kind"
+     ],
+     "aerodrome"
+    ],
+    [
+     "!",
+     [
+      "has",
+      "iata"
+     ]
+    ]
+   ],
+   "layout": {
+    "text-field": [
+     "get",
+     "name"
+    ],
+    "symbol-placement": "point",
+    "icon-keep-upright": true,
+    "text-size": 10,
+    "icon-anchor": "bottom",
+    "text-anchor": "top",
+    "icon-image": "base:icon-airfield",
+    "icon-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     13,
+     0.5,
+     15,
+     1
+    ],
+    "text-font": [
+     "noto_sans_regular"
+    ]
+   },
+   "paint": {
+    "icon-opacity": 0.7,
+    "icon-color": "rgb(102,98,106)",
+    "text-color": "rgb(102,98,106)",
+    "text-halo-color": "rgba(255,255,255,0.8)",
+    "text-halo-width": 2,
+    "text-halo-blur": 1
+   },
+   "minzoom": 13,
+   "source": "versatiles-shortbread"
+  },
+  {
+   "id": "symbol-transit-airport",
+   "type": "symbol",
+   "source-layer": "public_transport",
+   "filter": [
+    "all",
+    [
+     "==",
+     [
+      "get",
+      "kind"
+     ],
+     "aerodrome"
+    ],
+    [
+     "has",
+     "iata"
+    ]
+   ],
+   "layout": {
+    "text-field": [
+     "get",
+     "name"
+    ],
+    "symbol-placement": "point",
+    "icon-keep-upright": true,
+    "text-size": 10,
+    "icon-anchor": "bottom",
+    "text-anchor": "top",
+    "icon-image": "base:icon-airport",
+    "icon-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     12,
+     0.5,
+     14,
+     1
+    ],
+    "text-font": [
+     "noto_sans_regular"
+    ]
+   },
+   "paint": {
+    "icon-opacity": 0.7,
+    "icon-color": "rgb(102,98,106)",
+    "text-color": "rgb(102,98,106)",
+    "text-halo-color": "rgba(255,255,255,0.8)",
+    "text-halo-width": 2,
+    "text-halo-blur": 1
+   },
+   "minzoom": 12,
+   "source": "versatiles-shortbread"
+  },
+  {
+   "id": "airport-taxiway:outline",
+   "type": "line",
+   "source-layer": "streets",
+   "filter": [
+    "==",
+    [
+     "get",
+     "kind"
+    ],
+    "taxiway"
+   ],
+   "paint": {
+    "line-color": "rgb(207,205,202)",
+    "line-width": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     13,
+     0,
+     14,
+     2,
+     15,
+     10,
+     16,
+     14,
+     18,
+     20,
+     20,
+     40
+    ],
+    "line-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     13,
+     0,
+     14,
+     1
+    ]
+   },
+   "layout": {
+    "line-cap": "butt",
+    "line-join": "round"
+   },
+   "minzoom": 13,
+   "source": "versatiles-shortbread"
+  }
+ ]
+}

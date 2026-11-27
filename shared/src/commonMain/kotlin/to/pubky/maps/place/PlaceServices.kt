@@ -7,6 +7,7 @@ import to.pubky.maps.links.OpenInAction
 import to.pubky.maps.links.OsmId
 import to.pubky.maps.links.OsmType
 import to.pubky.maps.map.MapPlacesLayer
+import to.pubky.maps.map.StyleIcons
 import to.pubky.maps.osm.NoteController
 import to.pubky.maps.routing.DirectionsController
 
@@ -23,6 +24,8 @@ class PlaceServices(
     val data: PlaceData,
     val directions: DirectionsController? = null,
     val notes: NoteController? = null,
+    /** The base map's own icons for the Pubky places it has as points of interest; without it they keep the kind's badge. */
+    val styleIcons: StyleIcons? = null,
 )
 
 /** What "Open in" offers for a place, and how an entry is opened; none where map links are missing. */
