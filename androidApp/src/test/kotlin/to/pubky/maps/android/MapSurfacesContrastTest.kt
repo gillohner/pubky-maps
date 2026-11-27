@@ -31,6 +31,7 @@ import org.robolectric.annotation.GraphicsMode
 import to.pubky.maps.config.ServerDefaults
 import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.links.LinkProvider
+import to.pubky.maps.map.AreaPickerUi
 import to.pubky.maps.map.MapScreen
 import to.pubky.maps.map.MapSearch
 import to.pubky.maps.place.PlaceCard
@@ -42,12 +43,13 @@ import to.pubky.maps.status.ServicePart
 import to.pubky.maps.ui.PubkyMapsTheme
 
 /**
- * In dark mode every control, notice and card over the map has an edge that stands out from the land
- * of each default dark style: a shadow does not show on a dark map, and those lands range from nearly
- * black to dark grey, so the edge must carry the boundary. From a point in each container's padding,
- * where no icon or text is, the pixels are read outward across its edge, and the most distinct one must
- * reach 1.5:1 against the land (the near-black container of the search bar and buttons gave 1.01:1 on
- * OpenFreeMap Dark, M3's High tone 1.04:1 on VersaTiles Colorful Dark). Runs once per default dark style.
+ * In dark mode every control, notice and card over the map, and the area picker's bar and card, has
+ * an edge that stands out from the land of each default dark style: a shadow does not show on a dark
+ * map, and those lands range from nearly black to dark grey, so the edge must carry the boundary. From
+ * a point in each container's padding, where no icon or text is, the pixels are read outward across
+ * its edge, and the most distinct one that is not the container's fill must reach 1.5:1 against the
+ * land (without an edge: 1.36:1 on OpenFreeMap Dark, 1.04:1 on VersaTiles Colorful Dark for the
+ * search bar and buttons). Runs once per default dark style.
  * Native graphics, so the pixels are the ones a phone draws.
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
@@ -72,7 +74,10 @@ class MapSurfacesContrastTest(
             source = PlaceSource.LinkText,
         )
 
-    private fun showDark(placeCard: (@Composable () -> Unit)? = null) {
+    private fun showDark(
+        placeCard: (@Composable () -> Unit)? = null,
+        areaPicker: AreaPickerUi? = null,
+    ) {
         compose.setContent {
             density = LocalDensity.current
             PubkyMapsTheme(darkTheme = true) {
@@ -88,6 +93,7 @@ class MapSurfacesContrastTest(
                     onOpenSettings = {},
                     missing = setOf(ServicePart.Homeserver),
                     placeCard = placeCard,
+                    areaPicker = areaPicker,
                     search = MapSearch(SearchState(), recents = emptyList(), userLocation = null, actions = SearchActions()),
                 ) { Box(Modifier.fillMaxSize().background(land)) }
             }
@@ -102,7 +108,9 @@ class MapSurfacesContrastTest(
 
     /**
      * The colour most distinct from the land among the pixels from ([x], [y]) [span] outward, one pixel
-     * a step ([dx], [dy]): across the container's padding, its edge and the map just outside.
+     * a step ([dx], [dy]): across the container's padding, its edge and the map just outside. Pixels
+     * of the container's own fill (as at the start) do not count, so a fill that stands out by itself
+     * does not pass for an edge; with nothing past the fill but the map, the land itself.
      */
     private fun PixelMap.edgeFrom(
         x: Dp,
@@ -114,11 +122,13 @@ class MapSurfacesContrastTest(
         with(density) {
             val x0 = x.roundToPx()
             val y0 = y.roundToPx()
+            val fill = this@edgeFrom[x0, y0]
             (0..span.roundToPx())
                 .map { i -> Pair(x0 + i * dx, y0 + i * dy) }
                 .filter { (px, py) -> px in 0 until width && py in 0 until height }
                 .map { (px, py) -> this@edgeFrom[px, py] }
-                .maxBy { contrast(it, land) }
+                .filter { contrast(it, fill) >= 1.1f }
+                .maxByOrNull { contrast(it, land) } ?: land
         }
 
     private fun contrast(
@@ -154,9 +164,9 @@ class MapSurfacesContrastTest(
                 "search bar" to screen.edgeFrom(hint.right + 16.dp, hint.middleY(), 0, -1, 40.dp),
                 // The notice from its 16 dp start padding, leftward across its edge.
                 "'could not load' notice" to screen.edgeFrom(notice.left - 8.dp, notice.middleY(), -1, 0, 16.dp),
-                // The banner from just above its text, up across its 8 dp top padding and edge (its
-                // icon is before the text).
-                "missing-service banner" to screen.edgeFrom(banner.left, banner.top - 2.dp, 0, -1, 12.dp),
+                // The banner from just above its text, up across its 8 dp top padding and edge to 2 dp
+                // above it (its icon is before the text; the notice is 8 dp above).
+                "missing-service banner" to screen.edgeFrom(banner.left, banner.top - 2.dp, 0, -1, 8.dp),
             )
         edges.forEach { (what, colour) -> assertStandsOut(what, colour) }
         // As in light, a notice is a step apart from the controls above it, here lighter.
@@ -174,11 +184,26 @@ class MapSurfacesContrastTest(
     @Test
     @Config(qualifiers = "w412dp-h915dp-night")
     fun thePlaceCardOverTheDarkMapHasAnEdgeThatStandsOutFromItsLand() {
-        showDark { PlaceCard(place = place, provider = LinkProvider.Google, onShare = {}, onClose = {}) }
+        showDark(placeCard = { PlaceCard(place = place, provider = LinkProvider.Google, onShare = {}, onClose = {}) })
         val screen = compose.onRoot().captureToImage().toPixelMap()
         val title = compose.onNodeWithText("Zürich Hauptbahnhof", useUnmergedTree = true).getUnclippedBoundsInRoot()
         // From the card's 16 dp start padding, on the name's line, leftward across its edge.
         assertStandsOut("place card", screen.edgeFrom(title.left - 8.dp, title.middleY(), -1, 0, 16.dp))
+    }
+
+    @Test
+    @Config(qualifiers = "w412dp-h915dp-night")
+    fun theAreaPickersBarAndCardOverTheDarkMapHaveAnEdgeThatStandsOutFromItsLand() {
+        showDark(areaPicker = AreaPickerUi(fits = true))
+        val screen = compose.onRoot().captureToImage().toPixelMap()
+        val cancel = compose.onNodeWithContentDescription("Cancel").getUnclippedBoundsInRoot()
+        val title = compose.onNodeWithText("Download this area", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        // The map around them is shaded, darker than its land, so the land is the stricter measure.
+        // The bar from 4 dp inside its Cancel button (the icon is 24 dp in its middle), leftward
+        // across the bar's start edge.
+        assertStandsOut("area picker's bar", screen.edgeFrom(cancel.left + 4.dp, cancel.middleY(), -1, 0, 8.dp))
+        // The card from its 16 dp start padding, on the title's line, leftward across its edge.
+        assertStandsOut("area picker's card", screen.edgeFrom(title.left - 8.dp, title.middleY(), -1, 0, 16.dp))
     }
 
     private fun assertStandsOut(
