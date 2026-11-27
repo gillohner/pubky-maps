@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import to.pubky.maps.ui.SheetFlingVelocity
 
 /** The height of the drag handle strip at the top of the sheet. */
 private val HandleHeight = 20.dp
@@ -51,7 +52,8 @@ private val HandleHeight = 20.dp
 /**
  * The place page on a phone: a sheet over the map with three heights ([SheetStop]). The handle and
  * the header drag it; scrolling the page up first raises the sheet to the top, scrolling down at the
- * top of the page lowers it; a tap on the handle steps it up (and from the top back to half).
+ * top of the page lowers it; a release settles at the nearest stop, a flick ([SheetFlingVelocity])
+ * at the next one in its direction; a tap on the handle steps it up (and from the top back to half).
  * [maxHeight] is the room it may take (under the search bar).
  *
  * The header stays in place over the scrolling page while it and the handle take at most half of
@@ -78,6 +80,7 @@ fun PlaceSheet(
     val handlePx = with(density) { HandleHeight.toPx() }
     val maxPx = with(density) { maxHeight.toPx() }
     val insetPx = with(density) { bottomInset.toPx() }
+    val flingVelocity = with(density) { SheetFlingVelocity.toPx() }
     val peekPx = ((if (headerPx > 0) headerPx + handlePx else with(density) { 180.dp.toPx() }) + insetPx).coerceAtMost(maxPx)
     // The top stop is no taller than the page: a short page leaves no empty sheet under its end. While
     // the card loads, the page's length is not known yet (a few grey lines stand for the photo, the
@@ -112,6 +115,7 @@ fun PlaceSheet(
     val scope = rememberCoroutineScope()
     val currentStop by rememberUpdatedState(stop)
     val currentStops by rememberUpdatedState(stops)
+    val currentFlingVelocity by rememberUpdatedState(flingVelocity)
     val currentOnStopChange by rememberUpdatedState(onStopChange)
     val currentOnDragStart by rememberUpdatedState(onDragStart)
 
@@ -122,7 +126,7 @@ fun PlaceSheet(
 
     fun release(velocityUp: Float) {
         val from = dragged ?: return
-        val next = currentStops.settle(from, velocityUp)
+        val next = currentStops.settle(from, velocityUp, currentFlingVelocity)
         currentOnStopChange(next)
         // From where the finger left it, so the sheet does not jump back first.
         scope.launch {

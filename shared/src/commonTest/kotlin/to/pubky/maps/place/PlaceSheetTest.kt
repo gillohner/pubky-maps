@@ -8,19 +8,27 @@ class PlaceSheetTest {
 
     @Test
     fun aSlowReleaseGoesToTheNearestStop() {
-        assertEquals(SheetStop.Peek, stops.settle(500f, velocity = 0f))
-        assertEquals(SheetStop.Half, stops.settle(700f, velocity = 0f))
-        assertEquals(SheetStop.Full, stops.settle(1500f, velocity = 100f))
+        assertEquals(SheetStop.Peek, stops.settle(500f, velocity = 0f, flingVelocity = 1000f))
+        assertEquals(SheetStop.Half, stops.settle(700f, velocity = 0f, flingVelocity = 1000f))
+        assertEquals(SheetStop.Full, stops.settle(1500f, velocity = 100f, flingVelocity = 1000f))
     }
 
     @Test
     fun aFlingGoesToTheNextStopInItsDirection() {
-        assertEquals(SheetStop.Half, stops.settle(320f, velocity = 2000f))
-        assertEquals(SheetStop.Full, stops.settle(950f, velocity = 2000f))
-        assertEquals(SheetStop.Half, stops.settle(1700f, velocity = -2000f))
-        assertEquals(SheetStop.Peek, stops.settle(850f, velocity = -2000f))
-        assertEquals(SheetStop.Full, stops.settle(1800f, velocity = 2000f))
-        assertEquals(SheetStop.Peek, stops.settle(300f, velocity = -2000f))
+        assertEquals(SheetStop.Half, stops.settle(320f, velocity = 2000f, flingVelocity = 1000f))
+        assertEquals(SheetStop.Full, stops.settle(950f, velocity = 2000f, flingVelocity = 1000f))
+        assertEquals(SheetStop.Half, stops.settle(1700f, velocity = -2000f, flingVelocity = 1000f))
+        assertEquals(SheetStop.Peek, stops.settle(850f, velocity = -2000f, flingVelocity = 1000f))
+        assertEquals(SheetStop.Full, stops.settle(1800f, velocity = 2000f, flingVelocity = 1000f))
+        assertEquals(SheetStop.Peek, stops.settle(300f, velocity = -2000f, flingVelocity = 1000f))
+    }
+
+    @Test
+    fun theFlingSpeedIsTheCallersInItsPixels() {
+        // The caller turns 400 dp/s into its pixels: 800 px/s on a 2x phone, 1600 px/s on a 4x phone.
+        // The same 1500 px/s is a flick on the first and a slower release on the second.
+        assertEquals(SheetStop.Full, stops.settle(950f, velocity = 1500f, flingVelocity = 800f))
+        assertEquals(SheetStop.Half, stops.settle(950f, velocity = 1500f, flingVelocity = 1600f))
     }
 
     @Test

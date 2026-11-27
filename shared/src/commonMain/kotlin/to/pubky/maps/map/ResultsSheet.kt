@@ -2,11 +2,15 @@ package to.pubky.maps.map
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.AnchoredDraggableDefaults
 import androidx.compose.foundation.gestures.AnchoredDraggableState
 import androidx.compose.foundation.gestures.DraggableAnchors
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.TargetedFlingBehavior
 import androidx.compose.foundation.gestures.anchoredDraggable
 import androidx.compose.foundation.gestures.animateTo
+import androidx.compose.foundation.gestures.snapping.SnapLayoutInfoProvider
+import androidx.compose.foundation.gestures.snapping.snapFlingBehavior
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -39,11 +43,11 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import to.pubky.maps.ui.SheetFlingVelocity
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -56,9 +60,6 @@ private val HandleHeight = 24.dp
 /** The lowest height until the first row has been measured: the handle and a row at the normal font size. */
 private val FallbackPeekHeight = 120.dp
 
-/** A release faster than this (about a flick) goes on to the next height; a slower one to the nearest. */
-private val FlingVelocity = 400.dp
-
 /**
  * The least a lowest height must lie below half the screen to be one of its own: a closer one would
  * look like half, and the handle's tap or TalkBack's resize from it would seem to do nothing.
@@ -70,7 +71,9 @@ private val PeekStep = HandleHeight
  * handle drags between its first row ([SheetHeight.Peek]), half the screen ([SheetHeight.Half], where
  * it opens) and the whole height below the search bar ([SheetHeight.Full]); tapping the handle steps
  * up, and back down from full. The list drags it too: a finger moving up raises the sheet to full
- * before the list scrolls, and one moving down with the list at its top lowers it. [above] (the
+ * before the list scrolls, and one moving down with the list at its top lowers it. Let go, from the
+ * handle or the list alike, it settles at the nearest height, or after a flick
+ * ([SheetFlingVelocity]) at the next one in the flick's direction. [above] (the
  * credits and my-location button) rides on the sheet's top edge while there is room for it under
  * [topSpace]; at full height, or while the sheet is dragged that far, it is not there at all (not
  * drawn, not touchable, not read by TalkBack), so it never covers the search bar or Settings.
@@ -114,7 +117,9 @@ internal fun ResultsSheet(
     SideEffect { state.updateAnchors(anchors, state.targetValue.takeIf(anchors::hasPositionFor) ?: SheetHeight.Half) }
     val list = rememberLazyListState()
     LaunchedEffect(state, list) { keepListStartAtPeek(state, list) }
-    val listDrag = remember(state, density) { ListDragsSheet(state, density) }
+    val flingVelocity = with(density) { SheetFlingVelocity.toPx() }
+    val listDrag = remember(state, flingVelocity) { ListDragsSheet(state, flingVelocity) }
+    val releaseFling = remember(state, flingVelocity) { handleFling(state, flingVelocity) }
     val scope = rememberCoroutineScope()
     val step: () -> Unit = {
         val next =
@@ -140,7 +145,7 @@ internal fun ResultsSheet(
                                 Modifier
                                     .fillMaxWidth()
                                     .height(HandleHeight)
-                                    .anchoredDraggable(state, Orientation.Vertical)
+                                    .anchoredDraggable(state, Orientation.Vertical, flingBehavior = releaseFling)
                                     .clickable(onClick = step)
                                     .semantics {
                                         contentDescription = "Results list, ${state.currentValue.name.lowercase()}"
@@ -222,10 +227,8 @@ private suspend fun keepListStartAtPeek(
  */
 private class ListDragsSheet(
     private val state: AnchoredDraggableState<SheetHeight>,
-    density: Density,
+    private val flingVelocity: Float,
 ) : NestedScrollConnection {
-    private val flingVelocity = with(density) { FlingVelocity.toPx() }
-
     override fun onPreScroll(
         available: Offset,
         source: NestedScrollSource,
@@ -268,13 +271,50 @@ private class ListDragsSheet(
      */
     private suspend fun settle(velocity: Float): Boolean {
         val offset = state.offset.takeUnless { it.isNaN() } ?: return false
-        // Offsets grow down the screen: `searchUpwards` looks at larger offsets, the heights below.
-        val target =
-            (if (abs(velocity) >= flingVelocity) state.anchors.closestAnchor(offset, searchUpwards = velocity > 0) else null)
-                ?: state.anchors.closestAnchor(offset)
-                ?: return false
+        val target = state.anchors.settleAt(offset, velocity, flingVelocity) ?: return false
         if (state.anchors.positionOf(target) == offset) return false
         state.animateTo(target)
         return true
     }
 }
+
+/**
+ * The handle's release, by the same rule as the list's ([settleAt]) instead of Compose's default for
+ * draggable anchors, so a flick of the handle and one of the list move the sheet alike. It goes
+ * straight to the height, as Compose's own sheet fling does, without first coasting.
+ */
+private fun handleFling(
+    state: AnchoredDraggableState<SheetHeight>,
+    flingVelocity: Float,
+): TargetedFlingBehavior =
+    snapFlingBehavior(
+        snapLayoutInfoProvider =
+            object : SnapLayoutInfoProvider {
+                override fun calculateApproachOffset(
+                    velocity: Float,
+                    decayOffset: Float,
+                ): Float = 0f
+
+                override fun calculateSnapOffset(velocity: Float): Float {
+                    val offset = state.offset.takeUnless { it.isNaN() } ?: return 0f
+                    val target = state.anchors.settleAt(offset, velocity, flingVelocity) ?: return 0f
+                    return state.anchors.positionOf(target) - offset
+                }
+            },
+        // Not used: with no approach there is nothing to coast.
+        decayAnimationSpec = AnchoredDraggableDefaults.DecayAnimationSpec,
+        snapAnimationSpec = AnchoredDraggableDefaults.SnapAnimationSpec,
+    )
+
+/**
+ * Where a sheet let go at [offset] with [velocity] (px/s; both grow down the screen) settles: after a
+ * flick of at least [flingVelocity] at the next height in its direction, else at the nearest.
+ */
+private fun <T> DraggableAnchors<T>.settleAt(
+    offset: Float,
+    velocity: Float,
+    flingVelocity: Float,
+): T? =
+    // `searchUpwards` looks at larger offsets: the heights below.
+    (if (abs(velocity) >= flingVelocity) closestAnchor(offset, searchUpwards = velocity > 0) else null)
+        ?: closestAnchor(offset)

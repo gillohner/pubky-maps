@@ -35,14 +35,16 @@ data class SheetStops(
 
     /**
      * Where a drag that let go at [height] with [velocity] (px/s, positive = upwards) settles: a fling
-     * goes to the next stop in its direction, a slow release to the nearest stop.
+     * (at least [flingVelocity] px/s, from `SheetFlingVelocity`) goes to the next stop in its
+     * direction, a slower release to the nearest stop.
      */
     fun settle(
         height: Float,
         velocity: Float,
+        flingVelocity: Float,
     ): SheetStop {
         val stops = SheetStop.entries
-        if (abs(velocity) >= FLING_VELOCITY) {
+        if (abs(velocity) >= flingVelocity) {
             return if (velocity > 0) {
                 stops.firstOrNull { height(it) > height + 1f } ?: SheetStop.Full
             } else {
@@ -62,9 +64,4 @@ data class SheetStops(
             SheetStop.Half -> SheetStop.Full
             SheetStop.Full -> SheetStop.Half
         }
-
-    companion object {
-        /** px/s; about a quick flick on a phone. */
-        const val FLING_VELOCITY = 1200f
-    }
 }
