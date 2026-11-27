@@ -78,6 +78,9 @@ object AppIcons {
 
     val Add: ImageVector = icon("Add", "M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z")
 
+    /** Report a problem (Material's outlined flag). */
+    val Flag: ImageVector = icon("Flag", "M14 6l-1-2H5v17h2v-7h5l1 2h7V6h-6zm4 8h-4l-1-2H7V6h5l1 2h5v6z")
+
     val AccountCircle: ImageVector =
         icon(
             "AccountCircle",

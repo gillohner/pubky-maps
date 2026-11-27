@@ -115,6 +115,8 @@ data class PlacePageActions(
     val onDirections: (() -> Unit)? = null,
     /** The directions open to the place, shown under the actions; null when none are open. */
     val directions: DirectionsUi? = null,
+    /** Opens a note to OpenStreetMap about a problem with the map at the place; null where notes are not available or the place has no point. */
+    val onReportProblem: (() -> Unit)? = null,
 )
 
 /** What the user can do on the place page, and what they have about it. */
@@ -441,6 +443,8 @@ fun PlaceSections(
         if (page.nothingOnPubky && writes == null) NothingOnPubky()
         val alsoOn = card?.let { alsoOnShown(it.alsoOn, page.place.uri, context.language, hasWebsite = osm?.website != null) }.orEmpty()
         if (alsoOn.isNotEmpty()) AlsoOnSection(alsoOn, actions)
+        // After the card, as the coordinates: under a loading page it would drop down as the sections come.
+        if (!page.cardLoading) actions.onReportProblem?.let { ReportProblemButton(it) }
         DataCredits(page, actions)
     }
 }
@@ -1178,6 +1182,20 @@ private fun AlsoOnSection(
                 }
             }
         }
+    }
+}
+
+/** Google Maps' "Suggest an edit" at the end of a place: here a note to OpenStreetMap's mappers. */
+@Composable
+private fun ReportProblemButton(onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        contentPadding = PaddingValues(start = 12.dp, end = 16.dp),
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp).heightIn(min = 48.dp),
+    ) {
+        Icon(AppIcons.Flag, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text("Report a map problem")
     }
 }
 

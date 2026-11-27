@@ -326,6 +326,7 @@ class PlaceScreenshotTest {
             onOpenLink = {},
             onLoadMorePosts = {},
             onDirections = {},
+            onReportProblem = {},
         )
 
     /**

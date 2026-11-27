@@ -74,6 +74,11 @@ object ServerDefaults {
                 // start and end of every route the user asks for.
                 Service.Valhalla to
                     listOf(ServerEntry("Valhalla (FOSSGIS)", "https://valhalla1.openstreetmap.de", listOf(fossgisRouting, openStreetMap))),
+                // The OpenStreetMap API, for notes about map problems: it takes a note without an
+                // account (shown as anonymous), asks apps for a User-Agent of their own and modest use
+                // (operations.osmfoundation.org/policies/api). There is one OSM database, so no
+                // fallback holds the same notes; the list lets a user point the app elsewhere.
+                Service.OsmApi to listOf(ServerEntry("OpenStreetMap", "https://api.openstreetmap.org")),
                 // The Pubky SDK's default relays (pkarr::DEFAULT_RELAYS).
                 Service.PkarrRelay to
                     listOf(

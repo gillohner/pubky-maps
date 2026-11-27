@@ -118,13 +118,13 @@ Settings:
 - **Account:** sign in with [Pubky Ring](https://github.com/pubky/pubky-ring). It shows the user's
   profile name, tags and saved places, kept on the phone so they stay readable offline, and signs out.
 - **Server lists:** an ordered list of servers per service (map styles, Photon, Pinakes, Nexus,
-  Overpass, Valhalla, Pkarr relays, sign-in relay). Users add, remove, reorder and reset them; servers run by Synonym are
+  Overpass, Valhalla, OpenStreetMap API, Pkarr relays, sign-in relay). Users add, remove, reorder and reset them; servers run by Synonym are
   marked. The map uses its style list in order, the next style taking over when one fails to load;
   sign-in uses the Pkarr and sign-in relay lists (from the next start after a change); opening a
   map link asks the Pinakes list; search uses the Photon and Pinakes lists the same way (the next
   server takes over on an error, a timeout or "too many requests"); place pages and the map's Pubky
   places use the Pinakes and Nexus lists the same way, the offline areas' place details the
-  Overpass list, and directions the Valhalla list.
+  Overpass list, directions the Valhalla list, and map notes the OpenStreetMap API list.
 - **What is stored online:** per kind of data (saved places, home and work, lists, check-ins, tracks,
   location history, photo locations) phone only, homeserver private or public. Tags and reviews are
   public by nature. Saved places, lists and photo locations follow the choices; the other kinds are
@@ -179,6 +179,19 @@ place, or closing the page, ends them. Without a position, a route or a
 server, the page says which is missing (with Settings when location access is off for good), and
 every server failing names routing in the map's line of missing parts. Directions do not follow the
 user's position or speak while they travel, and need a connection.
+
+**Report a map problem** at the end of a place page (also of a dropped pin) opens a note to
+OpenStreetMap's mappers: what the user writes, then the place's name and OpenStreetMap link when it
+has them (a point of its own, as a dropped pin, goes without the user's label) and `#PubkyMaps`, at
+the place's own point (a page whose point is only a map view or a search centre has no button), up
+to OpenStreetMap's 2000 characters. It goes through the OpenStreetMap API list (`api.openstreetmap.org`
+by default) without an account, so the note is public and anonymous. A server that cannot be reached,
+fails or answers not as the API does hands over to the next one; the API's refusal is shown with its
+reason; a request with no answer in time is not sent elsewhere and the page says the note may be on
+the map already. A note that did not go keeps its text on the page to send again; notes need a
+connection. A note page Android brought back after stopping the app still thanks for a sent note, and
+one whose note was on its way or got no answer in time says it may be on the map already, so neither
+offers the same note again as new.
 
 **Writing about a place** (signed in; a write that needs the homeserver opens the sign-in first and
 continues after it). The page's action row has Save, Tag, Post and Add to list; its sections have

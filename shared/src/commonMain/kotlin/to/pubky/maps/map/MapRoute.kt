@@ -80,6 +80,7 @@ import to.pubky.maps.links.LinkedPlaceState
 import to.pubky.maps.offline.AreaBounds
 import to.pubky.maps.offline.OfflineMaps
 import to.pubky.maps.offline.fitsInOneDownload
+import to.pubky.maps.osm.NoteTarget
 import to.pubky.maps.place.GeoBox
 import to.pubky.maps.place.OpenInApps
 import to.pubky.maps.place.OpeningLinkCard
@@ -160,6 +161,8 @@ fun MapRoute(
     onWrite: (WriteTarget, WriteIntent) -> Unit = { _, _ -> },
     /** Opens the Saved screen; null where there is none. */
     onOpenSaved: (() -> Unit)? = null,
+    /** Opens a note to OpenStreetMap about a place; null where notes are not available. */
+    onReportProblem: ((NoteTarget) -> Unit)? = null,
     /** Offline maps: the map shows the area picker while they ask for one; null where there are none. */
     offline: OfflineMaps? = null,
     /** Shows the offline maps once a download started from the picker. */
@@ -513,7 +516,18 @@ fun MapRoute(
     }
     val placePage =
         places?.let {
-            rememberPlacePage(it, shown, mapSearch?.userLocation, onSharePlace, openIn, writes, onWrite, startDirections, directionsUi) {
+            rememberPlacePage(
+                it,
+                shown,
+                mapSearch?.userLocation,
+                onSharePlace,
+                openIn,
+                writes,
+                onWrite,
+                startDirections,
+                directionsUi,
+                onReportProblem,
+            ) {
                 sheetMoved = true
             }
         }
@@ -910,6 +924,7 @@ private fun rememberPlacePage(
     onWrite: (WriteTarget, WriteIntent) -> Unit,
     startDirections: ((String, GeoPoint, Boolean) -> Unit)?,
     directions: DirectionsUi?,
+    onReportProblem: ((NoteTarget) -> Unit)?,
     onSheetMoved: () -> Unit,
 ): PlacePageSlot? {
     LaunchedEffect(shown?.place) {
@@ -958,6 +973,7 @@ private fun rememberPlacePage(
                     startDirections?.let { start -> { start(shown.place.uri, to, false) } }
                 },
             directions = directions?.takeIf { it.directions.placeUri == shown.place.uri },
+            onReportProblem = page.noteTarget?.let { target -> onReportProblem?.let { open -> { open(target) } } },
         )
     return PlacePageSlot(
         full = stop == SheetStop.Full,
@@ -985,6 +1001,17 @@ private fun rememberPlacePage(
  * view or a search centre), else its Pinakes card's.
  */
 internal val PlacePageState.placePoint: GeoPoint? get() = place.point?.takeIf { place.pinned } ?: card?.point
+
+/**
+ * What a note about the page's place is about: its own point (none without one), its name and OSM
+ * element. A point of its own (typed coordinates, a dropped pin, one saved from its page) goes without
+ * a name: that is the user's own label, not the map's, and the note is public.
+ */
+internal val PlacePageState.noteTarget: NoteTarget?
+    get() =
+        placePoint?.let { point ->
+            NoteTarget(point, (card?.name ?: place.name).takeUnless { place.source == PlaceSource.Coordinates }, place.osm)
+        }
 
 /**
  * The page's place as the user's writes name it: its link, its name, where it is, whether it is a point
