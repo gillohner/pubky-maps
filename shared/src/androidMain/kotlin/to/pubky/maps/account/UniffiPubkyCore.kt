@@ -12,6 +12,7 @@ import to.pubky.maps.core.SignInEvent
 import to.pubky.maps.core.defaultCoreConfig
 import to.pubky.maps.core.parseAuthCallback
 import to.pubky.maps.core.use
+import to.pubky.maps.core.mayBeMapPlace as coreMayBeMapPlace
 
 /** Which servers the core uses, each list in the order to try (the user's server lists). */
 data class CoreServers(
@@ -110,6 +111,8 @@ class UniffiPubkyCore(
             val page = core.listBookmarks(ListOptions(cursor = cursor))
             Page(page.places.map { SavedPlace(place = it.place, path = it.path) }, page.nextCursor)
         }
+
+    override fun mayBeMapPlace(target: String): Boolean = coreMayBeMapPlace(target)
 }
 
 private fun AuthRequest.toLink(): SignInLink =

@@ -125,6 +125,10 @@ class FakePubkyCore : PubkyCore {
         if (bookmarks.isEmpty()) throw CoreFailure.NotFound("/priv/social/v1/bookmarks/")
         return Page(if (cursor == null) bookmarks else emptyList(), if (cursor == null) "end" else null)
     }
+
+    /** The core's rule, roughly: map links and web pages, not other apps' `pubky://` objects (host tests use the real one). */
+    override fun mayBeMapPlace(target: String): Boolean =
+        target.startsWith("geo:") || target.startsWith("https://") || target.startsWith("http://")
 }
 
 class MemorySecretStore : SecretStore {

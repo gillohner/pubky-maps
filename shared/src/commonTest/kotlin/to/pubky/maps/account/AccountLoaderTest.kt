@@ -54,6 +54,18 @@ class AccountLoaderTest {
         }
 
     @Test
+    fun tagsOtherAppsPutOnTheirOwnObjectsAreNotTheUsersPlaceTags() =
+        runTest {
+            tag("a", "https://www.openstreetmap.org/node/1", "coffee", 30)
+            tag("b", "pubky://$USER/pub/pubky.app/posts/0034A0000001", "funny", 20)
+            tag("c", "pubky://$USER/pub/pubky.app/profile.json", "friend", 10)
+            tag("d", "geo:47.1,8.5", "bench", 5)
+            core.tagPaths = listOf("a", "b", "c", "d").map { "/pub/social/v1/tags/$it.json" }
+
+            assertEquals(listOf("coffee", "bench"), AccountLoader(core) { 0 }.load(USER).tags.map { it.label })
+        }
+
+    @Test
     fun savedPlacesAreListedInPlaceOrder() =
         runTest {
             core.bookmarks =

@@ -54,6 +54,12 @@ interface PubkyCore {
 
     /** One page of the signed-in user's saved places (`/priv/social/v1/bookmarks/`). */
     suspend fun listBookmarks(cursor: String?): Page<SavedPlace>
+
+    /**
+     * Whether a tag's or bookmark's target can be a place on a map (a map link or a web page), not
+     * another app's own Pubky object (a pubky.app post, a profile): the rule [listBookmarks] filters with.
+     */
+    fun mayBeMapPlace(target: String): Boolean
 }
 
 /**
