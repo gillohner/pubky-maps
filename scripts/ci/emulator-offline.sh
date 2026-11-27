@@ -276,6 +276,30 @@ adb shell cmd uimode night no
 expect_water offline-light-recreated-again "#3c78d8"
 check_alive "offline map drawn without a connection"
 
+# A theme switch while the area's update check walks its packs (from 20 s after a start, at least
+# 10 s per style), when the app's download client loads every request of the map too. The new map's
+# style and tiles are fresh in MapLibre's cache: asking the unreachable server for them again would
+# fail the style the map already drew, and the map would fall back to nothing (run 45865109025).
+# The screenshots wait 3 s, as a failed style blanks the map only after its cached copy drew; and no
+# style may fail at all.
+open_at "$zurich"
+since=$(adb shell date +"'%m-%d %H:%M:%S.000'" | tr -d '\r')
+wait_for "Settings" 30 > /dev/null || fail "the map screen did not appear offline before the update check"
+age=$((SECONDS - app_started))
+((age <= 27)) || fail "the map screen took ${age}s to appear, so the theme switch would miss the update check's walk"
+if ((age < 23)); then sleep $((23 - age)); fi
+adb shell cmd uimode night yes
+sleep 3
+expect_water offline-dark-during-check "#1c4587"
+adb shell cmd uimode night no
+sleep 3
+expect_water offline-light-during-check "#3c78d8"
+age=$((SECONDS - app_started))
+failed=$(adb logcat -d -T "$since" | grep -c "loading style failed") || true
+echo "theme switches 23-${age} s after the start, styles failed meanwhile: $failed"
+((failed == 0)) || fail "a map style failed to load during the update check's walk without a server"
+check_alive "theme switches during an update check"
+
 # Without any server, search answers from the places in the area's tiles (by the bakery's word:
 # the fixture's town labels are places too, and could fill the list for "fixture").
 open_at "$zurich"

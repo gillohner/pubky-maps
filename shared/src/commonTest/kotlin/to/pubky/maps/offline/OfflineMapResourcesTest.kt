@@ -24,6 +24,8 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 class OfflineMapResourcesTest {
@@ -134,6 +136,55 @@ class OfflineMapResourcesTest {
             assertEquals(Instant.parse("2036-11-21T02:54:58Z"), assertIs<MapResourceLoad.NotModified>(load).expires)
             assertEquals("W/\"abc\"", ifNoneMatch)
             assertEquals("Sun, 22 Nov 2026 18:54:46 GMT", ifModifiedSince)
+        }
+
+    @Test
+    fun aMapRequestWhoseCachedCopyIsFreshIsAnsweredUnchangedWithoutAskingTheServer() =
+        runTest {
+            // The map server is unreachable (killed with a connection open, as run 45865109025 saw).
+            var asked = 0
+            val unreachable =
+                MockEngine {
+                    asked++
+                    throw IOException("unexpected end of stream")
+                }
+            val modified = Instant.parse("2026-11-22T18:54:46Z")
+            val expires = now + 1.hours
+            // The style of a map made while a download runs, which MapLibre already gave it from the cache.
+            val load =
+                assertIs<MapResourceLoad.NotModified>(
+                    resources(engine = unreachable).load(
+                        offline = false,
+                        url = "https://tiles.example.org/styles/liberty",
+                        priorEtag = "W/\"abc\"",
+                        priorModified = modified,
+                        priorExpires = expires,
+                    ),
+                )
+            assertEquals(modified, load.modified)
+            assertEquals(expires, load.expires)
+            assertEquals(0, asked)
+        }
+
+    @Test
+    fun aStaleCopyAndADownloadsRequestStillAskTheServer() =
+        runTest {
+            var asked = 0
+            val engine =
+                MockEngine {
+                    asked++
+                    respond("", HttpStatusCode.NotModified)
+                }
+            val resources = resources(engine = engine)
+            // A map's copy that has expired is revalidated, as MapLibre's own client would.
+            resources.load(offline = false, url = tile, priorEtag = "W/\"abc\"", priorExpires = now - 1.seconds)
+            assertEquals(1, asked)
+            // So is one with no expiry date.
+            resources.load(offline = false, url = tile, priorEtag = "W/\"abc\"")
+            assertEquals(2, asked)
+            // A download's request always asks: it is how an update check finds new map data.
+            resources.load(offline = true, url = tile, priorEtag = "W/\"abc\"", priorExpires = now + 1.hours)
+            assertEquals(3, asked)
         }
 
     @Test
