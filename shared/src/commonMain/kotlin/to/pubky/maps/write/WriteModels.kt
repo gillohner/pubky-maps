@@ -40,6 +40,8 @@ data class OwnList(
     val pending: Boolean = false,
     /** Names of its places, for lists on this phone (homeserver lists name them from the account's labels). */
     val names: Map<String, String> = emptyMap(),
+    /** What it is about, as the user wrote it (pubky.app shows it under the name); null when it has none. */
+    val description: String? = null,
 ) {
     /** The spec's cap: a list holds at most this many places. */
     val full: Boolean get() = items.size >= MAX_LIST_ITEMS
@@ -123,6 +125,8 @@ sealed interface WriteOp {
         val path: String,
         val uri: String,
         val json: String,
+        /** The list's description, also inside [json]; here for the list shown before the homeserver has it. */
+        val description: String? = null,
     ) : WriteOp
 
     @Serializable

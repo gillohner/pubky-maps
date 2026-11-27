@@ -6,6 +6,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import to.pubky.maps.account.CoreFailure
 import to.pubky.maps.core.CollectionItem
+import to.pubky.maps.core.OwnCollection
 import to.pubky.maps.core.PubkyMapsCore
 import to.pubky.maps.core.buildBookmark
 import to.pubky.maps.core.buildCollection
@@ -87,9 +88,40 @@ class RealCoreWritesTest {
     fun aListIsACollectionPostTheAppReadsBack() {
         val list = buildCollection(AUTHOR, "Coffee", null, listOf(CollectionItem("https://osm.org/node/270803095", null)))
 
-        assertEquals("Coffee" to listOf(PLACE), listOfPost(list.json))
+        assertEquals(ListPost("Coffee", null, listOf(PLACE)), listOfPost(list.json))
         assertEquals(false to list.id, listAddress(list.uri))
         assertEquals(true to list.id, listAddress(list.uri.replace("/pub/", "/priv/")))
+    }
+
+    @Test
+    fun aListsDescriptionGoesInItsPostAndIsReadBack() {
+        val writes = UniffiPubkyWrites(core())
+        val list = writes.buildList(AUTHOR, "Coffee", "Where to sit with a book", listOf("https://osm.org/node/270803095"), private = false)
+
+        assertEquals(ListPost("Coffee", "Where to sit with a book", listOf(PLACE)), listOfPost(list.json))
+        val content = json(json(list.json)["content"]!!.jsonPrimitive.content)
+        assertEquals("Where to sit with a book", content["description"]!!.jsonPrimitive.content, "the spec's field, as pubky.app reads it")
+        assertFailsWith<CoreFailure> { writes.buildList(AUTHOR, "Coffee", "x".repeat(501), listOf(PLACE), private = false) }
+    }
+
+    @Test
+    fun aListReadFromTheHomeserverKeepsItsDescription() {
+        fun read(description: String?) =
+            OwnCollection(
+                "L1",
+                "L1",
+                "pubky://$AUTHOR/priv/social/v1/posts/L1",
+                true,
+                "Coffee",
+                description,
+                listOf(CollectionItem(PLACE, null)),
+            ).toOwnList()
+
+        assertEquals(
+            OwnList("pubky://$AUTHOR/priv/social/v1/posts/L1", Kept.Private, "Coffee", listOf(PLACE), description = "Where to sit"),
+            read(" Where to sit "),
+        )
+        assertEquals(null, read("  ").description, "a blank one is none")
     }
 
     @Test

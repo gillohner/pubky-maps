@@ -87,6 +87,7 @@ class FakePubkyWrites : PubkyWrites {
     override fun buildList(
         author: String,
         name: String,
+        description: String?,
         places: List<String>,
         private: Boolean,
     ): BuiltWrite {
@@ -94,7 +95,7 @@ class FakePubkyWrites : PubkyWrites {
             throw to.pubky.maps.account.CoreFailure
                 .Other("name: at most 100 characters")
         }
-        builds += "list($name, $places, private=$private)"
+        builds += "list($name, $places, private=$private" + (description?.let { ", description=$it" } ?: "") + ")"
         val root = if (private) "priv" else "pub"
         return BuiltWrite("/$root/social/v1/posts/L$name/L$name.json", "pubky://$author/$root/social/v1/posts/L$name", "{}")
     }

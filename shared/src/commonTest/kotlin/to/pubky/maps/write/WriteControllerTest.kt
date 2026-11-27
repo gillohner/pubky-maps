@@ -932,6 +932,57 @@ class WriteControllerTest {
         }
 
     @Test
+    fun aNewListKeepsItsDescriptionWhereverItGoes() =
+        runTest {
+            signedIn()
+            val writer = controller()
+            val homeserver = CompletableDeferred<Unit>()
+            writes.gate = homeserver
+
+            writer.createList(target, "Coffee", Kept.Public, description = "  Where to sit with a book ")
+            writer.createList(target, "Picnic", Kept.Phone, description = "Shade and a bench")
+            writer.createList(target, "Secret", Kept.Private, description = "   ")
+            runCurrent()
+
+            assertEquals(
+                listOf("list(Coffee, [$OSM], private=false, description=Where to sit with a book)", "list(Secret, [$OSM], private=true)"),
+                writes.builds,
+                "trimmed into the post; a blank one is none",
+            )
+            assertEquals(
+                "Shade and a bench",
+                phone.data.lists
+                    .single()
+                    .description,
+            )
+            val shown = mapOf("Coffee" to "Where to sit with a book", "Picnic" to "Shade and a bench", "Secret" to null)
+            assertEquals(
+                shown,
+                writer.own.value.lists
+                    .associate { it.name to it.description },
+                "while the homeserver has not taken them",
+            )
+            assertTrue(
+                writer.own.value.lists
+                    .single { it.name == "Coffee" }
+                    .pending,
+            )
+
+            homeserver.complete(Unit)
+            runCurrent()
+            assertEquals(
+                shown,
+                writer.own.value.lists
+                    .associate { it.name to it.description },
+                "once it took them",
+            )
+            assertTrue(
+                writer.own.value.lists
+                    .none { it.pending },
+            )
+        }
+
+    @Test
     fun aPlaceOnAPhoneListIsAddedAndRemovedOnThePhone() =
         runTest {
             account.value = AccountState.SignedOut()

@@ -210,7 +210,8 @@ place (up to 2000 characters). A photo is picked or taken, re-encoded on the pho
 too), which drops camera and phone details and, unless Photo locations is Public, its GPS spot,
 then uploaded and posted as an `image` post embedding the place, with alt text. Collections (`OwnList` in the code) are
 the user's, read from their homeserver (public or private) or kept on the phone, 100
-places each. Bookmark keeps the place privately on the homeserver or on the phone only, per the
+places each, with a title and, as on pubky.app, an optional description (up to 500 characters, in
+the collection post's `description`; the Bookmarks screen shows it under the name). Bookmark keeps the place privately on the homeserver or on the phone only, per the
 setting; the **Bookmarks** screen (from the search page) lists bookmarks and collections (bookmarks of
 other Pubky apps' objects in the same folder, such as pubky.app posts, are left out), and the map
 shows each bookmarked place as a purple bookmark badge that opens it. The homeserver's bookmark holds

@@ -114,6 +114,7 @@ class PubkyWordsTest {
                         ),
                     onToggle = {},
                     onNewNameChange = {},
+                    onNewDescriptionChange = {},
                     onNewKeptChange = {},
                     onCreate = {},
                     onClose = {},

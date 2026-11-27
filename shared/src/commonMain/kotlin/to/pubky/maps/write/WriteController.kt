@@ -487,14 +487,16 @@ class WriteController(
 
     /**
      * Creates a list named [name] holding the place, kept where [kept] says (the user's Lists choice
-     * unless they picked another for this list).
+     * unless they picked another for this list), with [description] unless it is blank.
      */
     fun createList(
         target: WriteTarget,
         name: String,
         kept: Kept,
+        description: String = "",
     ) = enqueue {
         keepPointPage(target)
+        val about = listDescription(description)
         if (kept == Kept.Phone) {
             val id = "${now()}-${phoneData.lists.size}"
             val place = normalize(target.uri)
@@ -505,14 +507,15 @@ class WriteController(
                     name = name.trim(),
                     items = listOf(place),
                     names = listOfNotNull(target.name?.let { place to it }).toMap(),
+                    description = about,
                 )
             io { phone.putList(list) }
             phoneData = phoneData.copy(lists = phoneData.lists + list)
             publish()
         } else {
             val private = kept == Kept.Private
-            val built = build { core, author -> core.buildList(author, name.trim(), listOf(target.uri), private) } ?: return@enqueue
-            add(target, WriteOp.CreateList(target.uri, name.trim(), private, built.path, built.uri, built.json))
+            val built = build { core, author -> core.buildList(author, name.trim(), about, listOf(target.uri), private) } ?: return@enqueue
+            add(target, WriteOp.CreateList(target.uri, name.trim(), private, built.path, built.uri, built.json, about))
             send()
         }
     }
@@ -712,7 +715,13 @@ class WriteController(
 
             is WriteOp.CreateList -> {
                 core.put(op.path, op.json)
-                OwnList(op.uri, if (op.private) Kept.Private else Kept.Public, op.name, listOf(normalize(op.place)))
+                OwnList(
+                    op.uri,
+                    if (op.private) Kept.Private else Kept.Public,
+                    op.name,
+                    listOf(normalize(op.place)),
+                    description = op.description,
+                )
             }
 
             is WriteOp.EditList -> {

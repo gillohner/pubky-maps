@@ -29,6 +29,24 @@ import androidx.compose.ui.unit.dp
 /** The spec's limit for a list's name. */
 const val LIST_NAME_MAX = 100
 
+/** The spec's limit for a list's description (`collection_description_max_length`). */
+const val LIST_DESCRIPTION_MAX = 500
+
+/**
+ * A description's length as the spec counts it: characters (code points, so an emoji is one) of the
+ * text that is sent, trimmed.
+ */
+internal fun descriptionLength(description: String): Int {
+    val sent = description.trim()
+    var count = 0
+    var i = 0
+    while (i < sent.length) {
+        i += if (sent[i].isHighSurrogate() && i + 1 < sent.length && sent[i + 1].isLowSurrogate()) 2 else 1
+        count++
+    }
+    return count
+}
+
 /** One of the user's lists on the list page. */
 data class ListChoice(
     val list: OwnList,
@@ -46,6 +64,8 @@ data class ListPageState(
     val stale: Boolean = false,
     /** The new list's name as typed. */
     val newName: String = "",
+    /** The new list's description as typed; blank for none. */
+    val newDescription: String = "",
     /** Where a new list goes: the user's Lists choice until they pick another for it. */
     val newKept: Kept = Kept.Private,
     /** Where a new list may go (signed out: this phone only). */
@@ -62,6 +82,7 @@ fun ListPage(
     state: ListPageState,
     onToggle: (ListChoice) -> Unit,
     onNewNameChange: (String) -> Unit,
+    onNewDescriptionChange: (String) -> Unit,
     onNewKeptChange: (Kept) -> Unit,
     onCreate: () -> Unit,
     onClose: () -> Unit,
@@ -90,10 +111,23 @@ fun ListPage(
             OutlinedTextField(
                 value = state.newName,
                 onValueChange = onNewNameChange,
-                label = { Text("Name") },
+                label = { Text("Title") },
                 singleLine = true,
                 isError = state.newName.length > LIST_NAME_MAX,
                 supportingText = { Text("${state.newName.length} / $LIST_NAME_MAX") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            // Title and Description, as pubky.app's New Collection asks; the description shows under the
+            // collection's name on the Bookmarks page and on pubky.app's collection cards.
+            val descriptionChars = descriptionLength(state.newDescription)
+            OutlinedTextField(
+                value = state.newDescription,
+                onValueChange = onNewDescriptionChange,
+                label = { Text("Description (optional)") },
+                minLines = 2,
+                maxLines = 4,
+                isError = descriptionChars > LIST_DESCRIPTION_MAX,
+                supportingText = { Text("$descriptionChars / $LIST_DESCRIPTION_MAX") },
                 modifier = Modifier.fillMaxWidth(),
             )
             Column(Modifier.selectableGroup()) {
@@ -126,7 +160,10 @@ fun ListPage(
             ) {
                 Button(
                     onClick = onCreate,
-                    enabled = state.newName.isNotBlank() && state.newName.length <= LIST_NAME_MAX,
+                    enabled =
+                        state.newName.isNotBlank() &&
+                            state.newName.length <= LIST_NAME_MAX &&
+                            descriptionChars <= LIST_DESCRIPTION_MAX,
                 ) { Text("Create collection with this place") }
                 KeptBadge(state.newKept)
             }

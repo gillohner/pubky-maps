@@ -111,9 +111,20 @@ fun SavedScreen(
                         ListItem(
                             headlineContent = { Text(list.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                             supportingContent = {
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    KeptBadge(list.kept)
-                                    Text(if (list.items.size == 1) "1 place" else "${list.items.size} places")
+                                Column {
+                                    // Under the name, as pubky.app's collection cards show it: two lines while
+                                    // closed, so a long one does not push the next collection away; all of it
+                                    // once opened.
+                                    list.description?.let {
+                                        Text(it, maxLines = if (expanded) Int.MAX_VALUE else 2, overflow = TextOverflow.Ellipsis)
+                                    }
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        KeptBadge(list.kept)
+                                        Text(if (list.items.size == 1) "1 place" else "${list.items.size} places")
+                                    }
                                 }
                             },
                             leadingContent = { Icon(WriteIcons.SavedList, contentDescription = null) },

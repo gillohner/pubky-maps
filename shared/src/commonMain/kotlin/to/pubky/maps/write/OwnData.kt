@@ -266,7 +266,15 @@ private fun apply(
         }
 
         is WriteOp.CreateList -> {
-            lists[op.uri] = OwnList(op.uri, if (op.private) Kept.Private else Kept.Public, op.name, listOf(place), pending = pending)
+            lists[op.uri] =
+                OwnList(
+                    op.uri,
+                    if (op.private) Kept.Private else Kept.Public,
+                    op.name,
+                    listOf(place),
+                    pending = pending,
+                    description = op.description,
+                )
         }
 
         is WriteOp.EditList -> {

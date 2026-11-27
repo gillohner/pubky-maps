@@ -1,12 +1,20 @@
 package to.pubky.maps.android
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.text.TextLayoutResult
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -18,6 +26,7 @@ import org.robolectric.annotation.GraphicsMode
 import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.ui.PubkyMapsTheme
 import to.pubky.maps.write.Kept
+import to.pubky.maps.write.LIST_DESCRIPTION_MAX
 import to.pubky.maps.write.ListChoice
 import to.pubky.maps.write.ListPage
 import to.pubky.maps.write.ListPageState
@@ -281,6 +290,7 @@ class SavedAndListsTest {
                         ),
                     onToggle = {},
                     onNewNameChange = {},
+                    onNewDescriptionChange = {},
                     onNewKeptChange = {},
                     onCreate = {},
                     onClose = {},
@@ -295,5 +305,106 @@ class SavedAndListsTest {
                 badge.left >= button.right && badge.top >= button.top && badge.bottom <= button.bottom
             }
         assertTrue("the Public badge is not beside Create collection with this place ($button)", beside)
+    }
+
+    @Test
+    fun aCollectionShowsItsDescriptionUnderItsName() {
+        compose.setContent {
+            PubkyMapsTheme(darkTheme = false) {
+                SavedScreen(
+                    state =
+                        SavedScreenState(
+                            places = emptyList(),
+                            lists =
+                                listOf(
+                                    OwnList("phone:1", Kept.Phone, "Coffee", listOf(osm), description = "Where to sit with a book"),
+                                    OwnList("phone:2", Kept.Phone, "Walks", emptyList()),
+                                ),
+                        ),
+                    onOpen = { _, _ -> },
+                    onBack = {},
+                )
+            }
+        }
+        val name = compose.onNodeWithText("Coffee", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val description = compose.onNodeWithText("Where to sit with a book", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val count = compose.onNodeWithText("1 place", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "the description is not between the name and the count",
+            name.bottom <= description.top && description.bottom <= count.top,
+        )
+        val walks = compose.onNodeWithText("Walks", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue("Walks has no description, so nothing comes before its count", walks.top >= count.bottom)
+    }
+
+    @Test
+    fun aNewCollectionTakesADescriptionUpToTheSpecsLimit() {
+        var state by mutableStateOf(ListPageState(placeName = "Conditorei Schober", lists = emptyList(), newName = "Cake"))
+        compose.setContent {
+            PubkyMapsTheme(darkTheme = false) {
+                ListPage(
+                    state = state,
+                    onToggle = {},
+                    onNewNameChange = {},
+                    onNewDescriptionChange = { state = state.copy(newDescription = it) },
+                    onNewKeptChange = {},
+                    onCreate = {},
+                    onClose = {},
+                )
+            }
+        }
+        val create = hasText("Create collection with this place") and hasClickAction()
+        compose.onNodeWithText("Description (optional)").performTextInput("Worth the walk")
+        assertEquals("Worth the walk", state.newDescription)
+        compose.onNode(create).assertIsEnabled()
+
+        state = state.copy(newDescription = "x".repeat(LIST_DESCRIPTION_MAX))
+        compose.onNode(create).assertIsEnabled()
+        compose.onNodeWithText("$LIST_DESCRIPTION_MAX / $LIST_DESCRIPTION_MAX").assertExists()
+
+        state = state.copy(newDescription = "x".repeat(LIST_DESCRIPTION_MAX) + " ")
+        compose.onNode(create).assertIsEnabled()
+
+        state = state.copy(newDescription = "🍰".repeat(300))
+        compose.onNodeWithText("300 / $LIST_DESCRIPTION_MAX").assertExists()
+        compose.onNode(create).assertIsEnabled()
+
+        state = state.copy(newDescription = "x".repeat(LIST_DESCRIPTION_MAX + 1))
+        compose.onNode(create).assertIsNotEnabled()
+    }
+
+    @Test
+    fun anOpenedCollectionShowsAllOfItsDescription() {
+        val long =
+            "Quiet cafés with a seat by the window, good for an hour with a book or a laptop on a rainy afternoon, " +
+                "and a few that open early enough for a coffee before the first train."
+        compose.setContent {
+            PubkyMapsTheme(darkTheme = false) {
+                SavedScreen(
+                    state =
+                        SavedScreenState(
+                            places = emptyList(),
+                            lists = listOf(OwnList("phone:1", Kept.Phone, "Coffee", listOf(osm), description = long)),
+                        ),
+                    onOpen = { _, _ -> },
+                    onBack = {},
+                )
+            }
+        }
+
+        fun lines(): Int {
+            val layouts = mutableListOf<TextLayoutResult>()
+            compose
+                .onNodeWithText(long, useUnmergedTree = true)
+                .fetchSemanticsNode()
+                .config[SemanticsActions.GetTextLayoutResult]
+                .action!!
+                .invoke(layouts)
+            return layouts.single().lineCount.also { compose.waitForIdle() }
+        }
+        assertEquals("closed: two lines", 2, lines())
+
+        compose.onNodeWithText("Coffee").performClick()
+        assertTrue("opened: all of it (${lines()} lines)", lines() > 2)
     }
 }
