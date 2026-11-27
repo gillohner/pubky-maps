@@ -71,4 +71,29 @@ class DirectionsTextsTest {
             routeStatusText(directions(RouteStatus.NoRoute(NoRouteReason.NoRoadNear), reversed = true)),
         )
     }
+
+    @Test
+    fun aChosenStartIsNamedWhereTheUsersLocationWouldBe() {
+        val hotel = RouteStart("osm:node/9", GeoPoint(47.3667, 8.545), "Hotel Adler")
+
+        fun directions(
+            status: RouteStatus,
+            reversed: Boolean = false,
+        ) = Directions("osm:node/1", GeoPoint(47.0, 8.0), TravelMode.Walk, null, status, reversed = reversed, from = hotel)
+        val found = RouteStatus.Found(Route(emptyList(), 60.0, 80.0), "s")
+        assertEquals("On foot from Hotel Adler", routeWayText(directions(found)))
+        assertEquals("On foot to Hotel Adler", routeWayText(directions(found, reversed = true)))
+        assertEquals(
+            "No route on foot from Hotel Adler to this place.",
+            routeStatusText(directions(RouteStatus.NoRoute(NoRouteReason.NotConnected))),
+        )
+        assertEquals(
+            "No route on foot from this place to Hotel Adler.",
+            routeStatusText(directions(RouteStatus.NoRoute(NoRouteReason.NotConnected), reversed = true)),
+        )
+        assertEquals(
+            "No road or path on foot near Hotel Adler or the place.",
+            routeStatusText(directions(RouteStatus.NoRoute(NoRouteReason.NoRoadNear))),
+        )
+    }
 }

@@ -8,7 +8,9 @@
 # back to the fix and again to the place. Its steps open and raise the sheet to the whole screen; a
 # tapped step lowers it and the map moves to that turn, as does the route card's next step. The lists
 # holding the place show at the top; back closes it. A long-press on the map then drops a pin: its
-# page is named by its coordinates and asks no server; back closes it.
+# page is named by its coordinates and asks no server; its Start here makes it the start of the
+# next directions: the link opened again, Directions route from the pin to the place, and From your
+# location from the fix again; back closes it.
 # Checks that Pinakes, Nexus and Valhalla were asked with the app's User-Agent, Nexus for every
 # spelling people used for the place.
 # Usage: emulator-place.sh <apk> <out dir>
@@ -218,11 +220,39 @@ screenshot place-dropped-pin
 check_alive "dropped pin"
 # Its page asks Pinakes and Nexus nothing (the places layer is held while it is open, see layerMayAsk).
 if grep -q "geo:" "$log"; then fail "the dropped pin's point was sent to a server"; fi
+xy=$(wait_for "Start here" 5) || fail "no Start here on the dropped pin's page"
+adb shell input tap $xy
+wait_for "Starting here" 5 > /dev/null || fail "Start here did not make the dropped pin the start"
+wait_for "Directions to other places start here." 5 > /dev/null || fail "the chosen start does not say what it does"
+screenshot place-dropped-pin-start
 adb shell input keyevent KEYCODE_BACK
 sleep 2
 wait_for "Show my location" 10 > /dev/null || fail "back did not return to the map from the dropped pin"
 if wait_for_start "Dropped pin" 2 > /dev/null; then fail "back did not close the dropped pin's page"; fi
 check_alive "after the dropped pin"
+
+# The place again from its link: its Directions start at the dropped pin, no position asked, the
+# start's dot on the map (looked at in the screenshot); From your location routes from the GPS fix
+# again, fed anew (it was stopped for the steps' views).
+( for _ in $(seq 1 30); do adb emu geo fix 8.5403 47.3779 > /dev/null 2>&1 || true; sleep 2; done ) &
+gps=$!
+started=$(adb shell am start -W -a android.intent.action.VIEW -d "'https://www.openstreetmap.org/node/270803095'" -p "$pkg" 2>&1) || true
+if grep -q "Error" <<< "$started"; then fail "the link did not reach the app again: $started"; fi
+wait_for "Conditorei schober" 30 > /dev/null || fail "no place page for the Conditorei Schober from its link again"
+xy=$(wait_for "Directions" 10) || fail "no Directions on the place page opened again"
+adb shell input tap $xy
+wait_for_start "On foot from 47.3" 30 > /dev/null || fail "the directions do not start at the dropped pin"
+wait_for "From your location" 5 > /dev/null || fail "no way back to the user's location in the route card"
+sleep 3
+screenshot place-directions-from-pin
+check_alive "directions from the dropped pin"
+xy=$(wait_for "From your location" 5) || fail "no From your location in the route card"
+adb shell input tap $xy
+wait_for "On foot from your location" 20 > /dev/null || fail "From your location did not route from the user's location"
+check_alive "directions from the user's location again"
+adb shell input keyevent KEYCODE_BACK
+sleep 2
+wait_for "Show my location" 10 > /dev/null || fail "back did not return to the map from the place opened again"
 
 python3 -I - "$log" <<'PY' || fail "the place page did not ask Pinakes and Nexus as expected"
 import json, sys
@@ -241,16 +271,20 @@ agents = {l["ua"] for l in lines}
 assert all(a.startswith(("PubkyMaps/", "pubky-maps-core/")) for a in agents), agents
 assert all(l["ua"].startswith("PubkyMaps/") for l in lines if l["path"].startswith("/v1/stream/")), agents
 # Directions: by car from the GPS fix to the card's point, then on foot from the same start, swapped
-# (from the card's point back to the fix) and swapped again.
+# (from the card's point back to the fix) and swapped again; later on foot from the dropped pin
+# (somewhere else on the map), then from the fix again.
 routes = [l for l in lines if l["path"] == "/route"]
-assert [r["costing"] for r in routes] == ["auto", "pedestrian", "pedestrian", "pedestrian"], routes
+assert [r["costing"] for r in routes] == ["pedestrian" if i else "auto" for i in range(6)], routes
 for i, r in enumerate(routes):
     start, end = r["locations"]
     if i == 2:
         start, end = end, start
-    assert abs(start["lat"] - 47.3779) < 1e-3 and abs(start["lon"] - 8.5403) < 1e-3, r
+    fix = abs(start["lat"] - 47.3779) < 1e-3 and abs(start["lon"] - 8.5403) < 1e-3
+    assert fix == (i != 4), r
     assert abs(end["lat"] - 47.3708689) < 1e-6 and abs(end["lon"] - 8.5418241) < 1e-6, r
     assert r["ua"].startswith("PubkyMaps/"), r
+pin = routes[4]["locations"][0]
+assert abs(pin["lat"] - 47.37) < 0.1 and abs(pin["lon"] - 8.54) < 0.1, pin
 print("requests:", len(lines), sorted(set(paths)))
 PY
 

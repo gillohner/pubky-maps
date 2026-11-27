@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.status.ServiceHealth
 import to.pubky.maps.status.ServicePart
+import kotlin.math.abs
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -41,9 +42,35 @@ sealed interface RouteStatus {
 }
 
 /**
- * Directions between the place [placeUri] at [place] and the user's [position] once known, by [mode]:
- * from the user to the place, or from the place back to the user when [reversed] (the user swapped
- * start and destination); [stepsShown] when the user opened the route's list of steps, [shownStep] the
+ * A place the user chose to start directions from ("Start here" on its page, as CoMaps' "Route from"
+ * and OsmAnd's "Directions from"): the place [placeUri] at [point], named [name] in the route card.
+ */
+data class RouteStart(
+    val placeUri: String,
+    val point: GeoPoint,
+    val name: String,
+) {
+    /**
+     * Whether the place [uri] at [point] is this start: the same link, or the same point within
+     * about 5 m (the same place reached through another link: its Pinakes card, an OSM URL).
+     */
+    fun isPlace(
+        uri: String,
+        point: GeoPoint?,
+    ): Boolean =
+        uri == placeUri ||
+            (point != null && abs(point.lat - this.point.lat) < SAME_POINT && abs(point.lon - this.point.lon) < SAME_POINT)
+
+    private companion object {
+        /** About 5 m of latitude, less of longitude: two points of one place. */
+        const val SAME_POINT = 0.00005
+    }
+}
+
+/**
+ * Directions between the place [placeUri] at [place] and the user's [position] once known, or the
+ * place the user chose to start from ([from]), by [mode]: from the start to the place, or from the
+ * place back to the start when [reversed] (the user swapped start and destination); [stepsShown] when the user opened the route's list of steps, [shownStep] the
  * step of the list the user tapped to see on the map.
  */
 data class Directions(
@@ -52,8 +79,10 @@ data class Directions(
     val mode: TravelMode,
     val position: GeoPoint?,
     val status: RouteStatus,
-    /** The route starts at the place and ends at the user's position. */
+    /** The route starts at the place and ends at the user's position (at [from]). */
     val reversed: Boolean = false,
+    /** The place the user chose to start from instead of their position; null for their position. */
+    val from: RouteStart? = null,
     /**
      * Which opening of directions these are ([DirectionsController.start] counts them): the same for
      * the directions' other modes and way round, another once they are started again.
@@ -69,6 +98,9 @@ data class Directions(
     /** The tap the map has moved for ([DirectionsController.mapMovedToStep]). */
     val mapMovedForTap: Int = 0,
 ) {
+    /** The route's other end than the place: [from], else the user's position once known. */
+    val origin: GeoPoint? get() = from?.point ?: position
+
     /** The found route the map still has to fit, once per route. */
     val routeToFit: RouteStatus.Found? get() = (status as? RouteStatus.Found)?.takeIf { !routeFitted }
 
@@ -89,7 +121,9 @@ data class Directions(
  * Directions from the user's position to an open place, or back from it once the user swaps them, for
  * the life of the process: one route at a time, asked again when the mode or the direction changes (a
  * newer request replaces one still running), the last mode kept for the next place, which starts from
- * the user again. The list of steps the user opened stays open for the routes by other modes or the
+ * the user again. A place the user chose to start from ([chooseStart]) serves every other place's
+ * directions instead of the user's position until the user clears it: kept for the process, as the
+ * mode, so the start of a day out (a hotel, a station) serves the places looked at from there. The list of steps the user opened stays open for the routes by other modes or the
  * other way to the same place; a step tapped in it is marked on the map until the list closes or another route
  * comes. Every routing server failing names routing in [health] until one answers.
  * A position that has not come within [locatingTimeout] (a permission dialog dismissed, no fix
@@ -103,6 +137,11 @@ class DirectionsController(
 ) {
     private val state = MutableStateFlow<Directions?>(null)
     val directions: StateFlow<Directions?> = state.asStateFlow()
+
+    private val chosen = MutableStateFlow<RouteStart?>(null)
+
+    /** The place the user chose to start directions from; null for their position. */
+    val chosenStart: StateFlow<RouteStart?> = chosen.asStateFlow()
 
     /** The mode of the next directions: the one the user picked last, by car at first. */
     private var lastMode = TravelMode.Car
@@ -119,10 +158,54 @@ class DirectionsController(
     private var locating: Job? = null
 
     /**
-     * Opens directions to [placeUri] at [place]: from the user's [position] at once when it is known,
-     * else [RouteStatus.Locating] until [located] or [locationMissing]. [reversed] routes from the
-     * place back to the user: Try again for a missing position keeps the way round the user swapped
-     * the directions to, the page's Directions starts them to the place.
+     * The start the directions to [placeUri] at [place] take instead of the user's position: the
+     * chosen one, but not for the place itself (from a hotel to the hotel is the way there from the user).
+     */
+    fun startFor(
+        placeUri: String,
+        place: GeoPoint,
+    ): RouteStart? = chosen.value?.takeIf { !it.isPlace(placeUri, place) }
+
+    /**
+     * Directions to the other places start from [start] from now on. Open directions are not changed:
+     * they are those of the page where the user chose it, to the start itself.
+     */
+    fun chooseStart(start: RouteStart) {
+        chosen.value = start
+    }
+
+    /** Directions start from the user's position again. Open directions are started again by the caller. */
+    fun clearStart() {
+        chosen.value = null
+    }
+
+    /**
+     * The user asked for the open directions from their position instead of their chosen start: the
+     * start they came from is cleared, one chosen since on this page is kept (the caller starts the
+     * directions again, from the user for this page's own start).
+     */
+    fun leaveStart() {
+        val from = state.value?.from ?: return
+        if (chosen.value == from) chosen.value = null
+    }
+
+    /**
+     * The page of the chosen start [placeUri] is now called [name] (its card came after Start here
+     * took the link's coordinates or text): later directions say the name.
+     */
+    fun renameStart(
+        placeUri: String,
+        name: String,
+    ) {
+        val start = chosen.value ?: return
+        if (start.placeUri == placeUri && start.name != name) chosen.value = start.copy(name = name)
+    }
+
+    /**
+     * Opens directions to [placeUri] at [place]: from the chosen start ([startFor]) or the user's known
+     * [position] at once, else [RouteStatus.Locating] until [located] or [locationMissing]. [reversed]
+     * routes from the place back to the start: Try again for a missing position keeps the way round
+     * the user swapped the directions to, the page's Directions starts them to the place.
      */
     fun start(
         placeUri: String,
@@ -131,8 +214,18 @@ class DirectionsController(
         reversed: Boolean = false,
     ) {
         openings += 1
-        val directions = Directions(placeUri, place, lastMode, position, RouteStatus.Locating, reversed = reversed, opening = openings)
-        if (position != null) {
+        val directions =
+            Directions(
+                placeUri,
+                place,
+                lastMode,
+                position,
+                RouteStatus.Locating,
+                reversed = reversed,
+                from = startFor(placeUri, place),
+                opening = openings,
+            )
+        if (directions.origin != null) {
             ask(directions)
             return
         }
@@ -151,7 +244,7 @@ class DirectionsController(
      */
     fun located(position: GeoPoint) {
         val current = state.value ?: return
-        if (current.position != null || (current.status != RouteStatus.Locating && current.status !is RouteStatus.NoLocation)) return
+        if (current.origin != null || (current.status != RouteStatus.Locating && current.status !is RouteStatus.NoLocation)) return
         ask(current.copy(position = position))
     }
 
@@ -170,18 +263,18 @@ class DirectionsController(
         val current = state.value ?: return
         if (current.mode == mode) return
         val changed = current.copy(mode = mode)
-        if (changed.position != null) ask(changed) else set(changed)
+        if (changed.origin != null) ask(changed) else set(changed)
     }
 
     /**
-     * Swaps the start and the destination: the route from the place back to the user's position, or
-     * to the place again. Asked at once from a known position; one still awaited serves the swapped
+     * Swaps the start and the destination: the route from the place back to the user's position (to
+     * the chosen start), or to the place again. Asked at once from a known position; one still awaited serves the swapped
      * directions when it comes. The open list of steps stays open for the swapped route.
      */
     fun swap() {
         val current = state.value ?: return
         val changed = current.copy(reversed = !current.reversed)
-        if (changed.position != null) ask(changed) else set(changed)
+        if (changed.origin != null) ask(changed) else set(changed)
     }
 
     /** Opens or closes the list of the route's steps; closing it takes the tapped step off the map. */
@@ -210,7 +303,7 @@ class DirectionsController(
     /** Asks again after a failure, between the same points. */
     fun retry() {
         val current = state.value ?: return
-        if (current.position != null) ask(current)
+        if (current.origin != null) ask(current)
     }
 
     /**
@@ -240,7 +333,7 @@ class DirectionsController(
     }
 
     private fun ask(directions: Directions) {
-        val position = directions.position ?: return
+        val origin = directions.origin ?: return
         request?.cancel()
         locating?.cancel()
         locating = null
@@ -252,9 +345,9 @@ class DirectionsController(
             scope.launch {
                 val answer =
                     if (asked.reversed) {
-                        routing.route(asked.place, position, asked.mode)
+                        routing.route(asked.place, origin, asked.mode)
                     } else {
-                        routing.route(position, asked.place, asked.mode)
+                        routing.route(origin, asked.place, asked.mode)
                     }
                 val status =
                     when (answer) {

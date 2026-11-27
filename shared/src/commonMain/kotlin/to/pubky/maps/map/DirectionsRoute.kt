@@ -24,13 +24,18 @@ import to.pubky.maps.config.ServerDefaults
 import to.pubky.maps.config.ServerLists
 import to.pubky.maps.config.Service
 import to.pubky.maps.links.GeoPoint
+import to.pubky.maps.place.PlacePageState
+import to.pubky.maps.place.RouteStartChoice
+import to.pubky.maps.place.title
 import to.pubky.maps.routing.DirectionsController
+import to.pubky.maps.routing.RouteStart
 import to.pubky.maps.routing.RouteStatus
 
 /**
  * What Directions on a place page does: directions to the place from the user's position (from the
  * place back to it when reversed), which it asks for as the my-location button does (the permission
  * only now, location turned back on), and hands to [directions] once it is known. Without one the directions say why.
+ * Directions from a chosen start ([DirectionsController.startFor]) need no position: nothing is asked.
  */
 @Composable
 internal fun rememberStartDirections(
@@ -63,14 +68,19 @@ internal fun rememberStartDirections(
             .collect { unavailable -> if (unavailable && waiting()) directions.locationMissing(permissionOff = false) }
     }
     return remember(directions, locationState) {
-        { uri, to, reversed ->
+        start@{ uri, to, reversed ->
             val fix = locationState.lastLocation?.position?.let { GeoPoint(it.latitude, it.longitude) }
             val step =
-                myLocationStep(
+                directionsLocationStep(
+                    fromChosenStart = directions.startFor(uri, to) != null,
                     permission = locationState.permission,
                     trackingUnavailable = locationState.status is LocationTrackingStatus.Unavailable,
                     hasFix = fix != null,
                 )
+            if (step == null) {
+                directions.start(uri, to, fix, reversed)
+                return@start
+            }
             when (step) {
                 MyLocationStep.MoveToLastFix -> {
                     directions.start(uri, to, fix, reversed)
@@ -101,6 +111,37 @@ internal fun rememberStartDirections(
             }
         }
     }
+}
+
+/**
+ * What Directions do about the user's position: nothing from a chosen start (null: no permission
+ * asked, no position awaited), else what the my-location button does ([myLocationStep]).
+ */
+internal fun directionsLocationStep(
+    fromChosenStart: Boolean,
+    permission: LocationPermission,
+    trackingUnavailable: Boolean,
+    hasFix: Boolean,
+): MyLocationStep? = if (fromChosenStart) null else myLocationStep(permission, trackingUnavailable, hasFix)
+
+/**
+ * "Start here" on the page of [page]'s place, for [directions]: chosen while [chosen] is the place,
+ * choosing it under the page's title. None without routing or a point to start from, as Directions.
+ */
+internal fun routeStartChoice(
+    directions: DirectionsController?,
+    chosen: RouteStart?,
+    page: PlacePageState,
+): RouteStartChoice? {
+    if (directions == null) return null
+    val point = page.place.point ?: page.card?.point ?: return null
+    val isStart = chosen?.isPlace(page.place.uri, point) == true
+    return RouteStartChoice(
+        chosen = isStart,
+        onToggle = {
+            if (isStart) directions.clearStart() else directions.chooseStart(RouteStart(page.place.uri, point, page.title))
+        },
+    )
 }
 
 /**

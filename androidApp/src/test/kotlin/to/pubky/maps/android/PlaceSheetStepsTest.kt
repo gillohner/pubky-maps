@@ -143,6 +143,7 @@ class PlaceSheetStepsTest {
                                     onRetry = {},
                                     onOpenSettings = null,
                                     credits = emptyList(),
+                                    onFromYourLocation = {},
                                 ),
                         ),
                         stop,

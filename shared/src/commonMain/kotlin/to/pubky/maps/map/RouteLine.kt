@@ -76,3 +76,26 @@ internal fun RouteStepMark(point: GeoPoint) {
         )
     }
 }
+
+/** The grey of a chosen start's ring, as Google Maps marks a start that is not the user's position. */
+private val StartRing = Color(0xFF3C4043)
+
+/**
+ * The start the user chose for directions ([to.pubky.maps.routing.Directions.from]): a white dot in a
+ * dark ring where the route's line begins (ends, swapped), as Google Maps marks a start other than the
+ * user's position; apart from the blue location dot and the place's red pin.
+ */
+@Composable
+internal fun RouteStartMark(point: GeoPoint) {
+    key(point) {
+        val source = rememberGeoJsonSource(GeoJsonData.Features(Point(Position(longitude = point.lon, latitude = point.lat))))
+        CircleLayer(
+            id = "route-start",
+            source = source,
+            radius = const(6.dp),
+            color = const(Color.White),
+            strokeColor = const(StartRing),
+            strokeWidth = const(3.dp),
+        )
+    }
+}

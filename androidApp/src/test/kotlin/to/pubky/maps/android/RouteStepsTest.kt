@@ -119,6 +119,7 @@ class RouteStepsTest {
                                 onRetry = {},
                                 onOpenSettings = null,
                                 credits = emptyList(),
+                                onFromYourLocation = {},
                             ),
                     ),
                 )

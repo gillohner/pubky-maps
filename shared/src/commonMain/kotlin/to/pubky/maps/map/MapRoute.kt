@@ -223,6 +223,7 @@ fun MapRoute(
     val foundRoute = directionsState?.status as? RouteStatus.Found
     val routePoints by rememberUpdatedState(foundRoute?.route?.points)
     val markedStep by rememberUpdatedState(directionsState?.markedStep?.at)
+    val routeStart by rememberUpdatedState(directionsState?.from?.point)
     // Pins while search is open; the picked result also when its card shows.
     val searchPins by rememberUpdatedState(searchState?.takeIf { it.mode != SearchMode.Idle })
     val mapState =
@@ -233,6 +234,7 @@ fun MapRoute(
         ) {
             // Under the location dot and every pin.
             routePoints?.let { RouteLine(it) }
+            routeStart?.let { RouteStartMark(it) }
             LocationIndicatorLayer(id = "user-location", locationState = locationState)
             if (pubkyPlaces.isNotEmpty()) {
                 MapPlacesPins(
@@ -441,7 +443,7 @@ fun MapRoute(
                 onClose = directions::close,
                 onSwap = directions::swap,
                 onRetry = {
-                    if (directionsState.position == null) {
+                    if (directionsState.origin == null) {
                         startDirections(directionsState.placeUri, directionsState.place, directionsState.reversed)
                     } else {
                         directions.retry()
@@ -458,6 +460,10 @@ fun MapRoute(
                         null
                     },
                 credits = routeCredits(servers, foundRoute?.server),
+                onFromYourLocation = {
+                    directions.leaveStart()
+                    startDirections(directionsState.placeUri, directionsState.place, directionsState.reversed)
+                },
             )
         } else {
             null
@@ -934,6 +940,11 @@ private fun rememberPlacePage(
     val pageState by places.pages.state.collectAsStateWithLifecycle()
     val own = writes?.own?.collectAsStateWithLifecycle()?.value
     val publicTagsExplained = writes?.publicTagsExplained?.collectAsStateWithLifecycle()?.value ?: true
+    val chosenStart =
+        places.directions
+            ?.chosenStart
+            ?.collectAsStateWithLifecycle()
+            ?.value
     var stop by rememberSaveable(shown?.place?.uri) { mutableStateOf(shown?.initialStop ?: SheetStop.Peek) }
     val now by produceState(Clock.System.now()) {
         while (true) {
@@ -944,6 +955,10 @@ private fun rememberPlacePage(
     if (shown == null) return null
     SystemBack { shown.onClose() }
     val page = pageState?.takeIf { it.place.uri == shown.place.uri } ?: PlacePageState(shown.place)
+    // A start chosen before the page's card came is named as the card names the place.
+    // Only from a card: a page opened offline later, named by its link, does not undo the name.
+    val cardName = page.card?.name
+    LaunchedEffect(chosenStart, cardName) { if (cardName != null) places.directions?.renameStart(page.place.uri, cardName) }
     // Built once per place and point (it asks the core and the package manager), not per recomposition.
     val openInPlace = page.place.copy(point = page.place.point ?: page.card?.point)
     val openInActions =
@@ -974,6 +989,7 @@ private fun rememberPlacePage(
                 },
             directions = directions?.takeIf { it.directions.placeUri == shown.place.uri },
             onReportProblem = page.noteTarget?.let { target -> onReportProblem?.let { open -> { open(target) } } },
+            routeStart = routeStartChoice(places.directions.takeIf { startDirections != null }, chosenStart, page),
         )
     return PlacePageSlot(
         full = stop == SheetStop.Full,
