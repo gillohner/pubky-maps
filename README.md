@@ -378,7 +378,9 @@ screenshots search with its pins, and the update probe screenshots each step of 
   the theme three times in one process, each switch recreates `MainActivity`, and an old one still
   in memory at the second or third fails it); reports about a library, and our lookups of the
   app's private folders (`filesDir`, `noBackupFilesDir`: a microsecond check that the folder
-  exists), are listed only.
+  exists), are listed only. MapLibre making its runtime (its native library's load) on the main
+  thread counts as ours: the app makes it in the background as its map screen is created
+  (`startMapRuntime`).
 
 ## Data sources and attribution
 
