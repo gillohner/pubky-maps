@@ -6,6 +6,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -14,11 +15,18 @@ import to.pubky.maps.config.AppSettings
 import to.pubky.maps.config.AttributionLink
 import to.pubky.maps.config.ServerDefaults
 import to.pubky.maps.config.Service
+import to.pubky.maps.links.GeoPoint
+import to.pubky.maps.routing.DirectionsController
+import to.pubky.maps.routing.RouteAnswer
+import to.pubky.maps.routing.RouteStatus
+import to.pubky.maps.routing.Routing
+import to.pubky.maps.routing.TravelMode
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class DirectionsRouteTest {
@@ -201,4 +209,89 @@ class DirectionsRouteTest {
             routeCredits((withOwn as AppSettings.AddServerResult.Added).settings.servers, own.url),
         )
     }
+
+    private val kunsthaus = GeoPoint(47.3702, 8.5486)
+
+    /** A controller whose directions wait for a position, as after a tap on Directions with location unavailable. */
+    private fun TestScope.waitingDirections(): DirectionsController {
+        val directions = DirectionsController(Routing { _, _, _ -> RouteAnswer.Unreachable }, backgroundScope)
+        directions.start("osm:node/1", kunsthaus, null)
+        return directions
+    }
+
+    @Test
+    fun aRetryThatDoesNotBringLocationBackSaysThePositionIsMissing() =
+        runTest {
+            val directions = waitingDirections()
+            var retried = false
+            retryLocationFor(directions, { retried = true }, MutableStateFlow(true))
+            advanceTimeBy(LocationRetryGrace - 1.seconds)
+            assertTrue(retried)
+            assertEquals(RouteStatus.Locating, directions.directions.value?.status, "not before the grace ends")
+            advanceTimeBy(2.seconds)
+            // Long before the controller's own wait (30 s) ends.
+            assertEquals(RouteStatus.NoLocation(permissionOff = false), directions.directions.value?.status)
+        }
+
+    @Test
+    fun aRetryThatBringsLocationBackKeepsWaitingForThePosition() =
+        runTest {
+            val directions = waitingDirections()
+            val unavailable = MutableStateFlow(true)
+            retryLocationFor(directions, {}, unavailable)
+            advanceTimeBy(1.seconds)
+            unavailable.value = false
+            advanceTimeBy(LocationRetryGrace)
+            assertEquals(RouteStatus.Locating, directions.directions.value?.status)
+        }
+
+    @Test
+    fun aFailedRetrySaysThePositionIsMissingAlsoAfterAModeChangeOrASwap() =
+        runTest {
+            val directions = waitingDirections()
+            retryLocationFor(directions, {}, MutableStateFlow(true))
+            advanceTimeBy(1.seconds)
+            directions.selectMode(TravelMode.Walk)
+            directions.swap()
+            advanceTimeBy(LocationRetryGrace)
+            val shown = directions.directions.value
+            assertEquals(RouteStatus.NoLocation(permissionOff = false), shown?.status)
+            assertEquals(TravelMode.Walk, shown?.mode)
+            assertTrue(shown?.reversed == true)
+        }
+
+    @Test
+    fun aFailedRetryLeavesDirectionsOpenedAgainMeanwhileWaiting() =
+        runTest {
+            val directions = waitingDirections()
+            retryLocationFor(directions, {}, MutableStateFlow(true))
+            advanceTimeBy(1.seconds)
+            directions.close()
+            directions.start("osm:node/1", kunsthaus, null)
+            advanceTimeBy(LocationRetryGrace)
+            assertEquals(RouteStatus.Locating, directions.directions.value?.status)
+        }
+
+    @Test
+    fun theRetryIsForTheDirectionsOpenWhenItIsAskedNotWhenItRuns() =
+        runTest {
+            val directions = waitingDirections()
+            retryLocationFor(directions, {}, MutableStateFlow(true))
+            // Opened again before the retry's coroutine first runs.
+            directions.close()
+            directions.start("osm:node/1", kunsthaus, null)
+            advanceTimeBy(LocationRetryGrace + 1.seconds)
+            assertEquals(RouteStatus.Locating, directions.directions.value?.status)
+        }
+
+    @Test
+    fun aFailedRetryOpensNothingOnceTheDirectionsAreClosed() =
+        runTest {
+            val directions = waitingDirections()
+            retryLocationFor(directions, {}, MutableStateFlow(true))
+            advanceTimeBy(1.seconds)
+            directions.close()
+            advanceTimeBy(LocationRetryGrace)
+            assertNull(directions.directions.value)
+        }
 }
