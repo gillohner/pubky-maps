@@ -27,15 +27,15 @@ import to.pubky.maps.routing.DirectionsController
 import to.pubky.maps.routing.RouteStatus
 
 /**
- * What Directions on a place page does: directions to the place from the user's position, which it
- * asks for as the my-location button does (the permission only now, location turned back on), and
- * hands to [directions] once it is known. Without one the directions say why.
+ * What Directions on a place page does: directions to the place from the user's position (from the
+ * place back to it when reversed), which it asks for as the my-location button does (the permission
+ * only now, location turned back on), and hands to [directions] once it is known. Without one the directions say why.
  */
 @Composable
 internal fun rememberStartDirections(
     directions: DirectionsController,
     locationState: LocationState,
-): (String, GeoPoint) -> Unit {
+): (String, GeoPoint, Boolean) -> Unit {
     val scope = rememberCoroutineScope()
 
     fun waiting() = directions.directions.value?.status == RouteStatus.Locating
@@ -62,7 +62,7 @@ internal fun rememberStartDirections(
             .collect { unavailable -> if (unavailable && waiting()) directions.locationMissing(permissionOff = false) }
     }
     return remember(directions, locationState) {
-        { uri, to ->
+        { uri, to, reversed ->
             val fix = locationState.lastLocation?.position?.let { GeoPoint(it.latitude, it.longitude) }
             val step =
                 myLocationStep(
@@ -72,15 +72,15 @@ internal fun rememberStartDirections(
                 )
             when (step) {
                 MyLocationStep.MoveToLastFix -> {
-                    directions.start(uri, to, fix)
+                    directions.start(uri, to, fix, reversed)
                 }
 
                 MyLocationStep.CenterOnNextFix -> {
-                    directions.start(uri, to, null)
+                    directions.start(uri, to, null, reversed)
                 }
 
                 MyLocationStep.RetryThenCenter -> {
-                    directions.start(uri, to, null)
+                    directions.start(uri, to, null, reversed)
                     val started = directions.directions.value
                     scope.launch {
                         val recovered =
@@ -88,18 +88,21 @@ internal fun rememberStartDirections(
                                 retry = locationState::retry,
                                 unavailable = snapshotFlow { locationState.status is LocationTrackingStatus.Unavailable },
                             )
-                        // Only for these directions: closed and opened again meanwhile, they are others.
-                        if (!recovered && directions.directions.value === started) directions.locationMissing(permissionOff = false)
+                        // Only for these directions, also in another mode or way round: closed and opened
+                        // again meanwhile, they are others.
+                        if (!recovered && started != null && directions.directions.value?.opening == started.opening) {
+                            directions.locationMissing(permissionOff = false)
+                        }
                     }
                 }
 
                 MyLocationStep.ExplainPermissionOff -> {
-                    directions.start(uri, to, null)
+                    directions.start(uri, to, null, reversed)
                     directions.locationMissing(permissionOff = true)
                 }
 
                 MyLocationStep.RequestPermission -> {
-                    directions.start(uri, to, null)
+                    directions.start(uri, to, null, reversed)
                     locationState.requestPermission()
                 }
             }

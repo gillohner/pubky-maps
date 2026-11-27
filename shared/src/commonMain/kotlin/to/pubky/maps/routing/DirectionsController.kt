@@ -54,6 +54,11 @@ data class Directions(
     val status: RouteStatus,
     /** The route starts at the place and ends at the user's position. */
     val reversed: Boolean = false,
+    /**
+     * Which opening of directions these are ([DirectionsController.start] counts them): the same for
+     * the directions' other modes and way round, another once they are started again.
+     */
+    val opening: Int = 0,
     /** The map has fitted the found route ([DirectionsController.routeFitted]); false again for each new request. */
     val routeFitted: Boolean = false,
     val stepsShown: Boolean = false,
@@ -84,8 +89,8 @@ data class Directions(
  * Directions from the user's position to an open place, or back from it once the user swaps them, for
  * the life of the process: one route at a time, asked again when the mode or the direction changes (a
  * newer request replaces one still running), the last mode kept for the next place, which starts from
- * the user again. The list of steps the user opened stays open for the routes by other modes
- * to the same place; a step tapped in it is marked on the map until the list closes or another route
+ * the user again. The list of steps the user opened stays open for the routes by other modes or the
+ * other way to the same place; a step tapped in it is marked on the map until the list closes or another route
  * comes. Every routing server failing names routing in [health] until one answers.
  * A position that has not come within [locatingTimeout] (a permission dialog dismissed, no fix
  * indoors) is missing; one that comes later still starts the route.
@@ -106,22 +111,27 @@ class DirectionsController(
     /** Every tap on a step so far, for [Directions.stepTaps]; never goes back, so a tap is never taken for one before it. */
     private var stepTaps = 0
 
+    /** Every [start] so far, for [Directions.opening]. */
+    private var openings = 0
+
     /** The directions [request] asks the route for, as they were asked. */
     private var asking: Directions? = null
     private var locating: Job? = null
 
     /**
      * Opens directions to [placeUri] at [place]: from the user's [position] at once when it is known,
-     * else [RouteStatus.Locating] until [located] or [locationMissing]. Directions to the same place
-     * started again (Try again for a missing position) keep the way round the user swapped them to.
+     * else [RouteStatus.Locating] until [located] or [locationMissing]. [reversed] routes from the
+     * place back to the user: Try again for a missing position keeps the way round the user swapped
+     * the directions to, the page's Directions starts them to the place.
      */
     fun start(
         placeUri: String,
         place: GeoPoint,
         position: GeoPoint?,
+        reversed: Boolean = false,
     ) {
-        val reversed = state.value?.takeIf { it.placeUri == placeUri }?.reversed ?: false
-        val directions = Directions(placeUri, place, lastMode, position, RouteStatus.Locating, reversed = reversed)
+        openings += 1
+        val directions = Directions(placeUri, place, lastMode, position, RouteStatus.Locating, reversed = reversed, opening = openings)
         if (position != null) {
             ask(directions)
             return

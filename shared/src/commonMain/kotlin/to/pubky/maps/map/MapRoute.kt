@@ -252,7 +252,7 @@ fun MapRoute(
                 )
             }
             pinnedPoint?.let { PlacePin(it) }
-            // Above the place's pin: the route's last step is at the place.
+            // Above the place's pin: the route's last step (its first, swapped) is at the place.
             markedStep?.let { RouteStepMark(it) }
             searchPins?.let { pins ->
                 if (search != null) SearchPins(pins.results, pins.selected, onSelect = search.controller::select)
@@ -437,7 +437,7 @@ fun MapRoute(
                 onSwap = directions::swap,
                 onRetry = {
                     if (directionsState.position == null) {
-                        startDirections(directionsState.placeUri, directionsState.place)
+                        startDirections(directionsState.placeUri, directionsState.place, directionsState.reversed)
                     } else {
                         directions.retry()
                     }
@@ -906,7 +906,7 @@ private fun rememberPlacePage(
     openIn: OpenInApps?,
     writes: WriteController?,
     onWrite: (WriteTarget, WriteIntent) -> Unit,
-    startDirections: ((String, GeoPoint) -> Unit)?,
+    startDirections: ((String, GeoPoint, Boolean) -> Unit)?,
     directions: DirectionsUi?,
     onSheetMoved: () -> Unit,
 ): PlacePageSlot? {
@@ -953,7 +953,7 @@ private fun rememberPlacePage(
             writes = if (writes != null && own != null) placeWriteActions(page, own, writes, onWrite, publicTagsExplained) else null,
             onDirections =
                 (page.place.point ?: page.card?.point)?.let { to ->
-                    startDirections?.let { start -> { start(shown.place.uri, to) } }
+                    startDirections?.let { start -> { start(shown.place.uri, to, false) } }
                 },
             directions = directions?.takeIf { it.directions.placeUri == shown.place.uri },
         )

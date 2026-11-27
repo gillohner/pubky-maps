@@ -6,8 +6,9 @@
 # and the emulator's GPS at Zürich HB, ask the fixture Valhalla for a route by car from there to the
 # place, show its time and draw it on the map; Walk asks again on foot, the swap button from the place
 # back to the fix and again to the place. Its steps open and raise the sheet to the whole screen; a
-# tapped step lowers it and the map moves to that turn, as does the route card's next step. The lists holding the place show at the top; back closes it. A long-press on
-# the map then drops a pin: its page is named by its coordinates and asks no server; back closes it.
+# tapped step lowers it and the map moves to that turn, as does the route card's next step. The lists
+# holding the place show at the top; back closes it. A long-press on the map then drops a pin: its
+# page is named by its coordinates and asks no server; back closes it.
 # Checks that Pinakes, Nexus and Valhalla were asked with the app's User-Agent, Nexus for every
 # spelling people used for the place.
 # Usage: emulator-place.sh <apk> <out dir>

@@ -452,18 +452,24 @@ class DirectionsControllerTest {
         }
 
     @Test
-    fun theSameDirectionsStartedAgainKeepTheirWayRoundAndTheNextPlaceStartsFromTheUser() =
+    fun tryAgainKeepsTheWayRoundAndDirectionsOrTheNextPlaceStartFromTheUser() =
         runTest {
             val routing = FakeRouting { RouteAnswer.Found(route, "s") }
             val c = controller(routing)
             c.start("osm:node/1", kunsthaus, null)
             c.locationMissing(permissionOff = false)
             c.swap()
-            // Try again for the missing position starts the same directions anew.
-            c.start("osm:node/1", kunsthaus, here)
+            // Try again for the missing position starts the same directions anew, the same way round.
+            c.start("osm:node/1", kunsthaus, here, reversed = c.directions.value!!.reversed)
             advanceUntilIdle()
             assertTrue(c.directions.value!!.reversed)
             assertEquals(Triple(kunsthaus, here, TravelMode.Car), routing.asked.last())
+            // The page's Directions again: to the place.
+            c.start("osm:node/1", kunsthaus, here)
+            advanceUntilIdle()
+            assertEquals(false, c.directions.value?.reversed)
+            assertEquals(Triple(here, kunsthaus, TravelMode.Car), routing.asked.last())
+            c.swap()
             c.close()
             c.start("osm:node/2", kunsthaus, here)
             advanceUntilIdle()
@@ -473,5 +479,21 @@ class DirectionsControllerTest {
             c.close()
             c.swap()
             assertNull(c.directions.value)
+        }
+
+    @Test
+    fun eachStartIsAnotherOpeningAndItsOtherModesAndWayRoundAreTheSame() =
+        runTest {
+            val c = controller(FakeRouting { RouteAnswer.Found(route, "s") })
+            c.start("osm:node/1", kunsthaus, null)
+            val first = c.directions.value!!.opening
+            c.swap()
+            c.selectMode(TravelMode.Bike)
+            c.located(here)
+            advanceUntilIdle()
+            assertEquals(first, c.directions.value!!.opening)
+            c.close()
+            c.start("osm:node/1", kunsthaus, null)
+            assertTrue(c.directions.value!!.opening != first)
         }
 }
