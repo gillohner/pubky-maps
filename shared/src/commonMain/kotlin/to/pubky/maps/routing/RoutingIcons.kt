@@ -98,10 +98,13 @@ internal object RoutingIcons {
             "M6.41 21L5 19.59l4.83-4.83c.75-.75 1.17-1.77 1.17-2.83v-5.1L9.41 8.41 8 7l4-4 4 4-1.41 1.41L13 6.83v5.1c0 1.06.42 2.08 1.17 2.83L19 19.59 17.59 21 12 15.41 6.41 21z",
         )
 
+    /** Material's roundabout_left: round the ring anticlockwise, as where traffic keeps right. */
     val Roundabout: ImageVector =
         icon(
             "Roundabout",
-            "M13.92 8C13.44 5.16 10.97 3 8 3 4.69 3 2 5.69 2 9c0 2.97 2.16 5.44 5 5.92V21h2v-6.09c0-.98-.71-1.8-1.67-1.97C5.44 12.63 4 10.98 4 9c0-2.21 1.79-4 4-4 1.98 0 3.63 1.44 3.94 3.33.17.96.99 1.67 1.97 1.67h4.26l-1.59 1.59L18 13l4-4-4-4-1.41 1.41L18.17 8h-4.25z",
+            "M10.08 8c.48-2.84 2.94-5 5.92-5 3.31 0 6 2.69 6 6 0 2.97-2.16 5.44-5 5.92V21h-2v-6.09c0-.98.71-1.8 1.67-1.97" +
+                "C18.56 12.63 20 10.98 20 9c0-2.21-1.79-4-4-4-1.98 0-3.63 1.44-3.94 3.33-.17.96-.99 1.67-1.97 1.67H5.83l1.59 1.59L6 13" +
+                "L2 9l4-4 1.41 1.41L5.83 8h4.25z",
         )
 
     val Ferry: ImageVector =
@@ -178,7 +181,7 @@ internal val Turn.icon: ImageVector
 
             Turn.Merge -> RoutingIcons.Merge
 
-            // Material's roundabout for traffic on the right, as in the countries the app is made for first.
+            // Anticlockwise, as in the countries the app is made for first (traffic on the right).
             Turn.Roundabout -> RoutingIcons.Roundabout
 
             Turn.Ferry -> RoutingIcons.Ferry

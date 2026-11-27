@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
@@ -188,8 +189,10 @@ fun DirectionsCard(
             val found = directions.status as? RouteStatus.Found
             if (found != null) {
                 // Outside the live region above: opening the steps is not read out as a new route.
-                RouteSteps(found.route.steps, directions.stepsShown, ui.onSteps)
-                RouteCredits(ui.credits)
+                Column(Modifier.padding(end = 12.dp)) {
+                    RouteSteps(found.route.steps, directions.stepsShown, ui.onSteps)
+                    RouteCredits(ui.credits)
+                }
             }
         }
     }
@@ -209,14 +212,14 @@ private fun RouteSteps(
     TextButton(
         onClick = { onSteps(!shown) },
         // Its label starts under the route's time, as the steps' icons do.
-        modifier = Modifier.offset(x = (-12).dp),
+        modifier = Modifier.offset(x = (-12).dp).semantics { stateDescription = if (shown) "Expanded" else "Collapsed" },
     ) {
         Text(if (shown) "Hide steps" else "Steps")
         Spacer(Modifier.width(4.dp))
         Icon(if (shown) RoutingIcons.ExpandLess else RoutingIcons.ExpandMore, contentDescription = null, modifier = Modifier.size(18.dp))
     }
     if (!shown) return
-    Column(Modifier.padding(end = 12.dp)) {
+    Column {
         steps.forEachIndexed { i, step ->
             if (i > 0) HorizontalDivider(Modifier.padding(start = 40.dp), color = MaterialTheme.colorScheme.outlineVariant)
             Row(
@@ -227,7 +230,8 @@ private fun RouteSteps(
                 Spacer(Modifier.width(16.dp))
                 Column(Modifier.weight(1f)) {
                     Text(step.instruction, style = MaterialTheme.typography.bodyMedium)
-                    if (step.meters >= 1) {
+                    // Below 5 m the distance would read "0 m".
+                    if (step.meters >= 5) {
                         Text(
                             formatDistance(step.meters),
                             style = MaterialTheme.typography.bodySmall,

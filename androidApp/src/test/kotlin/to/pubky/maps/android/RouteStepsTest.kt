@@ -3,6 +3,9 @@ package to.pubky.maps.android
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -41,6 +44,7 @@ class RouteStepsTest {
         listOf(
             RouteStep("Drive north.", Turn.Depart, 35.0),
             RouteStep("Turn right onto Museumstrasse.", Turn.Right, 52.0),
+            RouteStep("Turn left onto Bahnhofquai.", Turn.Left, 3.0),
             RouteStep("Your destination is on the right.", Turn.Arrive, 0.0),
         )
 
@@ -66,6 +70,8 @@ class RouteStepsTest {
         }
     }
 
+    private fun stateIs(state: String) = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, state)
+
     @Test
     fun stepsOpenAndCloseBehindTheButton() {
         var shown by mutableStateOf(false)
@@ -75,13 +81,19 @@ class RouteStepsTest {
             shown = it
         }, { shown })
         compose.onNodeWithText("Turn right onto Museumstrasse.").assertDoesNotExist()
-        compose.onNodeWithText("Steps").assertHasClickAction().performClick()
+        compose
+            .onNodeWithText("Steps")
+            .assertHasClickAction()
+            .assert(stateIs("Collapsed"))
+            .performClick()
         compose.waitForIdle()
-        // One node per step: its sentence and how far the route then goes; the end has no distance.
+        // One node per step: its sentence and how far the route then goes; the end and a step of a few
+        // metres have no distance.
         compose.onNode(hasText("Turn right onto Museumstrasse.") and hasText("50 m")).assertExists()
+        compose.onNodeWithText("Turn left onto Bahnhofquai.").assertExists()
         compose.onNodeWithText("Your destination is on the right.").assertExists()
         compose.onNodeWithText("0 m").assertDoesNotExist()
-        compose.onNodeWithText("Hide steps").performClick()
+        compose.onNodeWithText("Hide steps").assert(stateIs("Expanded")).performClick()
         compose.waitForIdle()
         compose.onNodeWithText("Drive north.").assertDoesNotExist()
         assertEquals(listOf(true, false), asked)

@@ -168,8 +168,8 @@ it into the part the page leaves in view. Steps under the route open its list of
 English sentences, each with its turn's icon and how far the route then goes), which stays open for
 the other modes. Another place, or closing the page, ends them. Without a position, a route or a
 server, the page says which is missing (with Settings when location access is off for good), and
-every server failing names routing in the map's line of missing parts. Directions give no spoken
-guidance while driving and need a connection.
+every server failing names routing in the map's line of missing parts. Directions do not follow the
+user's position or speak while they travel, and need a connection.
 
 **Writing about a place** (signed in; a write that needs the homeserver opens the sign-in first and
 continues after it). The page's action row has Save, Tag, Post and Add to list; its sections have
