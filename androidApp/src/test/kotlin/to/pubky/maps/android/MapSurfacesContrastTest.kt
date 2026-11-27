@@ -3,6 +3,7 @@ package to.pubky.maps.android
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PixelMap
@@ -27,18 +28,24 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import to.pubky.maps.config.ServerDefaults
+import to.pubky.maps.links.GeoPoint
+import to.pubky.maps.links.LinkProvider
 import to.pubky.maps.map.MapScreen
 import to.pubky.maps.map.MapSearch
+import to.pubky.maps.place.PlaceCard
+import to.pubky.maps.place.PlaceRef
+import to.pubky.maps.place.PlaceSource
 import to.pubky.maps.search.SearchActions
 import to.pubky.maps.search.SearchState
 import to.pubky.maps.status.ServicePart
 import to.pubky.maps.ui.PubkyMapsTheme
 
 /**
- * In dark mode every control and notice over the map is told from the map by its tone: a shadow does
+ * In dark mode every control, notice and card over the map is told from the map by its tone: a shadow does
  * not show on a dark map, and the default dark style's land is nearly black. Each container is read
  * from the drawn screen, a few dp inside its edge where no icon or text is, over the dark style's
- * land, and must reach 1.3:1 against it (a visible boundary; the near-black container gave 1.01:1).
+ * land, and must reach 1.3:1 against it (a visible boundary; the near-black container of the search
+ * bar and buttons gave 1.01:1, the place card's 1.15:1).
  * Native graphics, so the pixels are the ones a phone draws.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -51,7 +58,16 @@ class MapSurfacesContrastTest {
     private val note = "The map could not load. Check your connection."
     private lateinit var density: Density
 
-    private fun showDark() {
+    private val place =
+        PlaceRef(
+            uri = "https://maps.app.goo.gl/AbCdEf123",
+            name = "Zürich Hauptbahnhof",
+            point = GeoPoint(47.37786, 8.54032),
+            osm = null,
+            source = PlaceSource.LinkText,
+        )
+
+    private fun showDark(placeCard: (@Composable () -> Unit)? = null) {
         compose.setContent {
             density = LocalDensity.current
             PubkyMapsTheme(darkTheme = true) {
@@ -66,6 +82,7 @@ class MapSurfacesContrastTest {
                     onMyLocation = {},
                     onOpenSettings = {},
                     missing = setOf(ServicePart.Homeserver),
+                    placeCard = placeCard,
                     search = MapSearch(SearchState(), recents = emptyList(), userLocation = null, actions = SearchActions()),
                 ) { Box(Modifier.fillMaxSize().background(land)) }
             }
@@ -111,9 +128,29 @@ class MapSurfacesContrastTest {
             )
         val map = screen.at(8.dp, compose.onRoot().getUnclippedBoundsInRoot().middleY())
         assertTrue("the sample of the map is its land ($map)", contrast(map, land) < 1.01f)
-        samples.forEach { (what, colour) ->
-            val ratio = contrast(colour, land)
-            assertTrue("the $what ($colour) stands out from the dark map's land: $ratio:1, needs 1.3:1", ratio >= 1.3f)
+        samples.forEach { (what, colour) -> assertStandsOut(what, colour) }
+        // As in light, a notice is a step apart from the controls above it, here lighter.
+        val control = samples.getValue("search bar")
+        samples.filterKeys { "notice" in it || "banner" in it }.forEach { (what, colour) ->
+            assertTrue("the $what ($colour) is lighter than the controls ($control)", colour.luminance() > control.luminance())
         }
+    }
+
+    @Test
+    @Config(qualifiers = "w412dp-h915dp-night")
+    fun thePlaceCardOverTheDarkMapStandsOutFromItsLand() {
+        showDark { PlaceCard(place = place, provider = LinkProvider.Google, onShare = {}, onClose = {}) }
+        val screen = compose.onRoot().captureToImage().toPixelMap()
+        val title = compose.onNodeWithText("Zürich Hauptbahnhof", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        // In the card's 16 dp start padding, on the name's line.
+        assertStandsOut("place card", screen.at(title.left - 8.dp, title.middleY()))
+    }
+
+    private fun assertStandsOut(
+        what: String,
+        colour: Color,
+    ) {
+        val ratio = contrast(colour, land)
+        assertTrue("the $what ($colour) stands out from the dark map's land: $ratio:1, needs 1.3:1", ratio >= 1.3f)
     }
 }

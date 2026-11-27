@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import to.pubky.maps.links.LinkProvider
 import to.pubky.maps.ui.AppIcons
+import to.pubky.maps.ui.MapSurfaces
 
 /** The widest the place card gets; on a tablet it stays a card instead of a banner. */
 private val MaxCardWidth = 560.dp
@@ -46,7 +47,7 @@ fun PlaceCard(
     Surface(
         modifier = modifier.widthIn(max = MaxCardWidth).fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = MapSurfaces.card,
         shadowElevation = 3.dp,
     ) {
         Column(Modifier.padding(start = 16.dp, top = 8.dp, end = 8.dp, bottom = 12.dp)) {
@@ -115,7 +116,7 @@ fun OpeningLinkCard(modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier.widthIn(max = MaxCardWidth).fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = MapSurfaces.card,
         shadowElevation = 3.dp,
     ) {
         Row(

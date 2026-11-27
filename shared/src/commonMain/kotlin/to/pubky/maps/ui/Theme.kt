@@ -30,26 +30,29 @@ private val DarkColors =
 
 /**
  * The containers of what floats over the map: [control] for the search bar and the round buttons,
- * [notice] for the lines saying what is missing (a step apart from the controls above them).
+ * [notice] for the lines saying what is missing (a step apart from the controls above them), [card]
+ * for the card of a place opened from a link or search.
  *
  * Light, a white control and its shadow stand out from the light map. Dark, a shadow does not show
  * and the dark styles' land is nearly black (OpenFreeMap Dark rgb(12,12,12)), so the darkest
  * container (#0F0D13) left only the icons visible (1.01:1); a lighter tone carries the edge instead,
- * as in Google Maps' and Material 3's dark themes: control 1.36:1, notice 1.59:1 on that land.
+ * as in Google Maps' and Material 3's dark themes: control and card 1.36:1, notice 1.59:1 on that
+ * land (the card's light container, #1D1B20 dark, gave 1.15:1).
  */
 @Immutable
 data class MapSurfaceColors(
     val control: Color,
     val notice: Color,
+    val card: Color,
 )
 
 private fun mapSurfaceColors(
     scheme: ColorScheme,
     dark: Boolean,
 ) = if (dark) {
-    MapSurfaceColors(control = scheme.surfaceContainerHigh, notice = scheme.surfaceContainerHighest)
+    MapSurfaceColors(control = scheme.surfaceContainerHigh, notice = scheme.surfaceContainerHighest, card = scheme.surfaceContainerHigh)
 } else {
-    MapSurfaceColors(control = scheme.surfaceContainerLowest, notice = scheme.surfaceContainerHigh)
+    MapSurfaceColors(control = scheme.surfaceContainerLowest, notice = scheme.surfaceContainerHigh, card = scheme.surfaceContainerLow)
 }
 
 private val LocalMapSurfaceColors = staticCompositionLocalOf { mapSurfaceColors(LightColors, dark = false) }
