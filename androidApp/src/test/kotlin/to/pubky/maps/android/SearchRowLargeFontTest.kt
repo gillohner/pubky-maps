@@ -9,6 +9,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
+import kotlinx.datetime.LocalDateTime
 import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
@@ -64,7 +65,10 @@ class SearchRowLargeFontTest {
         kind = PlaceKind.Culture,
     )
 
-    private fun showAtLargeFont(vararg results: SearchResult) {
+    private fun showAtLargeFont(
+        vararg results: SearchResult,
+        now: LocalDateTime? = null,
+    ) {
         val state =
             SearchState(
                 mode = SearchMode.Editing,
@@ -84,6 +88,7 @@ class SearchRowLargeFontTest {
                         userLocation = here,
                         actions = SearchActions(),
                         modifier = Modifier.fillMaxSize(),
+                        now = now,
                     )
                 }
             }
@@ -118,5 +123,15 @@ class SearchRowLargeFontTest {
     fun aLongNameWraps() {
         showAtLargeFont(result("Kunsthaus Zürich Shop", "Bookshop", "Heimplatz 1, 8001 Zürich"))
         assertShownWhole("Kunsthaus Zürich Shop", "Bookshop · Heimplatz 1, 8001 Zürich")
+    }
+
+    @Test
+    fun theOpeningHoursLineIsShownWhole() {
+        // Wednesday evening: closed, and it opens again another day.
+        showAtLargeFont(
+            result("Kunsthaus", "Museum", "Heimplatz 1, 8001 Zürich", onPubky = true).copy(openingHours = "Tu-Su 10:00-18:00"),
+            now = LocalDateTime(2026, 11, 25, 19, 0),
+        )
+        assertShownWhole("Kunsthaus", "Museum · Heimplatz 1, 8001 Zürich", "Closed · Opens Thu 10:00")
     }
 }

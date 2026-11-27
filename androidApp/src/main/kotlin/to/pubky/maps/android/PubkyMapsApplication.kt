@@ -39,6 +39,7 @@ import to.pubky.maps.place.PlaceServices
 import to.pubky.maps.place.androidPlaceServices
 import to.pubky.maps.search.SearchServices
 import to.pubky.maps.search.androidSearchServices
+import to.pubky.maps.search.openingHours
 import to.pubky.maps.status.ServiceHealth
 import to.pubky.maps.status.ServicePart
 import to.pubky.maps.update.UpdateController
@@ -67,7 +68,10 @@ class PubkyMapsApplication : Application() {
      */
     private val offlinePlaces: SqlOfflinePlaceIndex by lazy { SqlOfflinePlaceIndex(offlinePlacesDriver) }
 
-    /** The OSM details (opening hours, phone, ...) of the offline maps' places, for pages with no Pinakes card. */
+    /**
+     * The OSM details (opening hours, phone, ...) of the offline maps' places, for pages whose card has
+     * no OSM details, and the opening hours of search's results.
+     */
     private val offlineDetails: SqlOfflineDetails by lazy { SqlOfflineDetails(offlinePlacesDriver) }
 
     private val offlinePlacesDriver by lazy { androidOfflinePlacesDriver(this) }
@@ -85,6 +89,7 @@ class PubkyMapsApplication : Application() {
             viewer = { signedInKey() },
             health = serviceHealth,
             offline = offlinePlaces,
+            hours = offlineDetails.openingHours(),
         )
     }
 

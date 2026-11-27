@@ -9,8 +9,9 @@
 # gone the area draws in light and dark (the fixture's water colour, not the bare background), also
 # after three theme switches in one process (which count MainActivity's
 # instances for StrictMode), and search, whose servers are gone too, finds the area's places in the
-# offline maps; the place page of one of them shows the opening hours and phone number the app kept
-# for the area from Overpass (the server's fixture), as soon as the download began. Delete removes it.
+# offline maps, each saying whether it is open now from the opening hours the app kept for the area
+# from Overpass (the server's fixture), as soon as the download began, and the place page of one shows
+# those hours and its phone number. Delete removes it.
 # Usage: emulator-offline.sh <apk> <out dir>
 set -euo pipefail
 
@@ -286,6 +287,8 @@ adb shell input text bakery
 wait_for "Fixture Bakery" 30 > /dev/null || fail "search without a connection did not find the offline area's places"
 # The town it lies in comes from the tiles' place labels (a Fixture Town label is in every tile).
 wait_for "Bakery · Fixture Town" 5 > /dev/null || fail "an offline result does not say which town it is in"
+# The opening hours kept for the area say on the row whether it is open now (the fixture's are 24/7).
+wait_for "Open 24 hours" 5 > /dev/null || fail "an offline result does not say whether it is open from the hours kept for the area"
 wait_for "Search is offline: these places are from your offline maps. Street addresses need a connection." 5 > /dev/null ||
     fail "search does not say its results come from the offline maps"
 screenshot offline-search
@@ -293,8 +296,9 @@ check_alive "search in the offline maps"
 # Its page has no Pinakes card without a connection: the details kept for the area stand in.
 xy=$(wait_for "Fixture Bakery" 5) || fail "no offline result to open"
 adb shell input tap $xy
-wait_for "Open 24 hours" 20 > /dev/null || fail "the offline place page does not show the opening hours kept for the area"
-wait_for "+41 44 000 00 00" 5 > /dev/null || fail "the offline place page does not show the phone number kept for the area"
+# The phone number first: the row it was opened from also says "Open 24 hours".
+wait_for "+41 44 000 00 00" 20 > /dev/null || fail "the offline place page does not show the phone number kept for the area"
+wait_for "Open 24 hours" 5 > /dev/null || fail "the offline place page does not show the opening hours kept for the area"
 screenshot offline-place-details
 check_alive "offline place page with kept details"
 open_at "$zurich"

@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import to.pubky.maps.links.OsmId
 import to.pubky.maps.offline.OfflinePlace
 import to.pubky.maps.offline.OfflinePlaceSearch
 import to.pubky.maps.place.PlaceRef
@@ -72,6 +73,8 @@ data class SearchState(
  * Photon cannot be reached, the places of the offline maps ([offline]) answer in its place, so search
  * still finds places, towns and streets in the downloaded areas without a connection. When neither
  * online source answers, [health] names search as missing (the map's degraded line) until one does.
+ * A result whose OSM element has opening hours kept by an offline area ([hours]) carries them, online
+ * too: Photon and Pinakes' search answers have none.
  */
 class SearchController(
     private val search: PlaceSearch,
@@ -81,6 +84,7 @@ class SearchController(
     private val health: ServiceHealth? = null,
     private val debounce: Duration = DEBOUNCE,
     private val offline: OfflinePlaceSearch? = null,
+    private val hours: KeptOpeningHours? = null,
 ) {
     private val _state = MutableStateFlow(SearchState())
     val state: StateFlow<SearchState> = _state.asStateFlow()
@@ -328,7 +332,7 @@ class SearchController(
             _state.update {
                 if (!it.stillFor(query)) return@update it
                 it.copy(
-                    results = SearchRanking.rank(text, area, a.photon, a.pinakes, a.offline),
+                    results = SearchRanking.rank(text, area, a.photon, a.pinakes, a.offline).map { r -> r.withHours(a.hours) },
                     resultsQuery = query,
                     photon = a.photonState,
                     pinakes = a.pinakesState,
@@ -361,6 +365,8 @@ class SearchController(
                 val answer = search.photon(text, area)
                 // Asked before Photon's failure shows, so the list goes straight to the offline places.
                 val places = if (answer is SourceAnswer.Unreachable) searchOffline(text, area) else null
+                // Read before the rows show, so a row does not grow a line under the finger.
+                val kept = keptHours(answer.valueOrEmpty().map { it.osm } + places.orEmpty().map { it.osm })
                 publish(
                     answers.updateAndGet {
                         it.copy(
@@ -368,13 +374,19 @@ class SearchController(
                             photonState = answer.state(),
                             offline = places.orEmpty(),
                             offlineState = if (places != null) SourceState.Answered else SourceState.Idle,
+                            hours = it.hours + kept,
                         )
                     },
                 )
             }
             launch {
                 val answer = search.pinakes(text, area, viewer())
-                publish(answers.updateAndGet { it.copy(pinakes = answer.valueOrEmpty(), pinakesState = answer.state()) })
+                val kept = keptHours(answer.valueOrEmpty().map { it.osm })
+                publish(
+                    answers.updateAndGet {
+                        it.copy(pinakes = answer.valueOrEmpty(), pinakesState = answer.state(), hours = it.hours + kept)
+                    },
+                )
             }
         }
     }
@@ -392,6 +404,19 @@ class SearchController(
             null
         }
 
+    /** The opening hours the offline areas keep for [elements]; none when they cannot be read. */
+    private suspend fun keptHours(elements: List<OsmId?>): Map<OsmId, String> {
+        val ids = elements.filterNotNull()
+        if (ids.isEmpty()) return emptyMap()
+        return try {
+            hours?.hoursOf(ids).orEmpty()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyMap()
+        }
+    }
+
     private data class Answers(
         val photon: List<PhotonPlace> = emptyList(),
         val pinakes: List<PinakesPlace> = emptyList(),
@@ -399,6 +424,8 @@ class SearchController(
         val photonState: SourceState = SourceState.Loading,
         val pinakesState: SourceState = SourceState.Loading,
         val offlineState: SourceState = SourceState.Idle,
+        /** The opening hours kept for the answers' elements. */
+        val hours: Map<OsmId, String> = emptyMap(),
     )
 
     companion object {
@@ -418,6 +445,9 @@ private fun <T> MutableStateFlow<T>.updateAndGet(transform: (T) -> T): T {
         if (compareAndSet(prev, next)) return next
     }
 }
+
+private fun SearchResult.withHours(hours: Map<OsmId, String>): SearchResult =
+    place.osm?.let(hours::get)?.let { copy(openingHours = it) } ?: this
 
 private fun <T> SourceAnswer<List<T>>.valueOrEmpty(): List<T> = (this as? SourceAnswer.Answered)?.value.orEmpty()
 

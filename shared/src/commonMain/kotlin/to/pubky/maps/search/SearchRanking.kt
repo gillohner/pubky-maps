@@ -37,6 +37,11 @@ data class SearchResult(
     /** What kind of place it is, for its icon. */
     val kind: PlaceKind = PlaceKind.Other,
     val score: Double = 0.0,
+    /**
+     * The place's OSM `opening_hours` as an offline area keeps them for its element, for the row's
+     * "Open · Closes 18:00"; null when no downloaded area keeps hours for it.
+     */
+    val openingHours: String? = null,
 ) {
     /** True when people referenced the place on Pubky (Pinakes knows it). */
     val onPubky: Boolean get() = pinakesRank != null

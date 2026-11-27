@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import kotlinx.datetime.LocalDateTime
 import to.pubky.maps.config.AttributionLink
 import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.search.RecentSearch
@@ -104,6 +105,8 @@ data class MapSearch(
     val actions: SearchActions,
     /** The sources of search's results (Photon, OpenStreetMap), named under the results. */
     val credits: List<AttributionLink> = emptyList(),
+    /** The phone's local time, for whether results are open now; null shows no opening hours. */
+    val now: LocalDateTime? = null,
 )
 
 /**
@@ -229,6 +232,7 @@ fun MapScreen(
                         search.actions,
                         contentPadding = PaddingValues(vertical = 8.dp),
                         credits = search.credits,
+                        now = search.now,
                     )
                 }
             }
@@ -271,6 +275,7 @@ fun MapScreen(
                     search.actions,
                     contentPadding = PaddingValues(bottom = 8.dp),
                     credits = search.credits,
+                    now = search.now,
                     onFirstRowEnd = onFirstRowEnd,
                     listState = list,
                 )
@@ -448,6 +453,7 @@ private fun SearchPage(search: MapSearch) {
                 search.actions,
                 modifier = Modifier.weight(1f).imePadding(),
                 credits = search.credits,
+                now = search.now,
             )
         }
     }

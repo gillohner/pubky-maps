@@ -686,7 +686,20 @@ private fun rememberMapSearch(
                 onBack = { controller.back() },
             )
         }
-    return MapSearch(state = state, recents = recents, userLocation = userLocation, actions = actions)
+    // The clock ticks only while a row has hours to say open or closed by.
+    val now =
+        if (state.results.any { it.openingHours != null }) {
+            val instant by produceState(Clock.System.now()) {
+                while (true) {
+                    delay(CLOCK_TICK_MS)
+                    value = Clock.System.now()
+                }
+            }
+            instant.toLocalDateTime(TimeZone.currentSystemDefault())
+        } else {
+            null
+        }
+    return MapSearch(state = state, recents = recents, userLocation = userLocation, actions = actions, now = now)
 }
 
 /** Under the search bar, plus a pin's height: pins stand above their points. */

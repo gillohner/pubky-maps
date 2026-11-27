@@ -233,8 +233,9 @@ private fun ActionButton(
     }
 }
 
+/** Whether the place is open now and when that changes, green when open and red when closed, as Google Maps shows it. */
 @Composable
-private fun OpeningText(line: OpeningLine) {
+internal fun OpeningText(line: OpeningLine) {
     val dark = MaterialTheme.colorScheme.surface.luminanceIsDark()
     val color =
         when {
