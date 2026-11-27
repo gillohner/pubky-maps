@@ -179,9 +179,9 @@ fun viewBox(
 }
 
 /**
- * Whether the layer may ask for the area in view. Not while the page of typed coordinates is open and
- * the user has not moved the map since: the view is centred on the typed point, which never leaves
- * the phone.
+ * Whether the layer may ask for the area in view. Not while a [PlaceSource.Coordinates] page is open
+ * (typed coordinates, a dropped pin, a point saved from its own page and reopened) and the user has
+ * not moved the map since: the view is around the point, which never leaves the phone.
  */
 fun layerMayAsk(
     shownSource: PlaceSource?,

@@ -225,6 +225,14 @@ class MemoryPhoneStore : PhoneStore {
     override fun putList(list: OwnList) {
         data = data.copy(lists = data.lists.filterNot { it.uri == list.uri } + list)
     }
+
+    override fun putPointPlace(place: String) {
+        data = data.copy(pointPlaces = data.pointPlaces + place)
+    }
+
+    override fun deletePointPlace(place: String) {
+        data = data.copy(pointPlaces = data.pointPlaces - place)
+    }
 }
 
 class MemoryOutboxFiles : OutboxFiles {

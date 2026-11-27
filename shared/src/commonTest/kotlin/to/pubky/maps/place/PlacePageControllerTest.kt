@@ -11,7 +11,13 @@ import kotlinx.coroutines.test.runTest
 import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.links.OsmId
 import to.pubky.maps.links.OsmType
+import to.pubky.maps.map.DROPPED_PIN
+import to.pubky.maps.map.droppedPin
+import to.pubky.maps.map.savedPointPlace
+import to.pubky.maps.map.toPlaceRef
 import to.pubky.maps.search.SourceAnswer
+import to.pubky.maps.write.Kept
+import to.pubky.maps.write.SavedEntry
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -32,6 +38,7 @@ internal class FakePlaceData : PlaceData {
     var cardGate: CompletableDeferred<Unit>? = null
     val viewers = mutableListOf<String?>()
     val askedLinks = mutableListOf<List<String>>()
+    val askedCards = mutableListOf<List<String>>()
     val replyPages = mutableListOf<Int>()
 
     /** Replies Nexus has for the Schober (newest first), 20 per page. */
@@ -47,6 +54,7 @@ internal class FakePlaceData : PlaceData {
         if (nexusDown) SourceAnswer.Unreachable else SourceAnswer.Answered(value(), "n")
 
     override suspend fun card(uris: List<String>): SourceAnswer<PlaceCardInfo?> {
+        askedCards += uris
         cardGate?.await()
         return pinakes {
             if (SCHOBER in uris) {
@@ -438,6 +446,62 @@ class PlacePageControllerTest {
             advanceUntilIdle()
             assertEquals("Hottingen, Zürich", pages.state.value!!.address)
             assertEquals(listOf<Pair<OsmId?, GeoPoint>>(null to typed.point!!), localities.asked)
+        }
+
+    @Test
+    fun aDroppedPinAsksNoServerAndSaysItsDistrictAndTown() =
+        runTest {
+            val localities = Hottingen()
+            val data = FakePlaceData()
+            val pages = controller(data, localities = localities)
+            val pin = droppedPin(47.37031, 8.55601)
+            pages.open(pin)
+            advanceUntilIdle()
+            val page = pages.state.value!!
+            // The point a long-press dropped can be the user's home: neither Pinakes nor Nexus hears of it.
+            assertEquals(emptyList(), data.askedCards)
+            assertEquals(emptyList(), data.askedLinks)
+            assertEquals(emptySet(), page.loading)
+            assertEquals(emptySet(), page.failed)
+            assertEquals("47.37031, 8.55601", page.place.title)
+            assertEquals(DROPPED_PIN, page.place.category)
+            assertEquals("Hottingen, Zürich", page.address)
+            assertEquals(listOf<Pair<OsmId?, GeoPoint>>(null to GeoPoint(47.37031, 8.55601)), localities.asked)
+        }
+
+    @Test
+    fun aSavedPointReopenedFromItsPinOrTheSavedPageAsksNoServer() =
+        runTest {
+            val data = FakePlaceData()
+            val pages = controller(data, localities = Hottingen())
+            // A dropped pin saved (phone or homeserver), then opened again from its badge and from the Saved page.
+            val pin = SavedEntry("geo:47.37031,8.55601", Kept.Private, "Home", point = GeoPoint(47.37031, 8.55601), pointPage = true)
+            pages.open(pin.toPlaceRef())
+            advanceUntilIdle()
+            pages.close()
+            pages.open(savedPointPlace("geo:47.37031,8.55601", "Home")!!)
+            advanceUntilIdle()
+            assertEquals(emptyList(), data.askedCards)
+            assertEquals(emptyList(), data.askedLinks)
+            assertEquals(
+                "Home",
+                pages.state.value!!
+                    .place.title,
+            )
+            assertEquals("Hottingen, Zürich", pages.state.value!!.address)
+        }
+
+    @Test
+    fun aSavedPublicGeoPlaceReopenedFromItsPinAsksPinakesAndNexus() =
+        runTest {
+            val data = FakePlaceData()
+            val pages = controller(data, localities = Hottingen())
+            // A geo: link another app shared (or a Pubky place with a geo: URI), saved from its Pinakes page.
+            val shared = SavedEntry("geo:47.37031,8.55601", Kept.Private, "Kunsthalle", point = GeoPoint(47.37031, 8.55601))
+            pages.open(shared.toPlaceRef())
+            advanceUntilIdle()
+            assertEquals(listOf(listOf("geo:47.37031,8.55601")), data.askedCards)
+            assertTrue(data.askedLinks.isNotEmpty(), "Nexus is asked for its tags and posts")
         }
 
     @Test

@@ -23,7 +23,7 @@ data class LinkedPlaceState(
     val provider: LinkProvider? = null,
     /** A link is being read and there is nothing to show yet (a short link is being followed). */
     val opening: Boolean = false,
-    /** Grows with every [LinkedPlaces.open] and [LinkedPlaces.close]; a result of an older one is dropped. */
+    /** Grows with every [LinkedPlaces.open], [LinkedPlaces.show] and [LinkedPlaces.close]; a result of an older one is dropped. */
     val generation: Int = 0,
     /**
      * Changes whenever [place] gets a new point to show. The map moves there once per value, so coming
@@ -36,7 +36,8 @@ data class LinkedPlaceState(
  * Opens the map links other apps hand to Pubky Maps, one at a time: a newer link replaces one still
  * being read. A link that names a point (or a search) shows at once from its text; then the core
  * follows a short link and asks Pinakes, and the result refines the place where it is. Lives as long
- * as the app process, so a place survives the activity being recreated. [onPinakesReachable] hears
+ * as the app process, so a place survives the activity being recreated. A saved point is shown
+ * through [show] instead, read by no core. [onPinakesReachable] hears
  * whether the Pinakes servers answered, for the map's "missing" line.
  */
 class LinkedPlaces(
@@ -89,6 +90,15 @@ class LinkedPlaces(
                     placed(refined, generation, placedAt = if (moved) 2 * generation + 1 else it.placedAt)
                 }
             }
+    }
+
+    /**
+     * Shows [place] as it is, read by no core and asked of no server: a saved point (a dropped pin,
+     * typed coordinates) that stays on the phone. Replaces a link still being read.
+     */
+    fun show(place: PlaceRef) {
+        job?.cancel()
+        _state.update { LinkedPlaceState(place = place, generation = it.generation + 1, placedAt = 2 * (it.generation + 1)) }
     }
 
     /** Closes the place card. */

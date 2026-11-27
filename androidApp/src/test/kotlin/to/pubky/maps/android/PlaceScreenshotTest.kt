@@ -35,6 +35,7 @@ import to.pubky.maps.links.OsmId
 import to.pubky.maps.links.OsmType
 import to.pubky.maps.map.MapScreen
 import to.pubky.maps.map.PlacePageSlot
+import to.pubky.maps.map.droppedPin
 import to.pubky.maps.map.routeCredits
 import to.pubky.maps.place.AlsoOnLink
 import to.pubky.maps.place.KeptDetails
@@ -68,8 +69,9 @@ import to.pubky.maps.ui.PubkyMapsTheme
 /**
  * Screenshots of the place page (phone 412x915 dp, tablet 1280x800 dp, light and dark): a place with
  * everything (Pinakes card with photo and OSM details, Pubky tags with the user's own, photos, posts,
- * lists, Also on), a sparse place (a Photon address only), one still loading, and one shown offline
- * from the cache. Photos are grey: images load over the network, which the tests do not use.
+ * lists, Also on), a sparse place (a Photon address only), one still loading, one shown offline
+ * from the cache, and a pin dropped by a long-press. Photos are grey: images load over the network,
+ * which the tests do not use.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -298,6 +300,17 @@ class PlaceScreenshotTest {
                 ),
         )
 
+    /**
+     * A pin dropped by a long-press on a path above Zürich in a downloaded area: its coordinates, the
+     * district and town the area's labels give, no server asked.
+     */
+    private val droppedPinPage =
+        PlacePageState(
+            place = droppedPin(47.38143, 8.56922),
+            loading = emptySet(),
+            locality = "Fluntern, Zürich",
+        )
+
     private val actions =
         PlacePageActions(
             onClose = {},
@@ -485,6 +498,21 @@ class PlaceScreenshotTest {
         capture("place-directions-too-far", Device.Phone, dark = false) {
             Page(sparse, actions = directionsTo(RouteStatus.NoRoute(NoRouteReason.TooFar), TravelMode.Walk))
         }
+
+    @Test
+    fun droppedPinPhoneLight() = capture("place-dropped-pin", Device.Phone, dark = false) { Page(droppedPinPage, SheetStop.Peek) }
+
+    @Test
+    fun droppedPinPhoneDark() = capture("place-dropped-pin", Device.Phone, dark = true) { Page(droppedPinPage, SheetStop.Peek) }
+
+    @Test
+    fun droppedPinTabletLight() = capture("place-dropped-pin", Device.Tablet, dark = false) { Page(droppedPinPage) }
+
+    @Test
+    fun droppedPinTabletDark() = capture("place-dropped-pin", Device.Tablet, dark = true) { Page(droppedPinPage) }
+
+    @Test
+    fun droppedPinHalfPhoneLight() = capture("place-dropped-pin-half", Device.Phone, dark = false) { Page(droppedPinPage) }
 
     @Test
     fun offlinePhoneLight() = capture("place-offline", Device.Phone, dark = false) { Page(offline) }

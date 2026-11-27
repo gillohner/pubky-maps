@@ -22,6 +22,14 @@ CREATE TABLE flag (
     name TEXT NOT NULL PRIMARY KEY
 );
 
+-- The geo: places the user saved or put in a list from the page of a point of its own (a dropped
+-- pin, typed coordinates), as the core spells them: reopened from the Saved page or the map's
+-- badge they are asked of no server. Other geo: places (a link from another app, a Pubky place)
+-- are read as their link is. Phone only, also for places saved on the homeserver.
+CREATE TABLE point_place (
+    place TEXT NOT NULL PRIMARY KEY
+);
+
 savedPlaces:
 SELECT * FROM saved_place ORDER BY saved_at DESC;
 
@@ -42,3 +50,12 @@ SELECT name FROM flag WHERE name = ?;
 
 putFlag:
 INSERT OR REPLACE INTO flag(name) VALUES (?);
+
+pointPlaces:
+SELECT place FROM point_place;
+
+putPointPlace:
+INSERT OR REPLACE INTO point_place(place) VALUES (?);
+
+deletePointPlace:
+DELETE FROM point_place WHERE place = ?;

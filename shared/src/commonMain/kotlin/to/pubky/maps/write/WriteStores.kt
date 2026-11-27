@@ -136,6 +136,12 @@ interface PhoneStore {
 
     fun putList(list: OwnList)
 
+    /** Marks [place] (a `geo:` link) as saved from the page of a point of its own ([PhoneData.pointPlaces]). */
+    fun putPointPlace(place: String)
+
+    /** [place] was saved from another page: it is read as its link is again. */
+    fun deletePointPlace(place: String)
+
     /** Whether [name] was set on this phone. */
     fun flag(name: String): Boolean
 
@@ -159,6 +165,7 @@ class SqlPhoneStore(
                 queries.lists().executeAsList().mapNotNull {
                     runCatching { storeJson.decodeFromString(OwnList.serializer(), it) }.getOrNull()
                 },
+            pointPlaces = queries.pointPlaces().executeAsList().toSet(),
         )
 
     override fun save(saved: PhoneSaved) {
@@ -171,6 +178,14 @@ class SqlPhoneStore(
 
     override fun putList(list: OwnList) {
         queries.putList(list.uri, storeJson.encodeToString(OwnList.serializer(), list))
+    }
+
+    override fun putPointPlace(place: String) {
+        queries.putPointPlace(place)
+    }
+
+    override fun deletePointPlace(place: String) {
+        queries.deletePointPlace(place)
     }
 
     override fun flag(name: String): Boolean = queries.flag(name).executeAsOneOrNull() != null

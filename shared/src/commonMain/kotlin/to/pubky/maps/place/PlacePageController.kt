@@ -214,8 +214,8 @@ class PlacePageController(
     }
 
     private suspend fun load(place: PlaceRef) {
-        // Coordinates the user typed never leave the phone (search's rule): no source is asked; the
-        // offline areas are on the phone.
+        // Coordinates the user typed or a pin dropped on the map never leave the phone (search's rule):
+        // no source is asked; the offline areas are on the phone.
         if (place.source == PlaceSource.Coordinates) {
             update(place) { it.copy(loading = emptySet()) }
             loadLocality(place)

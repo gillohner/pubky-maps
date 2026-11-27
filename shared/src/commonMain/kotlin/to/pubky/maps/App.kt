@@ -100,13 +100,22 @@ private data object AccountDestination
 @Serializable
 private data object SavedDestination
 
-/** A write page about the place [uri] (named [name]): which page is [intent]'s name. */
+/**
+ * A write page about the place [uri] (named [name]): which page is [intent]'s name. [pointPage]: the
+ * place is a point of its own ([WriteTarget.pointPage]).
+ */
 @Serializable
 private data class WriteDestination(
     val intent: String,
     val uri: String,
     val name: String? = null,
+    val pointPage: Boolean = false,
 )
+
+private fun WriteDestination(
+    intent: WriteIntent,
+    target: WriteTarget,
+) = WriteDestination(intent.name, target.uri, target.name, target.pointPage)
 
 /**
  * The whole app: the map, and the settings pages on top of it. [loadLicences] returns the
@@ -241,7 +250,7 @@ private fun AppNavigation(
             if (waiting.intent == WriteIntent.Save) {
                 controller.save(waiting.target)
             } else {
-                navController.open(WriteDestination(waiting.intent.name, waiting.target.uri, waiting.target.name))
+                navController.open(WriteDestination(waiting.intent, waiting.target))
             }
         }
     }
@@ -302,7 +311,7 @@ private fun AppNavigation(
                     },
                 writes = writes?.controller,
                 onWrite = { target, intent ->
-                    navController.open(WriteDestination(intent.name, target.uri, target.name))
+                    navController.open(WriteDestination(intent, target))
                 },
                 onOpenSaved = writes?.let { { navController.open(SavedDestination) } },
                 offline = offline,
@@ -396,7 +405,7 @@ private fun AppNavigation(
         if (writes != null) {
             composable<WriteDestination> { entry ->
                 val route = entry.toRoute<WriteDestination>()
-                val target = WriteTarget(route.uri, route.name)
+                val target = WriteTarget(route.uri, route.name, pointPage = route.pointPage)
                 val page =
                     places
                         ?.pages
@@ -432,10 +441,11 @@ private fun AppNavigation(
                     signedIn = signedIn != null && !signedIn.signingOut,
                     refreshing = signedIn?.refreshing == true,
                     onRefresh = { account?.controller?.refresh() },
-                    onOpen = { place ->
+                    onOpen = { place, point ->
                         navController.popBackStack(MapDestination, inclusive = false)
                         search?.controller?.close()
-                        links?.linkedPlaces?.open(place, pinakes)
+                        // A point saved from its own page stays on the phone; any other place is read as its link is.
+                        if (point != null) links?.linkedPlaces?.show(point) else links?.linkedPlaces?.open(place, pinakes)
                     },
                     onBack = back,
                 )

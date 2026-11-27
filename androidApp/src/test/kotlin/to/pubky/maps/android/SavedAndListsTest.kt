@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -66,7 +67,7 @@ class SavedAndListsTest {
                             names = mapOf(osm to "Conditorei Schober"),
                             signedIn = true,
                         ),
-                    onOpen = {},
+                    onOpen = { _, _ -> },
                     onBack = {},
                 )
             }
@@ -116,7 +117,7 @@ class SavedAndListsTest {
                                 ),
                             signedIn = true,
                         ),
-                    onOpen = {},
+                    onOpen = { _, _ -> },
                     onBack = {},
                 )
             }
@@ -130,6 +131,40 @@ class SavedAndListsTest {
         compose.onAllNodesWithText("47.37586, 8.54253").assertCountEquals(2)
         compose.onAllNodesWithText("47.36722, 8.54493").assertCountEquals(2)
         compose.onAllNodesWithText("OpenStreetMap node 3").assertCountEquals(0)
+    }
+
+    @Test
+    fun aTapOpensThePlaceWithTheNameItsRowShows() {
+        val opened = mutableListOf<Pair<String, String?>>()
+        compose.setContent {
+            PubkyMapsTheme(darkTheme = false) {
+                SavedScreen(
+                    state =
+                        SavedScreenState(
+                            places = listOf(SavedRow("geo:47.36667,8.55", null, Kept.Phone)),
+                            // A dropped pin named only in the list that holds it.
+                            lists =
+                                listOf(
+                                    OwnList(
+                                        "phone:1",
+                                        Kept.Phone,
+                                        "Walks",
+                                        listOf("geo:47.37,8.55"),
+                                        names =
+                                            mapOf("geo:47.37,8.55" to "Bench"),
+                                    ),
+                                ),
+                            signedIn = true,
+                        ),
+                    onOpen = { place, name -> opened += place to name },
+                    onBack = {},
+                )
+            }
+        }
+        compose.onNodeWithText("47.36667, 8.55").performClick()
+        compose.onNodeWithText("Walks").performClick()
+        compose.onNodeWithText("Bench").performClick()
+        assertEquals(listOf("geo:47.36667,8.55" to null, "geo:47.37,8.55" to "Bench"), opened)
     }
 
     @Test

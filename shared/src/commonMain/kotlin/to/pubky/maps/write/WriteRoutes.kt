@@ -15,8 +15,10 @@ import kotlinx.coroutines.launch
 import to.pubky.maps.config.AppSettings
 import to.pubky.maps.config.DataKind
 import to.pubky.maps.config.StorageChoice
+import to.pubky.maps.map.savedPointPlace
 import to.pubky.maps.place.PlacePageController
 import to.pubky.maps.place.PlacePageState
+import to.pubky.maps.place.PlaceRef
 
 /** The user's writes as the app's screens use them; [photos] is null where photos cannot be picked. */
 class WriteUi(
@@ -223,14 +225,17 @@ fun ListRoute(
     )
 }
 
-/** The Saved screen on the live [writes]; [onRefresh] reads the account again when it opens. */
+/**
+ * The Saved screen on the live [writes]; [onRefresh] reads the account again when it opens. [onOpen]
+ * hears the point's page for a place saved from the page of a point of its own ([savedPagePoint]).
+ */
 @Composable
 fun SavedRoute(
     writes: WriteController,
     signedIn: Boolean,
     refreshing: Boolean,
     onRefresh: () -> Unit,
-    onOpen: (String) -> Unit,
+    onOpen: (place: String, point: PlaceRef?) -> Unit,
     onBack: () -> Unit,
 ) {
     val own by writes.own.collectAsStateWithLifecycle()
@@ -247,7 +252,18 @@ fun SavedRoute(
                 refreshing = refreshing || own.listsLoading,
                 signedIn = signedIn,
             ),
-        onOpen = onOpen,
+        onOpen = { place, name -> onOpen(place, savedPagePoint(place, name, own)) },
         onBack = onBack,
     )
 }
+
+/**
+ * The page a Saved-page row opens without asking any server: a place saved or listed from the page
+ * of a point of its own ([OwnData.pointPlaces]) is that point again ([savedPointPlace]). Null for any
+ * other place, which is read as its link is.
+ */
+internal fun savedPagePoint(
+    place: String,
+    name: String?,
+    own: OwnData,
+): PlaceRef? = if (place in own.pointPlaces) savedPointPlace(place, name) else null

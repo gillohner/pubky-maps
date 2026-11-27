@@ -21,6 +21,7 @@ import to.pubky.maps.config.AppSettings
 import to.pubky.maps.config.DataKind
 import to.pubky.maps.config.StorageChoice
 import to.pubky.maps.links.GeoPoint
+import to.pubky.maps.place.PlaceSource
 import kotlin.coroutines.ContinuationInterceptor
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -345,6 +346,87 @@ class WriteControllerTest {
                     .kept,
             )
             assertEquals(emptyList(), phone.data.saved)
+        }
+
+    @Test
+    fun aPointSavedFromItsOwnPageIsKeptAsOneOnThePhoneUntilSavedFromAnotherPage() =
+        runTest {
+            signedIn()
+            val writer = controller()
+            runCurrent()
+            val pin = GeoPoint(47.37031, 8.55601)
+            val home = WriteTarget("geo:47.37031,8.55601", "Home", pin, pointPage = true)
+
+            // A dropped pin saved on the homeserver: the phone keeps that it is the user's own point.
+            writer.save(home)
+            runCurrent()
+            assertEquals(listOf("save(geo:47.37031,8.55601)"), sent)
+            assertEquals(setOf("geo:47.37031,8.55601"), phone.data.pointPlaces)
+            assertEquals(setOf("geo:47.37031,8.55601"), writer.own.value.pointPlaces)
+            assertEquals(
+                SavedEntry("geo:47.37031,8.55601", Kept.Private, "Home", point = pin, pointPage = true),
+                writer.own.value.saved
+                    .single(),
+            )
+            // Put in a phone list from its page too, and added to it; also after a sign-out and the next start.
+            writer.createList(WriteTarget("geo:47.36,8.55", null, pointPage = true), "Walks", Kept.Phone)
+            runCurrent()
+            val walks =
+                writer.own.value.lists
+                    .single()
+            writer.addToList(WriteTarget("geo:47.35,8.54", null, pointPage = true), walks)
+            runCurrent()
+            assertEquals(setOf("geo:47.37031,8.55601", "geo:47.36,8.55", "geo:47.35,8.54"), phone.data.pointPlaces)
+            writer.removeFromList(WriteTarget("geo:47.35,8.54", null, pointPage = true), setOf("geo:47.35,8.54"), walks)
+            runCurrent()
+            account.value = AccountState.SignedOut()
+            runCurrent()
+            assertEquals(
+                setOf("geo:47.37031,8.55601", "geo:47.36,8.55", "geo:47.35,8.54"),
+                controller()
+                    .also { runCurrent() }
+                    .own.value.pointPlaces,
+                "a place taken out of a list keeps its mark: it may still be saved",
+            )
+
+            // The same link saved again from a public page (a link from another app, Pinakes): read as a link again.
+            signedIn()
+            runCurrent()
+            writer.save(WriteTarget("geo:47.37031,8.55601", "Kunsthalle", pin))
+            runCurrent()
+            assertEquals(setOf("geo:47.36,8.55", "geo:47.35,8.54"), phone.data.pointPlaces)
+            assertEquals(
+                false,
+                writer.own.value.saved
+                    .single()
+                    .pointPage,
+            )
+            // Places that are no geo: link are never kept as points.
+            writer.save(target.copy(pointPage = true))
+            runCurrent()
+            assertEquals(setOf("geo:47.36,8.55", "geo:47.35,8.54"), phone.data.pointPlaces)
+        }
+
+    @Test
+    fun theSavedPageOpensOnlyAPointSavedFromItsOwnPageWithoutAskingAnyServer() =
+        runTest {
+            signedIn()
+            val writer = controller()
+            runCurrent()
+            // A dropped pin saved from its page, and a geo: link from another app saved from its public page.
+            writer.save(WriteTarget("geo:47.37031,8.55601", "Home", pointPage = true))
+            writer.save(WriteTarget("geo:47.36,8.55", "Kunsthalle"))
+            writer.createList(WriteTarget("geo:47.35,8.54", null, pointPage = true), "Walks", Kept.Phone)
+            runCurrent()
+            val own = writer.own.value
+
+            val home = savedPagePoint("geo:47.37031,8.55601", "Home", own)
+            assertEquals(PlaceSource.Coordinates, home?.source)
+            assertEquals("Home", home?.name)
+            assertEquals(GeoPoint(47.37031, 8.55601), home?.point)
+            assertEquals(PlaceSource.Coordinates, savedPagePoint("geo:47.35,8.54", "Bench", own)?.source, "a list entry too")
+            assertNull(savedPagePoint("geo:47.36,8.55", "Kunsthalle", own), "a public geo: place is read as its link is")
+            assertNull(savedPagePoint(target.uri, target.name, own))
         }
 
     @Test

@@ -183,6 +183,9 @@ class SqlWriteStoreTest {
         phone.save(PhoneSaved("https://www.openstreetmap.org/node/1", "Schober", 30, GeoPoint(47.37159, 8.54531)))
         phone.putList(phoneList)
         phone.unsave("geo:1,2")
+        phone.putPointPlace("geo:3,4")
+        phone.putPointPlace("geo:5,6")
+        phone.deletePointPlace("geo:5,6")
 
         val read = SqlPhoneStore(driver).read()
         assertEquals(
@@ -193,10 +196,11 @@ class SqlWriteStoreTest {
             read.saved,
         )
         assertEquals(listOf(phoneList), read.lists)
+        assertEquals(setOf("geo:3,4"), read.pointPlaces)
     }
 
     @Test
-    fun aVersionOnePhoneStoreKeepsItsSavedPlacesAndGainsPoints() {
+    fun aVersionOnePhoneStoreKeepsItsSavedPlacesAndGainsPointsAndPointPlaces() {
         val driver = JdbcSqliteDriver("jdbc:sqlite:${File(dir, "old-phone.db").path}", Properties())
         // The schema the first released phone store had.
         listOf(
@@ -205,7 +209,7 @@ class SqlWriteStoreTest {
             "CREATE TABLE flag (name TEXT NOT NULL PRIMARY KEY)",
             "INSERT INTO saved_place VALUES ('https://www.openstreetmap.org/node/1', 'Schober', 10)",
         ).forEach { driver.execute(null, it, 0) }
-        assertEquals(2L, PhoneDataDatabase.Schema.version)
+        assertEquals(3L, PhoneDataDatabase.Schema.version)
 
         PhoneDataDatabase.Schema.migrate(driver, 1, PhoneDataDatabase.Schema.version)
 
@@ -220,5 +224,7 @@ class SqlWriteStoreTest {
                 .first()
                 .point,
         )
+        phone.putPointPlace("geo:3,4")
+        assertEquals(setOf("geo:3,4"), phone.read().pointPlaces)
     }
 }

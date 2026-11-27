@@ -15,10 +15,16 @@ enum class PlaceSource {
     /** A Photon search result (an OpenStreetMap place or address) that Pinakes does not know. */
     Photon,
 
-    /** Coordinates the user typed or pasted. */
+    /**
+     * A point of the user's own, asked of no server: coordinates they typed or pasted, a pin they
+     * dropped on the map, or such a point they saved, reopened from its badge or the Saved page.
+     */
     Coordinates,
 
-    /** A place tapped on the map: on the base map (its OpenStreetMap element), or one of the user's saved places. */
+    /**
+     * A place tapped on the map: on the base map (its OpenStreetMap element), or one of the user's
+     * saved places other than a point saved from its own page (that one is [Coordinates]).
+     */
     Map,
 }
 

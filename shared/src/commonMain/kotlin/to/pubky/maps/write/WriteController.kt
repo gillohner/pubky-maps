@@ -334,6 +334,7 @@ class WriteController(
     /** Saves the place where the user keeps saved places: on this phone, or privately on the homeserver. */
     fun save(target: WriteTarget) =
         enqueue {
+            keepPointPage(target)
             if (settings().storage(DataKind.SavedPlaces) == StorageChoice.PhoneOnly) {
                 val saved = PhoneSaved(normalize(target.uri), target.name, now(), target.point)
                 io { phone.save(saved) }
@@ -448,6 +449,7 @@ class WriteController(
         list: OwnList,
         remove: Boolean,
     ): Boolean {
+        if (!remove) keepPointPage(target)
         if (list.kept == Kept.Phone) {
             val place = normalize(target.uri)
             val current = phoneData.lists.firstOrNull { it.uri == list.uri } ?: list
@@ -473,6 +475,7 @@ class WriteController(
         name: String,
         kept: Kept,
     ) = enqueue {
+        keepPointPage(target)
         if (kept == Kept.Phone) {
             val id = "${now()}-${phoneData.lists.size}"
             val place = normalize(target.uri)
@@ -492,6 +495,26 @@ class WriteController(
             val built = build { core, author -> core.buildList(author, name.trim(), listOf(target.uri), private) } ?: return@enqueue
             add(target, WriteOp.CreateList(target.uri, name.trim(), private, built.path, built.uri, built.json))
             send()
+        }
+    }
+
+    /**
+     * Keeps on the phone whether the place [target] is saved or listed from is a point of its own
+     * ([OwnData.pointPlaces]): the page it is saved from says what it is when reopened, so a `geo:`
+     * place saved from its Pinakes page later reads as its link again. Kept before the write, so the
+     * write publishes it; a homeserver write refused for want of a sign-in leaves the mark, which only
+     * keeps a point the user had as its own page from servers.
+     */
+    private suspend fun keepPointPage(target: WriteTarget) {
+        val place = normalize(target.uri)
+        val kept = place in phoneData.pointPlaces
+        if (target.pointPage == kept || !place.startsWith("geo:", ignoreCase = true)) return
+        if (target.pointPage) {
+            io { phone.putPointPlace(place) }
+            phoneData = phoneData.copy(pointPlaces = phoneData.pointPlaces + place)
+        } else {
+            io { phone.deletePointPlace(place) }
+            phoneData = phoneData.copy(pointPlaces = phoneData.pointPlaces - place)
         }
     }
 
