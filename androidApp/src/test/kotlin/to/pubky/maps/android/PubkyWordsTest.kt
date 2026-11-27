@@ -3,6 +3,7 @@ package to.pubky.maps.android
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -13,6 +14,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
@@ -24,6 +26,12 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import to.pubky.maps.account.AccountScreen
+import to.pubky.maps.account.AccountState
+import to.pubky.maps.account.AccountUser
+import to.pubky.maps.account.Connection
+import to.pubky.maps.cache.CachedAccount
+import to.pubky.maps.cache.CachedBookmark
 import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.place.PlacePageActions
 import to.pubky.maps.place.PlacePageContext
@@ -32,6 +40,9 @@ import to.pubky.maps.place.PlacePanel
 import to.pubky.maps.place.PlaceRef
 import to.pubky.maps.place.PlaceSource
 import to.pubky.maps.place.PlaceWriteActions
+import to.pubky.maps.search.SearchActions
+import to.pubky.maps.search.SearchList
+import to.pubky.maps.search.SearchState
 import to.pubky.maps.ui.PubkyMapsTheme
 import to.pubky.maps.write.Kept
 import to.pubky.maps.write.ListChoice
@@ -40,6 +51,7 @@ import to.pubky.maps.write.ListPageState
 import to.pubky.maps.write.OwnList
 import to.pubky.maps.write.OwnPlace
 import to.pubky.maps.write.SavedEntry
+import to.pubky.maps.write.SavedRow
 import to.pubky.maps.write.SavedScreen
 import to.pubky.maps.write.SavedScreenState
 
@@ -108,10 +120,74 @@ class PubkyWordsTest {
                 )
             }
         }
-        compose.onNodeWithText("Add to a collection").assertExists()
+        compose.onNodeWithText("Add to collection").assertExists()
         compose.onNodeWithText("Your collections").assertExists()
         compose.onNodeWithText("New collection").assertExists()
         compose.onNodeWithText("Create collection with this place").assertExists()
+        assertNoOldWords()
+    }
+
+    @Test
+    fun aFilledBookmarksPageWithAnOpenCollectionSaysNoOldWord() {
+        compose.setContent {
+            PubkyMapsTheme(darkTheme = false) {
+                SavedScreen(
+                    SavedScreenState(
+                        places = listOf(SavedRow(osm, "Conditorei Schober", Kept.Private, pending = true)),
+                        lists = listOf(coffee),
+                        names = mapOf(osm to "Conditorei Schober"),
+                        signedIn = true,
+                    ),
+                    onOpen = { _, _ -> },
+                    onBack = {},
+                )
+            }
+        }
+        compose.onNodeWithText("Coffee in Zürich").performClick()
+        compose.onAllNodesWithText("Conditorei Schober").assertCountEquals(2)
+        assertNoOldWords()
+    }
+
+    @Test
+    fun theSearchPageOpensBookmarks() {
+        compose.setContent {
+            PubkyMapsTheme(darkTheme = false) {
+                SearchList(SearchState(), recents = emptyList(), userLocation = null, actions = SearchActions(onOpenSaved = {}))
+            }
+        }
+        compose.onNodeWithText("Bookmarks").assertExists()
+        compose.onNodeWithText("Your bookmarks and collections").assertExists()
+        assertNoOldWords()
+    }
+
+    @Test
+    fun theAccountPageListsBookmarks() {
+        val user = AccountUser("8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo", "Ada Lovelace")
+        val cached =
+            CachedAccount(
+                publicKey = user.publicKey,
+                name = user.name,
+                refreshedAt = 1,
+                tags = emptyList(),
+                bookmarks = listOf(CachedBookmark("/priv/social/v1/bookmarks/a.json", osm)),
+            )
+        compose.setContent {
+            PubkyMapsTheme(darkTheme = false) {
+                AccountScreen(
+                    state = AccountState.SignedIn(user, cached, Connection.Offline),
+                    ringOnThisPhone = false,
+                    onSignIn = {},
+                    onOpenRing = {},
+                    onCancelSignIn = {},
+                    onRefresh = {},
+                    onSignOut = {},
+                    onBack = {},
+                    placeLabel = { "Conditorei Schober" },
+                )
+            }
+        }
+        compose.onNodeWithText("Your bookmarks", substring = true).assertExists()
+        compose.onNodeWithText("Showing this phone's copy", substring = true).assertExists()
         assertNoOldWords()
     }
 
@@ -122,6 +198,13 @@ class PubkyWordsTest {
         fun walk(node: SemanticsNode) {
             node.config.getOrNull(SemanticsProperties.Text)?.forEach { texts += it.text }
             node.config.getOrNull(SemanticsProperties.ContentDescription)?.let { texts += it }
+            node.config.getOrNull(SemanticsProperties.StateDescription)?.let { texts += it }
+            node.config.getOrNull(SemanticsProperties.EditableText)?.let { texts += it.text }
+            node.config
+                .getOrNull(SemanticsActions.OnClick)
+                ?.label
+                ?.let { texts += it }
+            node.config.getOrNull(SemanticsActions.CustomActions)?.forEach { texts += it.label }
             node.children.forEach(::walk)
         }
         walk(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())

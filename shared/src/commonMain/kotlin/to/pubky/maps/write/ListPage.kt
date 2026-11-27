@@ -68,7 +68,7 @@ fun ListPage(
     snackbarHostState: SnackbarHostState? = null,
 ) {
     // Each tick is sent at once, so there is nothing to confirm: Close (the X) only, and Undo in a snackbar.
-    WritePage(title = "Add to a collection", place = state.placeName, onClose = onClose, snackbarHostState = snackbarHostState) {
+    WritePage(title = "Add to collection", place = state.placeName, onClose = onClose, snackbarHostState = snackbarHostState) {
         if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
         if (state.stale) {
             Text(

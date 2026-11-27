@@ -151,15 +151,15 @@ name, what the place is, the distance and the address, Directions, Start here, S
 their credits; OpenStreetMap details from the card's facts when Pinakes serves them, or, when the card brings none, those an offline area keeps (opening hours with open or closed now, phone,
 website, wheelchair access, cuisine); Pubky tags with their counts and who tagged (people the user
 follows first, the user's own tags marked); photos and posts about the place from Nexus, newest first;
-the public lists that hold it; and the same place on other services ("Also on"). Each part loads on
+the public collections that hold it; and the same place on other services ("Also on"). Each part loads on
 its own and is hidden while it has nothing. What a page showed is kept on the phone, so a place
-reopens offline with a note saying when it was saved; the user's own tags and lists in it are shown
+reopens offline with a note saying when its copy is from; the user's own tags and collections in it are shown
 only to the account that saw them. Typed coordinates and a dropped pin open a page without any
-request, also when saved or listed from that page and reopened from their pin or the Bookmarks page, and
+request, also when bookmarked or added to a collection from that page and reopened from their pin or the Bookmarks page, and
 the map's Pubky places wait until the map is next moved: by a gesture while the page is open, or by
-any move after it closes. The phone that saved them keeps which `geo:` places were saved so (the
+any move after it closes. The phone that bookmarked them keeps which `geo:` places were bookmarked so (the
 homeserver's bookmark has no room for it): on another phone, or after the app's data was cleared,
-such a save reopens as a `geo:` link from another app or a Pubky place with a `geo:` URI does, a
+such a bookmark reopens as a `geo:` link from another app or a Pubky place with a `geo:` URI does, a
 public place read with its card and tags.
 
 **Directions** on a place page ask for the user's position as the my-location button does (the
@@ -213,15 +213,15 @@ the user's, read from their homeserver (public or private) or kept on the phone,
 places each. Bookmark keeps the place privately on the homeserver or on the phone only, per the
 setting; the **Bookmarks** screen (from the search page) lists bookmarks and collections (bookmarks of
 other Pubky apps' objects in the same folder, such as pubky.app posts, are left out), and the map
-shows each saved place as a purple bookmark badge that opens it. The homeserver's bookmark holds
+shows each bookmarked place as a purple bookmark badge that opens it. The homeserver's bookmark holds
 only the link, so the place's name, point and summary (what and where it is, "Café · Napfgasse 4,
 8001 Zürich", as its page says once its card and offline district and town are in) are kept on the
-phone with the save (by the link as the core spells it), never sent; the Bookmarks screen shows the
-summary under the name, also for list entries, and tells two same-named places with the same
-summary (or none) apart by their points. A `geo:` link names its own point. A saved or tagged place
-the phone knows no name, point or summary for (saved on another device, before the last sign-out,
+phone with the bookmark (by the link as the core spells it), never sent; the Bookmarks screen shows the
+summary under the name, also for the places in collections, and tells two same-named places with the same
+summary (or none) apart by their points. A `geo:` link names its own point. A bookmarked or tagged place
+the phone knows no name, point or summary for (bookmarked on another device, before the last sign-out,
 or before summaries were kept) keeps those its page shows when the user opens it, and from then on
-has its name on the Bookmarks and Account pages and, when saved, its badge on the map; a summary kept
+has its name on the Bookmarks and Account pages and, when bookmarked, its badge on the map; a summary kept
 stays, except one taken while Pinakes could not be reached and no card or address was known (the
 offline district and town only), which the summary of a page Pinakes answered replaces. Public writes
 show a Public badge first. A write shows at once and goes into an outbox on the phone, sent in order;
@@ -289,7 +289,7 @@ the link text. The link the user had stays the place's URI.
 - Sign-in with Pubky Ring: the app opens Ring's `pubkyauth://` link, or shows it as a QR code when
   Ring is on another device; Ring sends the user back with `pubkymaps://auth/…`. A running sign-in
   and the session are stored encrypted with an Android Keystore key, never in a backup; the user's own
-  data (profile name, tags, saved places, lists) and the outbox of writes are cached in SQLite
+  data (profile name, tags, bookmarks, collections) and the outbox of writes are cached in SQLite
   (SQLDelight), deleted at sign-out; what is kept on the phone only has its own database, which
   sign-out keeps. When the homeserver cannot
   be reached the app stays signed in, shows the cached data and says so in one line over the map.
@@ -405,7 +405,7 @@ screenshots search with its pins, and the update probe screenshots each step of 
 - Synonym blocked (`scripts/ci/synonym-blocked.py`): the emulator gets a DNS server that blocks every
   host run by Synonym (`*.pubky.app`, `*.pubky.org`, `*.synonym.to`) and our development hosts. With a
   seeded signed-in account the app must start, draw the map, show the cached profile and tags, and
-  name the missing homeserver in its banner; a place saved in airplane mode waits, and with the app
+  name the missing homeserver in its banner; a place bookmarked in airplane mode waits, and with the app
   closed Android starts it for the outbox job, again after its process is killed during a run (the
   run counts as ended by the kill whichever way JobScheduler noticed the dead process; on the API 35
   emulator Android sometimes restarts the job service at once and otherwise leaves it to the run's

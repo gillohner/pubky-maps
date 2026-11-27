@@ -537,7 +537,7 @@ class WriteController(
         }
     }
 
-    /** Reads the user's lists from the homeserver again (the "Add to a collection" page asks when it opens). */
+    /** Reads the user's lists from the homeserver again (the "Add to collection" page asks when it opens). */
     fun refreshLists() = enqueue { loadLists() }
 
     /** Tries to send what waits now (the phone came online, the app came to the front). */

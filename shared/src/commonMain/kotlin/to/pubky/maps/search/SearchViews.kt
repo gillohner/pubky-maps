@@ -92,7 +92,7 @@ data class SearchActions(
     val onSelectRecent: (RecentSearch) -> Unit = {},
     val onClearQuery: () -> Unit = {},
     val onBack: () -> Unit = {},
-    /** Opens the user's saved places and lists; null where there are none. */
+    /** Opens the user's bookmarks and collections; null where there are none. */
     val onOpenSaved: (() -> Unit)? = null,
     /** Removes one recent search (a long press on it); null where the history cannot be changed. */
     val onRemoveRecent: ((RecentSearch) -> Unit)? = null,
