@@ -31,6 +31,23 @@ class OfflineAreaTest {
     }
 
     @Test
+    fun anAreaWidensToTheEdgesOfTheTilesItTouches() {
+        val tiles = tileBounds(zurich)
+        // Zoom 14 tiles 8576..8584 x 5733..5741, edges as tilePoint gives them.
+        assertEquals(tilePoint(14, 8576.0, 5733.0).lon, tiles.west)
+        assertEquals(tilePoint(14, 8576.0, 5733.0).lat, tiles.north)
+        assertEquals(tilePoint(14, 8585.0, 5742.0).lon, tiles.east)
+        assertEquals(tilePoint(14, 8585.0, 5742.0).lat, tiles.south)
+        assertTrue(tiles.west < zurich.west && tiles.south < zurich.south && tiles.east > zurich.east && tiles.north > zurich.north)
+        // Just inside its edges it touches the same tiles: nothing more.
+        val inside = 1e-9
+        assertEquals(
+            tileCount(zurich),
+            tileCount(AreaBounds(tiles.west + inside, tiles.south + inside, tiles.east - inside, tiles.north - inside)),
+        )
+    }
+
+    @Test
     fun aCityFitsInOneDownloadACountryDoesNot() {
         assertTrue(fitsInOneDownload(zurich))
         assertFalse(fitsInOneDownload(switzerland))

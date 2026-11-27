@@ -44,6 +44,26 @@ CREATE INDEX word_word ON word(word);
 
 CREATE INDEX word_place ON word(place);
 
+-- The OpenStreetMap details (opening hours, phone, website, ...) of the elements in each offline
+-- area, fetched from Overpass when it was (fetched_at, epoch ms); kept apart from the places, which
+-- are read again from the tiles at every map update.
+CREATE TABLE details_area (
+    id TEXT NOT NULL PRIMARY KEY,
+    fetched_at INTEGER NOT NULL
+);
+
+CREATE TABLE details (
+    area TEXT NOT NULL,
+    osm_type TEXT NOT NULL,
+    osm_id INTEGER NOT NULL,
+    -- OSM tag names to values, a JSON object
+    facts TEXT NOT NULL
+);
+
+CREATE INDEX details_osm ON details(osm_id, osm_type);
+
+CREATE INDEX details_by_area ON details(area);
+
 areas:
 SELECT id, new_data_at FROM area;
 
@@ -139,3 +159,25 @@ LIMIT 1;
 labelsIn:
 SELECT * FROM place
 WHERE tag_key = 'place' AND lat BETWEEN :south AND :north AND lon BETWEEN :west AND :east;
+
+detailsAreas:
+SELECT id, fetched_at FROM details_area;
+
+putDetailsArea:
+INSERT OR REPLACE INTO details_area(id, fetched_at) VALUES (?, ?);
+
+insertDetails:
+INSERT INTO details(area, osm_type, osm_id, facts) VALUES (?, ?, ?, ?);
+
+deleteDetails:
+DELETE FROM details WHERE area = ?;
+
+deleteDetailsArea:
+DELETE FROM details_area WHERE id = ?;
+
+-- The details of an OpenStreetMap element, from the area that fetched them last.
+detailsOf:
+SELECT details.facts, details_area.fetched_at FROM details JOIN details_area ON details_area.id = details.area
+WHERE details.osm_id = :id AND details.osm_type = :type
+ORDER BY details_area.fetched_at DESC
+LIMIT 1;

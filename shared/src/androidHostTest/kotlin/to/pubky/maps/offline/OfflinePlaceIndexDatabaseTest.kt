@@ -347,7 +347,7 @@ class OfflinePlaceIndexDatabaseTest {
             "INSERT INTO place VALUES (2, 'a', 'Zürich', 'Node', 10, 'place', 'city', NULL, 47.3700, 8.5400, NULL)",
             "INSERT INTO word VALUES ('rosa', 1)",
         ).forEach { driver.execute(null, it, 0) }
-        assertEquals(3L, OfflinePlacesDatabase.Schema.version)
+        assertEquals(4L, OfflinePlacesDatabase.Schema.version)
 
         OfflinePlacesDatabase.Schema.migrate(driver, 2, OfflinePlacesDatabase.Schema.version)
 

@@ -52,6 +52,15 @@ object ServerDefaults {
                     listOf(ServerEntry("Pinakes (development)", "https://8092--main--pinakes--gil.coder.riginode.xyz")),
                 Service.Nexus to
                     listOf(ServerEntry("Nexus (development)", "https://8080--main--pubky-staging--gil.coder.riginode.xyz")),
+                // Public Overpass instances that need no key. dresel.systems' default endpoint holds
+                // Europe only (fast for the Swiss and German areas the app starts with); elsewhere its
+                // empty answer hands over to the next server. FOSSGIS and private.coffee hold the planet.
+                Service.Overpass to
+                    listOf(
+                        ServerEntry("Overpass Europe (dresel.systems)", "https://ovp.dresel.systems/api/interpreter"),
+                        ServerEntry("Overpass (FOSSGIS)", "https://overpass-api.de/api/interpreter"),
+                        ServerEntry("Overpass (private.coffee)", "https://overpass.private.coffee/api/interpreter"),
+                    ),
                 // The Pubky SDK's default relays (pkarr::DEFAULT_RELAYS).
                 Service.PkarrRelay to
                     listOf(

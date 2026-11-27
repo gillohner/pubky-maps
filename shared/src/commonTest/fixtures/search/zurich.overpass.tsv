@@ -1,0 +1,7 @@
+node	13206440557	"Mo-Fr 07:45-12:00,13:15-18:00; Sa 09:00-12:00 open ""Rufen Sie uns an!"""	+41 41 921 39 44		https://www.mautoservice.ch		ms.sursee@bluewin.ch									
+node	353000720	Mo-Fr 08:00-19:00; Sa 08:00-18:00; PH off	+41 58 563 28 90		https://filialen.migros.ch/de/voi-voi-bonstetten				yes		Lärche-Märt VOI Migros Partner					
+node	2518316000	"""By appointment at https://www.phorest.com/salon/orinadcoiffurewestlink
+I can't see a sign with regular hours"""			https://www.orinad.ch/stadt-zuerich/				yes		Orinad Look					
+node	317024417	"Mo-Fr 11:30-14:00,18:00-22:00; Sa 18:00-22:30; Su off"	+41 44 280 26 20		https://www.antica-roma.ch/				no	italian						
+relation	3768127	Tu-Su 10:00-18:00; Th 10:00-20:00; PH 10:00-18:00			https://www.kunsthaus.ch/				yes							
+end	1															

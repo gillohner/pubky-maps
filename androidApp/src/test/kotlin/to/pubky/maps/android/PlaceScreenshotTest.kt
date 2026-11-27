@@ -36,6 +36,7 @@ import to.pubky.maps.links.OsmType
 import to.pubky.maps.map.MapScreen
 import to.pubky.maps.map.PlacePageSlot
 import to.pubky.maps.place.AlsoOnLink
+import to.pubky.maps.place.KeptDetails
 import to.pubky.maps.place.LocalRemoteImage
 import to.pubky.maps.place.PlaceCardInfo
 import to.pubky.maps.place.PlaceCredit
@@ -260,7 +261,10 @@ class PlaceScreenshotTest {
             savedAt = 1_795_597_920_000,
         )
 
-    /** A café tapped on the map of a downloaded area with no connection, its page never opened before. */
+    /**
+     * A café tapped on the map of a downloaded area with no connection, its page never opened before:
+     * the OSM details the area keeps, fetched the day before.
+     */
     private val tappedOffline =
         PlacePageState(
             place =
@@ -275,6 +279,16 @@ class PlaceScreenshotTest {
             loading = emptySet(),
             failed = setOf(PlacePart.Card, PlacePart.Social, PlacePart.Posts, PlacePart.Lists),
             locality = "Altstadt, Zürich",
+            keptDetails =
+                KeptDetails(
+                    mapOf(
+                        "opening_hours" to "Mo-Fr 08:00-18:30; Sa 08:00-17:00",
+                        "phone" to "+41 44 251 00 00",
+                        "website" to "https://www.cafe-schurter.ch",
+                        "wheelchair" to "limited",
+                    ),
+                    fetchedAt = 1_795_510_000_000,
+                ),
         )
 
     private val actions =

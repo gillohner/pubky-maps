@@ -79,3 +79,15 @@ data class KeptSocial(
     val social: PlaceSocial,
     val fetchedAt: Long,
 )
+
+/** OpenStreetMap details of places kept for the offline areas, for pages with no Pinakes card. Calls block on disk. */
+fun interface KeptPlaceDetails {
+    /** The details kept for the element [osm], from the area that fetched them last; null when no kept area has any. */
+    fun detailsOf(osm: OsmId): KeptDetails?
+}
+
+/** A kept element's OSM details ([PlaceCardInfo.facts]' tag names to values), fetched at [fetchedAt] (epoch ms). */
+data class KeptDetails(
+    val facts: Map<String, String>,
+    val fetchedAt: Long,
+)

@@ -9,7 +9,8 @@
 # gone the area draws in light and dark (the fixture's water colour, not the bare background), also
 # after three theme switches in one process (which count MainActivity's
 # instances for StrictMode), and search, whose servers are gone too, finds the area's places in the
-# offline maps. Delete removes it.
+# offline maps; the place page of one of them shows the opening hours and phone number the app kept
+# for the area from Overpass (the server's fixture), as soon as the download began. Delete removes it.
 # Usage: emulator-offline.sh <apk> <out dir>
 set -euo pipefail
 
@@ -41,7 +42,8 @@ cat > "$out/settings.json" <<JSON
   "map_style_light": [{"name": "Fixture light", "url": "http://127.0.0.1:$port/light.json"}],
   "map_style_dark": [{"name": "Fixture dark", "url": "http://127.0.0.1:$port/dark.json"}],
   "photon": [{"name": "Fixture Photon", "url": "http://127.0.0.1:$port/photon"}],
-  "pinakes": [{"name": "Fixture Pinakes", "url": "http://127.0.0.1:$port/pinakes"}]}}
+  "pinakes": [{"name": "Fixture Pinakes", "url": "http://127.0.0.1:$port/pinakes"}],
+  "overpass": [{"name": "Fixture Overpass", "url": "http://127.0.0.1:$port/overpass"}]}}
 JSON
 adb push "$out/settings.json" /data/local/tmp/pubky-maps-settings.json > /dev/null
 adb shell chmod 644 /data/local/tmp/pubky-maps-settings.json
@@ -144,6 +146,11 @@ assert all(agent.startswith("PubkyMaps/") for agent in agents), f"tiles asked as
 twice = [path for path, n in collections.Counter(line["path"] for line in tiles).items() if n > 1]
 assert not twice, f"tiles requested more than once: {twice}"
 print(f"{len(tiles)} tile requests, at most {most} at once, as {sorted(agents)}")
+details = [line for line in lines if line["path"] == "/overpass"]
+assert len(details) == 1, f"{len(details)} Overpass queries for the area's place details, not 1"
+assert details[0]["ua"].startswith("PubkyMaps/"), f"Overpass asked as {details[0]['ua']}"
+assert "[bbox:" in details[0]["query"] and "make end;out;" in details[0]["query"], details[0]["query"]
+print(f"one Overpass query for the place details: {details[0]['query'][:80]}...")
 PY
 cp "$log" "$out/download.jsonl"
 
@@ -283,6 +290,13 @@ wait_for "Search is offline: these places are from your offline maps. Street add
     fail "search does not say its results come from the offline maps"
 screenshot offline-search
 check_alive "search in the offline maps"
+# Its page has no Pinakes card without a connection: the details kept for the area stand in.
+xy=$(wait_for "Fixture Bakery" 5) || fail "no offline result to open"
+adb shell input tap $xy
+wait_for "Open 24 hours" 20 > /dev/null || fail "the offline place page does not show the opening hours kept for the area"
+wait_for "+41 44 000 00 00" 5 > /dev/null || fail "the offline place page does not show the phone number kept for the area"
+screenshot offline-place-details
+check_alive "offline place page with kept details"
 open_at "$zurich"
 open_offline_maps
 wait_ready offline-final 20 || fail "the offline map is not Ready on the list"
@@ -306,4 +320,4 @@ check_alive "offline map deleted"
 
 # This also fails on a leaked activity of ours, counted by the theme switches above.
 check_strict_mode "offline maps"
-echo "an area downloads, updates to new tiles, draws and is searched without a connection in light and dark, and deletes"
+echo "an area downloads, updates to new tiles, draws and is searched without a connection in light and dark, its places show their kept details, and it deletes"

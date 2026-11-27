@@ -55,6 +55,25 @@ fun tileCount(
 /** Whether [bounds] fits in one download. */
 fun fitsInOneDownload(bounds: AreaBounds): Boolean = tileCount(bounds) <= OfflineLimits.MAX_TILES - OfflineLimits.OTHER_SOURCES_MARGIN
 
+/**
+ * [bounds] widened to the edges of the tiles of [zoom] it touches: the ground a download of it holds,
+ * as MapLibre takes whole tiles (and the offline place index every place in them).
+ */
+fun tileBounds(
+    bounds: AreaBounds,
+    zoom: Int = OfflineLimits.MAX_ZOOM,
+): AreaBounds {
+    val n = 2.0.pow(zoom)
+    val last = n.toLong() - 1
+    val west = tileX(bounds.west, n).coerceIn(0, last)
+    val east = tileX(bounds.east, n).coerceIn(0, last) + 1
+    val north = tileY(bounds.north, n).coerceIn(0, last)
+    val south = tileY(bounds.south, n).coerceIn(0, last) + 1
+    val northWest = tilePoint(zoom, west.toDouble(), north.toDouble())
+    val southEast = tilePoint(zoom, east.toDouble(), south.toDouble())
+    return AreaBounds(west = northWest.lon, south = southEast.lat, east = southEast.lon, north = northWest.lat)
+}
+
 private fun tilesAt(
     bounds: AreaBounds,
     zoom: Int,

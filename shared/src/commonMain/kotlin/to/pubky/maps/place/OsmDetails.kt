@@ -10,7 +10,8 @@ enum class Wheelchair(
 }
 
 /**
- * A place's OpenStreetMap details, from the OSM tags on its Pinakes card. Only what the page shows;
+ * A place's OpenStreetMap details, from the OSM tags on its Pinakes card or those an offline area
+ * keeps for it. Only what the page shows;
  * every field is null (or empty) when OSM has none.
  */
 data class OsmDetails(
@@ -34,6 +35,26 @@ data class OsmDetails(
                 cuisine.isEmpty() && operator == null && level == null && bitcoin.isEmpty()
 
     companion object {
+        /** Every OSM tag [from] reads: the offline areas keep these of their places. */
+        val KEYS: List<String> =
+            listOf(
+                "opening_hours",
+                "phone",
+                "contact:phone",
+                "website",
+                "contact:website",
+                "email",
+                "contact:email",
+                "wheelchair",
+                "cuisine",
+                "operator",
+                "level",
+                "payment:lightning",
+                "payment:lightning_contactless",
+                "payment:onchain",
+                "currency:XBT",
+            )
+
         /** The details in [facts] (OSM tag names as keys); null when there are none. */
         fun from(facts: Map<String, String>): OsmDetails? {
             fun first(vararg keys: String): String? =

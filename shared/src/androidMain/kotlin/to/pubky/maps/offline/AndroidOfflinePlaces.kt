@@ -1,6 +1,7 @@
 package to.pubky.maps.offline
 
 import android.content.Context
+import android.net.ConnectivityManager
 import androidx.sqlite.db.SupportSQLiteDatabase
 import app.cash.sqldelight.db.AfterVersion
 import app.cash.sqldelight.db.QueryResult
@@ -10,8 +11,11 @@ import app.cash.sqldelight.driver.android.AndroidSqliteDriver
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import to.pubky.maps.config.AppSettings
+import to.pubky.maps.config.Service
 import to.pubky.maps.offline.db.OfflinePlacesDatabase
 import java.io.ByteArrayInputStream
 import java.io.File
@@ -24,25 +28,50 @@ import java.util.zip.GZIPInputStream
 import java.util.zip.InflaterInputStream
 
 /**
- * The places of the offline areas, in the no-backup folder (they are built again from the tiles: a
- * new version of the database empties it, and the places are read again). Write-ahead logging lets
- * a search read while an area's places are being written, which takes one transaction of up to
- * tens of seconds.
+ * The places of the offline areas and their OSM details, in one file in the no-backup folder (they
+ * are built again from the tiles and fetched again from Overpass). Write-ahead logging lets a search
+ * read while an area's places are being written, which takes one transaction of up to tens of
+ * seconds. Give the driver to [SqlOfflinePlaceIndex] and [SqlOfflineDetails]; one driver per process.
  */
-fun androidOfflinePlaceIndex(context: Context): SqlOfflinePlaceIndex =
-    SqlOfflinePlaceIndex(
-        AndroidSqliteDriver(
-            schema = OfflinePlacesDatabase.Schema,
-            context = context,
-            name = File(context.noBackupFilesDir, "offline-places.db").path,
-            callback =
-                object : AndroidSqliteDriver.Callback(OfflinePlacesDatabase.Schema) {
-                    override fun onConfigure(db: SupportSQLiteDatabase) {
-                        db.enableWriteAheadLogging()
-                    }
-                },
-        ),
+fun androidOfflinePlacesDriver(context: Context): SqlDriver =
+    AndroidSqliteDriver(
+        schema = OfflinePlacesDatabase.Schema,
+        context = context,
+        name = File(context.noBackupFilesDir, "offline-places.db").path,
+        callback =
+            object : AndroidSqliteDriver.Callback(OfflinePlacesDatabase.Schema) {
+                override fun onConfigure(db: SupportSQLiteDatabase) {
+                    db.enableWriteAheadLogging()
+                }
+            },
     )
+
+/**
+ * Keeps the OSM details of [maps]' areas in [store] for the life of the process, from the Overpass
+ * servers of the user's list in [settings]; refreshed only on a network Android does not count as
+ * metered.
+ */
+fun startOfflinePlaceDetails(
+    context: Context,
+    scope: CoroutineScope,
+    maps: OfflineMaps,
+    settings: StateFlow<AppSettings?>,
+    appVersion: String,
+    store: OfflineDetailsStore,
+) {
+    val connectivity = context.getSystemService(ConnectivityManager::class.java)
+    OfflinePlaceDetails(
+        maps = maps.state,
+        source =
+            OverpassPlaceDetails(
+                client = overpassHttpClient(appVersion),
+                servers = { (settings.value ?: AppSettings()).servers[Service.Overpass].map { it.url } },
+            ),
+        store = store,
+        scope = scope,
+        unmetered = { connectivity?.isActiveNetworkMetered == false },
+    ).start()
+}
 
 /**
  * Starts keeping [index] in step with [maps], reading the tiles from MapLibre's database
