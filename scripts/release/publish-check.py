@@ -6,7 +6,9 @@ failing compare fails the run; a build with a versionCode that is not above the 
 nothing; `dev` never compares commits; uploads, the release edits that publish it again after the
 tag move and name its commit, and a v* draft's publish (found in GitHub's release list) are tried
 again when GitHub fails them, and a run whose edit keeps failing fails without deleting the files of
-the build before. CI: android.yml, build job.
+the build before; the file of the build before is deleted, a delete that GitHub fails is tried again
+while the release still lists the file, and one that keeps failing, or a listing of the release's
+files that GitHub fails, only warns. CI: android.yml, build job.
 
 Usage: publish-check.py
 """
@@ -24,9 +26,13 @@ failures = []
 # Answers by environment: EXISTS (the release is there), LIVE_VC (the live feed's versionCode),
 # STATUS (GitHub's compare of the live build's commit with this one; FAIL: the call fails, FLAKY: the
 # first call fails with GitHub's error body on stdout, as `gh api` does, then it answers `ahead`),
-# DRAFT_FAILS / TARGET_FAILS / PUBLISH_FAILS / UPLOAD_FAILS (the first n `release edit` calls that
-# publish the release again, or that name its commit, the `api` calls that publish a v* draft, or the
-# uploads, fail). The v* release is a draft, which GitHub's releases/tags/<tag> does not find.
+# DRAFT_FAILS / TARGET_FAILS / PUBLISH_FAILS / UPLOAD_FAILS / DELETE_FAILS / LIST_FAILS / SIZES_FAILS
+# (the first n `release edit` calls that publish the release again, or that name its commit, the
+# `api` calls that publish a v* draft, the uploads, the file deletes, the listings of the release's
+# file names, or the listings of its files with their sizes at the end, fail), DELETE_LOST (the first
+# n deletes delete the file, but GitHub's answer is lost). The release lists the files of this build
+# and the old pubky-maps-old.apk until it is deleted. The v* release is a draft, which GitHub's
+# releases/tags/<tag> does not find.
 FAKE_GH = f"""#!/usr/bin/env python3
 import json, os, sys
 args = sys.argv[1:]
@@ -48,9 +54,21 @@ elif args[:2] == ["release", "view"]:
     if "targetCommitish" in args:
         print("{live_sha}")
     elif "--json" in args:
-        print("pubky-maps-old.apk 1" if "size" in args[-1] else "pubky-maps-old.apk")
+        if fails("SIZES_FAILS" if "size" in args[-1] else "LIST_FAILS"):
+            sys.exit("gh: Bad Gateway (HTTP 502)")
+        gone = os.environ["CALLS"] + ".deleted"
+        names = [n for n in ("pubky-maps-new.apk", "pubky-maps-old.apk", "SHA256SUMS")
+                 if not (os.path.exists(gone) and n in open(gone).read().split())]
+        print("\\n".join(n + " 1" if "size" in args[-1] else n for n in names))
     elif "EXISTS" not in os.environ:
         sys.exit("release not found")
+elif args[:2] == ["release", "delete-asset"]:
+    if fails("DELETE_FAILS"):
+        sys.exit("gh: Bad Gateway (HTTP 502)")
+    with open(os.environ["CALLS"] + ".deleted", "a") as gone:
+        gone.write(args[3] + "\\n")
+    if fails("DELETE_LOST"):
+        sys.exit("gh: Bad Gateway (HTTP 502)")
 elif args[:3] == ["api", "-X", "PATCH"] and args[3].startswith("repos/o/r/releases/"):
     if args[3] != "repos/o/r/releases/42":
         print('{{"message":"Not Found","status":"404"}}')
@@ -90,7 +108,7 @@ print(json.dumps({"feed": json.dumps({"versionCode": int(os.environ["LIVE_VC"])}
 
 
 def publish(tag, *, status="ahead", live_vc=5, exists=True, draft_fails=0, target_fails=0, publish_fails=0,
-            upload_fails=0, listed=True):
+            upload_fails=0, listed=True, delete_fails=0, delete_lost=0, list_fails=0, sizes_fails=0):
     """Runs publish.sh for a build with versionCode 7; returns (exit code, `published` output, gh calls, stderr)."""
     with tempfile.TemporaryDirectory() as tmp:
         bin_dir, dist = Path(tmp, "bin"), Path(tmp, "dist")
@@ -111,7 +129,9 @@ def publish(tag, *, status="ahead", live_vc=5, exists=True, draft_fails=0, targe
                "BUILD_SHA": sha, "GITHUB_OUTPUT": str(output), "CALLS": str(calls), "TAG": tag,
                "STATUS": status, "LIVE_VC": str(live_vc), "DRAFT_FAILS": str(draft_fails),
                "TARGET_FAILS": str(target_fails), "PUBLISH_FAILS": str(publish_fails),
-               "UPLOAD_FAILS": str(upload_fails)}
+               "UPLOAD_FAILS": str(upload_fails), "DELETE_FAILS": str(delete_fails),
+               "DELETE_LOST": str(delete_lost), "LIST_FAILS": str(list_fails),
+               "SIZES_FAILS": str(sizes_fails)}
         if listed:
             env["LISTED"] = "1"
         if exists:
@@ -215,6 +235,43 @@ code, published, log, out = publish("v1.2.3", listed=False)
 expect(code != 0 and not published and not any(c[:3] == ["api", "-X", "PATCH"] for c in log)
        and "lists no release of v1.2.3" in out,
        f"v1.2.3, not listed: {code} {published} {log} {out}")
+
+# The file of the build before is deleted once its build is replaced, and only that file.
+code, published, log, out = publish("edge")
+deletes = [c for c in log if c[:2] == ["release", "delete-asset"]]
+expect(code == 0 and [c[3] for c in deletes] == ["pubky-maps-old.apk"] and "::warning::" not in out,
+       f"edge, old file: {code} {deletes} {out}")
+
+# GitHub fails a delete twice, or answers a delete that worked with an error (a lost answer): it is
+# tried again while the release still lists the file, and the run is green.
+code, published, log, out = publish("edge", delete_fails=2)
+deletes = [c for c in log if c[:2] == ["release", "delete-asset"]]
+expect(code == 0 and published == ["published=true"] and len(deletes) == 3
+       and out.count("::warning::gh release delete-asset") == 2 and "could not be deleted" not in out,
+       f"edge, flaky delete: {code} {published} {len(deletes)} deletes {log} {out}")
+code, published, log, out = publish("dev", delete_lost=1)
+deletes = [c for c in log if c[:2] == ["release", "delete-asset"]]
+expect(code == 0 and published == ["published=true"] and len(deletes) == 1 and "could not be deleted" not in out,
+       f"dev, lost delete answer: {code} {published} {len(deletes)} deletes {log} {out}")
+
+# GitHub keeps failing a delete, or does not list the release's files: the publish is complete, so
+# the run is green and warns that the old file stays until the next publish.
+code, published, log, out = publish("edge", delete_fails=99)
+deletes = [c for c in log if c[:2] == ["release", "delete-asset"]]
+expect(code == 0 and published == ["published=true"] and len(deletes) == 3
+       and "::warning::the old file pubky-maps-old.apk of the edge release could not be deleted" in out,
+       f"edge, failing delete: {code} {published} {len(deletes)} deletes {log} {out}")
+code, published, log, out = publish("edge", list_fails=99)
+expect(code == 0 and published == ["published=true"] and not any(c[:2] == ["release", "delete-asset"] for c in log)
+       and "::warning::GitHub did not list the edge release's files" in out,
+       f"edge, failing listing: {code} {published} {log} {out}")
+
+# GitHub fails the listing at the end, after a complete publish: it only warns.
+for tag in ("edge", "v1.2.3"):
+    code, published, log, out = publish(tag, sizes_fails=99)
+    expect(code == 0 and published == ["published=true"]
+           and f"::warning::GitHub did not list the {tag} release's files after the publish" in out,
+           f"{tag}, failing listing at the end: {code} {published} {log} {out}")
 
 # GitHub keeps failing the edit that names the commit: the run fails, says so, and keeps the files of
 # the build before (whose commit the release still names).

@@ -21,8 +21,10 @@
 #
 # Uploads, `release edit` calls and the v* publish are tried again when GitHub fails them (each gives
 # the same release when made twice); one that still fails after five tries fails the run. Making the
-# release and deleting old files are single calls: a second try after a lost answer would fail on the
-# release or file that the first one made or deleted.
+# release is a single call: a second try after a lost answer would fail on the release the first one
+# made. A file of an older build whose delete fails is tried again while the release still lists it
+# (a lost answer may have deleted it); one that stays only warns: the publish is complete without it
+# (the feed and SHA256SUMS name this build's files), and the next publish deletes it.
 #
 # In GitHub Actions it writes `published=true` (or `false` when it published nothing) to the step's
 # outputs, so the job that installs the published APK runs only when there is one.
@@ -67,6 +69,32 @@ read_gh() {
     sleep $((i * 10))
   done
   return 1
+}
+
+# The names of the release's files, one per line.
+asset_names() {
+  read_gh release view "$tag" -R "$repo" --json assets -q '.assets[].name'
+}
+
+# Deletes the release's files that are not in dist/ (those of older builds); see the top.
+delete_old_files() {
+  local keep listed a i
+  keep=$(cd "$dist" && ls)
+  if ! listed=$(asset_names); then
+    echo "::warning::GitHub did not list the $tag release's files; the files of older builds stay until the next publish" >&2
+    return 0
+  fi
+  for a in $listed; do
+    grep -qxF "$a" <<< "$keep" && continue
+    for i in 1 2 3; do
+      gh release delete-asset "$tag" "$a" -R "$repo" --yes && continue 2
+      echo "::warning::gh release delete-asset $tag $a failed (attempt $i)" >&2
+      sleep $((i * 10))
+      listed=$(asset_names) || break
+      grep -qxF "$a" <<< "$listed" || continue 2
+    done
+    echo "::warning::the old file $a of the $tag release could not be deleted; the next publish deletes it" >&2
+  done
 }
 
 feed_version_code() {
@@ -125,10 +153,7 @@ case $tag in
     upload "${files[@]}"
     upload "$dist/$feed" "$dist/SHA256SUMS"
     change_gh release edit "$tag" -R "$repo" --title "$title" --notes-file "$notes" --target "$sha"
-    keep=$(cd "$dist" && ls)
-    for a in $(gh release view "$tag" -R "$repo" --json assets -q '.assets[].name'); do
-      grep -qxF "$a" <<< "$keep" || gh release delete-asset "$tag" "$a" -R "$repo" --yes
-    done
+    delete_old_files
     ;;
   v*)
     if ! gh release view "$tag" -R "$repo" > /dev/null 2>&1; then
@@ -151,5 +176,7 @@ case $tag in
     exit 1
     ;;
 esac
-gh release view "$tag" -R "$repo" --json assets -q '.assets[] | "\(.name) \(.size)"'
+# What the release has now, for the log only: the publish is complete, so a listing GitHub fails only warns.
+read_gh release view "$tag" -R "$repo" --json assets -q '.assets[] | "\(.name) \(.size)"' ||
+  echo "::warning::GitHub did not list the $tag release's files after the publish" >&2
 [ -z "${GITHUB_OUTPUT:-}" ] || echo "published=true" >> "$GITHUB_OUTPUT"
