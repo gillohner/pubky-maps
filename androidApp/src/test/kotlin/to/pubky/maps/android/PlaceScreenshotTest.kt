@@ -57,11 +57,13 @@ import to.pubky.maps.place.PlaceSocial
 import to.pubky.maps.place.PlaceSource
 import to.pubky.maps.place.PlaceTag
 import to.pubky.maps.place.RemoteImageContent
+import to.pubky.maps.place.RouteStartChoice
 import to.pubky.maps.place.SheetStop
 import to.pubky.maps.routing.Directions
 import to.pubky.maps.routing.DirectionsUi
 import to.pubky.maps.routing.NoRouteReason
 import to.pubky.maps.routing.Route
+import to.pubky.maps.routing.RouteStart
 import to.pubky.maps.routing.RouteStatus
 import to.pubky.maps.routing.RouteStep
 import to.pubky.maps.routing.TravelMode
@@ -327,7 +329,14 @@ class PlaceScreenshotTest {
             onLoadMorePosts = {},
             onDirections = {},
             onReportProblem = {},
+            routeStart = RouteStartChoice(chosen = false, onToggle = {}),
         )
+
+    /** The page of the place chosen as the start of directions to other places ("Start here" tapped). */
+    private val chosenStart = actions.copy(routeStart = RouteStartChoice(chosen = true, onToggle = {}))
+
+    /** The start chosen on another page: Hotel Adler, by the lake. */
+    private val hotel = RouteStart("osm:node/9", GeoPoint(47.3667, 8.5450), "Hotel Adler")
 
     /**
      * Directions to the Kunsthaus from Zürich HB, in [status], or back from it when [reversed]; found:
@@ -339,6 +348,7 @@ class PlaceScreenshotTest {
         stepsShown: Boolean = false,
         shownStep: Int? = null,
         reversed: Boolean = false,
+        from: RouteStart? = null,
     ) = actions.copy(
         directions =
             DirectionsUi(
@@ -352,6 +362,7 @@ class PlaceScreenshotTest {
                         stepsShown = stepsShown,
                         shownStep = shownStep,
                         reversed = reversed,
+                        from = from,
                     ),
                 onMode = {},
                 onSteps = {},
@@ -361,6 +372,7 @@ class PlaceScreenshotTest {
                 onRetry = {},
                 onOpenSettings = {},
                 credits = routeCredits(ServerDefaults.lists, null),
+                onFromYourLocation = {},
             ),
     )
 
@@ -607,6 +619,30 @@ class PlaceScreenshotTest {
             Page(rich, SheetStop.Full, directionsTo(foundRoute, stepsShown = true))
         }
 
+    /** Directions from the start chosen on another page: named in the card, with the way back to the user's position. */
+    @Test
+    fun directionsFromStartPhoneLight() =
+        capture("place-directions-from-start", Device.Phone, dark = false) { Page(rich, actions = directionsTo(foundRoute, from = hotel)) }
+
+    @Test
+    fun directionsFromStartPhoneDark() =
+        capture("place-directions-from-start", Device.Phone, dark = true) { Page(rich, actions = directionsTo(foundRoute, from = hotel)) }
+
+    @Test
+    fun directionsFromStartTabletLight() =
+        capture("place-directions-from-start", Device.Tablet, dark = false) { Page(rich, actions = directionsTo(foundRoute, from = hotel)) }
+
+    @Test
+    fun directionsFromStartTabletDark() =
+        capture("place-directions-from-start", Device.Tablet, dark = true) { Page(rich, actions = directionsTo(foundRoute, from = hotel)) }
+
+    /** At a large font the Steps and From your location buttons wrap under each other. */
+    @Test
+    fun directionsFromStartLargeFontPhoneLight() =
+        capture("place-directions-from-start", Device.Phone, dark = false, largeFont = true) {
+            Page(rich, SheetStop.Peek, directionsTo(foundRoute, TravelMode.Walk, reversed = true, from = hotel))
+        }
+
     @Test
     fun directionsFindingPhoneLight() =
         capture("place-directions-finding", Device.Phone, dark = false) {
@@ -636,6 +672,23 @@ class PlaceScreenshotTest {
 
     @Test
     fun droppedPinTabletDark() = capture("place-dropped-pin", Device.Tablet, dark = true) { Page(droppedPinPage) }
+
+    /** A dropped pin chosen as the start: "Starting here", and what that does. */
+    @Test
+    fun droppedPinStartPhoneLight() =
+        capture("place-dropped-pin-start", Device.Phone, dark = false) { Page(droppedPinPage, SheetStop.Peek, chosenStart) }
+
+    @Test
+    fun droppedPinStartPhoneDark() =
+        capture("place-dropped-pin-start", Device.Phone, dark = true) { Page(droppedPinPage, SheetStop.Peek, chosenStart) }
+
+    @Test
+    fun droppedPinStartTabletLight() =
+        capture("place-dropped-pin-start", Device.Tablet, dark = false) { Page(droppedPinPage, actions = chosenStart) }
+
+    @Test
+    fun droppedPinStartTabletDark() =
+        capture("place-dropped-pin-start", Device.Tablet, dark = true) { Page(droppedPinPage, actions = chosenStart) }
 
     @Test
     fun droppedPinHalfPhoneLight() = capture("place-dropped-pin-half", Device.Phone, dark = false) { Page(droppedPinPage) }

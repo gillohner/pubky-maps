@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -62,6 +63,8 @@ data class DirectionsUi(
     val onOpenSettings: (() -> Unit)?,
     /** The routing server's credits, shown with a found route. */
     val credits: List<AttributionLink>,
+    /** Starts the directions from the user's position again, instead of the chosen start ([Directions.from]). */
+    val onFromYourLocation: () -> Unit,
 )
 
 /** "18 min", "1 h 5 min", "2 h": a route's time, at least a minute. */
@@ -104,9 +107,12 @@ fun stepPositionText(
     return if (meters >= 5) "$position · ${formatDistance(meters)}" else position
 }
 
-/** "By car from your location", "On foot to your location": which way a found route goes. */
+/** "your location", or the name of the chosen start ([Directions.from]): the route's other end than the place. */
+private val Directions.originName: String get() = from?.name ?: "your location"
+
+/** "By car from your location", "On foot to Hotel Adler": which way a found route goes. */
 fun routeWayText(directions: Directions): String {
-    val way = if (directions.reversed) "to your location" else "from your location"
+    val way = if (directions.reversed) "to ${directions.originName}" else "from ${directions.originName}"
     return "${directions.mode.phrase.replaceFirstChar { it.uppercase() }} $way"
 }
 
@@ -141,14 +147,14 @@ fun routeStatusText(directions: Directions): String? =
                 }
 
                 NoRouteReason.NoRoadNear -> {
-                    "No road or path ${directions.mode.phrase} near your location or the place."
+                    "No road or path ${directions.mode.phrase} near ${directions.originName} or the place."
                 }
 
                 NoRouteReason.NotConnected -> {
                     if (directions.reversed) {
-                        "No route ${directions.mode.phrase} from this place to your location."
+                        "No route ${directions.mode.phrase} from this place to ${directions.originName}."
                     } else {
-                        "No route ${directions.mode.phrase} from your location to this place."
+                        "No route ${directions.mode.phrase} from ${directions.originName} to this place."
                     }
                 }
             }
@@ -164,7 +170,8 @@ fun routeStatusText(directions: Directions): String? =
  * route's time and length (the map draws its line) and which way it goes, with the button that opens
  * its steps ([RouteStepList]), or what stands in its way; the routing server's credits under a found
  * route. A step tapped in the list shows above the button with the
- * way to the previous and the next one ([StepPreview]).
+ * way to the previous and the next one ([StepPreview]). Directions from a chosen start
+ * ([Directions.from]) have a button that starts them from the user's position again.
  */
 @Composable
 fun DirectionsCard(
@@ -198,7 +205,8 @@ fun DirectionsCard(
                     onClick = ui.onSwap,
                     modifier =
                         Modifier.semantics {
-                            stateDescription = if (directions.reversed) "To your location" else "From your location"
+                            stateDescription =
+                                (if (directions.reversed) "To " else "From ") + directions.originName
                         },
                 ) {
                     Icon(RoutingIcons.SwapVert, contentDescription = "Swap start and destination")
@@ -235,14 +243,26 @@ fun DirectionsCard(
                 }
             }
             val found = directions.status as? RouteStatus.Found
-            if (found != null) {
+            if (found != null || directions.from != null) {
                 // Outside the live region above: opening the steps is not read out as a new route.
                 Column(Modifier.padding(end = 12.dp)) {
                     val marked = directions.shownStep
                     val step = directions.markedStep
-                    if (marked != null && step != null) StepPreview(step, marked, found.route.steps.size, ui.onStep)
-                    StepsButton(found.route.steps, directions.stepsShown, ui.onSteps)
-                    RouteCredits(ui.credits)
+                    if (found != null && marked != null && step != null) StepPreview(step, marked, found.route.steps.size, ui.onStep)
+                    // The buttons' labels start under the route's time; they wrap at a large font.
+                    FlowRow(Modifier.offset(x = (-12).dp)) {
+                        if (found != null) StepsButton(found.route.steps, directions.stepsShown, ui.onSteps)
+                        // As Google Maps' "Your location" field: back from a chosen start without
+                        // opening the start's page to clear it.
+                        if (directions.from != null) {
+                            TextButton(onClick = ui.onFromYourLocation) {
+                                Icon(AppIcons.MyLocation, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(if (directions.reversed) "To your location" else "From your location")
+                            }
+                        }
+                    }
+                    if (found != null) RouteCredits(ui.credits)
                 }
             }
         }
@@ -263,8 +283,7 @@ private fun StepsButton(
     if (steps.isEmpty()) return
     TextButton(
         onClick = { onSteps(!shown) },
-        // Its label starts under the route's time.
-        modifier = Modifier.offset(x = (-12).dp).semantics { stateDescription = if (shown) "Expanded" else "Collapsed" },
+        modifier = Modifier.semantics { stateDescription = if (shown) "Expanded" else "Collapsed" },
     ) {
         Text(if (shown) "Hide steps" else "Steps")
         Spacer(Modifier.width(4.dp))

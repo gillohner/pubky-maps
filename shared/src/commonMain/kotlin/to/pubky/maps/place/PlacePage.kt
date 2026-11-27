@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -117,6 +118,16 @@ data class PlacePageActions(
     val directions: DirectionsUi? = null,
     /** Opens a note to OpenStreetMap about a problem with the map at the place; null where notes are not available or the place has no point. */
     val onReportProblem: (() -> Unit)? = null,
+    /** The place as the start of directions to other places; null where [onDirections] is. */
+    val routeStart: RouteStartChoice? = null,
+)
+
+/** "Start here" on a place page: the place as the start of directions to the places opened next. */
+data class RouteStartChoice(
+    /** The place is the chosen start. */
+    val chosen: Boolean,
+    /** Chooses the place as the start, or clears it when it is. */
+    val onToggle: () -> Unit,
 )
 
 /** What the user can do on the place page, and what they have about it. */
@@ -209,6 +220,7 @@ fun PlaceHeader(
                     Text("Directions")
                 }
             }
+            actions.routeStart?.let { StartHereButton(it) }
             val writes = actions.writes
             if (writes != null) {
                 val saved = writes.own.isSaved
@@ -238,7 +250,34 @@ fun PlaceHeader(
             }
             if (actions.openIn.isNotEmpty()) OpenInButton(actions)
         }
+        if (actions.routeStart?.chosen == true) {
+            Text(
+                "Directions to other places start here.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp, end = 8.dp),
+            )
+        }
         actions.directions?.let { DirectionsCard(it, Modifier.padding(top = 12.dp, end = 8.dp)) }
+    }
+}
+
+/**
+ * "Start here", as CoMaps' "Route from" beside its "Route to": directions to the places opened next
+ * start from this one (a hotel, a station) instead of the user's position. Chosen, it reads "Starting
+ * here" and clears the start again, as Save reads "Saved" (the label is the state TalkBack reads).
+ */
+@Composable
+private fun StartHereButton(start: RouteStartChoice) {
+    val content: @Composable RowScope.() -> Unit = {
+        Icon(RoutingIcons.TripOrigin, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(if (start.chosen) "Starting here" else "Start here")
+    }
+    if (start.chosen) {
+        FilledTonalButton(onClick = start.onToggle, content = content)
+    } else {
+        OutlinedButton(onClick = start.onToggle, content = content)
     }
 }
 

@@ -496,4 +496,126 @@ class DirectionsControllerTest {
             c.start("osm:node/1", kunsthaus, null)
             assertTrue(c.directions.value!!.opening != first)
         }
+
+    private val hotel = RouteStart("osm:node/9", GeoPoint(47.3667, 8.5450), "Hotel Adler")
+
+    @Test
+    fun aChosenStartServesTheNextPlacesAtOnceWithoutAPosition() =
+        runTest {
+            val routing = FakeRouting { RouteAnswer.Found(route, "s") }
+            val c = controller(routing)
+            c.chooseStart(hotel)
+            assertEquals(hotel, c.chosenStart.value)
+            c.start("osm:node/1", kunsthaus, null)
+            // No waiting for the user's position: the route starts at the hotel.
+            assertEquals(RouteStatus.Finding, c.directions.value?.status)
+            assertEquals(hotel, c.directions.value?.from)
+            advanceUntilIdle()
+            assertEquals(listOf(Triple(hotel.point, kunsthaus, TravelMode.Car)), routing.asked)
+            // A fix that comes now does not ask again, nor does the position timeout end anything.
+            c.located(here)
+            advanceTimeBy(60_000)
+            advanceUntilIdle()
+            assertEquals(1, routing.asked.size)
+            assertTrue(c.directions.value?.status is RouteStatus.Found)
+            // Another place, a known position: still from the hotel.
+            c.close()
+            c.start("osm:node/2", kunsthaus, here)
+            advanceUntilIdle()
+            assertEquals(Triple(hotel.point, kunsthaus, TravelMode.Car), routing.asked.last())
+        }
+
+    @Test
+    fun theChosenStartsOwnDirectionsStartFromTheUser() =
+        runTest {
+            val routing = FakeRouting { RouteAnswer.Found(route, "s") }
+            val c = controller(routing)
+            c.chooseStart(hotel)
+            assertNull(c.startFor(hotel.placeUri, hotel.point))
+            assertEquals(hotel, c.startFor("osm:node/1", kunsthaus))
+            // The hotel through another link (its card, an OSM URL): the same point, the same place.
+            assertNull(c.startFor("https://www.openstreetmap.org/node/9", GeoPoint(47.36672, 8.54503)))
+            c.start(hotel.placeUri, hotel.point, null)
+            assertEquals(RouteStatus.Locating, c.directions.value?.status)
+            assertNull(c.directions.value?.from)
+            c.located(here)
+            advanceUntilIdle()
+            assertEquals(listOf(Triple(here, hotel.point, TravelMode.Car)), routing.asked)
+        }
+
+    @Test
+    fun aChosenStartIsSwappedRetriedAndAskedByEachMode() =
+        runTest {
+            var answer: RouteAnswer = RouteAnswer.Unreachable
+            val routing = FakeRouting { answer }
+            val c = controller(routing)
+            c.chooseStart(hotel)
+            c.start("osm:node/1", kunsthaus, null)
+            advanceUntilIdle()
+            assertEquals(RouteStatus.Unreachable, c.directions.value?.status)
+            answer = RouteAnswer.Found(route, "s")
+            c.retry()
+            advanceUntilIdle()
+            assertTrue(c.directions.value?.status is RouteStatus.Found)
+            c.swap()
+            advanceUntilIdle()
+            assertEquals(Triple(kunsthaus, hotel.point, TravelMode.Car), routing.asked.last())
+            c.selectMode(TravelMode.Walk)
+            advanceUntilIdle()
+            assertEquals(Triple(kunsthaus, hotel.point, TravelMode.Walk), routing.asked.last())
+            assertEquals(4, routing.asked.size)
+        }
+
+    @Test
+    fun aClearedStartLeavesTheNextDirectionsToTheUsersPosition() =
+        runTest {
+            val routing = FakeRouting { RouteAnswer.Found(route, "s") }
+            val c = controller(routing)
+            c.chooseStart(hotel)
+            c.start("osm:node/1", kunsthaus, null)
+            advanceUntilIdle()
+            c.clearStart()
+            assertNull(c.chosenStart.value)
+            // The open directions stay as they are until the caller starts them again.
+            assertEquals(hotel, c.directions.value?.from)
+            c.start("osm:node/1", kunsthaus, null)
+            assertEquals(RouteStatus.Locating, c.directions.value?.status)
+            assertNull(c.directions.value?.from)
+            c.located(here)
+            advanceUntilIdle()
+            assertEquals(Triple(here, kunsthaus, TravelMode.Car), routing.asked.last())
+        }
+
+    @Test
+    fun fromYourLocationClearsTheStartTheDirectionsCameFromButNotOneChosenSince() =
+        runTest {
+            val c = controller(FakeRouting { RouteAnswer.Found(route, "s") })
+            c.chooseStart(hotel)
+            c.start("osm:node/1", kunsthaus, null)
+            c.leaveStart()
+            assertNull(c.chosenStart.value)
+            // From the hotel to the Kunsthaus, then Start here on the Kunsthaus: the card still says the
+            // hotel; leaving it keeps the Kunsthaus as the start.
+            c.chooseStart(hotel)
+            c.start("osm:node/1", kunsthaus, null)
+            val museum = RouteStart("osm:node/1", kunsthaus, "Kunsthaus")
+            c.chooseStart(museum)
+            c.leaveStart()
+            assertEquals(museum, c.chosenStart.value)
+            // Without directions from a start nothing is cleared.
+            c.close()
+            c.leaveStart()
+            assertEquals(museum, c.chosenStart.value)
+        }
+
+    @Test
+    fun aStartChosenBeforeItsCardCameTakesTheCardsName() =
+        runTest {
+            val c = controller(FakeRouting { RouteAnswer.Found(route, "s") })
+            c.chooseStart(hotel.copy(name = "47.3667, 8.545"))
+            c.renameStart("osm:node/2", "Kunsthaus")
+            assertEquals("47.3667, 8.545", c.chosenStart.value?.name)
+            c.renameStart(hotel.placeUri, "Hotel Adler")
+            assertEquals(hotel, c.chosenStart.value)
+        }
 }
