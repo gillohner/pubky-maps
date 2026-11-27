@@ -44,12 +44,17 @@ class SavedPinsTest {
     }
 
     @Test
-    fun aSavedPointOpensAsCoordinatesNotAsAPlaceOfTheMap() {
+    fun aPointSavedFromItsOwnPageOpensAsCoordinatesNotAsAPlaceOfTheMap() {
         val pin = GeoPoint(47.37031, 8.55601)
         // A dropped pin or typed coordinates, saved: still a point that no server hears of.
         assertEquals(
             PlaceRef("geo:47.37031,8.55601", "Home", pin, null, PlaceSource.Coordinates),
-            SavedEntry("geo:47.37031,8.55601", Kept.Phone, "Home", point = pin).toPlaceRef(),
+            SavedEntry("geo:47.37031,8.55601", Kept.Phone, "Home", point = pin, pointPage = true).toPlaceRef(),
+        )
+        // A geo: link from another app or a Pubky place with a geo: URI, saved from its page: a public place.
+        assertEquals(
+            PlaceRef("geo:47.37031,8.55601", "Kunsthalle", pin, null, PlaceSource.Map),
+            SavedEntry("geo:47.37031,8.55601", Kept.Private, "Kunsthalle", point = pin).toPlaceRef(),
         )
         // From the Saved page, which knows the link and the name: the point is the link's.
         assertEquals(
@@ -58,6 +63,18 @@ class SavedPinsTest {
         )
         assertNull(savedPointPlace(OSM, "Conditorei Schober"), "an OpenStreetMap place is read as its link is")
         assertNull(savedPointPlace("geo:0,0?q=Kunsthaus", null), "a geo: search names no point")
+    }
+
+    @Test
+    fun onlyAPageOfAPointOfItsOwnSavesThePlaceAsOne() {
+        val typed = PlaceRef("geo:47.3703,8.556", null, GeoPoint(47.3703, 8.556), null, PlaceSource.Coordinates)
+        assertEquals(true, PlacePageState(typed).writeTarget.pointPage)
+        assertEquals(true, PlacePageState(droppedPin(47.37031, 8.55601)).writeTarget.pointPage)
+        // A geo: link from another app, a Pubky place with a geo: URI, a place of the map: public places.
+        val shared = typed.copy(source = PlaceSource.LinkText)
+        assertEquals(false, PlacePageState(shared).writeTarget.pointPage)
+        assertEquals(false, PlacePageState(shared.copy(source = PlaceSource.Pinakes)).writeTarget.pointPage)
+        assertEquals(false, PlacePageState(PlaceRef(OSM, "Conditorei Schober", SCHOBER, null, PlaceSource.Map)).writeTarget.pointPage)
     }
 
     @Test

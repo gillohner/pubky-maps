@@ -143,11 +143,14 @@ data class QueuedOp(
 /**
  * What a write is about: the place's URI as the user had it, its name for lists of the user's own
  * places, and where it is, for the pin of a saved place on the map (null when the page does not know).
+ * [pointPage]: the page is of a point of its own (a dropped pin, typed coordinates), so a save or list
+ * keeps it as one ([OwnData.pointPlaces]).
  */
 data class WriteTarget(
     val uri: String,
     val name: String?,
     val point: GeoPoint? = null,
+    val pointPage: Boolean = false,
 )
 
 /** What the user wanted to do when the app asked them to sign in first. */

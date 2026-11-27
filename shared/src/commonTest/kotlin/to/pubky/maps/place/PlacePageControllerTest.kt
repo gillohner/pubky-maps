@@ -475,7 +475,7 @@ class PlacePageControllerTest {
             val data = FakePlaceData()
             val pages = controller(data, localities = Hottingen())
             // A dropped pin saved (phone or homeserver), then opened again from its badge and from the Saved page.
-            val pin = SavedEntry("geo:47.37031,8.55601", Kept.Private, "Home", point = GeoPoint(47.37031, 8.55601))
+            val pin = SavedEntry("geo:47.37031,8.55601", Kept.Private, "Home", point = GeoPoint(47.37031, 8.55601), pointPage = true)
             pages.open(pin.toPlaceRef())
             advanceUntilIdle()
             pages.close()
@@ -489,6 +489,19 @@ class PlacePageControllerTest {
                     .place.title,
             )
             assertEquals("Hottingen, Zürich", pages.state.value!!.address)
+        }
+
+    @Test
+    fun aSavedPublicGeoPlaceReopenedFromItsPinAsksPinakesAndNexus() =
+        runTest {
+            val data = FakePlaceData()
+            val pages = controller(data, localities = Hottingen())
+            // A geo: link another app shared (or a Pubky place with a geo: URI), saved from its Pinakes page.
+            val shared = SavedEntry("geo:47.37031,8.55601", Kept.Private, "Kunsthalle", point = GeoPoint(47.37031, 8.55601))
+            pages.open(shared.toPlaceRef())
+            advanceUntilIdle()
+            assertEquals(listOf(listOf("geo:47.37031,8.55601")), data.askedCards)
+            assertTrue(data.askedLinks.isNotEmpty(), "Nexus is asked for its tags and posts")
         }
 
     @Test

@@ -93,6 +93,7 @@ import to.pubky.maps.place.PlaceRef
 import to.pubky.maps.place.PlaceRefSaver
 import to.pubky.maps.place.PlaceServices
 import to.pubky.maps.place.PlaceSheet
+import to.pubky.maps.place.PlaceSource
 import to.pubky.maps.place.PlaceWriteActions
 import to.pubky.maps.place.SheetStop
 import to.pubky.maps.routing.DirectionsUi
@@ -946,8 +947,9 @@ private fun rememberPlacePage(
  */
 internal val PlacePageState.placePoint: GeoPoint? get() = place.point?.takeIf { place.pinned } ?: card?.point
 
-/** The page's place as the user's writes name it: its link, its name, where it is. */
-private val PlacePageState.writeTarget: WriteTarget get() = WriteTarget(place.uri, card?.name ?: place.name, placePoint)
+/** The page's place as the user's writes name it: its link, its name, where it is, whether it is a point of its own. */
+internal val PlacePageState.writeTarget: WriteTarget
+    get() = WriteTarget(place.uri, card?.name ?: place.name, placePoint, pointPage = place.source == PlaceSource.Coordinates)
 
 /** Every link of [page]'s place, spelled as the core stores places: the keys of the user's own data about it. */
 private fun ownLinks(

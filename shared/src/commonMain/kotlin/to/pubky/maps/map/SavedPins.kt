@@ -51,15 +51,20 @@ private const val GLYPH_SCALE = 0.55f
  */
 internal fun savedPins(saved: List<SavedEntry>): List<SavedEntry> = saved.filter { it.point != null }.distinctBy { it.place }
 
-/** The place page of a saved place's pin: the place as saved, where it was saved. */
+/**
+ * The place page of a saved place's pin: the place as saved, where it was saved; a point saved from
+ * its own page ([SavedEntry.pointPage]) is such a page again ([savedPointPlace]).
+ */
 internal fun SavedEntry.toPlaceRef(): PlaceRef =
-    savedPointPlace(place, name, point)
+    (if (pointPage) savedPointPlace(place, name, point) else null)
         ?: PlaceRef(uri = place, name = name, point = point, osm = osmIdFromUrl(place), source = PlaceSource.Map)
 
 /**
- * The page of a saved place that is a point of its own, a `geo:` link (a dropped pin, typed
- * coordinates), from its pin or the Saved page: [PlaceSource.Coordinates] as when it was saved, so
- * it is asked of no server (a saved point can be the user's home). Null for any other place.
+ * The page of a saved `geo:` place that was saved from the page of a point of its own (a dropped
+ * pin, typed coordinates; [to.pubky.maps.write.OwnData.pointPlaces]), from its pin or the Saved page:
+ * [PlaceSource.Coordinates] as when it was saved, so it is asked of no server (a saved point can be
+ * the user's home). Null for a link that names no point. Callers ask only for such saves: a `geo:`
+ * link from another app or a Pubky place with a `geo:` URI is a public place, read as its link is.
  */
 internal fun savedPointPlace(
     place: String,

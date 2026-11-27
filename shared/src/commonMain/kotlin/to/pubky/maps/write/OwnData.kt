@@ -24,6 +24,8 @@ data class SavedEntry(
     val pending: Boolean = false,
     /** Where it is, for its pin on the map: stored when it was saved, else read from a `geo:` link; null when not known. */
     val point: GeoPoint? = null,
+    /** Saved from the page of a point of its own (a dropped pin, typed coordinates): see [OwnData.pointPlaces]. */
+    val pointPage: Boolean = false,
 )
 
 /** A post or photo written on this phone, until the place page's next load from Nexus has it. */
@@ -67,6 +69,13 @@ data class OwnData(
     val busy: Boolean = false,
     /** Names of places the user wrote about, by place as the core spells it. */
     val names: Map<String, String> = emptyMap(),
+    /**
+     * The `geo:` places the user saved or put in a list from the page of a point of its own (a dropped
+     * pin, typed coordinates), as the core spells them. Reopened from the Saved page or the map's
+     * badge they are such a page again, asked of no server; any other `geo:` place (a link from
+     * another app, a Pubky place someone tagged) is read as its link is, with its card and tags.
+     */
+    val pointPlaces: Set<String> = emptySet(),
 ) {
     /** What the user has about the place whose links are [links] (each spelled as the core stores it). */
     fun forPlace(links: Set<String>): OwnPlace {
@@ -107,6 +116,11 @@ data class OwnPlace(
 data class PhoneData(
     val saved: List<PhoneSaved> = emptyList(),
     val lists: List<OwnList> = emptyList(),
+    /**
+     * The `geo:` places the user saved or put in a list from the page of a point of its own (a dropped
+     * pin, typed coordinates), as the core spells them: reopened, they are asked of no server.
+     */
+    val pointPlaces: Set<String> = emptySet(),
 )
 
 data class PhoneSaved(
@@ -187,17 +201,22 @@ internal fun ownData(
             }
         }
     }
+    val pointPlaces = phone.pointPlaces.map(normalize).toSet()
     return OwnData(
         viewer = viewer.takeIf { signedIn },
         known = signedIn && cached.refreshedAt != null,
         tags = tags.values.toList(),
-        saved = saved.values.sortedBy { (it.name ?: it.place).lowercase() },
+        saved =
+            saved.values
+                .map { if (it.place in pointPlaces) it.copy(pointPage = true) else it }
+                .sortedBy { (it.name ?: it.place).lowercase() },
         lists = ownLists.values.toList(),
         posts = posts.sortedByDescending { it.at },
         pending = if (signedIn) queue.size else 0,
         names =
             phone.saved.mapNotNull { saved -> saved.name?.let { normalize(saved.place) to it } }.toMap() +
                 (if (signedIn) named else emptyMap()),
+        pointPlaces = pointPlaces,
     )
 }
 

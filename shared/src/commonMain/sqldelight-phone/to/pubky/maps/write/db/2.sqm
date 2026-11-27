@@ -1,0 +1,5 @@
+-- Version 3: the geo: places saved from the page of a point of its own, kept from servers when reopened.
+
+CREATE TABLE point_place (
+    place TEXT NOT NULL PRIMARY KEY
+);

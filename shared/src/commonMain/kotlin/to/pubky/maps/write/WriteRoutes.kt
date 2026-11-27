@@ -223,14 +223,17 @@ fun ListRoute(
     )
 }
 
-/** The Saved screen on the live [writes]; [onRefresh] reads the account again when it opens. */
+/**
+ * The Saved screen on the live [writes]; [onRefresh] reads the account again when it opens. [onOpen]
+ * hears whether the place was saved from the page of a point of its own ([OwnData.pointPlaces]).
+ */
 @Composable
 fun SavedRoute(
     writes: WriteController,
     signedIn: Boolean,
     refreshing: Boolean,
     onRefresh: () -> Unit,
-    onOpen: (place: String, name: String?) -> Unit,
+    onOpen: (place: String, name: String?, pointPage: Boolean) -> Unit,
     onBack: () -> Unit,
 ) {
     val own by writes.own.collectAsStateWithLifecycle()
@@ -247,7 +250,7 @@ fun SavedRoute(
                 refreshing = refreshing || own.listsLoading,
                 signedIn = signedIn,
             ),
-        onOpen = onOpen,
+        onOpen = { place, name -> onOpen(place, name, place in own.pointPlaces) },
         onBack = onBack,
     )
 }

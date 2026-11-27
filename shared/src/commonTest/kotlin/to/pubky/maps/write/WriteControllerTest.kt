@@ -348,6 +348,65 @@ class WriteControllerTest {
         }
 
     @Test
+    fun aPointSavedFromItsOwnPageIsKeptAsOneOnThePhoneUntilSavedFromAnotherPage() =
+        runTest {
+            signedIn()
+            val writer = controller()
+            runCurrent()
+            val pin = GeoPoint(47.37031, 8.55601)
+            val home = WriteTarget("geo:47.37031,8.55601", "Home", pin, pointPage = true)
+
+            // A dropped pin saved on the homeserver: the phone keeps that it is the user's own point.
+            writer.save(home)
+            runCurrent()
+            assertEquals(listOf("save(geo:47.37031,8.55601)"), sent)
+            assertEquals(setOf("geo:47.37031,8.55601"), phone.data.pointPlaces)
+            assertEquals(setOf("geo:47.37031,8.55601"), writer.own.value.pointPlaces)
+            assertEquals(
+                SavedEntry("geo:47.37031,8.55601", Kept.Private, "Home", point = pin, pointPage = true),
+                writer.own.value.saved
+                    .single(),
+            )
+            // Put in a phone list from its page too, and added to it; also after a sign-out and the next start.
+            writer.createList(WriteTarget("geo:47.36,8.55", null, pointPage = true), "Walks", Kept.Phone)
+            runCurrent()
+            val walks =
+                writer.own.value.lists
+                    .single()
+            writer.addToList(WriteTarget("geo:47.35,8.54", null, pointPage = true), walks)
+            runCurrent()
+            assertEquals(setOf("geo:47.37031,8.55601", "geo:47.36,8.55", "geo:47.35,8.54"), phone.data.pointPlaces)
+            writer.removeFromList(WriteTarget("geo:47.35,8.54", null, pointPage = true), setOf("geo:47.35,8.54"), walks)
+            runCurrent()
+            account.value = AccountState.SignedOut()
+            runCurrent()
+            assertEquals(
+                setOf("geo:47.37031,8.55601", "geo:47.36,8.55", "geo:47.35,8.54"),
+                controller()
+                    .also { runCurrent() }
+                    .own.value.pointPlaces,
+                "a place taken out of a list keeps its mark: it may still be saved",
+            )
+
+            // The same link saved again from a public page (a link from another app, Pinakes): read as a link again.
+            signedIn()
+            runCurrent()
+            writer.save(WriteTarget("geo:47.37031,8.55601", "Kunsthalle", pin))
+            runCurrent()
+            assertEquals(setOf("geo:47.36,8.55", "geo:47.35,8.54"), phone.data.pointPlaces)
+            assertEquals(
+                false,
+                writer.own.value.saved
+                    .single()
+                    .pointPage,
+            )
+            // Places that are no geo: link are never kept as points.
+            writer.save(target.copy(pointPage = true))
+            runCurrent()
+            assertEquals(setOf("geo:47.36,8.55", "geo:47.35,8.54"), phone.data.pointPlaces)
+        }
+
+    @Test
     fun aHomeserverSaveKeepsWhereThePlaceIsForItsPinAndReadsItBackAtTheNextStart() =
         runTest {
             signedIn()
