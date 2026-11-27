@@ -131,6 +131,9 @@ private const val MY_LOCATION_ZOOM = 15.0
 /** The zoom a place from a link is shown at when its link has none (a street, its buildings). */
 private const val PLACE_ZOOM = 16.0
 
+/** The zoom a tapped route step is shown at: its crossing and the streets' names, as Google Maps shows a step. */
+private const val STEP_ZOOM = 17.0
+
 /**
  * The live map: the first style of the server list for the current theme that loads, the user's
  * location on request, search ([search], null where it is not available), and the [MapScreen]
@@ -214,6 +217,7 @@ fun MapRoute(
             ?.value
     val foundRoute = directionsState?.status as? RouteStatus.Found
     val routePoints by rememberUpdatedState(foundRoute?.route?.points)
+    val markedStep by rememberUpdatedState(directionsState?.markedStep?.at)
     // Pins while search is open; the picked result also when its card shows.
     val searchPins by rememberUpdatedState(searchState?.takeIf { it.mode != SearchMode.Idle })
     val mapState =
@@ -248,6 +252,8 @@ fun MapRoute(
                 )
             }
             pinnedPoint?.let { PlacePin(it) }
+            // Above the place's pin: the route's last step is at the place.
+            markedStep?.let { RouteStepMark(it) }
             searchPins?.let { pins ->
                 if (search != null) SearchPins(pins.results, pins.selected, onSelect = search.controller::select)
             }
@@ -388,6 +394,13 @@ fun MapRoute(
         val open = directionsState ?: return@LaunchedEffect
         val route = open.routeToFit?.route ?: return@LaunchedEffect
         val room = routeRoom(pageRoomsOf(open.placeUri))
+        // A step tapped during the wait is what the map shows (DirectionsController.showStep).
+        if (directions.directions.value
+                ?.routeToFit
+                ?.route != route
+        ) {
+            return@LaunchedEffect
+        }
         directions.routeFitted(route)
         mapState.animateCameraToBounds(
             BoundingBox(
@@ -399,6 +412,18 @@ fun MapRoute(
             CameraFit(fitPadding = routeFitPadding(room, mapState.viewport?.size)),
         )
     }
+    // A step tapped in the route's list: the map moves it into the middle of the map its page leaves
+    // in view once the sheet has made room (PlaceSheet lowers it from the top), once per tap
+    // (Directions.stepTapToMoveTo), so coming back from Settings keeps the user's pan. Keyed on the
+    // taps, not on the tap still to move for: marking it moved would cancel the move. A move cut short
+    // (Settings, a rotation) counts as done, as for a search pick.
+    LaunchedEffect(directionsState?.stepTaps) {
+        val open = directionsState ?: return@LaunchedEffect
+        val tap = open.stepTapToMoveTo ?: return@LaunchedEffect
+        val step = open.markedStep ?: return@LaunchedEffect
+        directions.mapMovedToStep(tap)
+        mapState.moveToStep(step.at, pageRoomsOf(open.placeUri))
+    }
     val startDirections = directions?.let { rememberStartDirections(it, locationState) }
     val settingsLauncher = rememberSystemSettingsLauncher()
     val directionsUi =
@@ -407,6 +432,7 @@ fun MapRoute(
                 directions = directionsState,
                 onMode = directions::selectMode,
                 onSteps = directions::showSteps,
+                onStep = directions::showStep,
                 onClose = directions::close,
                 onRetry = {
                     if (directionsState.from == null) {
@@ -1204,6 +1230,22 @@ private suspend fun MapState.moveToPlace(
     if (cameraPosition != before && cameraMoveReason == CameraMoveReason.Gesture) return
     val centre = centreShowing(point, room, viewport?.size, zoom, cameraPosition.bearing)
     animateCamera(CameraUpdate(center = Position(longitude = centre.lon, latitude = centre.lat), zoom = zoom))
+}
+
+/**
+ * Moves the camera to a tapped route step at [point], in the middle of the map its page leaves in
+ * view ([routeRoom] of [rooms]: the sheet lowered from its top has come to rest). A finger that moved
+ * the map meanwhile has put it where the user wants it: then the map stays.
+ */
+private suspend fun MapState.moveToStep(
+    point: GeoPoint,
+    rooms: Flow<PageRoom?>,
+) {
+    val before = cameraPosition
+    val room = routeRoom(rooms)
+    if (cameraPosition != before && cameraMoveReason == CameraMoveReason.Gesture) return
+    val centre = centreShowing(point, room, viewport?.size, STEP_ZOOM, cameraPosition.bearing)
+    animateCamera(CameraUpdate(center = Position(longitude = centre.lon, latitude = centre.lat), zoom = STEP_ZOOM))
 }
 
 /** The camera of [this] map for [keepTappedInView]. */

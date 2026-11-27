@@ -333,6 +333,7 @@ class PlaceScreenshotTest {
         status: RouteStatus,
         mode: TravelMode = TravelMode.Car,
         stepsShown: Boolean = false,
+        shownStep: Int? = null,
     ) = actions.copy(
         directions =
             DirectionsUi(
@@ -344,9 +345,11 @@ class PlaceScreenshotTest {
                         from = GeoPoint(47.3779, 8.5403),
                         status,
                         stepsShown = stepsShown,
+                        shownStep = shownStep,
                     ),
                 onMode = {},
                 onSteps = {},
+                onStep = {},
                 onClose = {},
                 onRetry = {},
                 onOpenSettings = {},
@@ -362,15 +365,15 @@ class PlaceScreenshotTest {
                 meters = 1401.0,
                 steps =
                     listOf(
-                        RouteStep("Drive north.", Turn.Depart, 35.0),
-                        RouteStep("Turn right onto Museumstrasse.", Turn.Right, 52.0),
-                        RouteStep("Bear right onto Bahnhofquai.", Turn.SlightRight, 30.0),
-                        RouteStep("Keep left to stay on Bahnhofquai.", Turn.KeepLeft, 406.0),
-                        RouteStep("Turn left onto Rudolf-Brun-Brücke.", Turn.Left, 329.0),
-                        RouteStep("Turn right onto Seilergraben.", Turn.Right, 205.0),
-                        RouteStep("Bear right onto Hirschengraben.", Turn.SlightRight, 262.0),
-                        RouteStep("Bear right onto Heimplatz.", Turn.SlightRight, 81.0),
-                        RouteStep("Your destination is on the right.", Turn.Arrive, 0.0),
+                        RouteStep("Drive north.", Turn.Depart, 35.0, GeoPoint(47.3779, 8.5403)),
+                        RouteStep("Turn right onto Museumstrasse.", Turn.Right, 52.0, GeoPoint(47.3779, 8.5403)),
+                        RouteStep("Bear right onto Bahnhofquai.", Turn.SlightRight, 30.0, GeoPoint(47.3779, 8.5403)),
+                        RouteStep("Keep left to stay on Bahnhofquai.", Turn.KeepLeft, 406.0, GeoPoint(47.3779, 8.5403)),
+                        RouteStep("Turn left onto Rudolf-Brun-Brücke.", Turn.Left, 329.0, GeoPoint(47.3779, 8.5403)),
+                        RouteStep("Turn right onto Seilergraben.", Turn.Right, 205.0, GeoPoint(47.3779, 8.5403)),
+                        RouteStep("Bear right onto Hirschengraben.", Turn.SlightRight, 262.0, GeoPoint(47.3779, 8.5403)),
+                        RouteStep("Bear right onto Heimplatz.", Turn.SlightRight, 81.0, GeoPoint(47.3779, 8.5403)),
+                        RouteStep("Your destination is on the right.", Turn.Arrive, 0.0, GeoPoint(47.3779, 8.5403)),
                     ),
             ),
             server = "https://valhalla1.openstreetmap.de",
@@ -540,6 +543,31 @@ class PlaceScreenshotTest {
     @Test
     fun directionsStepsTabletDark() =
         capture("place-directions-steps", Device.Tablet, dark = true) { Page(rich, actions = directionsTo(foundRoute, stepsShown = true)) }
+
+    /** A tapped step lowers the phone sheet to its lowest stop: the map shows the step, the route card shows it with previous/next. */
+    @Test
+    fun directionsStepTappedPhoneLight() =
+        capture("place-directions-step-tapped", Device.Phone, dark = false) {
+            Page(rich, SheetStop.Peek, directionsTo(foundRoute, stepsShown = true, shownStep = 1))
+        }
+
+    @Test
+    fun directionsStepTappedPhoneDark() =
+        capture("place-directions-step-tapped", Device.Phone, dark = true) {
+            Page(rich, SheetStop.Peek, directionsTo(foundRoute, stepsShown = true, shownStep = 1))
+        }
+
+    @Test
+    fun directionsStepTappedTabletLight() =
+        capture("place-directions-step-tapped", Device.Tablet, dark = false) {
+            Page(rich, actions = directionsTo(foundRoute, stepsShown = true, shownStep = 1))
+        }
+
+    @Test
+    fun directionsStepTappedTabletDark() =
+        capture("place-directions-step-tapped", Device.Tablet, dark = true) {
+            Page(rich, actions = directionsTo(foundRoute, stepsShown = true, shownStep = 1))
+        }
 
     @Test
     fun directionsStepsLargeFontPhoneLight() =

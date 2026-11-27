@@ -28,13 +28,15 @@ data class Route(
 
 /**
  * One step of a route: what to do there ([instruction], the routing server's sentence, "Turn right
- * onto Museumstrasse."), which way it goes ([turn], for its icon) and how far the route then goes
- * until the next step ([meters], 0 at the end).
+ * onto Museumstrasse."), which way it goes ([turn], for its icon), how far the route then goes
+ * until the next step ([meters], 0 at the end) and where on the route's line it is ([at], the map
+ * shows it there when the step is tapped).
  */
 data class RouteStep(
     val instruction: String,
     val turn: Turn,
     val meters: Double,
+    val at: GeoPoint,
 )
 
 /** Which way a route step goes. */
@@ -135,7 +137,8 @@ fun valhallaRouteBody(
 
 /**
  * Reads Valhalla's route answer: every leg's line and steps in order (a step without a sentence is
- * left out), the trip's time and length.
+ * left out), the trip's time and length. A step is where its maneuver begins on its leg's line
+ * (`begin_shape_index`, the line's end when the index is past it).
  */
 fun parseValhallaRoute(json: String): Route {
     val trip = ValhallaJson.decodeFromString(ValhallaRouteResponse.serializer(), json).trip
@@ -147,7 +150,8 @@ fun parseValhallaRoute(json: String): Route {
         points += if (points.isNotEmpty() && line.firstOrNull() == points.last()) line.drop(1) else line
         for (maneuver in leg.maneuvers) {
             if (maneuver.instruction.isBlank()) continue
-            steps += RouteStep(maneuver.instruction.trim(), valhallaTurn(maneuver.type), maneuver.length * 1_000)
+            val at = line.getOrNull(maneuver.beginShapeIndex) ?: line.lastOrNull() ?: continue
+            steps += RouteStep(maneuver.instruction.trim(), valhallaTurn(maneuver.type), maneuver.length * 1_000, at)
         }
     }
     require(points.size >= 2) { "A route needs two points" }
@@ -222,6 +226,8 @@ private data class ValhallaManeuver(
     val instruction: String = "",
     /** Kilometres, as the request's units ask. */
     val length: Double = 0.0,
+    /** Where the maneuver begins: the index of its point in its leg's [ValhallaLeg.shape]. */
+    @SerialName("begin_shape_index") val beginShapeIndex: Int = 0,
 )
 
 @Serializable

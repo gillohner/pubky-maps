@@ -3,12 +3,19 @@ package to.pubky.maps.android
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import kotlinx.datetime.LocalDate
@@ -39,7 +46,8 @@ import to.pubky.maps.ui.PubkyMapsTheme
 
 /**
  * A found route's steps open and close behind the Steps button, listed in the place page under its
- * header; each reads as one sentence with its distance.
+ * header; each reads as one sentence with its distance. A tapped step is marked and shown in the route
+ * card with the way to the previous and the next one.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w412dp-h915dp")
@@ -63,16 +71,18 @@ class RouteStepsTest {
 
     private val steps =
         listOf(
-            RouteStep("Drive north.", Turn.Depart, 35.0),
-            RouteStep("Turn right onto Museumstrasse.", Turn.Right, 52.0),
-            RouteStep("Turn left onto Bahnhofquai.", Turn.Left, 3.0),
-            RouteStep("Your destination is on the right.", Turn.Arrive, 0.0),
+            RouteStep("Drive north.", Turn.Depart, 35.0, here),
+            RouteStep("Turn right onto Museumstrasse.", Turn.Right, 52.0, here),
+            RouteStep("Turn left onto Bahnhofquai.", Turn.Left, 3.0, here),
+            RouteStep("Your destination is on the right.", Turn.Arrive, 0.0, here),
         )
 
     private fun card(
         status: RouteStatus,
         onSteps: (Boolean) -> Unit,
         shown: () -> Boolean,
+        onStep: (Int) -> Unit = {},
+        shownStep: () -> Int? = { null },
     ) {
         compose.setContent {
             PubkyMapsTheme(darkTheme = false) {
@@ -89,9 +99,18 @@ class RouteStepsTest {
                         onLoadMorePosts = {},
                         directions =
                             DirectionsUi(
-                                Directions("osm:node/1", kunsthaus, TravelMode.Car, here, status, stepsShown = shown()),
+                                Directions(
+                                    "osm:node/1",
+                                    kunsthaus,
+                                    TravelMode.Car,
+                                    here,
+                                    status,
+                                    stepsShown = shown(),
+                                    shownStep = shownStep(),
+                                ),
                                 onMode = {},
                                 onSteps = onSteps,
+                                onStep = onStep,
                                 onClose = {},
                                 onRetry = {},
                                 onOpenSettings = null,
@@ -130,6 +149,51 @@ class RouteStepsTest {
         compose.waitForIdle()
         compose.onNodeWithText("Drive north.").assertDoesNotExist()
         assertEquals(listOf(true, false), asked)
+    }
+
+    @Test
+    fun aTappedStepIsAskedForTheMapAndMarkedInTheList() {
+        var shownStep by mutableStateOf<Int?>(null)
+        val tapped = ArrayList<Int>()
+        card(found(steps), {}, { true }, onStep = {
+            tapped += it
+            shownStep = it
+        }, { shownStep })
+        // The list's row (the step card has the same sentence, without a click of its own).
+        val museum = hasText("Turn right onto Museumstrasse.") and hasClickAction()
+        // TalkBack says what a tap does.
+        compose
+            .onNode(museum)
+            .assert(
+                SemanticsMatcher("clicks to show on map") {
+                    it.config.getOrElseNullable(SemanticsActions.OnClick) { null }?.label ==
+                        "Show on map"
+                },
+            ).assertIsNotSelected()
+            .performClick()
+        compose.waitForIdle()
+        compose.onNode(museum).assertIsSelected()
+        compose.onNode(hasText("Drive north.") and hasClickAction()).assertIsNotSelected()
+        // The route card shows the step, with the way to the ones before and after it.
+        compose.onNodeWithText("Step 2 of 4 · 50 m").assertExists()
+        compose.onNodeWithContentDescription("Previous step").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Step 1 of 4 · 40 m").assertExists()
+        compose.onNodeWithContentDescription("Previous step").assertIsNotEnabled()
+        compose.onNode(hasText("Your destination is on the right.") and hasClickAction()).performClick()
+        compose.waitForIdle()
+        compose.onNode(museum).assertIsNotSelected()
+        compose.onNodeWithText("Step 4 of 4").assertExists()
+        compose.onNodeWithContentDescription("Next step").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("Previous step").assertIsEnabled()
+        assertEquals(listOf(1, 0, 3), tapped)
+    }
+
+    @Test
+    fun noStepCardUntilAStepIsTapped() {
+        card(found(steps), {}, { true })
+        compose.onNodeWithContentDescription("Next step").assertDoesNotExist()
+        compose.onNodeWithText("Step 1 of 4 · 40 m").assertDoesNotExist()
     }
 
     @Test

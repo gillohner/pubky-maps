@@ -17,6 +17,15 @@ class DirectionsTextsTest {
     }
 
     @Test
+    fun aStepSaysWhereItIsInTheRouteAndHowFarItGoes() {
+        assertEquals("Step 2 of 9 · 50 m", stepPositionText(1, 9, 52.0))
+        assertEquals("Step 1 of 9 · 1.4 km", stepPositionText(0, 9, 1_401.0))
+        // The end, and a step of a few metres, have no distance.
+        assertEquals("Step 9 of 9", stepPositionText(8, 9, 0.0))
+        assertEquals("Step 3 of 9", stepPositionText(2, 9, 4.9))
+    }
+
+    @Test
     fun eachStatusSaysWhatStandsInTheWay() {
         fun text(
             status: RouteStatus,

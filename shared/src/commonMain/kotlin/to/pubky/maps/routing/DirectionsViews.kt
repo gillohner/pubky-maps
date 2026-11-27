@@ -1,5 +1,7 @@
 package to.pubky.maps.routing
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -23,8 +25,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.LinkAnnotation
@@ -47,6 +51,8 @@ data class DirectionsUi(
     val onMode: (TravelMode) -> Unit,
     /** Opens (true) or closes the list of the route's steps. */
     val onSteps: (Boolean) -> Unit,
+    /** Shows the step at this index of the list on the map. */
+    val onStep: (Int) -> Unit,
     val onClose: () -> Unit,
     /** Asks again: for the route after a failure, for the position when it was missing. */
     val onRetry: () -> Unit,
@@ -84,6 +90,17 @@ private val TravelMode.label: String
             TravelMode.Bike -> "Bike"
             TravelMode.Walk -> "Walk"
         }
+
+/** "Step 2 of 9 · 50 m": where the step at [index] of [count] is in the route, and how far the route then goes. */
+fun stepPositionText(
+    index: Int,
+    count: Int,
+    meters: Double,
+): String {
+    val position = "Step ${index + 1} of $count"
+    // Below 5 m the distance would read "0 m", as in the list.
+    return if (meters >= 5) "$position · ${formatDistance(meters)}" else position
+}
 
 /** What the directions say while they have no route to show; null once a route is found. */
 fun routeStatusText(directions: Directions): String? =
@@ -124,7 +141,8 @@ fun routeStatusText(directions: Directions): String? =
 /**
  * The directions on a place page: the modes, then the route's time and length (the map draws its
  * line) with the button that opens its steps ([RouteStepList]), or what stands in its way; the routing
- * server's credits under a found route.
+ * server's credits under a found route. A step tapped in the list shows above the button with the
+ * way to the previous and the next one ([StepPreview]).
  */
 @Composable
 fun DirectionsCard(
@@ -190,6 +208,9 @@ fun DirectionsCard(
             if (found != null) {
                 // Outside the live region above: opening the steps is not read out as a new route.
                 Column(Modifier.padding(end = 12.dp)) {
+                    val marked = directions.shownStep
+                    val step = directions.markedStep
+                    if (marked != null && step != null) StepPreview(step, marked, found.route.steps.size, ui.onStep)
                     StepsButton(found.route.steps, directions.stepsShown, ui.onSteps)
                     RouteCredits(ui.credits)
                 }
@@ -221,20 +242,75 @@ private fun StepsButton(
     }
 }
 
-/** The route's [steps] ([Directions.shownSteps]): each with its turn's icon, its sentence and how far the route then goes. */
+/**
+ * The step the map shows ([Directions.markedStep], at [index] of [count]), with buttons to the previous
+ * and the next one, as Google Maps' step preview: on a phone the place header is the sheet's lowest
+ * stop, so the user goes through the steps on the map without raising the sheet to the list. A new
+ * step is read out.
+ */
+@Composable
+private fun StepPreview(
+    step: RouteStep,
+    index: Int,
+    count: Int,
+    onStep: (Int) -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+    ) {
+        Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(step.turn.icon, contentDescription = null)
+            Spacer(Modifier.width(12.dp))
+            Column(
+                Modifier.weight(1f).padding(vertical = 8.dp).semantics(mergeDescendants = true) {
+                    liveRegion = LiveRegionMode.Polite
+                },
+            ) {
+                Text(step.instruction, style = MaterialTheme.typography.bodyMedium)
+                Text(stepPositionText(index, count, step.meters), style = MaterialTheme.typography.bodySmall)
+            }
+            IconButton(onClick = { onStep(index - 1) }, enabled = index > 0) {
+                Icon(RoutingIcons.ChevronLeft, contentDescription = "Previous step")
+            }
+            IconButton(onClick = { onStep(index + 1) }, enabled = index < count - 1) {
+                Icon(RoutingIcons.ChevronRight, contentDescription = "Next step")
+            }
+        }
+    }
+}
+
+/**
+ * The route's [steps] ([Directions.shownSteps]): each with its turn's icon, its sentence and how far
+ * the route then goes. A tap on a step shows it on the map ([onStep]), as in Google Maps' steps; the
+ * tapped one ([shown]) is highlighted while the map marks it.
+ */
 @Composable
 fun RouteStepList(
     steps: List<RouteStep>,
+    shown: Int?,
+    onStep: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier.padding(horizontal = 16.dp)) {
+    Column(modifier) {
         steps.forEachIndexed { i, step ->
-            if (i > 0) HorizontalDivider(Modifier.padding(start = 40.dp), color = MaterialTheme.colorScheme.outlineVariant)
+            if (i > 0) HorizontalDivider(Modifier.padding(start = 56.dp, end = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
+            val tapped = i == shown
             Row(
-                Modifier.fillMaxWidth().padding(vertical = 10.dp).semantics(mergeDescendants = true) {},
+                Modifier
+                    .fillMaxWidth()
+                    .background(if (tapped) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+                    .clickable(onClickLabel = "Show on map") { onStep(i) }
+                    .semantics(mergeDescendants = true) { selected = tapped }
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.Top,
             ) {
-                Icon(step.turn.icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(
+                    step.turn.icon,
+                    contentDescription = null,
+                    tint = if (tapped) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Spacer(Modifier.width(16.dp))
                 Column(Modifier.weight(1f)) {
                     Text(step.instruction, style = MaterialTheme.typography.bodyMedium)

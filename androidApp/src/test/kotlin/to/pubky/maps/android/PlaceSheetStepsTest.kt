@@ -11,6 +11,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -20,6 +21,7 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -48,7 +50,8 @@ import to.pubky.maps.ui.PubkyMapsTheme
 /**
  * The route's steps open in the phone sheet's page, under its header: the lowest stop keeps the height
  * of the header with its route card, so the map with the route stays in view, and opening the steps
- * raises the sheet to the top, where they show. Native graphics, so text is measured with real fonts.
+ * raises the sheet to the top, where they show; a step tapped there lowers it again, the step shown on
+ * the map and in the route card. Native graphics, so text is measured with real fonts.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -86,17 +89,19 @@ class PlaceSheetStepsTest {
             meters = 1401.0,
             steps =
                 listOf(
-                    RouteStep("Drive north.", Turn.Depart, 35.0),
-                    RouteStep("Turn right onto Museumstrasse.", Turn.Right, 52.0),
-                    RouteStep("Keep left to stay on Bahnhofquai.", Turn.KeepLeft, 406.0),
-                    RouteStep("Turn left onto Rudolf-Brun-Brücke.", Turn.Left, 329.0),
-                    RouteStep("Turn right onto Seilergraben.", Turn.Right, 205.0),
-                    RouteStep("Bear right onto Heimplatz.", Turn.SlightRight, 81.0),
-                    RouteStep("Your destination is on the right.", Turn.Arrive, 0.0),
+                    RouteStep("Drive north.", Turn.Depart, 35.0, here),
+                    RouteStep("Turn right onto Museumstrasse.", Turn.Right, 52.0, here),
+                    RouteStep("Keep left to stay on Bahnhofquai.", Turn.KeepLeft, 406.0, here),
+                    RouteStep("Turn left onto Rudolf-Brun-Brücke.", Turn.Left, 329.0, here),
+                    RouteStep("Turn right onto Seilergraben.", Turn.Right, 205.0, here),
+                    RouteStep("Bear right onto Heimplatz.", Turn.SlightRight, 81.0, here),
+                    RouteStep("Your destination is on the right.", Turn.Arrive, 0.0, here),
                 ),
         )
 
     private var stepsShown by mutableStateOf(false)
+    private var shownStep by mutableStateOf<Int?>(null)
+    private val stepsTapped = ArrayList<Int>()
     private var stop by mutableStateOf(SheetStop.Peek)
     private val stopsAsked = ArrayList<SheetStop>()
 
@@ -125,9 +130,14 @@ class PlaceSheetStepsTest {
                                         here,
                                         RouteStatus.Found(route, "s"),
                                         stepsShown = stepsShown,
+                                        shownStep = shownStep,
                                     ),
                                     onMode = {},
                                     onSteps = { stepsShown = it },
+                                    onStep = {
+                                        stepsTapped += it
+                                        shownStep = it
+                                    },
                                     onClose = {},
                                     onRetry = {},
                                     onOpenSettings = null,
@@ -181,5 +191,27 @@ class PlaceSheetStepsTest {
         compose.waitForIdle()
         assertEquals(peek, sheetHeight())
         compose.onNodeWithText("Hide steps").assertIsDisplayed()
+    }
+
+    @Test
+    fun aStepTappedAtTheTopLowersTheSheetWhereItsCardGoesOn() {
+        show(follow = true)
+        val peek = sheetHeight()
+        compose.onNodeWithText("Steps").performClick()
+        compose.waitForIdle()
+        assertEquals(SheetStop.Full, stop)
+        compose.onNodeWithText("Turn left onto Rudolf-Brun-Brücke.").performClick()
+        compose.waitForIdle()
+        assertEquals(listOf(3), stepsTapped)
+        // The map shows the step over the lowest stop, the route card shows it, a little taller.
+        assertEquals(SheetStop.Peek, stop)
+        compose.onNodeWithText("Step 4 of 7 · 330 m").assertIsDisplayed()
+        assertTrue(sheetHeight() > peek)
+        // The next step from the card moves the map and leaves the sheet where it is.
+        compose.onNodeWithContentDescription("Next step").assertIsDisplayed().performClick()
+        compose.waitForIdle()
+        assertEquals(listOf(3, 4), stepsTapped)
+        compose.onNodeWithText("Step 5 of 7 · 210 m").assertIsDisplayed()
+        assertEquals(listOf(SheetStop.Full, SheetStop.Peek), stopsAsked)
     }
 }

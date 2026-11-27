@@ -384,14 +384,11 @@ fun PlaceSections(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier) {
-        val steps =
-            actions.directions
-                ?.directions
-                ?.shownSteps
-                .orEmpty()
-        if (steps.isNotEmpty()) {
+        val directions = actions.directions
+        val steps = directions?.directions?.shownSteps.orEmpty()
+        if (directions != null && steps.isNotEmpty()) {
             SectionTitle("Steps")
-            RouteStepList(steps)
+            RouteStepList(steps, directions.directions.shownStep, directions.onStep)
         }
         val card = page.card
         if (page.cardLoading) LoadingBlock()

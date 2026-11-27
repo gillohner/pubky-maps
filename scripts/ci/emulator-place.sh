@@ -5,7 +5,8 @@
 # map with the card's name and kind, the Pubky tags and the posts. Directions, with location granted
 # and the emulator's GPS at Zürich HB, ask the fixture Valhalla for a route by car from there to the
 # place, show its time and draw it on the map; Walk asks again on foot. Its steps open and raise the
-# sheet to the whole screen, where the lists holding the place show; back closes it. A long-press on
+# sheet to the whole screen; a tapped step lowers it and the map moves to that turn, as does the
+# route card's next step. The lists holding the place show at the top; back closes it. A long-press on
 # the map then drops a pin: its page is named by its coordinates and asks no server; back closes it.
 # Checks that Pinakes, Nexus and Valhalla were asked with the app's User-Agent, Nexus for every
 # spelling people used for the place.
@@ -131,12 +132,56 @@ wait_for "Show less of the place" 5 > /dev/null || fail "opening the steps did n
 wait_for "Turn right onto Museumstrasse." 5 > /dev/null || fail "the route's steps did not open"
 screenshot place-steps
 check_alive "steps"
-# Closed again so the page is as long as before; the sheet stays at Full.
+# A tapped step lowers the sheet and the map moves to the turn at zoom 17 (DirectionsController
+# .showStep, MapRoute's moveToStep), the route card showing it; the next step from the card moves
+# the map on. The view the camera rests at is stored (no_backup/map-view.json), so it says where the
+# map went: the turn's point on the fixture's line, the centre south of it by half the sheet's lowest
+# stop (~480 dp with the step card, ~240 dp or ~0.0009 degrees at zoom 17), as the turn lands in the
+# middle of the map above the sheet. That the sheet is at its lowest stop, not half, PlaceSheetStepsTest checks.
+# expect_step_view NAME LAT LON: the stored view is at zoom 17, at the turn's longitude and
+# 0.0004-0.0016 degrees south of LAT LON.
+expect_step_view() {
+    for _ in $(seq 1 8); do
+        sleep 1
+        adb shell run-as "$pkg" cat no_backup/map-view.json > "$out/map-view-$1.json" 2> /dev/null || true
+        python3 -I -c "
+import json, sys
+try:
+    view = json.load(open(sys.argv[1], encoding='utf-8')).get('view') or {}
+except ValueError:
+    view = {}
+lat, lon = float(sys.argv[2]), float(sys.argv[3])
+south = lat - view.get('lat', 0)
+ok = abs(view.get('zoom', 0) - 17) < 0.1 and 0.0004 <= south <= 0.0016 and abs(view.get('lon', 0) - lon) < 0.0004
+sys.exit(0 if ok else 1)" "$out/map-view-$1.json" "$2" "$3" && return 0
+    done
+    fail "the map did not move to the step $1 at $2,$3 (stored view: $(cat "$out/map-view-$1.json" 2> /dev/null))"
+}
+xy=$(wait_for "Turn left onto Rudolf-Brun-Brücke." 3) || fail "no Rudolf-Brun-Brücke step in the list"
+adb shell input tap $xy
+wait_for "Step 5 of 9 · 330 m" 5 > /dev/null || fail "the route card does not show the tapped step"
+wait_for "Show more of the place" 5 > /dev/null || fail "a tapped step did not lower the sheet"
+expect_step_view rudolf-brun 47.374429 8.541692
+screenshot place-step
+check_alive "step on the map"
+xy=$(wait_for "Next step" 3) || fail "no Next step in the route card"
+adb shell input tap $xy
+wait_for "Step 6 of 9 · 210 m" 5 > /dev/null || fail "Next step did not show the next step"
+expect_step_view seilergraben 47.374664 8.545873
+check_alive "next step"
+# Closed again so the page is as long as before, at Full again for the lists.
 xy=$(wait_for "Hide steps" 3) || fail "no Hide steps button"
 adb shell input tap $xy
 sleep 1
 kill $gps 2> /dev/null || true
-wait_for "Show less of the place" 3 > /dev/null || fail "closing the steps moved the sheet"
+wait_for "Step 6 of 9 · 210 m" 1 > /dev/null && fail "closing the steps left the step in the route card"
+# The handle raises the sheet a stop at a time (half, then the top).
+for _ in 1 2; do
+    xy=$(wait_for "Show more of the place" 3) || break
+    adb shell input tap $xy
+    sleep 1
+done
+wait_for "Show less of the place" 3 > /dev/null || fail "the sheet's handle did not raise it to the top"
 found=""
 for _ in 1 2 3; do
     if wait_for "In 3 lists" 4 > /dev/null; then found=1; break; fi
@@ -156,7 +201,7 @@ centre_of "$dump" "Show my location" > /dev/null || fail "back did not return to
 check_alive "after back"
 
 # A long-press on the map drops a pin there: the point's page, named by its coordinates (the map is
-# around the Schober, in Zürich), with Directions. The point is asked of no server.
+# at the route's last shown step, in Zürich), with Directions. The point is asked of no server.
 adb shell input swipe 540 900 540 900 1500
 wait_for_start "Dropped pin" 15 > /dev/null || fail "a long-press on the map dropped no pin"
 wait_for_start "47.3" 5 > /dev/null || fail "the dropped pin's page is not named by its coordinates"

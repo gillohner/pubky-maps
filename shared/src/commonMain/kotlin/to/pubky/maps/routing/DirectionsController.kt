@@ -42,7 +42,8 @@ sealed interface RouteStatus {
 
 /**
  * Directions to the place [placeUri] at [to], by [mode], from the user's position [from] once known;
- * [stepsShown] when the user opened the route's list of steps.
+ * [stepsShown] when the user opened the route's list of steps, [shownStep] the step of the list the
+ * user tapped to see on the map.
  */
 data class Directions(
     val placeUri: String,
@@ -53,19 +54,35 @@ data class Directions(
     /** The map has fitted the found route ([DirectionsController.routeFitted]); false again for each new request. */
     val routeFitted: Boolean = false,
     val stepsShown: Boolean = false,
+    /** The index in the found route's steps of the one the user tapped; null for none. */
+    val shownStep: Int? = null,
+    /** Counts the taps on steps ([DirectionsController.showStep]); the same step tapped again counts again. */
+    val stepTaps: Int = 0,
+    /** The tap the map has moved for ([DirectionsController.mapMovedToStep]). */
+    val mapMovedForTap: Int = 0,
 ) {
     /** The found route the map still has to fit, once per route. */
     val routeToFit: RouteStatus.Found? get() = (status as? RouteStatus.Found)?.takeIf { !routeFitted }
 
     /** The steps the place page lists: the found route's, while the user has them open. */
     val shownSteps: List<RouteStep> get() = if (stepsShown) (status as? RouteStatus.Found)?.route?.steps.orEmpty() else emptyList()
+
+    /** The step the map marks: the one the user tapped, while the list is open. */
+    val markedStep: RouteStep? get() = shownStep?.let { shownSteps.getOrNull(it) }
+
+    /**
+     * The tap the map still has to move to [markedStep] for, once per tap: coming back from Settings or
+     * a recreated activity keeps the user's pan, a tap on the same step again moves the map again.
+     */
+    val stepTapToMoveTo: Int? get() = stepTaps.takeIf { markedStep != null && it != mapMovedForTap }
 }
 
 /**
  * Directions from the user's position to an open place, for the life of the process: one route at a
  * time, asked again when the mode changes (a newer request replaces one still running), the last mode
  * kept for the next place. The list of steps the user opened stays open for the routes by other modes
- * to the same place. Every routing server failing names routing in [health] until one answers.
+ * to the same place; a step tapped in it is marked on the map until the list closes or another route
+ * comes. Every routing server failing names routing in [health] until one answers.
  * A position that has not come within [locatingTimeout] (a permission dialog dismissed, no fix
  * indoors) is missing; one that comes later still starts the route.
  */
@@ -81,6 +98,9 @@ class DirectionsController(
     /** The mode of the next directions: the one the user picked last, by car at first. */
     private var lastMode = TravelMode.Car
     private var request: Job? = null
+
+    /** Every tap on a step so far, for [Directions.stepTaps]; never goes back, so a tap is never taken for one before it. */
+    private var stepTaps = 0
 
     /** The directions [request] asks the route for, as they were asked. */
     private var asking: Directions? = null
@@ -137,10 +157,27 @@ class DirectionsController(
         if (changed.from != null) ask(changed) else set(changed)
     }
 
-    /** Opens or closes the list of the route's steps. */
+    /** Opens or closes the list of the route's steps; closing it takes the tapped step off the map. */
     fun showSteps(shown: Boolean) {
         val current = state.value ?: return
-        if (current.stepsShown != shown) state.value = current.copy(stepsShown = shown)
+        if (current.stepsShown != shown) state.value = current.copy(stepsShown = shown, shownStep = current.shownStep.takeIf { shown })
+    }
+
+    /**
+     * The user tapped the step at [index] of the open list: the map shows where it is. A route still
+     * to be fitted (found with the sheet at its top) is not fitted after it, over the step.
+     */
+    fun showStep(index: Int) {
+        val current = state.value ?: return
+        if (index !in current.shownSteps.indices) return
+        stepTaps += 1
+        state.value = current.copy(shownStep = index, stepTaps = stepTaps, routeFitted = true)
+    }
+
+    /** The map has moved to the step of [tap] (or started to: a move cut short counts too). */
+    fun mapMovedToStep(tap: Int) {
+        val current = state.value ?: return
+        if (tap > current.mapMovedForTap) state.value = current.copy(mapMovedForTap = tap)
     }
 
     /** Asks again after a failure, from the same start. */
@@ -180,7 +217,8 @@ class DirectionsController(
         request?.cancel()
         locating?.cancel()
         locating = null
-        val asked = directions.copy(status = RouteStatus.Finding, routeFitted = false)
+        // A step tapped on the route before is not one of the next route's.
+        val asked = directions.copy(status = RouteStatus.Finding, routeFitted = false, shownStep = null)
         state.value = asked
         asking = asked
         request =
