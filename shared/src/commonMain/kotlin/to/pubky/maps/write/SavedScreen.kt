@@ -42,7 +42,7 @@ data class SavedRow(
     val name: String?,
     val kept: Kept,
     val pending: Boolean = false,
-    /** Where it is, when known: told under its name when another place has the same name and summary. */
+    /** Where it is, when known: told under its name when another place has its name and its summary does not tell them apart. */
     val point: GeoPoint? = null,
     /** What and where it is ("Café · Napfgasse 4, 8001 Zürich"), told under its name; null when not known. */
     val summary: String? = null,
@@ -76,7 +76,7 @@ fun SavedScreen(
     onBack: () -> Unit,
 ) {
     var openList by rememberSaveable { mutableStateOf<String?>(null) }
-    val sameNamedPlaces = sharedNames(state.places.map { it.place to sameLine(it.name, it.summary) })
+    val placesToTellApart = rowsToTellApart(state.places.map { RowText(it.place, it.name, it.summary) })
     val points = state.places.mapNotNull { row -> row.point?.let { row.place to it } }.toMap()
     Scaffold(
         topBar = {
@@ -97,7 +97,8 @@ fun SavedScreen(
                 }
                 items(state.places, key = { "place:${it.kept}:${it.place}" }) { row ->
                     val where =
-                        whereText(row.place, row.point ?: points[row.place]).takeIf { sameLine(row.name, row.summary) in sameNamedPlaces }
+                        whereText(row.place, row.point ?: points[row.place])
+                            .takeIf { RowText(row.place, row.name, row.summary).key() in placesToTellApart }
                     PlaceRow(row, savedLine(row.summary, where), onOpen)
                 }
                 item(key = "lists-title") { Title("Your lists") }
@@ -127,11 +128,12 @@ fun SavedScreen(
                     }
                     if (openList == list.uri) {
                         val names = list.items.associateWith { list.names[it] ?: state.names[it] }
-                        val sameNamedEntries = sharedNames(list.items.map { it to sameLine(names[it], state.summaries[it]) })
+                        val entriesToTellApart = rowsToTellApart(list.items.map { RowText(it, names[it], state.summaries[it]) })
                         items(list.items, key = { "list:${list.uri}:$it" }) { place ->
                             val name = names[place]
                             val summary = state.summaries[place]
-                            val where = whereText(place, points[place]).takeIf { sameLine(name, summary) in sameNamedEntries }
+                            val where =
+                                whereText(place, points[place]).takeIf { RowText(place, name, summary).key() in entriesToTellApart }
                             val line = savedLine(summary, where)
                             ListItem(
                                 headlineContent = { Text(name ?: placeText(place), maxLines = 1, overflow = TextOverflow.Ellipsis) },
@@ -197,31 +199,38 @@ private fun Hint(text: String) {
     )
 }
 
+/** A row's place, name and summary, as [rowsToTellApart] compares rows. */
+internal data class RowText(
+    val place: String,
+    val name: String?,
+    val summary: String?,
+) {
+    /** What tells this row from another: its place, then its name and summary compared as [sameName] does. */
+    internal fun key(): Triple<String, String?, String?> = Triple(place, sameName(name), sameName(summary))
+}
+
 /**
- * The names (as [sameName] compares them) that two or more different places have among [places]
- * (place, name): those rows need more than their name to be told apart. A place kept twice (on the
- * phone and on the homeserver) is one place; a place without a name shows its link and is never one.
+ * The rows among [rows] ([RowText.key]) that need [whereText] under their name: another place has the
+ * same name and the row's summary does not tell them apart, because the row has none or the other
+ * place has the same one. Two Coops on different streets are told apart by their summaries; a Coop
+ * with a summary and one without by the bare one's point (the other's summary tells it already, and
+ * the bare row would otherwise have no line at all); two with the same summary or none by both points.
+ * A place kept twice (on the phone and on the homeserver) is one place; a place without a name shows
+ * its link and is never one.
  */
-internal fun sharedNames(places: List<Pair<String, String?>>): Set<String> =
-    places
-        .mapNotNull { (place, name) -> sameName(name)?.let { it to place } }
-        .distinct()
-        .groupBy({ it.first }, { it.second })
-        .filterValues { it.size > 1 }
-        .keys
+internal fun rowsToTellApart(rows: List<RowText>): Set<Triple<String, String?, String?>> {
+    val named = rows.map { it.key() }.filter { it.second != null }.distinct()
+    val byName = named.groupBy { it.second }
+    return named
+        .filter { (place, name, summary) ->
+            byName.getValue(name).any { (otherPlace, _, otherSummary) ->
+                otherPlace != place && (summary == null || otherSummary == summary)
+            }
+        }.toSet()
+}
 
 /** A name as the eye compares two rows: case and the spaces around it do not tell places apart. */
 internal fun sameName(name: String?): String? = name?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
-
-/**
- * A row's name and summary as the eye compares two rows (null for a row without a name, which shows its
- * link): two Coops whose summaries name different streets are told apart by them; with the same
- * summary or none, by their points.
- */
-internal fun sameLine(
-    name: String?,
-    summary: String?,
-): String? = sameName(name)?.let { named -> sameName(summary)?.let { "$named\n$it" } ?: named }
 
 /**
  * The line under a row's name: what and where the place is ("Café · Napfgasse 4, 8001 Zürich"), then
@@ -233,7 +242,7 @@ internal fun savedLine(
 ): String? = listOfNotNull(summary, where).joinToString(" · ").ifEmpty { null }
 
 /**
- * Where a place is, for one whose name and summary another place shares: its point ("47.37689,
+ * Where a place is, for a row its name and summary do not tell from another place ([rowsToTellApart]): its point ("47.37689,
  * 8.54169"), else its link in words. The point is what tells two Coops with no stored address apart.
  */
 internal fun whereText(

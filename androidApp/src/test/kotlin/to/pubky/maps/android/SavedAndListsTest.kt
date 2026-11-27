@@ -183,6 +183,56 @@ class SavedAndListsTest {
     }
 
     @Test
+    fun aPlaceWithoutASummaryIsToldFromASameNamedOneByItsPoint() {
+        val bahnhofbruecke = "https://www.openstreetmap.org/node/1"
+        val bellevue = "https://www.openstreetmap.org/node/2"
+        compose.setContent {
+            PubkyMapsTheme(darkTheme = false) {
+                SavedScreen(
+                    state =
+                        SavedScreenState(
+                            places =
+                                listOf(
+                                    SavedRow(
+                                        bahnhofbruecke,
+                                        "Coop",
+                                        Kept.Private,
+                                        point = GeoPoint(47.37586, 8.54253),
+                                        summary = "Supermarket · Bahnhofbrücke 1",
+                                    ),
+                                    // Saved on another device, before summaries.
+                                    SavedRow(bellevue, "Coop", Kept.Phone, point = GeoPoint(47.36722, 8.54493)),
+                                ),
+                            lists =
+                                listOf(
+                                    OwnList(
+                                        "phone:1",
+                                        Kept.Phone,
+                                        "Groceries",
+                                        listOf(bahnhofbruecke, bellevue),
+                                        names = mapOf(bahnhofbruecke to "Coop", bellevue to "Coop"),
+                                    ),
+                                ),
+                            summaries = mapOf(bahnhofbruecke to "Supermarket · Bahnhofbrücke 1"),
+                            signedIn = true,
+                        ),
+                    onOpen = { _, _ -> },
+                    onBack = {},
+                )
+            }
+        }
+        // The bare Coop shows where it is; the other is told by its summary alone.
+        compose.onNodeWithText("47.36722, 8.54493").assertExists()
+        compose.onNodeWithText("Supermarket · Bahnhofbrücke 1").assertExists()
+        compose.onAllNodesWithText("47.37586, 8.54253", substring = true).assertCountEquals(0)
+        compose.onNodeWithText("Groceries").performClick()
+        // In the list too.
+        compose.onAllNodesWithText("47.36722, 8.54493").assertCountEquals(2)
+        compose.onAllNodesWithText("Supermarket · Bahnhofbrücke 1").assertCountEquals(2)
+        compose.onAllNodesWithText("47.37586, 8.54253", substring = true).assertCountEquals(0)
+    }
+
+    @Test
     fun aTapOpensThePlaceWithTheNameItsRowShows() {
         val opened = mutableListOf<Pair<String, String?>>()
         compose.setContent {

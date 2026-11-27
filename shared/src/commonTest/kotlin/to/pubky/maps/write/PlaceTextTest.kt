@@ -24,39 +24,69 @@ class PlaceTextTest {
 
     @Test
     fun onlyANameTwoDifferentPlacesShareNeedsTellingApart() {
-        val shared =
-            sharedNames(
-                listOf(
-                    "https://www.openstreetmap.org/node/1" to "Coop",
-                    "https://www.openstreetmap.org/node/2" to "coop ",
-                    // The same place kept on the phone and on the homeserver is one place.
-                    "https://www.openstreetmap.org/node/3" to "Lindenhof",
-                    "https://www.openstreetmap.org/node/3" to "Lindenhof",
-                    // Places without a name show their own link.
-                    "geo:47.1,8.5" to null,
-                    "geo:47.2,8.5" to null,
-                ),
+        val coop1 = RowText("https://www.openstreetmap.org/node/1", "Coop", null)
+        val coop2 = RowText("https://www.openstreetmap.org/node/2", "coop ", null)
+        val rows =
+            listOf(
+                coop1,
+                coop2,
+                // The same place kept on the phone and on the homeserver is one place.
+                RowText("https://www.openstreetmap.org/node/3", "Lindenhof", null),
+                RowText("https://www.openstreetmap.org/node/3", "Lindenhof", null),
+                // Places without a name show their own link.
+                RowText("geo:47.1,8.5", null, null),
+                RowText("geo:47.2,8.5", null, null),
             )
-        assertEquals(setOf("coop"), shared)
+        assertEquals(setOf(coop1.key(), coop2.key()), rowsToTellApart(rows))
     }
 
     @Test
     fun sameNamedPlacesWithDifferentSummariesAreToldApartByThem() {
-        val coopBahnhof = "Supermarket · Bahnhofstrasse 1, 8001 Zürich"
-        val shared =
-            sharedNames(
-                listOf(
-                    "https://www.openstreetmap.org/node/1" to sameLine("Coop", coopBahnhof),
-                    "https://www.openstreetmap.org/node/2" to sameLine("Coop", "Supermarket · Limmatquai 2, 8001 Zürich"),
-                    // The same summary (or none) does not tell two Migros apart: their points do.
-                    "https://www.openstreetmap.org/node/3" to sameLine("Migros", "Supermarket"),
-                    "https://www.openstreetmap.org/node/4" to sameLine("migros ", "supermarket"),
-                    "https://www.openstreetmap.org/node/5" to sameLine("Lindenhof", null),
-                    "https://www.openstreetmap.org/node/6" to sameLine("Lindenhof", null),
-                ),
+        val migros1 = RowText("https://www.openstreetmap.org/node/3", "Migros", "Supermarket")
+        val migros2 = RowText("https://www.openstreetmap.org/node/4", "migros ", "supermarket")
+        val rows =
+            listOf(
+                RowText("https://www.openstreetmap.org/node/1", "Coop", "Supermarket · Bahnhofstrasse 1, 8001 Zürich"),
+                RowText("https://www.openstreetmap.org/node/2", "Coop", "Supermarket · Limmatquai 2, 8001 Zürich"),
+                // The same summary does not tell two Migros apart: their points do.
+                migros1,
+                migros2,
             )
-        assertEquals(setOf(sameLine("Migros", "Supermarket"), sameLine("Lindenhof", null)), shared)
-        assertEquals(null, sameLine(null, coopBahnhof), "a row without a name shows its link")
+        assertEquals(setOf(migros1.key(), migros2.key()), rowsToTellApart(rows))
+    }
+
+    @Test
+    fun ofTwoSameNamedPlacesOnlyTheOneWithoutASummaryNeedsItsPoint() {
+        val bare = RowText("https://www.openstreetmap.org/node/2", "Coop", null)
+        val rows =
+            listOf(
+                // Its summary tells this Coop already; the other, with no summary, would have no line at all.
+                RowText("https://www.openstreetmap.org/node/1", "Coop", "Supermarket · Bahnhofstrasse 1, 8001 Zürich"),
+                bare,
+            )
+        assertEquals(setOf(bare.key()), rowsToTellApart(rows))
+    }
+
+    @Test
+    fun ofThreeSameNamedPlacesOneWithItsOwnSummaryNeedsNoPoint() {
+        val bahnhof = RowText("https://www.openstreetmap.org/node/1", "Coop", "Supermarket · Bahnhofstrasse 1")
+        val limmatquai1 = RowText("https://www.openstreetmap.org/node/2", "Coop", "Supermarket · Limmatquai 2")
+        val limmatquai2 = RowText("https://www.openstreetmap.org/node/3", "Coop", "Supermarket · Limmatquai 2")
+        val bare = RowText("https://www.openstreetmap.org/node/4", "Coop", null)
+        assertEquals(
+            setOf(limmatquai1.key(), limmatquai2.key(), bare.key()),
+            rowsToTellApart(listOf(bahnhof, limmatquai1, limmatquai2, bare)),
+        )
+    }
+
+    @Test
+    fun aPlaceKeptTwiceWithOneSummaryShowsThePointOnlyOnItsBareCopy() {
+        val phoneCopy = RowText("https://www.openstreetmap.org/node/1", "Coop", "Supermarket · Bahnhofstrasse 1")
+        val homeCopy = RowText("https://www.openstreetmap.org/node/1", "Coop", null)
+        // Alone, the place kept twice is one place: neither copy needs a point.
+        assertEquals(emptySet(), rowsToTellApart(listOf(phoneCopy, homeCopy)))
+        val other = RowText("https://www.openstreetmap.org/node/2", "Coop", null)
+        assertEquals(setOf(homeCopy.key(), other.key()), rowsToTellApart(listOf(phoneCopy, homeCopy, other)))
     }
 
     @Test
