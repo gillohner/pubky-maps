@@ -75,6 +75,11 @@ internal class AccountLoader(
         return null
     }
 
+    /**
+     * The user's tags on places. The tags folder is shared with other apps: tags on a pubky.app post or
+     * profile are left out by the core's rule ([PubkyCore.mayBeMapPlace]), as the core leaves out
+     * such bookmarks. A tag file names its target only inside, so every listed file is read.
+     */
     private suspend fun tags(): List<CachedTag> {
         val paths = pages { core.list(TAGS_DIR, it) }.filter { it.endsWith(".json") }
         val permits = Semaphore(PARALLEL_READS)
@@ -89,7 +94,7 @@ internal class AccountLoader(
                                 } catch (_: CoreFailure.NotFound) {
                                     return@withPermit null
                                 }
-                            parseTag(path, bytes)
+                            parseTag(path, bytes)?.takeIf { core.mayBeMapPlace(it.place) }
                         }
                     }
                 }.awaitAll()

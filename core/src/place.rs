@@ -102,7 +102,9 @@ pub fn normalize_place_uri(input: String) -> Result<String, CoreError> {
 /// or a web page, because a Pinakes place card can be one (the app keeps a card without an
 /// OpenStreetMap element under the card's URI, e.g. a museum's site). Other apps' own Pubky
 /// objects that share the folders (a pubky.app post, a profile) and other schemes are not.
-pub(crate) fn may_be_map_place(target: &str) -> bool {
+/// The app counts other users' collections' places with it, as the core filters the user's bookmarks.
+#[uniffi::export]
+pub fn may_be_map_place(target: &str) -> bool {
     let target = frozen_trim(target);
     map_links::parse(target).is_some()
         || has_scheme(target, "https://")

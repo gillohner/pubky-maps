@@ -117,6 +117,9 @@ Settings:
 
 - **Account:** sign in with [Pubky Ring](https://github.com/pubky/pubky-ring). It shows the user's
   profile name, tags and bookmarks, kept on the phone so they stay readable offline, and signs out.
+  Its tags and bookmarks are those on places (map links and web pages, the core's `mayBeMapPlace`):
+  tags and bookmarks other apps put on their own Pubky objects, such as pubky.app posts and
+  profiles, are not listed or counted.
 - **Server lists:** an ordered list of servers per service (map styles, Photon, Pinakes, Nexus,
   Overpass, Valhalla, OpenStreetMap API, Pkarr relays, sign-in relay). Users add, remove, reorder and reset them; servers run by Synonym are
   marked. The map uses its style list in order, the next style taking over when one fails to load;

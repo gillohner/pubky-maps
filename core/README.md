@@ -47,6 +47,9 @@ It bundles the `pubky` SDK (0.18), `pubky-social-specs` (1.0.0-rc.2) and the wor
 - Places: `normalizePlaceUri`, `osmPlaceUri` and `geoPlaceUri`. Places are canonical OSM URLs,
   `geo:lat,lon` with at most 5 fraction digits, or the link the user pasted (an Android
   search link `geo:0,0?q=<name or address>` is kept as it is, never moved to 0,0).
+  `mayBeMapPlace(target)` says whether a bookmark's or collection item's target can be a place
+  (a map link or a web page; not another app's `pubky://` object): the rule `listBookmarks`
+  filters with, for counting other users' collections in the app.
 - Map links (from the `map-links` crate in `core/map-links`): `parseMapLink(url)` and
   `findMapLink(sharedText)` read a Google Maps, Apple Maps, Waze, OpenStreetMap, OsmAnd,
   Organic Maps, CoMaps, HERE or `geo:` link from its text (name, point, OSM element, zoom,
@@ -75,7 +78,9 @@ It bundles the `pubky` SDK (0.18), `pubky-social-specs` (1.0.0-rc.2) and the wor
   (only bookmarks that can be places: map links the link reader reads and web pages, which a
   Pinakes place card can be; other apps' `pubky://` objects in the same folder, such as
   pubky.app posts, are left out; one call follows up to 20 listing pages that hold no place,
-  so a page can be empty and still have a `nextCursor`).
+  so a page can be empty and still have a `nextCursor`). The app reads the user's own tags with
+  `list` and `get` and keeps only those whose target `mayBeMapPlace` takes, so tags another app
+  put on its own objects are not the user's place tags.
   The pure `build*` functions (`buildTag`, `buildReview`, `buildPhotoFile`, `buildPhotoPost`,
   `buildCollection`, `buildList` with `private`, `buildBookmark`) return the same objects without
   the network, with their ids minted, so the app can queue them and `put` them later to the same
