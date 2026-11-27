@@ -398,6 +398,7 @@ fun MapRoute(
             DirectionsUi(
                 directions = directionsState,
                 onMode = directions::selectMode,
+                onSteps = directions::showSteps,
                 onClose = directions::close,
                 onRetry = {
                     if (directionsState.from == null) {

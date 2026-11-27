@@ -5,9 +5,10 @@
 # map with the card's name and kind, the Pubky tags and the posts; the handle raises it to the whole
 # screen, where the lists holding the place show; back closes it. Directions, with location granted
 # and the emulator's GPS at Zürich HB, ask the fixture Valhalla for a route by car from there to the
-# place, show its time and draw it on the map; Walk asks again on foot. A long-press on the map then
-# drops a pin: its page is named by its coordinates and asks no server; back closes it. Checks that Pinakes, Nexus
-# and Valhalla were asked with the app's User-Agent, Nexus for every spelling people used for the place.
+# place, show its time and draw it on the map, open its steps; Walk asks again on foot. A long-press on
+# the map then drops a pin: its page is named by its coordinates and asks no server; back closes it.
+# Checks that Pinakes, Nexus and Valhalla were asked with the app's User-Agent, Nexus for every
+# spelling people used for the place.
 # Usage: emulator-place.sh <apk> <out dir>
 set -euo pipefail
 
@@ -117,6 +118,19 @@ stats=$(python3 -I "$here/png_stats.py" "$out/place-directions.png" 0 0.1 1 0.45
 share=$(awk '{print $3}' <<< "$stats")
 python3 -I -c "import sys; sys.exit(0 if float(sys.argv[1]) >= 0.0005 else 1)" "$share" ||
     fail "the route is not drawn on the map (share of its colour: $share)"
+# The route's steps open under it (the fixture's turn instructions, as FOSSGIS gave them).
+xy=$(wait_for "Steps" 5) || fail "no Steps button under the route"
+adb shell input tap $xy
+found=""
+for _ in 1 2 3; do
+    if wait_for "Turn right onto Museumstrasse." 4 > /dev/null; then found=1; break; fi
+    adb shell input swipe 540 1700 540 1100 400
+    sleep 1
+done
+[ -n "$found" ] || fail "the route's steps did not open"
+sleep 1
+screenshot place-steps
+check_alive "steps"
 xy=$(wait_for "Walk" 5) || fail "no Walk mode in the directions"
 adb shell input tap $xy
 sleep 4

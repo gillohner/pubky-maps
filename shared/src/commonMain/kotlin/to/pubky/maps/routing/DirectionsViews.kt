@@ -4,12 +4,16 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -40,6 +44,8 @@ import kotlin.math.roundToInt
 data class DirectionsUi(
     val directions: Directions,
     val onMode: (TravelMode) -> Unit,
+    /** Opens (true) or closes the list of the route's steps. */
+    val onSteps: (Boolean) -> Unit,
     val onClose: () -> Unit,
     /** Asks again: for the route after a failure, for the position when it was missing. */
     val onRetry: () -> Unit,
@@ -116,7 +122,8 @@ fun routeStatusText(directions: Directions): String? =
 
 /**
  * The directions on a place page: the modes, then the route's time and length (the map draws its
- * line) or what stands in its way, with the routing server's credits under a found route.
+ * line) with its steps behind a button, or what stands in its way; the routing server's credits under
+ * a found route.
  */
 @Composable
 fun DirectionsCard(
@@ -161,7 +168,6 @@ fun DirectionsCard(
                         "${directions.mode.phrase.replaceFirstChar { it.uppercase() }} from your location",
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    RouteCredits(ui.credits)
                 } else {
                     routeStatusText(directions)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                     val status = directions.status
@@ -176,6 +182,57 @@ fun DirectionsCard(
                         }
 
                         else -> {}
+                    }
+                }
+            }
+            val found = directions.status as? RouteStatus.Found
+            if (found != null) {
+                // Outside the live region above: opening the steps is not read out as a new route.
+                RouteSteps(found.route.steps, directions.stepsShown, ui.onSteps)
+                RouteCredits(ui.credits)
+            }
+        }
+    }
+}
+
+/**
+ * The route's steps, behind a button as in Google Maps' directions: each with its turn's icon, its
+ * sentence and how far the route then goes. Nothing when the server gave no steps.
+ */
+@Composable
+private fun RouteSteps(
+    steps: List<RouteStep>,
+    shown: Boolean,
+    onSteps: (Boolean) -> Unit,
+) {
+    if (steps.isEmpty()) return
+    TextButton(
+        onClick = { onSteps(!shown) },
+        // Its label starts under the route's time, as the steps' icons do.
+        modifier = Modifier.offset(x = (-12).dp),
+    ) {
+        Text(if (shown) "Hide steps" else "Steps")
+        Spacer(Modifier.width(4.dp))
+        Icon(if (shown) RoutingIcons.ExpandLess else RoutingIcons.ExpandMore, contentDescription = null, modifier = Modifier.size(18.dp))
+    }
+    if (!shown) return
+    Column(Modifier.padding(end = 12.dp)) {
+        steps.forEachIndexed { i, step ->
+            if (i > 0) HorizontalDivider(Modifier.padding(start = 40.dp), color = MaterialTheme.colorScheme.outlineVariant)
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 10.dp).semantics(mergeDescendants = true) {},
+                verticalAlignment = Alignment.Top,
+            ) {
+                Icon(step.turn.icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.width(16.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(step.instruction, style = MaterialTheme.typography.bodyMedium)
+                    if (step.meters >= 1) {
+                        Text(
+                            formatDistance(step.meters),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }

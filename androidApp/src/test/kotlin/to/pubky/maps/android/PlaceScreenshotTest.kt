@@ -63,7 +63,9 @@ import to.pubky.maps.routing.DirectionsUi
 import to.pubky.maps.routing.NoRouteReason
 import to.pubky.maps.routing.Route
 import to.pubky.maps.routing.RouteStatus
+import to.pubky.maps.routing.RouteStep
 import to.pubky.maps.routing.TravelMode
+import to.pubky.maps.routing.Turn
 import to.pubky.maps.ui.PubkyMapsTheme
 
 /**
@@ -330,12 +332,14 @@ class PlaceScreenshotTest {
     private fun directionsTo(
         status: RouteStatus,
         mode: TravelMode = TravelMode.Car,
+        stepsShown: Boolean = false,
     ) = actions.copy(
         directions =
             DirectionsUi(
                 directions =
-                    Directions(kunsthausRef.uri, kunsthausRef.point!!, mode, from = GeoPoint(47.3779, 8.5403), status = status),
+                    Directions(kunsthausRef.uri, kunsthausRef.point!!, mode, from = GeoPoint(47.3779, 8.5403), status, stepsShown),
                 onMode = {},
+                onSteps = {},
                 onClose = {},
                 onRetry = {},
                 onOpenSettings = {},
@@ -345,7 +349,23 @@ class PlaceScreenshotTest {
 
     private val foundRoute =
         RouteStatus.Found(
-            Route(listOf(GeoPoint(47.3779, 8.5403), kunsthausRef.point!!), seconds = 289.373, meters = 1401.0),
+            Route(
+                listOf(GeoPoint(47.3779, 8.5403), kunsthausRef.point!!),
+                seconds = 289.373,
+                meters = 1401.0,
+                steps =
+                    listOf(
+                        RouteStep("Drive north.", Turn.Depart, 35.0),
+                        RouteStep("Turn right onto Museumstrasse.", Turn.Right, 52.0),
+                        RouteStep("Bear right onto Bahnhofquai.", Turn.SlightRight, 30.0),
+                        RouteStep("Keep left to stay on Bahnhofquai.", Turn.KeepLeft, 406.0),
+                        RouteStep("Turn left onto Rudolf-Brun-Brücke.", Turn.Left, 329.0),
+                        RouteStep("Turn right onto Seilergraben.", Turn.Right, 205.0),
+                        RouteStep("Bear right onto Hirschengraben.", Turn.SlightRight, 262.0),
+                        RouteStep("Bear right onto Heimplatz.", Turn.SlightRight, 81.0),
+                        RouteStep("Your destination is on the right.", Turn.Arrive, 0.0),
+                    ),
+            ),
             server = "https://valhalla1.openstreetmap.de",
         )
 
@@ -479,6 +499,32 @@ class PlaceScreenshotTest {
     fun directionsPeekLargeFontPhoneLight() =
         capture("place-directions-peek", Device.Phone, dark = false, largeFont = true) {
             Page(rich, SheetStop.Peek, directionsTo(foundRoute, TravelMode.Bike))
+        }
+
+    @Test
+    fun directionsStepsPhoneLight() =
+        capture("place-directions-steps", Device.Phone, dark = false) {
+            Page(rich, SheetStop.Full, directionsTo(foundRoute, stepsShown = true))
+        }
+
+    @Test
+    fun directionsStepsPhoneDark() =
+        capture("place-directions-steps", Device.Phone, dark = true) {
+            Page(rich, SheetStop.Full, directionsTo(foundRoute, stepsShown = true))
+        }
+
+    @Test
+    fun directionsStepsTabletLight() =
+        capture("place-directions-steps", Device.Tablet, dark = false) { Page(rich, actions = directionsTo(foundRoute, stepsShown = true)) }
+
+    @Test
+    fun directionsStepsTabletDark() =
+        capture("place-directions-steps", Device.Tablet, dark = true) { Page(rich, actions = directionsTo(foundRoute, stepsShown = true)) }
+
+    @Test
+    fun directionsStepsLargeFontPhoneLight() =
+        capture("place-directions-steps", Device.Phone, dark = false, largeFont = true) {
+            Page(rich, SheetStop.Full, directionsTo(foundRoute, stepsShown = true))
         }
 
     @Test

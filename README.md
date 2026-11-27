@@ -164,10 +164,12 @@ permission only then) and route from there to the place by car, bike or on foot 
 the mode picked last) through the Valhalla list (FOSSGIS' public server by default: at most one
 request a second, the next server taking over when one fails). The page shows the route's time and
 length with the server's credits and a link to report a map error; the map draws the line and fits
-it into the part the page leaves in view. Another place, or closing the page, ends them. Without a
-position, a route or a server, the page says which is missing (with Settings when location access is
-off for good), and every server failing names routing in the map's line of missing parts. Directions
-give no turn-by-turn guidance and need a connection.
+it into the part the page leaves in view. Steps under the route open its list of turns (Valhalla's
+English sentences, each with its turn's icon and how far the route then goes), which stays open for
+the other modes. Another place, or closing the page, ends them. Without a position, a route or a
+server, the page says which is missing (with Settings when location access is off for good), and
+every server failing names routing in the map's line of missing parts. Directions give no spoken
+guidance while driving and need a connection.
 
 **Writing about a place** (signed in; a write that needs the homeserver opens the sign-in first and
 continues after it). The page's action row has Save, Tag, Post and Add to list; its sections have

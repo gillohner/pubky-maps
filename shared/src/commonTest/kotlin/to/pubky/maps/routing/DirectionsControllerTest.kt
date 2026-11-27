@@ -216,4 +216,48 @@ class DirectionsControllerTest {
             assertEquals(RouteStatus.NoRoute(NoRouteReason.NotConnected), c.directions.value?.status)
             assertEquals(emptySet(), health.missing.value)
         }
+
+    @Test
+    fun openedStepsStayOpenForOtherModesAndCloseForTheNextPlace() =
+        runTest {
+            val routing = FakeRouting { RouteAnswer.Found(route, "s") }
+            val c = controller(routing)
+            c.start("osm:node/1", kunsthaus, here)
+            advanceUntilIdle()
+            assertEquals(false, c.directions.value?.stepsShown)
+            c.showSteps(true)
+            assertEquals(true, c.directions.value?.stepsShown)
+            c.selectMode(TravelMode.Walk)
+            advanceUntilIdle()
+            assertEquals(true, c.directions.value?.stepsShown)
+            assertTrue(c.directions.value?.status is RouteStatus.Found)
+            c.start("osm:node/2", kunsthaus, here)
+            advanceUntilIdle()
+            assertEquals(false, c.directions.value?.stepsShown)
+            assertEquals(3, routing.asked.size)
+        }
+
+    @Test
+    fun stepsOpenedWhileTheRouteIsFoundAreKeptWithIt() =
+        runTest {
+            val routing = FakeRouting { RouteAnswer.Found(route, "s") }
+            routing.gate = CompletableDeferred()
+            val c = controller(routing)
+            c.start("osm:node/1", kunsthaus, here)
+            runCurrent()
+            c.showSteps(true)
+            routing.gate!!.complete(Unit)
+            advanceUntilIdle()
+            val directions = c.directions.value!!
+            assertEquals(RouteStatus.Found(route, "s"), directions.status)
+            assertTrue(directions.stepsShown)
+        }
+
+    @Test
+    fun stepsWithoutDirectionsDoNothing() =
+        runTest {
+            val c = controller(FakeRouting { RouteAnswer.Found(route, "s") })
+            c.showSteps(true)
+            assertNull(c.directions.value)
+        }
 }
