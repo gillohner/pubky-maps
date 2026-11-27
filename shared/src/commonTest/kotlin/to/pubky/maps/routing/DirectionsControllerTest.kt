@@ -12,6 +12,7 @@ import to.pubky.maps.status.ServiceHealth
 import to.pubky.maps.status.ServicePart
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -130,6 +131,42 @@ class DirectionsControllerTest {
             c.start("osm:node/2", kunsthaus, here)
             advanceUntilIdle()
             assertEquals(listOf(TravelMode.Car, TravelMode.Walk, TravelMode.Walk), routing.asked.map { it.third })
+        }
+
+    private fun DirectionsController.toFit() = directions.value?.routeToFit?.route
+
+    @Test
+    fun theMapFitsEachFoundRouteOnceAndANewRequestAgain() =
+        runTest {
+            val routing = FakeRouting { mode -> RouteAnswer.Found(route.copy(seconds = mode.ordinal.toDouble()), "s") }
+            val c = controller(routing)
+            c.start("osm:node/1", kunsthaus, here)
+            assertNull(c.directions.value?.routeToFit, "nothing found yet")
+            advanceUntilIdle()
+            val car = assertNotNull(c.directions.value?.routeToFit).route
+            c.routeFitted(car)
+            // Back from Settings the same route is not fitted again over the user's pan.
+            assertNull(c.directions.value?.routeToFit)
+            assertEquals(RouteStatus.Found(car, "s"), c.directions.value?.status)
+
+            // Another mode's route is fitted once more; a fit reported late for the car's route does not count for it.
+            c.selectMode(TravelMode.Walk)
+            assertNull(c.directions.value?.routeToFit, "the walk is still being asked")
+            advanceUntilIdle()
+            c.routeFitted(car)
+            val walk = assertNotNull(c.directions.value?.routeToFit).route
+            assertEquals(TravelMode.Walk.ordinal.toDouble(), walk.seconds)
+            c.routeFitted(walk)
+            assertNull(c.directions.value?.routeToFit)
+
+            // Asking again (Retry) and the next place's directions are new routes too.
+            c.retry()
+            advanceUntilIdle()
+            assertEquals(walk, c.toFit())
+            c.close()
+            c.start("osm:node/2", kunsthaus, here)
+            advanceUntilIdle()
+            assertEquals(walk, c.toFit())
         }
 
     @Test
