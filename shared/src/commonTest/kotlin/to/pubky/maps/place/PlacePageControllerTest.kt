@@ -478,6 +478,7 @@ class PlacePageControllerTest {
             val pin = SavedEntry("geo:47.37031,8.55601", Kept.Private, "Home", point = GeoPoint(47.37031, 8.55601))
             pages.open(pin.toPlaceRef())
             advanceUntilIdle()
+            pages.close()
             pages.open(savedPointPlace("geo:47.37031,8.55601", "Home")!!)
             advanceUntilIdle()
             assertEquals(emptyList(), data.askedCards)

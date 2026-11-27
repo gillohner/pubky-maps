@@ -473,7 +473,7 @@ class WriteScreenshotTest {
                     lists = listOf(coffee, OwnList("phone:1", Kept.Phone, "Sunday walks", emptyList())),
                     signedIn = true,
                 ),
-            onOpen = {},
+            onOpen = { _, _ -> },
             onBack = {},
         )
     }
@@ -492,7 +492,7 @@ class WriteScreenshotTest {
 
     @Composable
     private fun SavedScreenEmptyShot() {
-        SavedScreen(SavedScreenState(places = emptyList(), lists = emptyList(), signedIn = false), onOpen = {}, onBack = {})
+        SavedScreen(SavedScreenState(places = emptyList(), lists = emptyList(), signedIn = false), onOpen = { _, _ -> }, onBack = {})
     }
 
     @Test

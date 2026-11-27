@@ -247,7 +247,7 @@ fun SavedRoute(
                 refreshing = refreshing || own.listsLoading,
                 signedIn = signedIn,
             ),
-        onOpen = { place -> onOpen(place, own.saved.firstOrNull { it.place == place }?.name ?: own.names[place]) },
+        onOpen = onOpen,
         onBack = onBack,
     )
 }

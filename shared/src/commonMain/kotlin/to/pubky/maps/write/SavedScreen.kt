@@ -62,13 +62,13 @@ private val MaxSavedWidth = 720.dp
 
 /**
  * The user's saved places and lists, from this phone's copy (refreshed from the homeserver when the
- * screen opens). A tap opens the place on the map.
+ * screen opens). A tap opens the place on the map, with the name the row shows.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SavedScreen(
     state: SavedScreenState,
-    onOpen: (String) -> Unit,
+    onOpen: (place: String, name: String?) -> Unit,
     onBack: () -> Unit,
 ) {
     var openList by rememberSaveable { mutableStateOf<String?>(null) }
@@ -133,7 +133,7 @@ fun SavedScreen(
                                     } else {
                                         null
                                     },
-                                modifier = Modifier.padding(start = 40.dp).clickable { onOpen(place) },
+                                modifier = Modifier.padding(start = 40.dp).clickable { onOpen(place, name) },
                             )
                         }
                     }
@@ -152,7 +152,7 @@ fun SavedScreen(
 private fun PlaceRow(
     row: SavedRow,
     where: String?,
-    onOpen: (String) -> Unit,
+    onOpen: (place: String, name: String?) -> Unit,
 ) {
     ListItem(
         headlineContent = { Text(row.name ?: placeText(row.place), maxLines = 1, overflow = TextOverflow.Ellipsis) },
@@ -167,7 +167,7 @@ private fun PlaceRow(
             }
         },
         leadingContent = { Icon(WriteIcons.Bookmark, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-        modifier = Modifier.clickable { onOpen(row.place) },
+        modifier = Modifier.clickable { onOpen(row.place, row.name) },
     )
 }
 
