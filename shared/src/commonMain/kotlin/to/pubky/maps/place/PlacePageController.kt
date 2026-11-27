@@ -153,8 +153,10 @@ class PlacePageController(
         if (current != null && current.place.uri == place.uri) {
             if (current.place != place) {
                 val locality = current.locality ?: current.place.locality
-                _state.value = current.copy(place = place, locality = locality)
-                if (locality == null && localityJob?.isActive != true) localityJob = scope.launch { loadLocality(place) }
+                val lookUp = locality == null && localityJob?.isActive != true && needsLocality(place)
+                // Marked in the same update, as in [load]: a save meanwhile keeps no summary without the district and town.
+                _state.value = current.copy(place = place, locality = locality, localityLoading = current.localityLoading || lookUp)
+                if (lookUp) localityJob = scope.launch { loadLocality(place) }
             }
             return
         }

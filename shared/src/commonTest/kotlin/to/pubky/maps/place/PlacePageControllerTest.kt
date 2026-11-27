@@ -582,6 +582,28 @@ class PlacePageControllerTest {
             advanceUntilIdle()
             assertFalse(pages.state.value!!.localityLoading)
             assertEquals(listOf("Café · Hottingen, Zürich"), summaries.filterNotNull().distinct())
+            assertTrue(pages.state.value!!.summaryPartial, "no card: a page with one replaces this line")
+        }
+
+    @Test
+    fun theSamePlaceOpenedAgainWithAPointKeepsNoSummaryWhileItsDistrictAndTownAreLookedUp() =
+        runTest {
+            val held = HeldDispatcher()
+            val pages = controller(FakePlaceData().apply { pinakesDown = true }, localities = Hottingen(), io = held)
+            // A link not resolved yet (no point, so nothing to look up), then the same café with its point.
+            pages.open(tapped.copy(point = null))
+            advanceUntilIdle()
+            assertEquals("Café", pages.state.value!!.summary)
+            pages.open(tapped)
+            runCurrent()
+
+            assertEquals(1, held.waiting)
+            assertTrue(pages.state.value!!.localityLoading)
+            assertNull(pages.state.value!!.summary, "not the category alone, which a save would keep")
+            held.runAll()
+            advanceUntilIdle()
+            assertFalse(pages.state.value!!.localityLoading)
+            assertEquals("Café · Hottingen, Zürich", pages.state.value!!.summary)
         }
 
     @Test
@@ -601,6 +623,7 @@ class PlacePageControllerTest {
             advanceUntilIdle()
             assertFalse(pages.state.value!!.localityLoading)
             assertEquals(listOf("$DROPPED_PIN · Hottingen, Zürich"), summaries.filterNotNull().distinct())
+            assertFalse(pages.state.value!!.summaryPartial, "no card is asked for a dropped pin: this line is all there is")
         }
 
     @Test

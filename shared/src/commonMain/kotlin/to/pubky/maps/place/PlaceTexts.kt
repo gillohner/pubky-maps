@@ -37,8 +37,8 @@ val PlacePageState.streetAddress: String? get() = place.address ?: card?.address
 /**
  * What and where the place is, "Café · Napfgasse 4, 8001 Zürich" as a search result says it: kept
  * with a save for the line under its name on the Saved page. Null while the card loads or, with no
- * address yet, the offline areas' district and town (either may say more, and the first summary kept
- * stays), and when the page knows neither.
+ * address yet, the offline areas' district and town (either may say more, and a full summary kept
+ * stays: [summaryPartial]), and when the page knows neither.
  */
 val PlacePageState.summary: String?
     get() =
@@ -47,6 +47,14 @@ val PlacePageState.summary: String?
         } else {
             listOfNotNull(categoryText(), address).joinToString(" · ").ifEmpty { null }
         }
+
+/**
+ * Whether [summary] was taken while Pinakes could not be reached, with no card kept for the place and
+ * no address of its own (a search result's is as good as the card's): the line of a page Pinakes
+ * answered replaces it, so a place saved offline or with Synonym's Pinakes blocked gets its address
+ * once its page is opened online.
+ */
+val PlacePageState.summaryPartial: Boolean get() = card == null && PlacePart.Card in failed && place.address == null
 
 /**
  * The line under what the place is: its address, else its coordinates (unless the title is them),

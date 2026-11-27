@@ -97,6 +97,7 @@ import to.pubky.maps.place.PlaceSource
 import to.pubky.maps.place.PlaceWriteActions
 import to.pubky.maps.place.SheetStop
 import to.pubky.maps.place.summary
+import to.pubky.maps.place.summaryPartial
 import to.pubky.maps.routing.DirectionsUi
 import to.pubky.maps.routing.RouteStatus
 import to.pubky.maps.search.RecentSearch
@@ -970,6 +971,7 @@ internal val PlacePageState.writeTarget: WriteTarget
             placePoint,
             pointPage = place.source == PlaceSource.Coordinates,
             summary = summary,
+            summaryPartial = summaryPartial,
         )
 
 /** Every link of [page]'s place, spelled as the core stores places: the keys of the user's own data about it. */
@@ -979,10 +981,10 @@ private fun ownLinks(
 ): Set<String> = PlacePageController.placeLinks(page.place, page.card).map(writes::normalize).toSet()
 
 /**
- * A place the user saved, tagged or listed keeps the name, point and summary its page shows, when the phone has
- * none for it ([WriteController.remember] decides; the first one kept stays); asked again when the page
- * or the user's entries for it change, so a page with no name or summary before its card loads keeps
- * the card's.
+ * A place the user saved, tagged or listed keeps the name, point and summary its page shows, when the
+ * phone has none for it ([WriteController.remember] decides; the first one kept stays, a summary taken
+ * without Pinakes only until a full one comes); asked again when the page or the user's entries for it
+ * change, so a page with no name or summary before its card loads keeps the card's.
  */
 @Composable
 private fun RememberOwnPlace(

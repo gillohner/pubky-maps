@@ -133,7 +133,7 @@ class WriteController(
     private var phoneData = PhoneData()
     private var labels: Map<String, String> = emptyMap()
     private var points: Map<String, GeoPoint> = emptyMap()
-    private var summaries: Map<String, String> = emptyMap()
+    private var summaries: Map<String, KeptSummary> = emptyMap()
     private var viewer: String? = null
     private var listsLoaded = false
 
@@ -337,7 +337,8 @@ class WriteController(
         enqueue {
             keepPointPage(target)
             if (settings().storage(DataKind.SavedPlaces) == StorageChoice.PhoneOnly) {
-                val saved = PhoneSaved(normalize(target.uri), target.name, now(), target.point, target.summary)
+                val partial = target.summary != null && target.summaryPartial
+                val saved = PhoneSaved(normalize(target.uri), target.name, now(), target.point, target.summary, partial)
                 io { phone.save(saved) }
                 phoneData = phoneData.copy(saved = listOf(saved) + phoneData.saved.filterNot { it.place == saved.place })
                 publish()
@@ -353,7 +354,8 @@ class WriteController(
      * sign-out, or before its card loaded) keeps [target]'s, so the Saved and Account pages name it, the
      * Saved page says what and where it is and the map shows its badge. Points are kept for saved
      * places only, summaries for saved places and (signed in) places in the user's lists; a name,
-     * point or summary already kept stays; other places keep nothing.
+     * point or summary already kept stays, except a summary taken without Pinakes, which a full one
+     * replaces ([KeptSummary.partial]); other places keep nothing.
      */
     fun remember(
         target: WriteTarget,
@@ -364,11 +366,15 @@ class WriteController(
         val name = target.name
         val point = target.point
         val summary = target.summary
+        val partial = target.summaryPartial
         var changed = false
         mine.saved.filter { it.kept == Kept.Phone }.forEach { entry ->
             val kept = phoneData.saved.firstOrNull { normalize(it.place) == entry.place } ?: return@forEach
+            val keptSummary = kept.summary?.let { KeptSummary(it, kept.summaryPartial) }
             val filled =
-                kept.copy(name = kept.name ?: name, point = kept.point ?: entry.point ?: point, summary = kept.summary ?: summary)
+                kept.copy(name = kept.name ?: name, point = kept.point ?: entry.point ?: point).let {
+                    if (keptSummary.replacedBy(summary, partial)) it.copy(summary = summary, summaryPartial = partial) else it
+                }
             if (filled != kept) {
                 io { phone.save(filled) }
                 phoneData = phoneData.copy(saved = phoneData.saved.map { if (it == kept) filled else it })
@@ -400,9 +406,10 @@ class WriteController(
             }
             if (summary != null) {
                 val listed = mine.lists.flatMap { list -> list.items.filter { it in links } }
-                (homeSaved.map { it.place } + listed).distinct().filter { it !in summaries }.forEach { place ->
-                    io { store.putSummary(place, summary) }
-                    summaries = summaries + (place to summary)
+                (homeSaved.map { it.place } + listed).distinct().filter { summaries[it].replacedBy(summary, partial) }.forEach { place ->
+                    val kept = KeptSummary(summary, partial)
+                    io { store.putSummary(place, kept) }
+                    summaries = summaries + (place to kept)
                     changed = true
                 }
             }
@@ -592,11 +599,13 @@ class WriteController(
             io { store.putPoint(place, point) }
             points = points + (place to point)
         }
-        // The first summary kept stays, as in [remember]: a page with less to say (offline, no card) does not replace it.
+        // As in [remember]: a full summary kept stays, so a page with less to say (offline, no card) does not
+        // replace it; a partial one is replaced by a full one.
         val summary = target.summary
-        if (summary != null && place !in summaries) {
-            io { store.putSummary(place, summary) }
-            summaries = summaries + (place to summary)
+        if (summary != null && summaries[place].replacedBy(summary, target.summaryPartial)) {
+            val kept = KeptSummary(summary, target.summaryPartial)
+            io { store.putSummary(place, kept) }
+            summaries = summaries + (place to kept)
         }
         publish()
         return true
@@ -897,7 +906,7 @@ class WriteController(
                 confirmed = confirmed,
                 labels = labels,
                 points = points,
-                summaries = summaries,
+                summaries = summaries.mapValues { it.value.text },
                 normalize = ::normalize,
             ).copy(
                 listsLoaded = listsLoaded,

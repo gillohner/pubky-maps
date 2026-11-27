@@ -152,7 +152,7 @@ class MemoryWriteStore : WriteStore {
     val others = mutableMapOf<Boolean, MutableSet<String>>()
     val names = mutableMapOf<String, String>()
     val placePoints = mutableMapOf<String, GeoPoint>()
-    val placeSummaries = mutableMapOf<String, String>()
+    val placeSummaries = mutableMapOf<String, KeptSummary>()
 
     override fun queue(): List<QueuedOp> = outbox.toList()
 
@@ -202,11 +202,11 @@ class MemoryWriteStore : WriteStore {
         placePoints[place] = point
     }
 
-    override fun summaries(): Map<String, String> = placeSummaries.toMap()
+    override fun summaries(): Map<String, KeptSummary> = placeSummaries.toMap()
 
     override fun putSummary(
         place: String,
-        summary: String,
+        summary: KeptSummary,
     ) {
         placeSummaries[place] = summary
     }

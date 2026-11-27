@@ -470,7 +470,7 @@ class WriteControllerTest {
             writer.save(WriteTarget("https://osm.org/node/270803095", "Conditorei Schober", SCHOBER, summary = SCHOBER_SUMMARY))
             runCurrent()
 
-            assertEquals(mapOf(OSM to SCHOBER_SUMMARY), store.summaries(), "as the core spells the place")
+            assertEquals(mapOf(OSM to KeptSummary(SCHOBER_SUMMARY)), store.summaries(), "as the core spells the place")
             assertEquals(
                 SCHOBER_SUMMARY,
                 writer.own.value.saved
@@ -523,10 +523,10 @@ class WriteControllerTest {
                     .map { it.summary },
                 "on the phone and on the homeserver",
             )
-            assertEquals(mapOf(OSM to SCHOBER_SUMMARY), store.summaries(), "a place not the user's keeps nothing")
+            assertEquals(mapOf(OSM to KeptSummary(SCHOBER_SUMMARY)), store.summaries(), "a place not the user's keeps nothing")
 
             // A page with less to say (offline, no card) does not replace what was kept.
-            writer.remember(target.copy(summary = "Altstadt, Zürich"), setOf(OSM))
+            writer.remember(target.copy(summary = "Altstadt, Zürich", summaryPartial = true), setOf(OSM))
             runCurrent()
             assertEquals(
                 listOf(SCHOBER_SUMMARY, SCHOBER_SUMMARY),
@@ -540,6 +540,71 @@ class WriteControllerTest {
                     .summary,
             )
             assertEquals(emptyList(), sent, "nothing goes to the homeserver")
+        }
+
+    @Test
+    fun aSummaryTakenWithoutPinakesIsReplacedByTheOneOfAPageWithACard() =
+        runTest {
+            phone.data = PhoneData(saved = listOf(PhoneSaved(OSM, "Schober", 7L, SCHOBER)))
+            signedIn()
+            val writer = controller()
+            runCurrent()
+            val offline = target.copy(summary = "Café · Altstadt, Zürich", summaryPartial = true)
+
+            // Saved while Pinakes could not be reached: the district and town are all the page had.
+            writer.save(offline)
+            writer.remember(offline, setOf(OSM))
+            runCurrent()
+            assertEquals(mapOf(OSM to KeptSummary("Café · Altstadt, Zürich", partial = true)), store.summaries())
+            assertEquals(
+                PhoneSaved(OSM, "Schober", 7L, SCHOBER, "Café · Altstadt, Zürich", summaryPartial = true),
+                phone.data.saved.single(),
+            )
+
+            // Opened again online: the card's address replaces it, on the phone and on the homeserver.
+            writer.remember(target.copy(summary = SCHOBER_SUMMARY), setOf(OSM))
+            runCurrent()
+            assertEquals(mapOf(OSM to KeptSummary(SCHOBER_SUMMARY)), store.summaries())
+            assertEquals(PhoneSaved(OSM, "Schober", 7L, SCHOBER, SCHOBER_SUMMARY), phone.data.saved.single())
+            assertEquals(
+                listOf(SCHOBER_SUMMARY, SCHOBER_SUMMARY),
+                writer.own.value.saved
+                    .map { it.summary },
+            )
+
+            // A later offline page does not take the full line back.
+            writer.remember(offline, setOf(OSM))
+            runCurrent()
+            assertEquals(mapOf(OSM to KeptSummary(SCHOBER_SUMMARY)), store.summaries())
+            assertEquals(
+                SCHOBER_SUMMARY,
+                phone.data.saved
+                    .single()
+                    .summary,
+            )
+        }
+
+    @Test
+    fun aHomeSaveUnsavedAndSavedAgainOnlineGetsTheFullSummary() =
+        runTest {
+            signedIn()
+            val writer = controller()
+            runCurrent()
+
+            writer.save(target.copy(summary = "Café · Altstadt, Zürich", summaryPartial = true))
+            runCurrent()
+            writer.unsave(target, setOf(OSM))
+            runCurrent()
+            writer.save(target.copy(summary = SCHOBER_SUMMARY))
+            runCurrent()
+
+            assertEquals(mapOf(OSM to KeptSummary(SCHOBER_SUMMARY)), store.summaries())
+            assertEquals(
+                SCHOBER_SUMMARY,
+                writer.own.value.saved
+                    .single()
+                    .summary,
+            )
         }
 
     @Test
@@ -562,9 +627,9 @@ class WriteControllerTest {
             assertEquals(SCHOBER_SUMMARY, writer.own.value.summaries[OSM], "the list entry says what and where it is")
 
             // Tagged later from a page with less to say (offline, no card).
-            writer.tag(target.copy(summary = "Altstadt, Zürich"), "cake")
+            writer.tag(target.copy(summary = "Altstadt, Zürich", summaryPartial = true), "cake")
             runCurrent()
-            assertEquals(mapOf(OSM to SCHOBER_SUMMARY), store.summaries())
+            assertEquals(mapOf(OSM to KeptSummary(SCHOBER_SUMMARY)), store.summaries())
         }
 
     @Test

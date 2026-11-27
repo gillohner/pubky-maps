@@ -6,6 +6,7 @@ import kotlinx.datetime.LocalTime
 import to.pubky.maps.links.GeoPoint
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -95,6 +96,44 @@ class PlaceTextsTest {
         assertEquals("Hottingen, Zürich", PlacePageState(bare, loading = emptySet(), locality = "Hottingen, Zürich").summary)
         // A page that knows neither what nor where keeps nothing.
         assertNull(PlacePageState(bare, loading = emptySet()).summary)
+    }
+
+    @Test
+    fun aSummaryIsPartialOnlyWhenPinakesCouldNotBeReachedAndNoCardWasKept() {
+        val bench = PlaceRef("https://www.openstreetmap.org/node/1", "Bench", GeoPoint(47.37, 8.54), null, PlaceSource.Map)
+        assertTrue(PlacePageState(bench, loading = emptySet(), failed = setOf(PlacePart.Card)).summaryPartial)
+        assertFalse(PlacePageState(bench, loading = emptySet()).summaryPartial, "Pinakes answered: it knows no more")
+        assertFalse(
+            PlacePageState(
+                bench.copy(address = "Lindenhof 1, 8001 Zürich"),
+                loading = emptySet(),
+                failed = setOf(PlacePart.Card),
+            ).summaryPartial,
+            "a search result's own address is as good as the card's: a later page without one does not replace it",
+        )
+        val kept =
+            PlaceCardInfo(
+                id = "1",
+                uri = bench.uri,
+                name = "Bench",
+                type = null,
+                category = null,
+                address = "Lindenhof 1, 8001 Zürich",
+                lat = null,
+                lon = null,
+                description = null,
+                image = null,
+                credits = emptyList(),
+                attribution = null,
+                alsoOn = emptyList(),
+                refs = emptyList(),
+                collections = 0,
+                facts = emptyMap(),
+            )
+        assertFalse(
+            PlacePageState(bench, loading = emptySet(), failed = setOf(PlacePart.Card), card = kept).summaryPartial,
+            "a kept card says as much as a fresh one",
+        )
     }
 
     @Test

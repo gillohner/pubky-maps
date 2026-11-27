@@ -193,9 +193,11 @@ summary under the name, also for list entries, and tells two same-named places w
 summary (or none) apart by their points. A `geo:` link names its own point. A saved or tagged place
 the phone knows no name, point or summary for (saved on another device, before the last sign-out,
 or before summaries were kept) keeps those its page shows when the user opens it, and from then on
-has its name on the Saved and Account pages and, when saved, its badge on the map; the first
-summary kept stays. Public writes show a Public badge first. A write shows at once and goes into an outbox on the phone, sent in
-order; one without a connection waits and is retried, and goes out as soon as the phone is online
+has its name on the Saved and Account pages and, when saved, its badge on the map; a summary kept
+stays, except one taken while Pinakes could not be reached and no card or address was known (the
+offline district and town only), which the summary of a page Pinakes answered replaces. Public writes
+show a Public badge first. A write shows at once and goes into an outbox on the phone, sent in order;
+one without a connection waits and is retried, and goes out as soon as the phone is online
 again (the homeserver is tried again then, not only on a timer), also with the app closed: while
 writes wait, a JobScheduler job (`OutboxJobService`, expedited from Android 12 on, kept over a
 restart of the phone) has Android start the app when the phone has a network, and tries for one

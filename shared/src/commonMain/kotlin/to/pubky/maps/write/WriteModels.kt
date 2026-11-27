@@ -153,6 +153,8 @@ data class WriteTarget(
     val pointPage: Boolean = false,
     /** What and where the place is ("Café · Napfgasse 4, 8001 Zürich"), kept for the line under its name on the Saved page. */
     val summary: String? = null,
+    /** [summary] was taken while Pinakes could not be reached and no card was kept ([KeptSummary.partial]). */
+    val summaryPartial: Boolean = false,
 )
 
 /** What the user wanted to do when the app asked them to sign in first. */

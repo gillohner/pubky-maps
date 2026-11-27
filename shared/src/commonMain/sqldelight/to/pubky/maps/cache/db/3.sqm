@@ -3,5 +3,8 @@
 
 CREATE TABLE place_summary (
     place TEXT NOT NULL PRIMARY KEY,
-    summary TEXT NOT NULL
+    summary TEXT NOT NULL,
+    -- 1 when the summary was taken while Pinakes could not be reached and no card was kept: the line of
+    -- a page Pinakes answered replaces it.
+    partial INTEGER NOT NULL DEFAULT 0
 );

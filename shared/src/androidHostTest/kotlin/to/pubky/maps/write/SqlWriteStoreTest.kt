@@ -80,14 +80,21 @@ class SqlWriteStoreTest {
         store.putLabel("geo:1,2", "Bench")
         store.putPoint("https://osm.org/node/1", GeoPoint(47.37, 8.54))
         store.putPoint("https://osm.org/node/1", GeoPoint(47.38, 8.55))
-        store.putSummary("https://osm.org/node/1", "Café")
-        store.putSummary("https://osm.org/node/1", "Café · Napfgasse 4, 8001 Zürich")
+        store.putSummary("https://osm.org/node/1", KeptSummary("Café · Hottingen, Zürich", partial = true))
+        store.putSummary("https://osm.org/node/1", KeptSummary("Café · Napfgasse 4, 8001 Zürich"))
+        store.putSummary("geo:1,2", KeptSummary("Bench · Lindenhof, Zürich", partial = true))
 
         assertEquals(setOf("A", "B"), store.otherPosts(false).toSet())
         assertEquals(listOf("C"), store.otherPosts(true))
         assertEquals(mapOf("geo:1,2" to "Bench"), store.labels())
         assertEquals(mapOf("https://osm.org/node/1" to GeoPoint(47.38, 8.55)), store.points())
-        assertEquals(mapOf("https://osm.org/node/1" to "Café · Napfgasse 4, 8001 Zürich"), store.summaries())
+        assertEquals(
+            mapOf(
+                "https://osm.org/node/1" to KeptSummary("Café · Napfgasse 4, 8001 Zürich"),
+                "geo:1,2" to KeptSummary("Bench · Lindenhof, Zürich", partial = true),
+            ),
+            store.summaries(),
+        )
     }
 
     @Test
@@ -100,7 +107,7 @@ class SqlWriteStoreTest {
         store.putList(list)
         store.putLabel("geo:1,2", "Bench")
         store.putPoint("geo:1,2", GeoPoint(1.0, 2.0))
-        store.putSummary("geo:1,2", "Bench · Lindenhof, Zürich")
+        store.putSummary("geo:1,2", KeptSummary("Bench · Lindenhof, Zürich"))
 
         cache.replace(CachedAccount(USER, "Ada", 1, emptyList(), emptyList()))
         assertEquals(1, store.queue().size, "a refresh of the cache keeps what waits to be sent")
@@ -199,8 +206,8 @@ class SqlWriteStoreTest {
         assertEquals(mapOf("geo:1,2" to "Bench"), store.labels())
         assertEquals(mapOf("geo:1,2" to GeoPoint(1.0, 2.0)), store.points())
         assertEquals(emptyMap(), store.summaries())
-        store.putSummary("geo:1,2", "Bench · Lindenhof, Zürich")
-        assertEquals(mapOf("geo:1,2" to "Bench · Lindenhof, Zürich"), store.summaries())
+        store.putSummary("geo:1,2", KeptSummary("Bench · Lindenhof, Zürich"))
+        assertEquals(mapOf("geo:1,2" to KeptSummary("Bench · Lindenhof, Zürich")), store.summaries())
         SqlAccountCache(driver).clear()
         assertEquals(emptyMap(), store.summaries(), "sign-out deletes them with the account")
     }
@@ -213,7 +220,7 @@ class SqlWriteStoreTest {
         val phoneList = OwnList("phone:1", Kept.Phone, "Picnic spots", listOf("geo:1,2"), names = mapOf("geo:1,2" to "Lake"))
 
         phone.save(PhoneSaved("geo:1,2", "Lake", 10))
-        phone.save(PhoneSaved("geo:3,4", null, 20))
+        phone.save(PhoneSaved("geo:3,4", null, 20, summary = "Hottingen, Zürich", summaryPartial = true))
         phone.save(PhoneSaved("https://www.openstreetmap.org/node/1", "Schober", 30, GeoPoint(47.37159, 8.54531), "Café · Napfgasse 4"))
         phone.putList(phoneList)
         phone.unsave("geo:1,2")
@@ -225,7 +232,7 @@ class SqlWriteStoreTest {
         assertEquals(
             listOf(
                 PhoneSaved("https://www.openstreetmap.org/node/1", "Schober", 30, GeoPoint(47.37159, 8.54531), "Café · Napfgasse 4"),
-                PhoneSaved("geo:3,4", null, 20),
+                PhoneSaved("geo:3,4", null, 20, summary = "Hottingen, Zürich", summaryPartial = true),
             ),
             read.saved,
         )
@@ -283,14 +290,12 @@ class SqlWriteStoreTest {
             phone.read().saved,
         )
         assertEquals(setOf("geo:3,4"), phone.read().pointPlaces)
-        phone.save(PhoneSaved("https://www.openstreetmap.org/node/1", "Schober", 10, GeoPoint(47.37159, 8.54531), "Café"))
+        phone.save(
+            PhoneSaved("https://www.openstreetmap.org/node/1", "Schober", 10, GeoPoint(47.37159, 8.54531), "Café", summaryPartial = true),
+        )
         assertEquals(
-            "Café",
-            phone
-                .read()
-                .saved
-                .single()
-                .summary,
+            PhoneSaved("https://www.openstreetmap.org/node/1", "Schober", 10, GeoPoint(47.37159, 8.54531), "Café", summaryPartial = true),
+            phone.read().saved.single(),
         )
     }
 }

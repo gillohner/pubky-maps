@@ -134,6 +134,8 @@ data class PhoneSaved(
     val point: GeoPoint? = null,
     /** What and where it is, as its page said when it was saved ([SavedEntry.summary]). */
     val summary: String? = null,
+    /** [summary] was taken without Pinakes and a card ([KeptSummary.partial]): a full line replaces it. */
+    val summaryPartial: Boolean = false,
 )
 
 /**
