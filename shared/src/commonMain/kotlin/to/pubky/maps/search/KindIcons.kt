@@ -97,3 +97,33 @@ internal fun pinIcon(
 
 /** The glyph fills about half the pin's head. */
 private const val GLYPH_SCALE = 0.5f
+
+/** A round badge's outline: a circle filling its 24 x 24 units. */
+private const val BADGE = "M12 1a11 11 0 1 0 0 22a11 11 0 1 0 0-22z"
+
+/** The glyph fills a bit more than half of a badge. */
+private const val BADGE_GLYPH_SCALE = 0.58f
+
+/**
+ * The round map badge of [kind]: [fill] with a white outline and the kind's white glyph (a dot for a
+ * place of no particular kind), centred on its point.
+ */
+internal fun badgeIcon(
+    kind: PlaceKind,
+    fill: Color,
+): ImageVector =
+    ImageVector
+        .Builder(name = "Badge$kind", defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f)
+        .addPath(
+            PathParser().parsePathString(BADGE).toNodes(),
+            fill = SolidColor(fill),
+            stroke = SolidColor(Color.White),
+            strokeLineWidth = 2f,
+        ).addGroup(
+            scaleX = BADGE_GLYPH_SCALE,
+            scaleY = BADGE_GLYPH_SCALE,
+            translationX = 12f - 12f * BADGE_GLYPH_SCALE,
+            translationY = 12f - 12f * BADGE_GLYPH_SCALE,
+        ).addPath(PathParser().parsePathString(KIND_GLYPHS[kind] ?: DOT).toNodes(), fill = SolidColor(Color.White))
+        .clearGroup()
+        .build()
