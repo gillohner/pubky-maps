@@ -285,6 +285,31 @@ class PlacePageControllerTest {
         }
 
     @Test
+    fun aCachedCardWithoutOsmDetailsShowsTheKeptOnesBeforePinakesAnswers() =
+        runTest {
+            val details = KeptRosa(everyElement = true)
+            val cache = MemoryPlaceCache()
+            controller(FakePlaceData(), cache, details = details).apply { open(schober) }
+            advanceUntilIdle()
+            val data = FakePlaceData().apply { cardGate = CompletableDeferred() }
+            val pages = controller(data, cache, details = details)
+            pages.open(schober)
+            advanceUntilIdle()
+            val page = pages.state.value!!
+            assertTrue(PlacePart.Card in page.loading, "Pinakes has not answered")
+            assertEquals("Mo-Su 08:00-18:00", page.osm?.openingHours)
+            data.cardGate!!.complete(Unit)
+            advanceUntilIdle()
+            assertEquals(
+                "Mo-Su 08:00-18:00",
+                pages.state.value!!
+                    .osm
+                    ?.openingHours,
+            )
+            assertEquals(listOf(schober.osm!!, schober.osm), details.asked, "asked once per opening")
+        }
+
+    @Test
     fun aCardWithOsmDetailsShowsOnlyThemAlsoFromTheCache() =
         runTest {
             val details = KeptRosa(everyElement = true)
@@ -543,10 +568,33 @@ class PlacePageControllerTest {
             // The card is still loading: the header shows the place as it was opened.
             val page = pages.state.value!!
             assertTrue(PlacePart.Card in page.loading)
+            assertTrue(page.cardLoading)
             assertEquals("Conditorei schober", page.place.title)
             data.cardGate!!.complete(Unit)
             advanceUntilIdle()
             assertEquals(emptySet<PlacePart>(), pages.state.value!!.loading)
+        }
+
+    @Test
+    fun aCachedCardCountsAsShownWhileTheFreshCardLoads() =
+        runTest {
+            val cache = MemoryPlaceCache()
+            val data = FakePlaceData()
+            val pages = controller(data, cache)
+            pages.open(schober)
+            advanceUntilIdle()
+            pages.close()
+
+            data.cardGate = CompletableDeferred()
+            pages.open(schober)
+            advanceUntilIdle()
+            val page = pages.state.value!!
+            assertTrue(PlacePart.Card in page.loading)
+            assertEquals("Conditorei schober", page.card?.name)
+            assertFalse(page.cardLoading)
+            data.cardGate!!.complete(Unit)
+            advanceUntilIdle()
+            assertFalse(pages.state.value!!.cardLoading)
         }
 
     @Test

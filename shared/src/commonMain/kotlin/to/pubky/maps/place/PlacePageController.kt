@@ -65,6 +65,12 @@ data class PlacePageState(
     /** Some part could not be loaded: the page shows saved data, or less. */
     val offline: Boolean get() = failed.isNotEmpty()
 
+    /**
+     * No card is shown yet and its source has not answered: grey lines stand for it. A card from the
+     * cache counts as shown while the fresh one loads, so the page lays out as it will stay.
+     */
+    val cardLoading: Boolean get() = card == null && PlacePart.Card in loading
+
     /** The date of the oldest saved or kept part shown (epoch ms), for the offline note; null when none is. */
     val shownAt: Long?
         get() = listOfNotNull(savedAt, socialAt, keptDetails?.takeIf { cardOsm == null && osm != null }?.fetchedAt).minOrNull()
@@ -234,6 +240,11 @@ class PlacePageController(
         }
         // After the cache, so a saved street address is not replaced by the district and town for a moment.
         if (cached?.card?.address == null) localityJob = scope.launch { loadLocality(place) }
+        // A cached card without OSM details shows with the ones the offline areas keep before Pinakes is
+        // asked again: the page is then laid out as it stays, instead of the kept rows arriving above
+        // the coordinates when Pinakes answers.
+        val keptFirst = cached?.card != null && cached.card.osmDetails() == null
+        if (keptFirst) loadDetails(place)
         val card =
             when (val answer = data.card(listOfNotNull(place.uri, place.osm?.url))) {
                 is SourceAnswer.Answered -> {
@@ -246,7 +257,7 @@ class PlacePageController(
                     cached?.card
                 }
             }
-        if (card.osmDetails() == null) loadDetails(place)
+        if (card.osmDetails() == null && !keptFirst) loadDetails(place)
         coroutineScope {
             launch { loadSocial(place, card, viewer) }
             launch { loadLists(place, card, viewer) }

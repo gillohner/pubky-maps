@@ -383,13 +383,15 @@ fun PlaceSections(
 ) {
     Column(modifier) {
         val card = page.card
-        if (card == null && PlacePart.Card in page.loading) LoadingBlock()
+        if (page.cardLoading) LoadingBlock()
         card?.image?.let { image -> CardImage(image, card.credit("image"), actions) }
         card?.description?.let { Description(it) }
         val osm = page.osm
-        // The details come with the card: while it loads, a section of coordinates alone would grow and
-        // then jump when the card's rows arrive above them.
-        val coordinates = page.coordinatesText?.takeUnless { PlacePart.Card in page.loading }
+        // The details come with the card: with no card shown yet, a section of coordinates alone would
+        // grow and then jump when the card's rows arrive above them. A card from the cache is the page as it will
+        // stay, so its coordinates show at once: waiting for the fresh card would push every section
+        // under Details down by a row when it comes.
+        val coordinates = page.coordinatesText?.takeUnless { page.cardLoading }
         if (osm != null || coordinates != null) DetailsSection(osm, coordinates, context, actions)
         val writes = actions.writes
         val viewer = writes?.viewer ?: page.viewer
