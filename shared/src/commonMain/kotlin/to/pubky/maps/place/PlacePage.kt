@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
@@ -77,6 +78,9 @@ import kotlinx.datetime.toLocalDateTime
 import to.pubky.maps.account.shortPubkyId
 import to.pubky.maps.links.LinkProvider
 import to.pubky.maps.links.OpenInAction
+import to.pubky.maps.routing.DirectionsCard
+import to.pubky.maps.routing.DirectionsUi
+import to.pubky.maps.routing.RoutingIcons
 import to.pubky.maps.ui.AppIcons
 import to.pubky.maps.write.Kept
 import to.pubky.maps.write.KeptBadge
@@ -103,6 +107,10 @@ data class PlacePageActions(
     val onLoadMorePosts: () -> Unit,
     /** The user's writes about the place (Save, Tag, Post, Photo, Add to list); null where there are none. */
     val writes: PlaceWriteActions? = null,
+    /** Opens directions to the place; null where routing is not available or the place has no point. */
+    val onDirections: (() -> Unit)? = null,
+    /** The directions open to the place, shown under the actions; null when none are open. */
+    val directions: DirectionsUi? = null,
 )
 
 /** What the user can do on the place page, and what they have about it. */
@@ -182,12 +190,19 @@ fun PlaceHeader(
                 ?.let { line -> OpeningText(line) }
             OfflineNote(page, context)
         }
-        // Google Maps' order: the place's own actions first, then Share and Open in; the row scrolls
-        // sideways when it is wider than the page.
+        // Google Maps' order: Directions, the place's own actions, then Share and Open in; the row
+        // scrolls sideways when it is wider than the page.
         Row(
             modifier = Modifier.padding(top = 12.dp).horizontalScroll(rememberScrollState()).padding(end = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            actions.onDirections?.let { directions ->
+                Button(onClick = directions) {
+                    Icon(RoutingIcons.Directions, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Directions")
+                }
+            }
             val writes = actions.writes
             if (writes != null) {
                 val saved = writes.own.isSaved
@@ -217,6 +232,7 @@ fun PlaceHeader(
             }
             if (actions.openIn.isNotEmpty()) OpenInButton(actions)
         }
+        actions.directions?.let { DirectionsCard(it, Modifier.padding(top = 12.dp, end = 8.dp)) }
     }
 }
 

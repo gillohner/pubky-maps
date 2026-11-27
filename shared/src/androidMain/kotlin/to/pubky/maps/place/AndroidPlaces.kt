@@ -10,6 +10,9 @@ import to.pubky.maps.config.Service
 import to.pubky.maps.map.MapPlacesLayer
 import to.pubky.maps.offline.KeptPubkyPlaces
 import to.pubky.maps.place.db.PlaceCacheDatabase
+import to.pubky.maps.routing.DirectionsController
+import to.pubky.maps.routing.HttpRouting
+import to.pubky.maps.routing.routingHttpClient
 import to.pubky.maps.search.searchHttpClient
 import to.pubky.maps.status.ServiceHealth
 import java.io.File
@@ -20,8 +23,9 @@ import java.io.File
  * [viewer] is the signed-in user's pubky id, null when signed out; [health] gets the layer's Pinakes
  * outages for the map's degraded line; the layer shows the Pubky places of the offline areas
  * ([offline]) when Pinakes cannot be reached, and a page their tags when Nexus cannot; a page with
- * no address names its district and town from the offline areas' labels ([localities]), and a page
- * with no card shows the OSM details the offline areas keep ([details]). Create it once per process.
+ * no address names its district and town from the offline areas' labels ([localities]), a page
+ * with no card shows the OSM details the offline areas keep ([details]), and directions to a place
+ * come from the Valhalla servers of the list. Create it once per process.
  */
 fun androidPlaceServices(
     context: Context,
@@ -57,5 +61,11 @@ fun androidPlaceServices(
             ),
         layer = MapPlacesLayer(data, main, health = health, offline = offline),
         data = data,
+        directions =
+            DirectionsController(
+                HttpRouting(routingHttpClient(appVersion), servers = { servers(Service.Valhalla) }),
+                main,
+                health = health,
+            ),
     )
 }

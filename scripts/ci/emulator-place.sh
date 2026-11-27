@@ -3,8 +3,10 @@
 # runner (scripts/ci/place_fixture_server.py through adb reverse; no public network): an
 # openstreetmap.org link to the Conditorei Schober opens the app on its place page, a sheet over the
 # map with the card's name and kind, the Pubky tags and the posts; the handle raises it to the whole
-# screen, where the lists holding the place show; back closes it. Checks that Pinakes and Nexus were
-# asked with the app's User-Agent, Nexus for every spelling people used for the place.
+# screen, where the lists holding the place show; back closes it. Directions, with location granted
+# and the emulator's GPS at Zürich HB, ask the fixture Valhalla for a route by car from there to the
+# place, show its time and draw it on the map; Walk asks again on foot. Checks that Pinakes, Nexus
+# and Valhalla were asked with the app's User-Agent, Nexus for every spelling people used for the place.
 # Usage: emulator-place.sh <apk> <out dir>
 set -euo pipefail
 
@@ -19,6 +21,31 @@ log="$out/requests.jsonl"
 : > "$log"
 # shellcheck source=scripts/ci/emulator-lib.sh
 source "$here/emulator-lib.sh"
+
+# Waits up to $2 seconds for a node whose text starts with $1 (the kind line carries the distance
+# once location is granted: "Café · 790 m"); prints its centre.
+wait_for_start() {
+    local deadline=$((SECONDS + $2)) dump
+    while ((SECONDS < deadline)); do
+        dump=$(dump_ui "wait")
+        handle_anr_dialog "$dump" >&2
+        if python3 -I - "$dump" "$1" <<'PY'; then return 0; fi
+import re, sys, xml.etree.ElementTree as ET
+try:
+    root = ET.parse(sys.argv[1]).getroot()
+except ET.ParseError:
+    sys.exit(1)
+for node in root.iter("node"):
+    if (node.get("text") or "").startswith(sys.argv[2]):
+        x1, y1, x2, y2 = map(int, re.findall(r"\d+", node.get("bounds")))
+        print((x1 + x2) // 2, (y1 + y2) // 2)
+        sys.exit(0)
+sys.exit(1)
+PY
+        sleep 2
+    done
+    return 1
+}
 
 python3 -I "$here/place_fixture_server.py" "$port" "$root/shared/src/commonTest/fixtures/place" "$log" &
 server=$!
@@ -35,7 +62,8 @@ adb reverse "tcp:$port" "tcp:$port"
 cat > "$out/settings.json" <<JSON
 {"schemaVersion": 1, "servers": {
   "pinakes": [{"name": "Fixtures", "url": "http://127.0.0.1:$port"}],
-  "nexus": [{"name": "Fixtures", "url": "http://127.0.0.1:$port"}]}}
+  "nexus": [{"name": "Fixtures", "url": "http://127.0.0.1:$port"}],
+  "valhalla": [{"name": "Fixtures", "url": "http://127.0.0.1:$port"}]}}
 JSON
 adb push "$out/settings.json" /data/local/tmp/pubky-maps-settings.json > /dev/null
 adb shell chmod 644 /data/local/tmp/pubky-maps-settings.json
@@ -49,16 +77,50 @@ adb logcat -G 16M || true
 adb logcat -c || true
 adb logcat -b crash -c || true
 
+# The emulator's GPS at Zürich HB, sent again every 2 s: Android hands a fix only to listeners
+# already registered.
+( for _ in $(seq 1 90); do adb emu geo fix 8.5403 47.3779 > /dev/null 2>&1 || true; sleep 2; done ) &
+gps=$!
+# The tests after this one start without location access, as a fresh install does.
+revoke_location() {
+    adb shell pm revoke "$pkg" android.permission.ACCESS_FINE_LOCATION > /dev/null 2>&1 || true
+    adb shell pm revoke "$pkg" android.permission.ACCESS_COARSE_LOCATION > /dev/null 2>&1 || true
+}
+trap 'kill $server $gps 2> /dev/null || true; revoke_location' EXIT
+# Directions start from the user's position: the permission is granted up front (the dialog is the
+# my-location button's, tested in the smoke test) and the GPS is put at Zürich HB above.
+adb shell pm grant "$pkg" android.permission.ACCESS_FINE_LOCATION
+adb shell pm grant "$pkg" android.permission.ACCESS_COARSE_LOCATION
 started=$(adb shell am start -W -a android.intent.action.VIEW -d "'https://www.openstreetmap.org/node/270803095'" -p "$pkg" 2>&1) || true
 if grep -q "Error" <<< "$started"; then fail "the link did not reach the app: $started"; fi
 
 wait_for "Conditorei schober" 60 > /dev/null || fail "no place page for the Conditorei Schober"
-wait_for "Café" 15 > /dev/null || fail "the place page does not say what the place is (the Pinakes card)"
+wait_for_start "Café" 15 > /dev/null || fail "the place page does not say what the place is (the Pinakes card)"
 wait_for "Tags on Pubky" 20 > /dev/null || fail "no Pubky tags on the place page (Nexus)"
 wait_for "coffee" 5 > /dev/null || fail "the coffee tag is missing"
 sleep 3
 screenshot place-half
 check_alive "place page"
+
+xy=$(wait_for "Directions" 10) || fail "no Directions on the place page"
+adb shell input tap $xy
+wait_for "5 min · 1.4 km" 40 > /dev/null || fail "no route time and length after Directions"
+# A server the user added carries no credits of its own: OpenStreetMap's, and where to report errors.
+wait_for "© OpenStreetMap contributors · Report a map error" 5 > /dev/null || fail "no routing credits under the route"
+sleep 3
+screenshot place-directions
+check_alive "directions"
+# The route's darker edge (RouteLine.kt) on the map above the sheet.
+stats=$(python3 -I "$here/png_stats.py" "$out/place-directions.png" 0 0.1 1 0.45 '#0b4fb3') ||
+    fail "png_stats could not read the screenshot"
+share=$(awk '{print $3}' <<< "$stats")
+python3 -I -c "import sys; sys.exit(0 if float(sys.argv[1]) >= 0.0005 else 1)" "$share" ||
+    fail "the route is not drawn on the map (share of its colour: $share)"
+xy=$(wait_for "Walk" 5) || fail "no Walk mode in the directions"
+adb shell input tap $xy
+sleep 4
+check_alive "directions on foot"
+kill $gps 2> /dev/null || true
 
 xy=$(wait_for "Show more of the place" 5) || fail "no sheet handle"
 adb shell input tap $xy
@@ -97,6 +159,14 @@ assert any(p.endswith("/collections") for p in paths), paths
 agents = {l["ua"] for l in lines}
 assert all(a.startswith(("PubkyMaps/", "pubky-maps-core/")) for a in agents), agents
 assert all(l["ua"].startswith("PubkyMaps/") for l in lines if l["path"].startswith("/v1/stream/")), agents
+# Directions: by car from the GPS fix to the card's point, then on foot from the same start.
+routes = [l for l in lines if l["path"] == "/route"]
+assert [r["costing"] for r in routes] == ["auto", "pedestrian"], routes
+for r in routes:
+    start, end = r["locations"]
+    assert abs(start["lat"] - 47.3779) < 1e-3 and abs(start["lon"] - 8.5403) < 1e-3, r
+    assert abs(end["lat"] - 47.3708689) < 1e-6 and abs(end["lon"] - 8.5418241) < 1e-6, r
+    assert r["ua"].startswith("PubkyMaps/"), r
 print("requests:", len(lines), sorted(set(paths)))
 PY
 

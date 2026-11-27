@@ -13,6 +13,7 @@ private val serviceGroups =
     listOf(
         "Map" to listOf(Service.MapStyleLight, Service.MapStyleDark),
         "Search and places" to listOf(Service.Photon, Service.Pinakes, Service.Overpass),
+        "Directions" to listOf(Service.Valhalla),
         "Pubky" to listOf(Service.Nexus, Service.PkarrRelay, Service.AuthRelay),
     )
 

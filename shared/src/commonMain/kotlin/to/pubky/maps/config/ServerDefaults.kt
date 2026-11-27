@@ -18,6 +18,13 @@ object ServerDefaults {
     /** Search results come from Photon's OpenStreetMap index (komoot's public server by default). */
     val photon = AttributionLink("Search: Photon by komoot", "https://photon.komoot.io")
 
+    /** Routes from FOSSGIS' Valhalla server; its terms ask for a way to report errors in OSM's data. */
+    val fossgisRouting =
+        AttributionLink("Routing: Valhalla by FOSSGIS", "https://www.fossgis.de/arbeitsgruppen/osm-server/nutzungsbedingungen")
+
+    /** Where users report a wrong road or a missing path in OpenStreetMap. */
+    val fixTheMap = AttributionLink("Report a map error", "https://www.openstreetmap.org/fixthemap")
+
     val lists =
         ServerLists(
             mapOf(
@@ -61,6 +68,12 @@ object ServerDefaults {
                         ServerEntry("Overpass (FOSSGIS)", "https://overpass-api.de/api/interpreter"),
                         ServerEntry("Overpass (private.coffee)", "https://overpass.private.coffee/api/interpreter"),
                     ),
+                // FOSSGIS' public Valhalla, the one keyless routing server for apps: at most one request
+                // a second, an app User-Agent, OSM credits with a link to report map errors, and not
+                // hard-coded (fossgis.de/arbeitsgruppen/osm-server/nutzungsbedingungen). It learns the
+                // start and end of every route the user asks for.
+                Service.Valhalla to
+                    listOf(ServerEntry("Valhalla (FOSSGIS)", "https://valhalla1.openstreetmap.de", listOf(fossgisRouting, openStreetMap))),
                 // The Pubky SDK's default relays (pkarr::DEFAULT_RELAYS).
                 Service.PkarrRelay to
                     listOf(

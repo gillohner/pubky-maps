@@ -2,8 +2,9 @@
 """Serves the recorded Pinakes and Nexus answers of the place page (shared/src/commonTest/fixtures/
 place) on 127.0.0.1 for the emulator place test, so it needs no public network: the Conditorei
 Schober's card, its lists, tags, posts and people, and the places in Zürich's old town. Other links
-are unknown (404), as on a real Pinakes. Every request is logged as one JSON line (method, path,
-uri or uris, User-Agent).
+are unknown (404), as on a real Pinakes. Valhalla's /route answers FOSSGIS' recorded route from
+Zürich HB for any request. Every request is logged as one JSON line (method, path, uri or uris, a
+route's costing and locations, User-Agent).
 
 Usage: place_fixture_server.py <port> <fixture dir> <request log>
 """
@@ -25,6 +26,8 @@ def load(name: str):
 CARD = load("pinakes-card-schober.json")
 SPELLINGS = {CARD["uri"], *CARD["refs"], *CARD.get("aliases", [])}
 VIEWS = load("nexus-by-ids-zurich.json")
+with open(f"{fixtures}/../search/hauptbahnhof-kunsthaus.valhalla.json", encoding="utf-8") as f:
+    ROUTE = json.load(f)
 SCHOBER_ID = next(v["details"]["id"] for v in VIEWS if v["details"]["uri"] == CARD["uri"])
 
 
@@ -69,6 +72,10 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):  # noqa: N802
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))) or b"{}")
         path = urlparse(self.path).path
+        if path == "/route":
+            self.log_request_line({"costing": body.get("costing"), "locations": body.get("locations")})
+            self.answer(200, ROUTE)
+            return
         self.log_request_line({"uris": body.get("uris")})
         if path == "/v1/stream/resources/by_ids":
             self.answer(200, [v for v in VIEWS if v["details"]["uri"] in (body.get("uris") or [])])
