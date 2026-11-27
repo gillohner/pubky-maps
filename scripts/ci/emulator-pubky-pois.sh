@@ -110,24 +110,26 @@ expect_ring() {
         fail "the Conditorei Schober's highlight does not show the map's own café icon ($1; share of its orange: $cup)"
 }
 
-# expect_name NAME SHADE: the name under the badge is drawn in the name's teal SHADE (#00695C light,
-# #4DB6AC dark), not in the map's own label colour. The CI emulator's renderer drops the green
-# channel of every map text, the base style's own too (Liberty's water names, #495E91, come out
-# #490091), while icons keep it; so the row counts in the shade as drawn there (green 0) or as a phone
-# draws it. The box is the row of "Conditorei schober" under the badge: the name is ~17 % of it on
-# light and ~9 % on dark (thinner letters on the dark style's halo), any other colour ~0 %; the bar
-# is 5 %.
+# expect_name NAME SHADE: the name under the highlight is drawn in the name's teal SHADE (#00695C
+# light, #4DB6AC dark), not in the map's own label colour. The CI emulator's renderer draws every map
+# text with the green channel of its layer's icon colour, the base style's own too (Liberty's water
+# names, #495E91, have no icon colour and come out #490091), while icons keep theirs; the highlight's
+# icon colour is its teal (#00897B), so the row counts in the shade as a phone draws it or as this
+# emulator does (green 0x89, or 0 for a layer without an icon colour). The box is the row of
+# "Conditorei schober" under the highlight: the name is ~17 % of it on light and ~9 % on dark (thinner
+# letters on the dark style's halo), any other colour ~0 %; the bar is 5 %.
 expect_name() {
-    local shade=$1 as_drawn share
-    as_drawn="#${shade:1:2}00${shade:5:2}"
+    local shade=$1 as_drawn as_drawn_bare share
+    as_drawn="#${shade:1:2}89${shade:5:2}"
+    as_drawn_bare="#${shade:1:2}00${shade:5:2}"
     share=$(python3 -I -c '
 import subprocess, sys
 here, png, *shades = sys.argv[1:]
 print(sum(float(subprocess.check_output([sys.executable, "-I", f"{here}/png_stats.py", png, "0.36", "0.515", "0.64", "0.533", s], text=True).split()[2]) for s in shades))
-' "$here" "$out/$2.png" "$shade" "$as_drawn") || fail "png_stats could not read $2.png"
+' "$here" "$out/$2.png" "$shade" "$as_drawn" "$as_drawn_bare") || fail "png_stats could not read $2.png"
     echo "$2: name shade share under the badge $share"
     python3 -I -c "import sys; sys.exit(0 if float(sys.argv[1]) >= 0.05 else 1)" "$share" ||
-        fail "the Conditorei Schober's name is not drawn in the Pubky teal ($2; share of $shade or $as_drawn: $share)"
+        fail "the Conditorei Schober's name is not drawn in the Pubky teal ($2; share of $shade, $as_drawn or $as_drawn_bare: $share)"
 }
 
 adb shell cmd uimode night no
