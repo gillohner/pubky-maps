@@ -121,16 +121,25 @@ fun PlaceSheet(
     // Opening the route's steps raises the sheet to the top, where they are listed under the header:
     // at the lower stops the header with its route card takes about all the sheet shows, so the list
     // would open out of sight. Lowering the sheet again keeps them open and brings back the map.
+    // A step tapped at the top lowers the sheet to its lowest stop, as Google Maps' steps give way to
+    // the map: the map shows the step, and the header's route card shows it with the way to the
+    // previous and the next one (half would show about the header too, with the list out of sight).
     // Remembered: the sheet recomposes on every frame of a drag, and new actions would recompose the page.
     val sheetActions =
         remember(actions) {
             val ui = actions.directions ?: return@remember actions
             actions.copy(
                 directions =
-                    ui.copy(onSteps = { shown ->
-                        ui.onSteps(shown)
-                        if (shown && currentStop != SheetStop.Full) currentOnStopChange(SheetStop.Full)
-                    }),
+                    ui.copy(
+                        onSteps = { shown ->
+                            ui.onSteps(shown)
+                            if (shown && currentStop != SheetStop.Full) currentOnStopChange(SheetStop.Full)
+                        },
+                        onStep = { index ->
+                            ui.onStep(index)
+                            if (currentStop == SheetStop.Full) currentOnStopChange(SheetStop.Peek)
+                        },
+                    ),
             )
         }
 

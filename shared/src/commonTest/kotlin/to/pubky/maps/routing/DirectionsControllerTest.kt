@@ -256,7 +256,7 @@ class DirectionsControllerTest {
     @Test
     fun thePageListsTheFoundRoutesStepsOnlyWhileTheyAreOpen() =
         runTest {
-            val steps = listOf(RouteStep("Drive north.", Turn.Depart, 35.0), RouteStep("You have arrived.", Turn.Arrive, 0.0))
+            val steps = listOf(RouteStep("Drive north.", Turn.Depart, 35.0, here), RouteStep("You have arrived.", Turn.Arrive, 0.0, here))
             val routing = FakeRouting { RouteAnswer.Found(route.copy(steps = steps), "s") }
             routing.gate = CompletableDeferred()
             val c = controller(routing)
@@ -278,5 +278,96 @@ class DirectionsControllerTest {
             val c = controller(FakeRouting { RouteAnswer.Found(route, "s") })
             c.showSteps(true)
             assertNull(c.directions.value)
+        }
+
+    private val steps =
+        listOf(
+            RouteStep("Drive north.", Turn.Depart, 35.0, here),
+            RouteStep("Turn right onto Museumstrasse.", Turn.Right, 52.0, GeoPoint(47.3785, 8.5410)),
+            RouteStep("You have arrived.", Turn.Arrive, 0.0, kunsthaus),
+        )
+
+    /** Directions with the steps of a route found by car open. */
+    private fun TestScope.stepsOpen(routing: FakeRouting = FakeRouting { RouteAnswer.Found(route.copy(steps = steps), "s") }) =
+        controller(routing).also {
+            it.start("osm:node/1", kunsthaus, here)
+            advanceUntilIdle()
+            it.showSteps(true)
+        }
+
+    @Test
+    fun aTappedStepIsMarkedAndTheMapMovesToItOncePerTap() =
+        runTest {
+            val c = stepsOpen()
+            assertNull(c.directions.value?.markedStep)
+            assertNull(c.directions.value?.stepTapToMoveTo)
+            c.showStep(1)
+            val tapped = c.directions.value!!
+            assertEquals(steps[1], tapped.markedStep)
+            val tap = assertNotNull(tapped.stepTapToMoveTo)
+            c.mapMovedToStep(tap)
+            // Back from Settings the map stays where the user moved it since.
+            assertEquals(steps[1], c.directions.value?.markedStep)
+            assertNull(c.directions.value?.stepTapToMoveTo)
+            // The same step tapped again moves the map again.
+            c.showStep(1)
+            val again = assertNotNull(c.directions.value?.stepTapToMoveTo)
+            assertTrue(again > tap)
+            // A move for an older tap does not count for this one.
+            c.mapMovedToStep(tap)
+            assertEquals(again, c.directions.value?.stepTapToMoveTo)
+        }
+
+    @Test
+    fun closingTheStepsTakesTheTappedStepOffTheMap() =
+        runTest {
+            val c = stepsOpen()
+            c.showStep(2)
+            c.showSteps(false)
+            assertNull(c.directions.value?.markedStep)
+            assertNull(c.directions.value?.stepTapToMoveTo)
+            // Opened again, no step is marked until one is tapped.
+            c.showSteps(true)
+            assertNull(c.directions.value?.markedStep)
+            assertNull(c.directions.value?.stepTapToMoveTo)
+        }
+
+    @Test
+    fun anotherRouteHasNoTappedStep() =
+        runTest {
+            val c = stepsOpen()
+            c.showStep(1)
+            c.selectMode(TravelMode.Walk)
+            assertNull(c.directions.value?.markedStep)
+            advanceUntilIdle()
+            val walk = c.directions.value!!
+            assertTrue(walk.stepsShown)
+            assertEquals(steps, walk.shownSteps)
+            assertNull(walk.markedStep)
+            assertNull(walk.stepTapToMoveTo)
+        }
+
+    @Test
+    fun aStepTapOutsideTheOpenListDoesNothing() =
+        runTest {
+            val c = stepsOpen()
+            c.showStep(3)
+            c.showStep(-1)
+            assertNull(c.directions.value?.markedStep)
+            c.showSteps(false)
+            c.showStep(0)
+            assertNull(c.directions.value?.markedStep)
+            assertNull(c.directions.value?.stepTapToMoveTo)
+        }
+
+    @Test
+    fun aStepTappedBeforeTheRouteIsFittedKeepsTheMapAtTheStep() =
+        runTest {
+            val c = stepsOpen()
+            // Found with the sheet at its top: the route waits for room to be fitted.
+            assertNotNull(c.directions.value?.routeToFit)
+            c.showStep(1)
+            assertNull(c.directions.value?.routeToFit)
+            assertNotNull(c.directions.value?.stepTapToMoveTo)
         }
 }

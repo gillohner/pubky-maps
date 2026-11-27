@@ -1,18 +1,21 @@
 package to.pubky.maps.map
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import org.maplibre.compose.expressions.dsl.const
 import org.maplibre.compose.expressions.value.LineCap
 import org.maplibre.compose.expressions.value.LineJoin
+import org.maplibre.compose.layers.CircleLayer
 import org.maplibre.compose.layers.LineLayer
 import org.maplibre.compose.sources.GeoJsonData
 import org.maplibre.compose.sources.rememberGeoJsonSource
 import org.maplibre.spatialk.geojson.Feature
 import org.maplibre.spatialk.geojson.FeatureCollection
 import org.maplibre.spatialk.geojson.LineString
+import org.maplibre.spatialk.geojson.Point
 import org.maplibre.spatialk.geojson.Position
 import to.pubky.maps.links.GeoPoint
 
@@ -53,4 +56,23 @@ internal fun RouteLine(points: List<GeoPoint>) {
         cap = const(LineCap.Round),
         join = const(LineJoin.Round),
     )
+}
+
+/**
+ * The route step the user tapped in the list: a white dot ringed in the route's blue on the line,
+ * as Google Maps marks a step; apart from the red pin of the place at the route's end.
+ */
+@Composable
+internal fun RouteStepMark(point: GeoPoint) {
+    key(point) {
+        val source = rememberGeoJsonSource(GeoJsonData.Features(Point(Position(longitude = point.lon, latitude = point.lat))))
+        CircleLayer(
+            id = "route-step",
+            source = source,
+            radius = const(7.dp),
+            color = const(Color.White),
+            strokeColor = const(RouteCasing),
+            strokeWidth = const(3.dp),
+        )
+    }
 }

@@ -28,42 +28,55 @@ class ValhallaTest {
     @Test
     fun aRouteAnswerGivesItsStepsInOrder() {
         // The same answer, asked with turn instructions in English.
-        val steps = parseValhallaRoute(Fixtures.read("hauptbahnhof-kunsthaus.valhalla.json")).steps
+        val route = parseValhallaRoute(Fixtures.read("hauptbahnhof-kunsthaus.valhalla.json"))
+        // Each where its maneuver begins on the line (its begin_shape_index).
+        val at = listOf(0, 7, 12, 13, 36, 56, 65, 85, 93).map { route.points[it] }
         assertEquals(
             listOf(
-                RouteStep("Drive north.", Turn.Depart, 35.0),
-                RouteStep("Turn right onto Museumstrasse.", Turn.Right, 52.0),
-                RouteStep("Bear right onto Bahnhofquai.", Turn.SlightRight, 30.0),
-                RouteStep("Keep left to stay on Bahnhofquai.", Turn.KeepLeft, 406.0),
-                RouteStep("Turn left onto Rudolf-Brun-Brücke.", Turn.Left, 329.0),
-                RouteStep("Turn right onto Seilergraben.", Turn.Right, 205.0),
-                RouteStep("Bear right onto Hirschengraben.", Turn.SlightRight, 262.0),
-                RouteStep("Bear right onto Heimplatz.", Turn.SlightRight, 81.0),
-                RouteStep("Your destination is on the right.", Turn.Arrive, 0.0),
+                RouteStep("Drive north.", Turn.Depart, 35.0, at[0]),
+                RouteStep("Turn right onto Museumstrasse.", Turn.Right, 52.0, at[1]),
+                RouteStep("Bear right onto Bahnhofquai.", Turn.SlightRight, 30.0, at[2]),
+                RouteStep("Keep left to stay on Bahnhofquai.", Turn.KeepLeft, 406.0, at[3]),
+                RouteStep("Turn left onto Rudolf-Brun-Brücke.", Turn.Left, 329.0, at[4]),
+                RouteStep("Turn right onto Seilergraben.", Turn.Right, 205.0, at[5]),
+                RouteStep("Bear right onto Hirschengraben.", Turn.SlightRight, 262.0, at[6]),
+                RouteStep("Bear right onto Heimplatz.", Turn.SlightRight, 81.0, at[7]),
+                RouteStep("Your destination is on the right.", Turn.Arrive, 0.0, at[8]),
             ),
-            steps.map { it.copy(meters = round(it.meters)) },
+            route.steps.map { it.copy(meters = round(it.meters)) },
         )
+        assertEquals(route.points.last(), route.steps.last().at)
     }
 
     @Test
     fun stepsOfEveryLegFollowEachOtherAndOnesWithoutASentenceAreLeftOut() {
         val json =
             """{"trip":{"legs":[{"shape":"${encode(GeoPoint(1.0, 2.0), GeoPoint(1.5, 2.5))}","maneuvers":[""" +
-                """{"type":1,"instruction":"Walk east.","length":0.5},{"type":99,"instruction":"Take the gondola.","length":1.2},""" +
+                """{"type":1,"instruction":"Walk east.","length":0.5},""" +
+                """{"type":99,"instruction":"Take the gondola.","length":1.2,"begin_shape_index":1},""" +
                 """{"type":15,"instruction":" ","length":0.1}]},""" +
                 """{"shape":"${encode(
                     GeoPoint(1.5, 2.5),
                     GeoPoint(2.0, 3.0),
-                )}","maneuvers":[{"type":6,"instruction":"You have arrived."}]}],""" +
+                )}","maneuvers":[{"type":6,"instruction":"You have arrived.","begin_shape_index":1}]}],""" +
                 """"summary":{"time":60,"length":2.5}}}"""
+        // A step's index is into its own leg's line.
         assertEquals(
             listOf(
-                RouteStep("Walk east.", Turn.Depart, 500.0),
-                RouteStep("Take the gondola.", Turn.Straight, 1200.0),
-                RouteStep("You have arrived.", Turn.Arrive, 0.0),
+                RouteStep("Walk east.", Turn.Depart, 500.0, GeoPoint(1.0, 2.0)),
+                RouteStep("Take the gondola.", Turn.Straight, 1200.0, GeoPoint(1.5, 2.5)),
+                RouteStep("You have arrived.", Turn.Arrive, 0.0, GeoPoint(2.0, 3.0)),
             ),
             parseValhallaRoute(json).steps,
         )
+    }
+
+    @Test
+    fun aStepPastItsLegsLineIsAtTheLinesEnd() {
+        val json =
+            """{"trip":{"legs":[{"shape":"${encode(GeoPoint(1.0, 2.0), GeoPoint(1.5, 2.5))}","maneuvers":[""" +
+                """{"type":4,"instruction":"You have arrived.","begin_shape_index":7}]}],"summary":{"time":60,"length":2.5}}}"""
+        assertEquals(GeoPoint(1.5, 2.5), parseValhallaRoute(json).steps.single().at)
     }
 
     @Test
