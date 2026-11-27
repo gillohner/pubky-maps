@@ -420,8 +420,43 @@ class SearchControllerTest {
             c.mapMoved(firstPick)
             assertEquals(secondPick, c.state.value.pickToMoveTo)
             c.mapMoved(secondPick)
-            c.mapMoved(firstPick)
             assertNull(c.state.value.pickToMoveTo)
+        }
+
+    @Test
+    fun leavingTheCardLeavesNothingToMoveToAndEveryWayOfPickingIsANewPick() =
+        runTest {
+            val c = controller()
+            c.onQueryChange("kunsthaus", area)
+            advanceUntilIdle()
+            val museum =
+                c.state.value.results
+                    .first()
+            c.select(museum)
+            val pick = assertNotNull(c.state.value.pickToMoveTo)
+            // Back to the results before the map moved: nothing left to move to (the map stops its move).
+            assertTrue(c.back())
+            assertNull(c.state.value.pickToMoveTo)
+            c.mapMoved(pick)
+
+            // Clearing the bar keeps the count, so the next pick is new.
+            c.clearQuery()
+            assertEquals(pick, c.state.value.picks)
+            // A typed point opens at once on Search.
+            c.onQueryChange("47.37, 8.54", area)
+            c.submit(area)
+            val typedPoint = assertNotNull(c.state.value.pickToMoveTo)
+            assertTrue(typedPoint > pick)
+            c.mapMoved(typedPoint)
+            // A lone result opens on Search.
+            c.close()
+            search.fixture = "conditorei-schober"
+            c.onQueryChange("conditorei schober", area)
+            c.submit(area)
+            advanceUntilIdle()
+            assertEquals(SearchMode.Selected, c.state.value.mode)
+            val lone = assertNotNull(c.state.value.pickToMoveTo)
+            assertTrue(lone > typedPoint)
         }
 
     @Test

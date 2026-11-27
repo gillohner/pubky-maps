@@ -364,9 +364,10 @@ fun MapRoute(
     }
     // A picked search result: the map moves to it, the same way, once per pick (SearchState.pickToMoveTo):
     // going back to its card or coming back from Settings keeps where the user has moved the map since.
-    // Marked as moved also when the move is cut short (the user moves the map, Settings opens during
-    // the wait for the page's room): moving back later would undo the user's own move.
-    LaunchedEffect(searchState?.picks) {
+    // Leaving the card (Back, the bar, a pin, a link) stops a move still waiting for the page's room.
+    // A move cut short (the card left, Settings opened or the screen rotated during the wait or the
+    // animation) counts as done: moving later, when the user may have moved the map, would undo that.
+    LaunchedEffect(searchState?.pickToMoveTo) {
         val pick = searchState?.pickToMoveTo ?: return@LaunchedEffect
         val picked = selected?.place ?: return@LaunchedEffect
         try {

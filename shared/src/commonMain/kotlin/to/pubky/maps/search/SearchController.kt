@@ -59,8 +59,7 @@ data class SearchState(
 ) {
     /**
      * The pick the map still has to move to, once: the shown place's, until the map has moved for it.
-     * Going back to its card from the bar, or coming back from Settings, is no new pick and keeps
-     * where the user has moved the map since.
+     * Showing the same pick's card again (Back from the bar) is no new pick.
      */
     val pickToMoveTo: Int? get() = picks.takeIf { mode == SearchMode.Selected && selected != null && it != mapMovedFor }
 
