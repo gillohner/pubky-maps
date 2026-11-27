@@ -133,6 +133,7 @@ class WriteController(
     private var phoneData = PhoneData()
     private var labels: Map<String, String> = emptyMap()
     private var points: Map<String, GeoPoint> = emptyMap()
+    private var summaries: Map<String, String> = emptyMap()
     private var viewer: String? = null
     private var listsLoaded = false
 
@@ -336,7 +337,7 @@ class WriteController(
         enqueue {
             keepPointPage(target)
             if (settings().storage(DataKind.SavedPlaces) == StorageChoice.PhoneOnly) {
-                val saved = PhoneSaved(normalize(target.uri), target.name, now(), target.point)
+                val saved = PhoneSaved(normalize(target.uri), target.name, now(), target.point, target.summary)
                 io { phone.save(saved) }
                 phoneData = phoneData.copy(saved = listOf(saved) + phoneData.saved.filterNot { it.place == saved.place })
                 publish()
@@ -348,10 +349,11 @@ class WriteController(
 
     /**
      * The page of the place whose links are [links] shows it as [target]: a place the user saved or
-     * tagged that has no name or no point on this phone (saved on another device, or before the last
-     * sign-out) keeps [target]'s, so the Saved and Account pages name it and the map shows its badge.
-     * Points are kept for saved places only; a name or point already kept stays; other places keep
-     * nothing.
+     * tagged that has no name, point or summary on this phone (saved on another device, before the last
+     * sign-out, or before its card loaded) keeps [target]'s, so the Saved and Account pages name it, the
+     * Saved page says what and where it is and the map shows its badge. Points are kept for saved
+     * places only, summaries for saved places and (signed in) places in the user's lists; a name,
+     * point or summary already kept stays; other places keep nothing.
      */
     fun remember(
         target: WriteTarget,
@@ -361,10 +363,12 @@ class WriteController(
         val mine = own.forPlace(links)
         val name = target.name
         val point = target.point
+        val summary = target.summary
         var changed = false
         mine.saved.filter { it.kept == Kept.Phone }.forEach { entry ->
             val kept = phoneData.saved.firstOrNull { normalize(it.place) == entry.place } ?: return@forEach
-            val filled = kept.copy(name = kept.name ?: name, point = kept.point ?: entry.point ?: point)
+            val filled =
+                kept.copy(name = kept.name ?: name, point = kept.point ?: entry.point ?: point, summary = kept.summary ?: summary)
             if (filled != kept) {
                 io { phone.save(filled) }
                 phoneData = phoneData.copy(saved = phoneData.saved.map { if (it == kept) filled else it })
@@ -391,6 +395,14 @@ class WriteController(
                 homeSaved.filter { it.point == null }.map { it.place }.distinct().forEach { place ->
                     io { store.putPoint(place, point) }
                     points = points + (place to point)
+                    changed = true
+                }
+            }
+            if (summary != null) {
+                val listed = mine.lists.flatMap { list -> list.items.filter { it in links } }
+                (homeSaved.map { it.place } + listed).distinct().filter { it !in summaries }.forEach { place ->
+                    io { store.putSummary(place, summary) }
+                    summaries = summaries + (place to summary)
                     changed = true
                 }
             }
@@ -580,6 +592,12 @@ class WriteController(
             io { store.putPoint(place, point) }
             points = points + (place to point)
         }
+        // The first summary kept stays, as in [remember]: a page with less to say (offline, no card) does not replace it.
+        val summary = target.summary
+        if (summary != null && place !in summaries) {
+            io { store.putSummary(place, summary) }
+            summaries = summaries + (place to summary)
+        }
         publish()
         return true
     }
@@ -610,6 +628,7 @@ class WriteController(
                 lists = io { store.lists() }
                 labels = io { store.labels() }
                 points = io { store.points() }
+                summaries = io { store.summaries() }
                 // Photos of writes that are no longer queued (sent, or dropped by a sign-out) are not needed.
                 io { files.deleteAllBut(queue.mapNotNull { (it.op as? WriteOp.Photo)?.file }.toSet()) }
             } else {
@@ -617,6 +636,7 @@ class WriteController(
                 lists = emptyList()
                 labels = emptyMap()
                 points = emptyMap()
+                summaries = emptyMap()
             }
         }
         // Signed out, the account's cache and the outbox in it are gone (sign-out, or a start with no
@@ -877,6 +897,7 @@ class WriteController(
                 confirmed = confirmed,
                 labels = labels,
                 points = points,
+                summaries = summaries,
                 normalize = ::normalize,
             ).copy(
                 listsLoaded = listsLoaded,

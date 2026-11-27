@@ -35,6 +35,20 @@ val PlacePageState.address: String? get() = streetAddress ?: place.locality ?: l
 val PlacePageState.streetAddress: String? get() = place.address ?: card?.address
 
 /**
+ * What and where the place is, "Café · Napfgasse 4, 8001 Zürich" as a search result says it: kept
+ * with a save for the line under its name on the Saved page. Null while the card loads or, with no
+ * address yet, the offline areas' district and town (either may say more, and the first summary kept
+ * stays), and when the page knows neither.
+ */
+val PlacePageState.summary: String?
+    get() =
+        if (cardLoading || (localityLoading && address == null)) {
+            null
+        } else {
+            listOfNotNull(categoryText(), address).joinToString(" · ").ifEmpty { null }
+        }
+
+/**
  * The line under what the place is: its address, else its coordinates (unless the title is them),
  * and the app a link came from ("From a Google Maps link"), as on the place card.
  */

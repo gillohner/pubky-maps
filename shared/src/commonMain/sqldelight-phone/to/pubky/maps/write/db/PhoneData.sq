@@ -8,7 +8,10 @@ CREATE TABLE saved_place (
     saved_at INTEGER NOT NULL,
     -- Where the place is (WGS84), for its pin on the map; null when the app did not know it.
     lat REAL,
-    lon REAL
+    lon REAL,
+    -- What and where it is ("Café · Napfgasse 4, 8001 Zürich"), as its page said when it was saved;
+    -- null when the page knew neither.
+    summary TEXT
 );
 
 -- One JSON OwnList per list.
@@ -34,7 +37,7 @@ savedPlaces:
 SELECT * FROM saved_place ORDER BY saved_at DESC;
 
 putSavedPlace:
-INSERT OR REPLACE INTO saved_place(place, name, saved_at, lat, lon) VALUES (?, ?, ?, ?, ?);
+INSERT OR REPLACE INTO saved_place(place, name, saved_at, lat, lon, summary) VALUES (?, ?, ?, ?, ?, ?);
 
 deleteSavedPlace:
 DELETE FROM saved_place WHERE place = ?;

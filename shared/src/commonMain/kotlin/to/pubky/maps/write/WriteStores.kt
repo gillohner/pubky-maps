@@ -15,7 +15,7 @@ private val storeJson =
 
 /**
  * The signed-in user's writes on this phone: the outbox, their lists as last read, the posts known
- * not to be lists, and the names and points of places they wrote about. It lives in the account cache's
+ * not to be lists, and the names, points and summaries of places they wrote about. It lives in the account cache's
  * database, so sign-out deletes it with the rest of the account. Calls block on disk.
  */
 interface WriteStore {
@@ -55,6 +55,14 @@ interface WriteStore {
     fun putPoint(
         place: String,
         point: GeoPoint,
+    )
+
+    /** What and where the places the user wrote about are ("Café · Napfgasse 4, 8001 Zürich"), by place as the core spells it. */
+    fun summaries(): Map<String, String>
+
+    fun putSummary(
+        place: String,
+        summary: String,
     )
 }
 
@@ -124,6 +132,15 @@ class SqlWriteStore(
     ) {
         queries.putPlacePoint(place, point.lat, point.lon)
     }
+
+    override fun summaries(): Map<String, String> = queries.placeSummaries().executeAsList().associate { it.place to it.summary }
+
+    override fun putSummary(
+        place: String,
+        summary: String,
+    ) {
+        queries.putPlaceSummary(place, summary)
+    }
 }
 
 /** What the user keeps on this phone only. Calls block on disk. */
@@ -158,8 +175,8 @@ class SqlPhoneStore(
         PhoneData(
             saved =
                 queries
-                    .savedPlaces { place, name, savedAt, lat, lon ->
-                        PhoneSaved(place, name, savedAt, if (lat != null && lon != null) geoPointOrNull(lat, lon) else null)
+                    .savedPlaces { place, name, savedAt, lat, lon, summary ->
+                        PhoneSaved(place, name, savedAt, if (lat != null && lon != null) geoPointOrNull(lat, lon) else null, summary)
                     }.executeAsList(),
             lists =
                 queries.lists().executeAsList().mapNotNull {
@@ -169,7 +186,7 @@ class SqlPhoneStore(
         )
 
     override fun save(saved: PhoneSaved) {
-        queries.putSavedPlace(saved.place, saved.name, saved.savedAt, saved.point?.lat, saved.point?.lon)
+        queries.putSavedPlace(saved.place, saved.name, saved.savedAt, saved.point?.lat, saved.point?.lon, saved.summary)
     }
 
     override fun unsave(place: String) {

@@ -1,0 +1,7 @@
+-- Version 4: what the places the user wrote about are and where ("Café · Napfgasse 4, 8001 Zürich"),
+-- for the lines under their names on the Saved page.
+
+CREATE TABLE place_summary (
+    place TEXT NOT NULL PRIMARY KEY,
+    summary TEXT NOT NULL
+);

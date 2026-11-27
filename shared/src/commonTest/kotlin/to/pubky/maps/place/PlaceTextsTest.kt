@@ -76,6 +76,28 @@ class PlaceTextsTest {
     }
 
     @Test
+    fun aSaveKeepsWhatAndWhereThePlaceIsOnceItsCardIsNoLongerLoading() {
+        val place =
+            PlaceRef(
+                "https://www.openstreetmap.org/node/270803095",
+                "Conditorei Schober",
+                GeoPoint(47.3722, 8.5446),
+                null,
+                PlaceSource.Photon,
+                address = "Napfgasse 4, 8001 Zürich",
+                category = "Café",
+            )
+        // The card may name it otherwise: nothing is kept while it loads.
+        assertNull(PlacePageState(place).summary)
+        assertEquals("Café · Napfgasse 4, 8001 Zürich", PlacePageState(place, loading = emptySet()).summary)
+        // No card came (Pinakes down, or no Pubky place): the offline map's district and town.
+        val bare = PlaceRef("https://www.openstreetmap.org/node/1", "Bench", GeoPoint(47.37, 8.54), null, PlaceSource.Map)
+        assertEquals("Hottingen, Zürich", PlacePageState(bare, loading = emptySet(), locality = "Hottingen, Zürich").summary)
+        // A page that knows neither what nor where keeps nothing.
+        assertNull(PlacePageState(bare, loading = emptySet()).summary)
+    }
+
+    @Test
     fun theDetailsShowTheCoordinatesOnlyWhenThePointIsThePlace() {
         val point = GeoPoint(47.3778612, 8.5403200)
         val place = PlaceRef("https://www.openstreetmap.org/node/1", "Kunsthaus", point, null, PlaceSource.Map)

@@ -116,6 +116,13 @@ CREATE TABLE place_point (
     lon REAL NOT NULL
 );
 
+-- What the places the user wrote about are and where ("Café · Napfgasse 4, 8001 Zürich"), as their
+-- page said when the user wrote: the line under their names on the Saved page.
+CREATE TABLE place_summary (
+    place TEXT NOT NULL PRIMARY KEY,
+    summary TEXT NOT NULL
+);
+
 placeLabels:
 SELECT * FROM place_label;
 
@@ -133,3 +140,12 @@ INSERT OR REPLACE INTO place_point(place, lat, lon) VALUES (?, ?, ?);
 
 deletePlacePoints:
 DELETE FROM place_point;
+
+placeSummaries:
+SELECT * FROM place_summary;
+
+putPlaceSummary:
+INSERT OR REPLACE INTO place_summary(place, summary) VALUES (?, ?);
+
+deletePlaceSummaries:
+DELETE FROM place_summary;

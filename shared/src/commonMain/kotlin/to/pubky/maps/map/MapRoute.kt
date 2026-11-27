@@ -96,6 +96,7 @@ import to.pubky.maps.place.PlaceSheet
 import to.pubky.maps.place.PlaceSource
 import to.pubky.maps.place.PlaceWriteActions
 import to.pubky.maps.place.SheetStop
+import to.pubky.maps.place.summary
 import to.pubky.maps.routing.DirectionsUi
 import to.pubky.maps.routing.RouteStatus
 import to.pubky.maps.search.RecentSearch
@@ -957,9 +958,19 @@ private fun rememberPlacePage(
  */
 internal val PlacePageState.placePoint: GeoPoint? get() = place.point?.takeIf { place.pinned } ?: card?.point
 
-/** The page's place as the user's writes name it: its link, its name, where it is, whether it is a point of its own. */
+/**
+ * The page's place as the user's writes name it: its link, its name, where it is, whether it is a point
+ * of its own, what and where it is in words.
+ */
 internal val PlacePageState.writeTarget: WriteTarget
-    get() = WriteTarget(place.uri, card?.name ?: place.name, placePoint, pointPage = place.source == PlaceSource.Coordinates)
+    get() =
+        WriteTarget(
+            place.uri,
+            card?.name ?: place.name,
+            placePoint,
+            pointPage = place.source == PlaceSource.Coordinates,
+            summary = summary,
+        )
 
 /** Every link of [page]'s place, spelled as the core stores places: the keys of the user's own data about it. */
 private fun ownLinks(
@@ -968,9 +979,10 @@ private fun ownLinks(
 ): Set<String> = PlacePageController.placeLinks(page.place, page.card).map(writes::normalize).toSet()
 
 /**
- * A place the user saved or tagged keeps the name and point its page shows, when the phone has none
- * for it ([WriteController.remember] decides; the first name kept stays); asked again when the page
- * or the user's entries for it change, so a page with no name before its card loads keeps the card's.
+ * A place the user saved, tagged or listed keeps the name, point and summary its page shows, when the phone has
+ * none for it ([WriteController.remember] decides; the first one kept stays); asked again when the page
+ * or the user's entries for it change, so a page with no name or summary before its card loads keeps
+ * the card's.
  */
 @Composable
 private fun RememberOwnPlace(
@@ -981,7 +993,7 @@ private fun RememberOwnPlace(
     val target = page.writeTarget
     val links = ownLinks(page, writes)
     val mine = own.forPlace(links)
-    LaunchedEffect(writes, target, links, mine.saved, mine.tags) { writes.remember(target, links) }
+    LaunchedEffect(writes, target, links, mine.saved, mine.tags, mine.lists) { writes.remember(target, links) }
 }
 
 /** The place page's writes: what the user has about [page]'s place (by every link of it) and what they can do. */

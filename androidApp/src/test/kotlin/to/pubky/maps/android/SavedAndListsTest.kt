@@ -28,8 +28,8 @@ import to.pubky.maps.write.SavedScreenState
 
 /**
  * The Saved page names places the way the user knows them (a named place shows no OpenStreetMap id
- * or link) and tells two places of the same name apart by where they are, and the list page shows
- * where a new list goes beside the button that makes it.
+ * or link), says what and where each is under its name and tells two places of the same name apart
+ * by where they are; the list page shows where a new list goes beside the button that makes it.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w412dp-h915dp")
@@ -83,6 +83,55 @@ class SavedAndListsTest {
         compose.onAllNodesWithText("Lindenhof").assertCountEquals(2)
         compose.onAllNodesWithText("OpenStreetMap node 270803095").assertCountEquals(0)
         compose.onAllNodesWithText("maps.app.goo.gl/x1").assertCountEquals(0)
+    }
+
+    @Test
+    fun aSavedPlaceSaysWhatAndWhereItIsUnderItsName() {
+        val bahnhofbruecke = "https://www.openstreetmap.org/node/1"
+        val bellevue = "https://www.openstreetmap.org/node/2"
+        compose.setContent {
+            PubkyMapsTheme(darkTheme = false) {
+                SavedScreen(
+                    state =
+                        SavedScreenState(
+                            places =
+                                listOf(
+                                    SavedRow(osm, "Conditorei Schober", Kept.Private, summary = "Café · Napfgasse 4, 8001 Zürich"),
+                                    SavedRow(
+                                        bahnhofbruecke,
+                                        "Coop",
+                                        Kept.Private,
+                                        point = GeoPoint(47.37586, 8.54253),
+                                        summary = "Supermarket · Bahnhofbrücke 1",
+                                    ),
+                                    SavedRow(
+                                        bellevue,
+                                        "Coop",
+                                        Kept.Phone,
+                                        point = GeoPoint(47.36722, 8.54493),
+                                        summary = "Supermarket · Theaterstrasse 2",
+                                    ),
+                                ),
+                            lists =
+                                listOf(
+                                    OwnList("phone:1", Kept.Phone, "Coffee in Zürich", listOf(osm), names = mapOf(osm to "Schober")),
+                                ),
+                            summaries = mapOf(osm to "Café · Napfgasse 4, 8001 Zürich"),
+                            signedIn = true,
+                        ),
+                    onOpen = { _, _ -> },
+                    onBack = {},
+                )
+            }
+        }
+        compose.onNodeWithText("Café · Napfgasse 4, 8001 Zürich").assertExists()
+        // Two Coops on different streets are told apart by their summaries: no point needed.
+        compose.onNodeWithText("Supermarket · Bahnhofbrücke 1").assertExists()
+        compose.onNodeWithText("Supermarket · Theaterstrasse 2").assertExists()
+        compose.onAllNodesWithText("47.37586, 8.54253", substring = true).assertCountEquals(0)
+        compose.onNodeWithText("Coffee in Zürich").performClick()
+        // The list entry says it too.
+        compose.onAllNodesWithText("Café · Napfgasse 4, 8001 Zürich").assertCountEquals(2)
     }
 
     @Test

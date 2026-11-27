@@ -489,9 +489,16 @@ class WriteScreenshotTest {
                 SavedScreenState(
                     places =
                         listOf(
-                            SavedRow(osm, "Conditorei Schober", Kept.Private),
-                            SavedRow("https://maps.app.goo.gl/x1", "Lindenhof", Kept.Private, pending = true),
+                            SavedRow(osm, "Conditorei Schober", Kept.Private, summary = "Café · Napfgasse 4, 8001 Zürich"),
+                            SavedRow(
+                                "https://maps.app.goo.gl/x1",
+                                "Lindenhof",
+                                Kept.Private,
+                                pending = true,
+                                summary = "Park · Altstadt, Zürich",
+                            ),
                             SavedRow("geo:47.36667,8.55", null, Kept.Phone),
+                            // Saved on another device, before summaries: told apart by their points.
                             SavedRow("https://www.openstreetmap.org/node/1", "Coop", Kept.Private, point = GeoPoint(47.37586, 8.54253)),
                             SavedRow("https://www.openstreetmap.org/node/2", "Coop", Kept.Phone, point = GeoPoint(47.36722, 8.54493)),
                         ),

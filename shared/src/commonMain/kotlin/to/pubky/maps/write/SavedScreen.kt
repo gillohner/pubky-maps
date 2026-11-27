@@ -42,8 +42,10 @@ data class SavedRow(
     val name: String?,
     val kept: Kept,
     val pending: Boolean = false,
-    /** Where it is, when known: told under its name when another place has the same name. */
+    /** Where it is, when known: told under its name when another place has the same name and summary. */
     val point: GeoPoint? = null,
+    /** What and where it is ("Café · Napfgasse 4, 8001 Zürich"), told under its name; null when not known. */
+    val summary: String? = null,
 )
 
 /** What the Saved screen shows. */
@@ -52,6 +54,8 @@ data class SavedScreenState(
     val lists: List<OwnList>,
     /** Names of places, for list entries. */
     val names: Map<String, String> = emptyMap(),
+    /** What and where places are ([SavedRow.summary]), for list entries. */
+    val summaries: Map<String, String> = emptyMap(),
     /** The homeserver is being read again. */
     val refreshing: Boolean = false,
     /** Signed in: saved places and lists on the homeserver are shown too. */
@@ -72,7 +76,7 @@ fun SavedScreen(
     onBack: () -> Unit,
 ) {
     var openList by rememberSaveable { mutableStateOf<String?>(null) }
-    val sameNamedPlaces = sharedNames(state.places.map { it.place to it.name })
+    val sameNamedPlaces = sharedNames(state.places.map { it.place to sameLine(it.name, it.summary) })
     val points = state.places.mapNotNull { row -> row.point?.let { row.place to it } }.toMap()
     Scaffold(
         topBar = {
@@ -92,8 +96,9 @@ fun SavedScreen(
                     }
                 }
                 items(state.places, key = { "place:${it.kept}:${it.place}" }) { row ->
-                    val where = whereText(row.place, row.point ?: points[row.place]).takeIf { sameName(row.name) in sameNamedPlaces }
-                    PlaceRow(row, where, onOpen)
+                    val where =
+                        whereText(row.place, row.point ?: points[row.place]).takeIf { sameLine(row.name, row.summary) in sameNamedPlaces }
+                    PlaceRow(row, savedLine(row.summary, where), onOpen)
                 }
                 item(key = "lists-title") { Title("Your lists") }
                 if (state.lists.isEmpty()) {
@@ -122,16 +127,17 @@ fun SavedScreen(
                     }
                     if (openList == list.uri) {
                         val names = list.items.associateWith { list.names[it] ?: state.names[it] }
-                        val sameNamedEntries = sharedNames(names.toList())
+                        val sameNamedEntries = sharedNames(list.items.map { it to sameLine(names[it], state.summaries[it]) })
                         items(list.items, key = { "list:${list.uri}:$it" }) { place ->
                             val name = names[place]
+                            val summary = state.summaries[place]
+                            val where = whereText(place, points[place]).takeIf { sameLine(name, summary) in sameNamedEntries }
+                            val line = savedLine(summary, where)
                             ListItem(
                                 headlineContent = { Text(name ?: placeText(place), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                 supportingContent =
-                                    if (sameName(name) in sameNamedEntries) {
-                                        { Text(whereText(place, points[place]), maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                                    } else {
-                                        null
+                                    line?.let {
+                                        { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                                     },
                                 modifier = Modifier.padding(start = 40.dp).clickable { onOpen(place, name) },
                             )
@@ -151,15 +157,15 @@ fun SavedScreen(
 @Composable
 private fun PlaceRow(
     row: SavedRow,
-    where: String?,
+    line: String?,
     onOpen: (place: String, name: String?) -> Unit,
 ) {
     ListItem(
         headlineContent = { Text(row.name ?: placeText(row.place), maxLines = 1, overflow = TextOverflow.Ellipsis) },
         supportingContent = {
             Column {
-                // Above the badge, as a map app's saved list puts a place's address under its name.
-                if (where != null) Text(where, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                // Above the badge, as a map app's saved list puts what and where a place is under its name.
+                if (line != null) Text(line, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     KeptBadge(row.kept)
                     if (row.pending) Text("Not sent yet", maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -208,8 +214,27 @@ internal fun sharedNames(places: List<Pair<String, String?>>): Set<String> =
 internal fun sameName(name: String?): String? = name?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
 
 /**
- * Where a place is, for one whose name another place shares: its point ("47.37689, 8.54169"), else
- * its link in words. Saved places store no address, and the point is what tells two Coops apart.
+ * A row's name and summary as the eye compares two rows (null for a row without a name, which shows its
+ * link): two Coops whose summaries name different streets are told apart by them; with the same
+ * summary or none, by their points.
+ */
+internal fun sameLine(
+    name: String?,
+    summary: String?,
+): String? = sameName(name)?.let { named -> sameName(summary)?.let { "$named\n$it" } ?: named }
+
+/**
+ * The line under a row's name: what and where the place is ("Café · Napfgasse 4, 8001 Zürich"), then
+ * [where] when the row needs it to be told apart from a same-named one; null when there is neither.
+ */
+internal fun savedLine(
+    summary: String?,
+    where: String?,
+): String? = listOfNotNull(summary, where).joinToString(" · ").ifEmpty { null }
+
+/**
+ * Where a place is, for one whose name and summary another place shares: its point ("47.37689,
+ * 8.54169"), else its link in words. The point is what tells two Coops with no stored address apart.
  */
 internal fun whereText(
     place: String,
