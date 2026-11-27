@@ -1189,8 +1189,7 @@ private fun ListsSection(
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text(list.name ?: "A collection", style = MaterialTheme.typography.bodyLarge)
                 val by = if (list.mine) "Your collection" else "By ${personName(list.author, people[list.author])}"
-                val places = list.itemCount?.let { if (it == 1) "1 place" else "$it places" }
-                SmallText(listOfNotNull(by, places).joinToString(" · "))
+                SmallText(placeListLine(by, list.itemCount))
             }
         }
         if (count > others.size + ownLists.size) {

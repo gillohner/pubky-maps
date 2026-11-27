@@ -174,6 +174,22 @@ fun dateText(date: LocalDate): String = "${date.day} ${MONTHS[date.month.ordinal
 fun savedText(at: LocalDateTime): String = "${at.date.day} ${MONTHS[at.date.month.ordinal]}, ${clock(at.hour * 60 + at.minute)}"
 
 /**
+ * "By Anna · 31 places" under a collection that holds the place. No count when it is unknown or 0:
+ * Pinakes lists the collection under this place, so 0 means none of the items Nexus returned passes
+ * the core's place rule (the two services disagree, or the item is a link the rule does not take),
+ * and "0 places" would contradict the section the line is in.
+ */
+fun placeListLine(
+    by: String,
+    itemCount: Int?,
+): String =
+    when (itemCount) {
+        null, 0 -> by
+        1 -> "$by · 1 place"
+        else -> "$by · $itemCount places"
+    }
+
+/**
  * The "Also on" links worth a row: one Wikipedia (the phone's language, else English), every other
  * service once, not the link the page is about, and not Wikidata's "Official website" when the
  * details already have a website row ([hasWebsite]).
