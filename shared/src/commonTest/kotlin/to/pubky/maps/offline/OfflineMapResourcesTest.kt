@@ -16,6 +16,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.IOException
 import org.maplibre.compose.resource.MapResourceError
+import org.maplibre.compose.resource.MapResourceKind
 import org.maplibre.compose.resource.MapResourceLoad
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -35,11 +36,13 @@ class OfflineMapResourcesTest {
             override fun now() = now
         }
     private val tile = "https://tiles.example.org/planet/14/8580/5738.pbf"
+    private val style = "https://tiles.example.org/styles/liberty"
 
     private fun resources(
         downloading: Boolean = true,
         engine: MockEngine,
         onClientMade: () -> Unit = {},
+        offlineStyles: Set<String> = setOf(style),
         fetchedNewData: () -> Unit = {},
     ) = OfflineMapResources(
         {
@@ -52,6 +55,7 @@ class OfflineMapResourcesTest {
         downloading = { downloading },
         clock = clock,
         fetchedNewData = fetchedNewData,
+        keepsCopy = { it in offlineStyles },
     )
 
     @Test
@@ -60,7 +64,8 @@ class OfflineMapResourcesTest {
             var made = 0
             val resources = resources(engine = MockEngine { respond("") }, onClientMade = { made++ })
             // Set up at app start and asked about every request of the map: no client yet.
-            assertTrue(resources.accepts(tile))
+            assertTrue(resources.accepts(tile, MapResourceKind.Tile))
+            assertTrue(resources.accepts(style, MapResourceKind.Style))
             assertEquals(0, made)
             resources.load(offline = true, url = tile)
             resources.load(offline = false, url = tile)
@@ -82,12 +87,135 @@ class OfflineMapResourcesTest {
         }
 
     @Test
-    fun takesOverRequestsOnlyWhileADownloadRuns() {
+    fun takesOverTheMapsStylesAlwaysAndEveryOtherRequestOnlyWhileADownloadRuns() {
         val engine = MockEngine { respond("") }
-        assertTrue(resources(downloading = true, engine = engine).accepts(tile))
-        assertFalse(resources(downloading = true, engine = engine).accepts("asset://styles/local.json"))
-        assertFalse(resources(downloading = false, engine = engine).accepts(tile))
+        val downloading = resources(downloading = true, engine = engine)
+        val idle = resources(downloading = false, engine = engine)
+        for (kind in listOf(MapResourceKind.Tile, MapResourceKind.Source, MapResourceKind.Glyphs, MapResourceKind.SpriteImage)) {
+            assertTrue(downloading.accepts(tile, kind), "$kind while downloading")
+            assertFalse(idle.accepts(tile, kind), "$kind without a download")
+        }
+        assertTrue(idle.accepts(style, MapResourceKind.Style))
+        assertTrue(idle.accepts("http://127.0.0.1:18493/light.json", MapResourceKind.Style))
+        // Only what comes from a server.
+        assertFalse(downloading.accepts("asset://styles/local.json", MapResourceKind.Style))
+        assertFalse(idle.accepts("asset://styles/local.json", MapResourceKind.Style))
     }
+
+    /** A server that cannot answer, in each way: no connection to it, a server error, too busy. */
+    private fun unreachable(asked: () -> Unit = {}): Map<String, MockEngine> =
+        mapOf(
+            "no connection" to
+                MockEngine {
+                    asked()
+                    throw IOException("Failed to connect to tiles.example.org")
+                },
+            "502" to
+                MockEngine {
+                    asked()
+                    respond("", HttpStatusCode.BadGateway)
+                },
+            "429" to
+                MockEngine {
+                    asked()
+                    respond("", HttpStatusCode.TooManyRequests)
+                },
+        )
+
+    @Test
+    fun anOfflineAreasExpiredStyleWhoseServerCannotBeReachedKeepsTheCopyTheMapDrew() =
+        runTest {
+            // OpenFreeMap's style a day after it was fetched (max-age=86400); MapLibre gave the map
+            // the expired copy and asks the server whether it changed.
+            val modified = Instant.parse("2026-11-22T18:54:46Z")
+            val expired = now - 1.hours
+            var asked = 0
+            for ((way, engine) in unreachable { asked++ }) {
+                val load =
+                    resources(downloading = false, engine = engine).load(
+                        offline = false,
+                        url = style,
+                        priorModified = modified,
+                        priorExpires = expired,
+                    )
+                // Unchanged with its own dates: still expired, so the next load asks again.
+                val kept = assertIs<MapResourceLoad.NotModified>(load, way)
+                assertEquals(modified, kept.modified)
+                assertEquals(expired, kept.expires)
+            }
+            assertEquals(3, asked)
+            // An etag alone says MapLibre has a copy too.
+            for ((way, engine) in unreachable()) {
+                val load = resources(engine = engine).load(offline = false, url = style, priorEtag = "W/\"abc\"")
+                assertIs<MapResourceLoad.NotModified>(load, way)
+            }
+        }
+
+    @Test
+    fun anOfflineAreasStyleHeldBackToRevalidateIsGivenFromTheCacheWhenItsServerCannotBeReached() =
+        runTest {
+            // A style served must-revalidate: MapLibre gives the map no copy before the server said
+            // it is unchanged, and hands it to the request instead.
+            val cached = "{\"version\": 8}".encodeToByteArray()
+            val modified = Instant.parse("2026-11-22T18:54:46Z")
+            for ((way, engine) in unreachable()) {
+                val load =
+                    resources(downloading = false, engine = engine).load(
+                        offline = false,
+                        url = style,
+                        priorEtag = "W/\"abc\"",
+                        priorModified = modified,
+                        priorData = cached,
+                    )
+                val copy = assertIs<MapResourceLoad.Bytes>(load, way)
+                assertContentEquals(cached, copy.bytes)
+                assertEquals("W/\"abc\"", copy.etag)
+                assertTrue(copy.mustRevalidate)
+                assertEquals(modified, copy.modified)
+                assertEquals(null, copy.expires)
+            }
+        }
+
+    @Test
+    fun aServersAnswerAboutTheResourceAndARequestWithoutACopyStillFail() =
+        runTest {
+            val cached = "{\"version\": 8}".encodeToByteArray()
+
+            suspend fun load(
+                status: HttpStatusCode,
+                offline: Boolean = false,
+                withCopy: Boolean = true,
+            ) = resources(engine = MockEngine { respond("", status) }).load(
+                offline = offline,
+                url = style,
+                priorEtag = if (withCopy) "W/\"abc\"" else null,
+                priorExpires = if (withCopy) now - 1.hours else null,
+                priorData = if (withCopy) cached else null,
+            )
+            // The server says the style is gone or refused: the map hands over to the next server.
+            assertEquals(MapResourceError.NotFound, assertIs<MapResourceLoad.Failed>(load(HttpStatusCode.NotFound)).reason)
+            assertEquals(MapResourceError.Other, assertIs<MapResourceLoad.Failed>(load(HttpStatusCode.Forbidden)).reason)
+            // Not an offline area's style: the map hands over to the next server, whose tiles it can fetch.
+            val online =
+                resources(engine = MockEngine { respond("", HttpStatusCode.BadGateway) }, offlineStyles = emptySet()).load(
+                    offline = false,
+                    url = style,
+                    priorEtag = "W/\"abc\"",
+                    priorExpires = now - 1.hours,
+                    priorData = cached,
+                )
+            assertEquals(MapResourceError.Server, assertIs<MapResourceLoad.Failed>(online).reason)
+            // Nothing cached to keep.
+            assertEquals(
+                MapResourceError.Server,
+                assertIs<MapResourceLoad.Failed>(load(HttpStatusCode.BadGateway, withCopy = false)).reason,
+            )
+            val offline = MockEngine { throw IOException("Unable to resolve host") }
+            val none = resources(engine = offline).load(offline = false, url = style)
+            assertEquals(MapResourceError.Connection, assertIs<MapResourceLoad.Failed>(none).reason)
+            // A download's request is not the map's: it fails as before.
+            assertEquals(MapResourceError.Server, assertIs<MapResourceLoad.Failed>(load(HttpStatusCode.BadGateway, offline = true)).reason)
+        }
 
     @Test
     fun aTileComesWithItsCacheHeadersAndTheAppsUserAgent() =
@@ -136,6 +264,51 @@ class OfflineMapResourcesTest {
             assertEquals(Instant.parse("2036-11-21T02:54:58Z"), assertIs<MapResourceLoad.NotModified>(load).expires)
             assertEquals("W/\"abc\"", ifNoneMatch)
             assertEquals("Sun, 22 Nov 2026 18:54:46 GMT", ifModifiedSince)
+        }
+
+    @Test
+    fun aCopyHeldBackToRevalidateIsTheDataWhenTheServerSaysItIsUnchanged() =
+        runTest {
+            val cached = "{\"version\": 8}".encodeToByteArray()
+            val engine =
+                MockEngine {
+                    respond("", HttpStatusCode.NotModified, headersOf(HttpHeaders.CacheControl, "max-age=0, must-revalidate"))
+                }
+            val load =
+                resources(engine = engine, offlineStyles = emptySet()).load(
+                    offline = false,
+                    url = style,
+                    priorEtag = "W/\"abc\"",
+                    priorModified = Instant.parse("2026-11-22T18:54:46Z"),
+                    priorData = cached,
+                )
+            // MapLibre gave the map nothing yet: an answer without data would leave it without a style.
+            val copy = assertIs<MapResourceLoad.Bytes>(load)
+            assertContentEquals(cached, copy.bytes)
+            assertEquals("W/\"abc\"", copy.etag)
+            assertTrue(copy.mustRevalidate)
+            assertEquals(Instant.parse("2026-11-22T18:54:46Z"), copy.modified)
+            assertEquals(now, copy.expires)
+            // A copy the map has already is only unchanged.
+            assertIs<MapResourceLoad.NotModified>(
+                resources(engine = engine).load(offline = false, url = style, priorEtag = "W/\"abc\"", priorExpires = now - 1.hours),
+            )
+        }
+
+    @Test
+    fun onlyMustRevalidateHoldsACopyBackAsMapLibreReadsCacheControl() =
+        runTest {
+            suspend fun mustRevalidate(cacheControl: String) =
+                assertIs<MapResourceLoad.Bytes>(
+                    resources(
+                        engine = MockEngine { respond("{}", HttpStatusCode.OK, headersOf(HttpHeaders.CacheControl, cacheControl)) },
+                    ).load(offline = false, url = style),
+                ).mustRevalidate
+            // VersaTiles serves its styles no-cache; MapLibre's own client keeps them as usable copies,
+            // so the map draws one at once instead of waiting for the server at every load.
+            assertFalse(mustRevalidate("no-cache"))
+            assertTrue(mustRevalidate("max-age=0, must-revalidate"))
+            assertFalse(mustRevalidate("max-age=86400, public"))
         }
 
     @Test

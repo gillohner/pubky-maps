@@ -13,8 +13,9 @@ import java.io.File
 
 /**
  * Sets up MapLibre for the process, before its first map: its database (the map cache and the
- * offline maps) in the no-backup folder, and [OfflineMapResources] for the requests of offline
- * downloads while [downloading], telling [fetchedNewData] when one got new map data. MapLibre's
+ * offline maps) in the no-backup folder, and [OfflineMapResources] for the map's styles and, while
+ * [downloading], every request of the map, telling [fetchedNewData] when a download's request got
+ * new map data; a style [keepsCopy] says is an offline area's keeps its cached copy without its server. MapLibre's
  * default database is in the cache folder, which Android empties when the phone runs low on
  * storage, so the one from before is deleted in [scope]: this runs on the main thread at app start,
  * and listing and deleting files there is disk work the start waits for (StrictMode fails the
@@ -27,13 +28,20 @@ fun configureMapRuntime(
     scope: CoroutineScope,
     downloading: () -> Boolean,
     fetchedNewData: () -> Unit,
+    keepsCopy: suspend (styleUrl: String) -> Boolean,
 ) {
     scope.launch {
         context.cacheDir.listFiles { file -> file.name.startsWith("maplibre-cache.db") }?.forEach { it.delete() }
     }
     DefaultMapRuntime.configure {
         cacheFile = Path(File(context.noBackupFilesDir, "maplibre.db").path)
-        resourceProvider = OfflineMapResources({ offlineHttpClient(appVersion) }, downloading, fetchedNewData = fetchedNewData)
+        resourceProvider =
+            OfflineMapResources(
+                { offlineHttpClient(appVersion) },
+                downloading,
+                fetchedNewData = fetchedNewData,
+                keepsCopy = keepsCopy,
+            )
     }
 }
 

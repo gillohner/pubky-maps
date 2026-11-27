@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -182,11 +183,16 @@ class OfflineMaps(
     /** The packs that make up the areas ([visible]). */
     private val areaPacks: List<StoredPack> get() = visible(packs)
 
+    /** The map styles of the packs on the phone; null until the store first listed them. */
+    private val styles = MutableStateFlow<Set<String>?>(null)
+
     init {
         scope.launch {
             store.state.collect { state ->
+                if (state is PackStoreState.Failed) styles.update { it ?: emptySet() }
                 if (state !is PackStoreState.Ready) return@collect
                 listed.value = state.packs
+                styles.value = state.packs.mapNotNullTo(HashSet()) { it.style }
                 state.packs.forEach { watch(it) }
             }
         }
@@ -208,6 +214,13 @@ class OfflineMaps(
     fun fetchedNewData() {
         fetches.update { it + 1 }
     }
+
+    /**
+     * Whether some pack on the phone was downloaded in the map style at [url] (any of its areas, also
+     * one still downloading); called on any thread. Asked at the start, it waits for the store's
+     * first list, at most [STYLES_LISTED], and says no when the store has none by then.
+     */
+    suspend fun hasStyle(url: String): Boolean = withTimeoutOrNull(STYLES_LISTED) { styles.filterNotNull().first() }?.contains(url) == true
 
     fun startPicking() {
         _picking.value = true
@@ -728,6 +741,9 @@ private const val LARGEST_TILE_BYTES = 500_000L
  * copies), so a phone that goes offline right after the start rarely misses a new release.
  */
 internal val FIRST_CHECK = 20.seconds
+
+/** How long [OfflineMaps.hasStyle] waits at the start for the store to list its packs. */
+internal val STYLES_LISTED = 5.seconds
 
 /** OpenFreeMap lets a map keep its sources for an hour; checking twice as often finds a change in time. */
 internal val CHECK_INTERVAL = 30.minutes

@@ -2,6 +2,7 @@ package to.pubky.maps.offline
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -19,6 +20,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -206,6 +208,33 @@ class OfflineMapsTest {
             assertEquals("Map around 47.38° N, 8.54° E", map.name)
             assertEquals(1_800_000_000_000, map.createdAt)
             assertEquals(OfflineMapStatus.Paused(0), map.status)
+        }
+
+    @Test
+    fun saysWhichStylesItsPacksWereDownloadedInOnceTheStoreListsThem() =
+        runTest(UnconfinedTestDispatcher()) {
+            val store = FakeStore()
+            store.packs.value = PackStoreState.Loading
+            val offline = offlineMaps(store)
+            // Asked at the start, before MapLibre listed the packs: it waits for the list.
+            val asked = async { offline.hasStyle(light) }
+            assertFalse(asked.isCompleted)
+            store.packs.value = PackStoreState.Ready(listOf(StoredPack(Pack(light), null, PackProgress(PackState.Complete), light)))
+            assertTrue(asked.await())
+            assertFalse(offline.hasStyle(dark))
+            // A pack still downloading counts: its style is what the map draws the area from.
+            offline.download(zurich, listOf(dark))
+            assertTrue(offline.hasStyle(dark))
+            // A store that cannot list its packs has none to keep, and one that never lists them is
+            // not waited for past STYLES_LISTED.
+            val failed = FakeStore().apply { packs.value = PackStoreState.Failed("no database") }
+            val before = testScheduler.currentTime
+            assertFalse(offlineMaps(failed).hasStyle(light))
+            assertEquals(before, testScheduler.currentTime)
+            val silent = FakeStore().apply { packs.value = PackStoreState.Loading }
+            val waited = async { offlineMaps(silent).hasStyle(light) }
+            advanceTimeBy(STYLES_LISTED + 1.seconds)
+            assertFalse(waited.await())
         }
 
     @Test
