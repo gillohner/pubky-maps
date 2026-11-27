@@ -74,8 +74,9 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         app.account.controller.onForeground()
-        // Writes that waited for a connection are tried again.
+        // Writes and notes that waited for a connection are tried again.
         app.writes.flush()
+        app.places.notes?.flush()
     }
 
     override fun onStop() {

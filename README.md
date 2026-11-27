@@ -194,10 +194,18 @@ by default) without an account, so the note is public and anonymous. A server th
 fails or answers not as the API does (also a success that is not the new note, as a web page
 answering every address) hands over to the next one; the API's refusal is shown with its
 reason; a request with no answer in time is not sent elsewhere and the page says the note may be on
-the map already. A note that did not go keeps its text on the page to send again; notes need a
-connection. A note page Android brought back after stopping the app still thanks for a sent note, and
-one whose note was on its way or got no answer in time says it may be on the map already, so neither
-offers the same note again as new.
+the map already. A note whose request reached no server at all (no connection, no name, refused, timed
+out connecting; a server error, an answer that is not the API's or a connection broken after sending
+is "the server had a problem" instead, as that server may have the note) waits on the phone (`note-outbox.db` in the no-backup folder, kept at
+sign-out) and the page says so: it is sent when the phone has a network again, when the app starts or
+comes to the front, and by the outbox's background job with the app closed, oldest first. Each try is
+marked first, so a note whose try was cut off (the app stopped before the answer) is dropped as one
+that may be on the map, never sent twice. A waiting note not taken then leaves the phone, and a page
+of this run of the app still open says why. A note not sent at once keeps its text on the page to
+send again. A note page Android brought back after stopping the app still thanks for a sent note,
+says a waiting note waits (also when another run of the app has sent it since), and one whose note
+was on its way or got no answer in time says it may be on the map already, so none offers the same
+note again as new.
 
 **Writing about a place** (signed in; a write that needs the homeserver opens the sign-in first and
 continues after it). The page's action row has Bookmark, Tag, Post and Add to collection; its sections have

@@ -1,0 +1,32 @@
+-- Notes to OpenStreetMap that no server of the list could take (no connection): they go out when the
+-- phone is online again. Anonymous notes, not tied to an account: sign-out keeps them.
+CREATE TABLE waiting_note (
+    -- The note page's id, so a page still open shows when its note went.
+    id TEXT NOT NULL PRIMARY KEY,
+    -- Where the note goes on the map (WGS84).
+    lat REAL NOT NULL,
+    lon REAL NOT NULL,
+    -- The place's name, as the note names it; null for a point of its own.
+    name TEXT,
+    -- The place's OpenStreetMap element as `Node/123`; null when it is not one.
+    osm TEXT,
+    -- What the user wrote; the place and the app's tag are added when it is sent.
+    body TEXT NOT NULL,
+    -- epoch milliseconds: notes go in the order they were written.
+    written_at INTEGER NOT NULL,
+    -- 1 while a try to send it is under way: a note still marked when the app starts may be on the
+    -- map (the app stopped before the answer), so it is not sent again.
+    on_its_way INTEGER NOT NULL DEFAULT 0
+);
+
+waitingNotes:
+SELECT * FROM waiting_note ORDER BY written_at, id;
+
+putWaitingNote:
+INSERT OR REPLACE INTO waiting_note(id, lat, lon, name, osm, body, written_at, on_its_way) VALUES (?, ?, ?, ?, ?, ?, ?, 0);
+
+setOnItsWay:
+UPDATE waiting_note SET on_its_way = ? WHERE id = ?;
+
+deleteWaitingNote:
+DELETE FROM waiting_note WHERE id = ?;

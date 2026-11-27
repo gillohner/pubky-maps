@@ -148,6 +148,12 @@ sqldelight {
             packageName.set("to.pubky.maps.write.db")
             srcDirs.setFrom("src/commonMain/sqldelight-phone")
         }
+        // Notes to OpenStreetMap waiting for a connection: not tied to an account (anonymous), so
+        // sign-out keeps them, in their own file.
+        create("NoteOutboxDatabase") {
+            packageName.set("to.pubky.maps.osm.db")
+            srcDirs.setFrom("src/commonMain/sqldelight-notes")
+        }
         // The Pubky places of the offline areas and their tags, for the map's Pubky places layer and
         // place pages without a connection: fetched again from Pinakes and Nexus, so in its own file
         // that can be deleted with no loss.

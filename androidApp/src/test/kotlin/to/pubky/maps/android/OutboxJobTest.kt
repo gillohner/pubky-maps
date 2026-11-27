@@ -37,6 +37,16 @@ class OutboxJobTest {
     private val waiting = MutableStateFlow<Boolean?>(null)
 
     @Test
+    fun theJobIsKeptWhileWritesOrNotesWaitAndOnlyEndsWhenBothAreKnownToWaitNot() {
+        assertEquals(true, anyWaiting(writes = true, notes = false))
+        assertEquals(true, anyWaiting(writes = null, notes = true))
+        assertEquals(true, anyWaiting(writes = false, notes = true))
+        assertNull(anyWaiting(writes = false, notes = null))
+        assertNull(anyWaiting(writes = null, notes = false))
+        assertEquals(false, anyWaiting(writes = false, notes = false))
+    }
+
+    @Test
     fun waitingWritesKeepAJobThatNeedsANetworkAndOutlastsARestart() =
         runTest(UnconfinedTestDispatcher()) {
             followOutbox(context, waiting, backgroundScope)
