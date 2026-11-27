@@ -326,6 +326,7 @@ class PlaceScreenshotTest {
             onOpenLink = {},
             onLoadMorePosts = {},
             onDirections = {},
+            onReportProblem = {},
         )
 
     /** Directions to the Kunsthaus from Zürich HB, in [status]; found: FOSSGIS' route by car. */

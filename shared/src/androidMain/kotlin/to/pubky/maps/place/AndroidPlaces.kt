@@ -9,6 +9,9 @@ import to.pubky.maps.config.AppSettings
 import to.pubky.maps.config.Service
 import to.pubky.maps.map.MapPlacesLayer
 import to.pubky.maps.offline.KeptPubkyPlaces
+import to.pubky.maps.osm.HttpOsmNotes
+import to.pubky.maps.osm.NoteController
+import to.pubky.maps.osm.osmHttpClient
 import to.pubky.maps.place.db.PlaceCacheDatabase
 import to.pubky.maps.routing.DirectionsController
 import to.pubky.maps.routing.HttpRouting
@@ -25,7 +28,8 @@ import java.io.File
  * ([offline]) when Pinakes cannot be reached, and a page their tags when Nexus cannot; a page with
  * no address names its district and town from the offline areas' labels ([localities]), a page
  * with no card shows the OSM details the offline areas keep ([details]), and directions to a place
- * come from the Valhalla servers of the list. Create it once per process.
+ * come from the Valhalla servers of the list, and notes about a place go to the OpenStreetMap API
+ * servers of the list. Create it once per process.
  */
 fun androidPlaceServices(
     context: Context,
@@ -67,5 +71,6 @@ fun androidPlaceServices(
                 main,
                 health = health,
             ),
+        notes = NoteController(HttpOsmNotes(osmHttpClient(appVersion), servers = { servers(Service.OsmApi) }), main),
     )
 }

@@ -17,6 +17,7 @@ internal val Service.title: String
             Service.Nexus -> "Tags and posts"
             Service.Overpass -> "Offline place details"
             Service.Valhalla -> "Routes"
+            Service.OsmApi -> "Map notes"
             Service.PkarrRelay -> "Finding homeservers"
             Service.AuthRelay -> "Sign-in relay"
         }
@@ -51,6 +52,11 @@ internal val Service.description: String
 
             Service.Valhalla -> {
                 "Valhalla servers: routes by car, bike and on foot. They learn where each route starts and ends."
+            }
+
+            Service.OsmApi -> {
+                "OpenStreetMap API servers: the map problems you report, as public notes without your name. " +
+                    "They learn each note and where it is."
             }
 
             Service.PkarrRelay -> {

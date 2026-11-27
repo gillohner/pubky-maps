@@ -7,19 +7,22 @@ import to.pubky.maps.links.OpenInAction
 import to.pubky.maps.links.OsmId
 import to.pubky.maps.links.OsmType
 import to.pubky.maps.map.MapPlacesLayer
+import to.pubky.maps.osm.NoteController
 import to.pubky.maps.routing.DirectionsController
 
 /**
  * Place pages as the app runs them: the page controller and the map's Pubky places layer, for the life
  * of the process (rotation keeps an open page), and Pinakes and Nexus through the user's server lists
- * ([data]) for keeping the offline areas' Pubky places, and [directions] to the open place (null
- * where routing is not available).
+ * ([data]) for keeping the offline areas' Pubky places, [directions] to the open place (null
+ * where routing is not available), and [notes] to OpenStreetMap about a place's map problems (null
+ * where there are none).
  */
 class PlaceServices(
     val pages: PlacePageController,
     val layer: MapPlacesLayer,
     val data: PlaceData,
     val directions: DirectionsController? = null,
+    val notes: NoteController? = null,
 )
 
 /** What "Open in" offers for a place, and how an entry is opened; none where map links are missing. */

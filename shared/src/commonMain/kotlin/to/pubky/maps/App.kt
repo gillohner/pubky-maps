@@ -28,6 +28,7 @@ import to.pubky.maps.config.AppSettings
 import to.pubky.maps.config.Service
 import to.pubky.maps.config.SettingsRepository
 import to.pubky.maps.links.AppLinks
+import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.links.LinkTarget
 import to.pubky.maps.links.LinkedPlaceState
 import to.pubky.maps.links.OpenIn
@@ -37,6 +38,10 @@ import to.pubky.maps.map.StartView
 import to.pubky.maps.offline.OfflineMaps
 import to.pubky.maps.offline.OfflineMapsScreen
 import to.pubky.maps.offline.offlineMapsSummary
+import to.pubky.maps.osm.NoteRoute
+import to.pubky.maps.osm.NoteTarget
+import to.pubky.maps.osm.osmIdOfRouteText
+import to.pubky.maps.osm.routeText
 import to.pubky.maps.place.OpenInApps
 import to.pubky.maps.place.PlaceServices
 import to.pubky.maps.search.SearchServices
@@ -116,6 +121,23 @@ private fun WriteDestination(
     intent: WriteIntent,
     target: WriteTarget,
 ) = WriteDestination(intent.name, target.uri, target.name, target.pointPage)
+
+/**
+ * The note page about a place at [lat], [lon] named [name], the OSM element [osm] (`Node/123`) when it
+ * is one. Every argument goes as text, a type every version of the navigation library carries.
+ */
+@Serializable
+private data class NoteDestination(
+    val lat: String,
+    val lon: String,
+    val name: String? = null,
+    val osm: String? = null,
+) {
+    constructor(target: NoteTarget) :
+        this(target.point.lat.toString(), target.point.lon.toString(), target.name, target.osm?.routeText)
+
+    val target: NoteTarget get() = NoteTarget(GeoPoint(lat.toDouble(), lon.toDouble()), name, osm?.let(::osmIdOfRouteText))
+}
 
 /**
  * The whole app: the map, and the settings pages on top of it. [loadLicences] returns the
@@ -314,6 +336,7 @@ private fun AppNavigation(
                     navController.open(WriteDestination(intent, target))
                 },
                 onOpenSaved = writes?.let { { navController.open(SavedDestination) } },
+                onReportProblem = places?.notes?.let { { target -> navController.open(NoteDestination(target)) } },
                 offline = offline,
                 onDownloadStarted = { navController.open(OfflineMapsDestination) },
                 onMapDrawn = onMapDrawn,
@@ -449,6 +472,11 @@ private fun AppNavigation(
                     },
                     onBack = back,
                 )
+            }
+        }
+        places?.notes?.let { notes ->
+            composable<NoteDestination> { entry ->
+                NoteRoute(notes, entry.toRoute<NoteDestination>().target, onClose = back)
             }
         }
         composable<ServersDestination> {
