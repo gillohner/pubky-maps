@@ -196,3 +196,15 @@ internal val Turn.icon: ImageVector
 
             Turn.Arrive -> AppIcons.Place
         }
+
+/**
+ * The icon of a step of these directions' route: its [turn]'s, but the arrival of a route swapped back
+ * to the user's position is their location (the icon of the route card's "To your location"), not the
+ * place's pin, as the place is where that route starts. A route back to a chosen start arrives at a
+ * place's pin. Every route's start keeps the ring ([RoutingIcons.TripOrigin]), as Google Maps' trip
+ * origin: the start's icon says where the route begins, the end's what the user arrives at.
+ */
+internal fun Directions.stepIcon(turn: Turn): ImageVector {
+    val endsAtUser = reversed && from == null
+    return if (turn == Turn.Arrive && endsAtUser) AppIcons.MyLocation else turn.icon
+}
