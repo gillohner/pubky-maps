@@ -144,7 +144,7 @@ expect_badge pois-z16-dark
 expect_name '#4db6ac' pois-z16-dark
 adb shell cmd uimode night no
 
-# A tap on the badge opens the place's page (the Pinakes place).
+# A tap on the highlight (the ring around the map's own icon) opens the place's page (the Pinakes place).
 open_at pois-z16-tap 16
 size=$(adb shell wm size | awk '/Physical/ {print $3}')
 w=${size%x*}

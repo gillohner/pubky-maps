@@ -18,13 +18,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.transformLatest
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
@@ -57,6 +60,7 @@ import org.maplibre.compose.style.BaseStyle
 import to.pubky.maps.place.MapPlace
 import to.pubky.maps.search.badgeIcon
 import to.pubky.maps.search.ringIcon
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 /** The teal of Pubky places (as their dots); its lighter shade names them on a dark map. */
@@ -72,10 +76,11 @@ private val PubkyPoiSize = DpSize(24.dp, 24.dp)
 /** How long a style whose files could not be read waits before its icons are asked again. */
 private val STYLE_ICONS_RETRY = 30.seconds
 
-/** The base map's sources of points of interest and the font its labels use. */
+/** The base map's sources of points of interest and the font its labels use, read from the style at [styleUrl]. */
 internal data class PoiBase(
     val sources: List<PoiSource>,
     val font: List<String>?,
+    val styleUrl: String?,
 )
 
 /**
@@ -114,26 +119,25 @@ internal fun TrackPubkyPois(
         snapshotFlow {
             (mapState.style.loadState is StyleLoadState.Ready && mapState.style.baseStyle is BaseStyle.Uri) to
                 mapState.style.baseStyle
-        }.collectLatest { (ready, _) -> tiles.base = if (ready) mapState.poiBase() else null }
+        }.collectLatest { (ready, style) -> tiles.base = if (ready) mapState.poiBase((style as? BaseStyle.Uri)?.uri) else null }
     }
     val shown by rememberUpdatedState(places)
     val base = tiles.base
-    // Keyed on the style's URL too: the light and dark styles of one server can have the same sources.
-    val styleUrl = (mapState.style.baseStyle as? BaseStyle.Uri)?.uri
-    LaunchedEffect(tiles, base, styleUrl, styleIcons) {
-        tiles.icons = emptyMap()
-        if (styleIcons == null || base == null || base.sources.isEmpty() || styleUrl == null) return@LaunchedEffect
-        while (true) {
-            // Read only for a map that highlights a place: most views have none, and the badges draw meanwhile.
-            snapshotFlow { tiles.found.isNotEmpty() }.first { it }
-            val icons = styleIcons.of(styleUrl, base.sources)
-            if (icons != null) {
-                tiles.icons = icons
-                return@LaunchedEffect
-            }
-            // No connection to the style's server: the badges stay, and it is asked again a while later.
-            delay(STYLE_ICONS_RETRY)
+    LaunchedEffect(tiles, styleIcons) {
+        if (styleIcons == null) {
+            tiles.icons = emptyMap()
+            return@LaunchedEffect
         }
+        // By the style's URL too (the light and dark styles of one server can have the same sources),
+        // the one its sources were read from.
+        val asks =
+            snapshotFlow {
+                tiles.base?.let { base ->
+                    base.styleUrl?.takeIf { base.sources.isNotEmpty() }?.let { IconsAsk(it, base.sources) }
+                }
+            }
+        styleIconsOf(asks, snapshotFlow { tiles.found.isNotEmpty() }) { styleIcons.of(it.styleUrl, it.sources) }
+            .collect { tiles.icons = it }
     }
     LaunchedEffect(tiles, mapState, base) {
         if (base == null || base.sources.isEmpty()) {
@@ -151,13 +155,46 @@ internal fun TrackPubkyPois(
     }
 }
 
+/** Whose icons to read: the style at [styleUrl], for its sources of points of interest. */
+internal data class IconsAsk(
+    val styleUrl: String,
+    val sources: List<PoiSource>,
+)
+
+/**
+ * The base style's own icons for each of [asks] ([read]; null when its files could not be read):
+ * none at once for a new ask (the badges draw meanwhile), and its icons once [highlighted] is
+ * true, as most views highlight no place. Files that could not be read are asked again [retry]
+ * later (still only for a map that highlights one); an ask's icons, once read, stay until the next.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+internal fun styleIconsOf(
+    asks: Flow<IconsAsk?>,
+    highlighted: Flow<Boolean>,
+    retry: Duration = STYLE_ICONS_RETRY,
+    read: suspend (IconsAsk) -> Map<PoiSource, PoiIcon>?,
+): Flow<Map<PoiSource, PoiIcon>> =
+    asks.distinctUntilChanged().transformLatest { ask ->
+        emit(emptyMap())
+        if (ask == null) return@transformLatest
+        while (true) {
+            highlighted.first { it }
+            val icons = read(ask)
+            if (icons != null) {
+                emit(icons)
+                return@transformLatest
+            }
+            delay(retry)
+        }
+    }
+
 /** The base style's sources of points of interest and its labels' font; null while the map cannot tell. */
-private suspend fun MapState.poiBase(): PoiBase? =
+private suspend fun MapState.poiBase(styleUrl: String?): PoiBase? =
     try {
         val layers = style.layers.toList()
         val sources = poiSourcesOf(layers.map { StyleLayerRef(it.source, it.sourceLayer) })
         val fonts = layers.filter { it.type == "symbol" }.map { it.getProperty("text-font") }
-        PoiBase(sources, highlightFont(fonts))
+        PoiBase(sources, highlightFont(fonts), styleUrl)
     } catch (e: CancellationException) {
         throw e
     } catch (_: Exception) {

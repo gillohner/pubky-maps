@@ -123,7 +123,12 @@ fun parseSpriteIndex(text: String): Map<String, SpriteImage> {
  * style). A layer whose icon or filter the highlight cannot take over is left out: an old-style
  * filter or function, an icon that depends on the zoom or on a feature's state (allowed in its own
  * layer, not inside the highlight's choice), one made with `image`. A source with no layer left, or
- * a style with no images, has none: its highlights keep the kind's badge.
+ * a style with no images, has none: its highlights keep the kind's badge. The layers' filters and
+ * icons are joined in one `case`, where one that fails on a feature would fail the whole choice and
+ * leave the place unmarked (neither ring nor badge); so their order comparisons are guarded
+ * ([guardedComparisons]), the error a style's filter meets on a feature without a property it
+ * compares (`[">=", ["get", "rank"], 20]`). Other failing expressions (a `to-number` of a word, a
+ * type assertion) stay unguarded: the default styles have none.
  */
 fun poiIconsOf(
     style: JsonObject,
@@ -153,7 +158,11 @@ fun poiIconsOf(
                     }.mapNotNull { layer ->
                         val icon = (layer["layout"] as? JsonObject)?.get("icon-image")?.let(::iconImageExpression)
                         val filter = layer["filter"] ?: JsonPrimitive(true)
-                        if (icon == null || !isExpressionFilter(filter) || filter.uses(LAYOUT_UNSAFE)) null else filter to icon
+                        if (icon == null || !isExpressionFilter(filter) || filter.uses(LAYOUT_UNSAFE)) {
+                            null
+                        } else {
+                            guardedComparisons(filter) to guardedComparisons(icon)
+                        }
                     }
             if (choices.isEmpty()) return@mapNotNull null
             val image =
@@ -164,6 +173,31 @@ fun poiIconsOf(
                 }
             poiSource to PoiIcon(image, known, size, dp.toFloat())
         }.toMap()
+}
+
+/** The order comparisons MapLibre fails on (not false) when the two sides are not both numbers or both strings. */
+private val ORDER_COMPARISONS = setOf("<", "<=", ">", ">=")
+
+/**
+ * [expression] with each of its order comparisons false, not failing, when its sides are not both
+ * numbers or both strings (both strings with a collator): `[op, a, b]` becomes
+ * `["all", <a and b of one such type>, [op, a, b]]` (`all` stops at the first false). A `literal`
+ * and the labels of a `match` are left as they are.
+ */
+internal fun guardedComparisons(expression: JsonElement): JsonElement {
+    if (expression !is JsonArray || expression.isEmpty()) return expression
+    val op = (expression[0] as? JsonPrimitive)?.takeIf { it.isString }?.content
+    if (op == "literal") return expression
+
+    // A match's labels sit at 2, 4, .. before its fallback; they are values, not expressions.
+    fun isLabel(i: Int) = op == "match" && i >= 2 && i % 2 == 0 && i < expression.size - 1
+    val inner = JsonArray(expression.mapIndexed { i, it -> if (i == 0 || isLabel(i)) it else guardedComparisons(it) })
+    if (op !in ORDER_COMPARISONS || inner.size !in 3..4) return inner
+    val left = expr("typeof", inner[1])
+    val sameType = expr("==", left, expr("typeof", inner[2]))
+    val types = if (inner.size == 4) listOf("string") else listOf("number", "string")
+    val comparable = expr("in", left, expr("literal", JsonArray(types.map(::JsonPrimitive))))
+    return expr("all", sameType, comparable, inner)
 }
 
 /** A style expression: [op] called with [args] (a string, number or boolean as a literal of its own). */
@@ -253,8 +287,8 @@ internal fun isExpressionFilter(filter: JsonElement): Boolean {
 
 /**
  * The base style's icons for its points of interest ([poiIconsOf]), read from its style document
- * and the indexes of its sprites, the same files MapLibre loads for the map (parsed off the main
- * thread). Kept for the process, by style URL; a style whose files could not be read is not kept,
+ * and the indexes of its sprites, the same files MapLibre loads for the map (read and parsed off
+ * the main thread). Kept for the process, by style URL; a style whose files could not be read is not kept,
  * so the next ask reads them again.
  */
 class StyleIcons(
@@ -278,17 +312,15 @@ class StyleIcons(
         sources: List<PoiSource>,
     ): Map<PoiSource, PoiIcon>? =
         try {
-            val styleText = text(styleUrl)
-            // A style document is up to a few hundred kB.
-            val style = styleText?.let { withContext(Dispatchers.Default) { Json.parseToJsonElement(it).jsonObject } }
-            style?.let {
-                val indexes = ArrayList<Pair<String, String>>()
-                for (sprite in spriteRefsOf(it, styleUrl)) indexes += sprite.prefix to (text(spriteIndexUrl(sprite.url)) ?: return@let null)
-                withContext(Dispatchers.Default) {
-                    val images = HashMap<String, SpriteImage>()
-                    for ((prefix, index) in indexes) for ((name, image) in parseSpriteIndex(index)) images[prefix + name] = image
-                    poiIconsOf(it, sources, images)
+            // Off the main thread as a whole: a style document is up to a few hundred kB to decode and parse.
+            withContext(Dispatchers.Default) {
+                val style = text(styleUrl)?.let { Json.parseToJsonElement(it).jsonObject } ?: return@withContext null
+                val images = HashMap<String, SpriteImage>()
+                for (sprite in spriteRefsOf(style, styleUrl)) {
+                    val index = text(spriteIndexUrl(sprite.url)) ?: return@withContext null
+                    for ((name, image) in parseSpriteIndex(index)) images[sprite.prefix + name] = image
                 }
+                poiIconsOf(style, sources, images)
             }
         } catch (e: CancellationException) {
             throw e

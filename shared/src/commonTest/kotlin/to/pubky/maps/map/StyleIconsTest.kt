@@ -7,6 +7,12 @@ import io.ktor.client.engine.mock.respondError
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -22,9 +28,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 private const val OFM_SPRITE = "https://tiles.openfreemap.org/sprites/ofm_f384/ofm"
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class StyleIconsTest {
     private fun read(name: String): String = FileSystem.SYSTEM.read("src/commonTest/fixtures/style".toPath() / name) { readUtf8() }
 
@@ -47,12 +56,12 @@ class StyleIconsTest {
     fun openFreeMapsIconIsChosenByItsLayersFiltersInTheStylesOrder() {
         val icons = poiIconsOf(liberty, listOf(omtPoi), images("", "ofm.sprite.json"))
         val icon = icons.getValue(omtPoi)
-        // poi_r20, poi_r7, poi_r1, poi_transit: each layer's filter, then its icon; none gives no image.
+        // poi_r20, poi_r7, poi_r1, poi_transit: each layer's filter (its comparisons guarded), then its icon; none gives no image.
         val choice = icon.image as JsonArray
         assertEquals(JsonPrimitive("case"), choice[0])
         assertEquals(2 * 4 + 2, choice.size)
         val layers = (liberty["layers"] as JsonArray).map { it.jsonObject }
-        assertEquals(layers[0]["filter"], choice[1])
+        assertEquals(guardedComparisons(layers[0]["filter"]!!), choice[1])
         assertEquals((layers[0]["layout"] as JsonObject)["icon-image"], choice[2])
         assertEquals(layers[3]["filter"], choice[7])
         assertEquals(json("""["to-string", ["get", "class"]]"""), choice[8])
@@ -61,6 +70,41 @@ class StyleIconsTest {
         // Its icons have their own disc (no SDF): its typical 19 dp icon is drawn at 17 dp.
         assertEquals(SPRITE_ICON_DP.toFloat(), icon.dp)
         assertTrue(abs(icon.size - 17f / 19f) < 0.001f, "size ${icon.size}")
+    }
+
+    @Test
+    fun aComparisonOnAMissingPropertyIsFalseNotAFailureOfTheWholeChoice() {
+        // Liberty's poi_r20: a feature without a rank would fail the case for every layer after it too.
+        val r20 = json("""["all", ["match", ["geometry-type"], ["MultiPoint", "Point"], true, false], [">=", ["get", "rank"], 20]]""")
+        assertEquals(
+            json(
+                """["all", ["match", ["geometry-type"], ["MultiPoint", "Point"], true, false],
+                  ["all", ["==", ["typeof", ["get", "rank"]], ["typeof", 20]],
+                    ["in", ["typeof", ["get", "rank"]], ["literal", ["number", "string"]]],
+                    [">=", ["get", "rank"], 20]]]""",
+            ),
+            guardedComparisons(r20),
+        )
+        val choice = poiIconsOf(liberty, listOf(omtPoi), images("", "ofm.sprite.json")).getValue(omtPoi).image as JsonArray
+        assertEquals(guardedComparisons(r20), choice[1])
+        // A collator compares strings only: both sides must be strings; it keeps its collator.
+        val collated = json("""["<", ["get", "name"], "m", ["collator", {}]]""")
+        assertEquals(
+            json(
+                """["all", ["==", ["typeof", ["get", "name"]], ["typeof", "m"]],
+                  ["in", ["typeof", ["get", "name"]], ["literal", ["string"]]], $collated]""",
+            ),
+            guardedComparisons(collated),
+        )
+        // A literal, a match's labels and other operators are left as they are; a match's outputs are guarded.
+        val untouched =
+            json(
+                """["any", ["==", ["get", "kind"], "cafe"], ["literal", [">", 1, 2]], ["to-boolean", ["get", "shop"]],
+                  ["match", ["get", "op"], [">", "<", "="], true, false]]""",
+            )
+        assertEquals(untouched, guardedComparisons(untouched))
+        val output = json("""["match", ["get", "kind"], "cafe", [">", ["get", "rank"], 2], false]""")
+        assertEquals(guardedComparisons(json("""[">", ["get", "rank"], 2]""")), (guardedComparisons(output) as JsonArray)[3])
     }
 
     @Test
@@ -205,5 +249,50 @@ class StyleIconsTest {
                 listOf(libertyUrl, "$OFM_SPRITE.json").let { it + it },
                 requests,
             )
+        }
+
+    @Test
+    fun theIconsAreReadOnceAPlaceIsHighlightedAgainAfterAFailureAndAfreshForAnotherStyle() =
+        runTest {
+            val light = IconsAsk(libertyUrl, listOf(omtPoi))
+            val dark = IconsAsk("https://tiles.openfreemap.org/styles/dark", listOf(omtPoi))
+            val icons = mapOf(omtPoi to PoiIcon(JsonPrimitive("cafe"), listOf("cafe"), 1f, 17f))
+            val asks = MutableStateFlow<IconsAsk?>(null)
+            val highlighted = MutableStateFlow(false)
+            var reachable = false
+            val reads = ArrayList<IconsAsk>()
+            val seen = ArrayList<Map<PoiSource, PoiIcon>>()
+            backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+                styleIconsOf(asks, highlighted, retry = 30.seconds) { ask ->
+                    reads += ask
+                    if (reachable) icons else null
+                }.collect { seen += it }
+            }
+            asks.value = light
+            runCurrent()
+            // A map without a highlighted place reads nothing.
+            assertEquals(emptyList(), reads)
+            highlighted.value = true
+            runCurrent()
+            assertEquals(listOf(light), reads)
+            // Unreadable: asked again 30 s later, not before.
+            reachable = true
+            advanceTimeBy(29.seconds)
+            assertEquals(1, reads.size)
+            advanceTimeBy(2.seconds)
+            assertEquals(listOf(light, light), reads)
+            assertEquals(icons, seen.last())
+            // Read once: kept, not asked again.
+            advanceTimeBy(5.minutes)
+            assertEquals(2, reads.size)
+            // Another style: its own icons, none until they are read.
+            asks.value = dark
+            runCurrent()
+            assertEquals(listOf(light, light, dark), reads)
+            assertEquals(listOf(emptyMap(), emptyMap(), icons, emptyMap(), icons), seen)
+            // No style in place: none.
+            asks.value = null
+            runCurrent()
+            assertEquals(emptyMap(), seen.last())
         }
 }
