@@ -70,7 +70,8 @@ It bundles the `pubky` SDK (0.18), `pubky-social-specs` (1.0.0-rc.2) and the wor
   folders that could not be read now), and `bookmarkPlace`, `removeBookmark` and `listBookmarks`
   (only bookmarks that can be places: map links the link reader reads and web pages, which a
   Pinakes place card can be; other apps' `pubky://` objects in the same folder, such as
-  pubky.app posts, are left out, and a page is empty only at the end of the listing).
+  pubky.app posts, are left out; one call follows up to 20 listing pages that hold no place,
+  so a page can be empty and still have a `nextCursor`).
   The pure `build*` functions (`buildTag`, `buildReview`, `buildPhotoFile`, `buildPhotoPost`,
   `buildCollection`, `buildList` with `private`, `buildBookmark`) return the same objects without
   the network, with their ids minted, so the app can queue them and `put` them later to the same

@@ -1147,9 +1147,10 @@ impl PubkyMapsCore {
 
     /// Lists saved places. Normal-length places cost no extra request; entries that are not
     /// valid bookmarks, and bookmarks of other apps' Pubky objects (a pubky.app post: they
-    /// share the folder), are skipped. A listing page that holds
-    /// no place is followed by the next one, so an empty page is still the end; 20 pages in a
-    /// row without a place (2000 bookmarks at the default page size) end it too.
+    /// share the folder), are skipped. A listing page that holds no place is followed by the
+    /// next one, up to 20 pages (2000 bookmarks at the default page size) for one call: a page
+    /// without places is empty with a `next_cursor` only after those 20, and without one at
+    /// the end of the listing.
     pub async fn list_bookmarks(&self, options: ListOptions) -> Result<SavedPlacePage, CoreError> {
         let inner = Arc::clone(&self.inner);
         self.run(async move {
@@ -1187,9 +1188,10 @@ impl PubkyMapsCore {
                 }
                 options.cursor = page.next_cursor;
             }
+            // 20 pages without a place: an empty page that is not the end.
             Ok(SavedPlacePage {
                 places,
-                next_cursor: None,
+                next_cursor: options.cursor,
             })
         })
         .await
