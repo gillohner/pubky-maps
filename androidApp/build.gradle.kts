@@ -4,6 +4,7 @@ import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.artifacts.result.ResolvedComponentResult
 import org.gradle.api.artifacts.result.ResolvedDependencyResult
 import org.gradle.api.artifacts.result.UnresolvedDependencyResult
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import javax.inject.Inject
 
@@ -286,6 +287,9 @@ tasks.withType<Test>().configureEach {
     // Robolectric screenshot tests keep each rendered screen in memory; Gradle's 512 MB default runs
     // out with the full set (every screen on phone and tablet, light and dark).
     maxHeapSize = "2g"
+    // A failing test prints its message (the expected and actual values, the screenshot that changed)
+    // in the build log, so a failure on CI can be read without the test report.
+    testLogging.exceptionFormat = TestExceptionFormat.FULL
     javaLauncher.set(
         javaToolchains.launcherFor {
             languageVersion.set(

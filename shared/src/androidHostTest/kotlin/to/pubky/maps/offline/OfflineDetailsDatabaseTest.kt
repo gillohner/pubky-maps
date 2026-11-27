@@ -14,7 +14,9 @@ import java.util.Properties
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlin.time.measureTime
 
 /** The OSM details of the offline areas on this machine's SQLite (the app uses Android's), in the offline places' file. */
@@ -148,9 +150,11 @@ class OfflineDetailsDatabaseTest {
                 )
             }
         val write = measureTime { store.replace("zh", 1, details) }
-        assert(write.inWholeSeconds < 10) { "writing took $write" }
-        store.detailsOf(node(42_000))
-        val read = measureTime { repeat(100) { store.detailsOf(node(42_000L + it)) } }
-        assert(read.inWholeMilliseconds < 100) { "100 reads took $read" }
+        assertTrue(write.inWholeSeconds < 10, "writing took $write")
+        // The fastest of a few warm rounds: the first reads run before the JIT has compiled the read
+        // path and take 2-4 times a warm read. A read that misses the index scans 84,000 rows in
+        // every round.
+        val read = fastestOf { repeat(100) { assertNotNull(store.detailsOf(node(42_000L + it))) } }
+        assertTrue(read.inWholeMilliseconds < 100, "100 reads took $read at best")
     }
 }

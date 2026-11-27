@@ -1,3 +1,4 @@
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -175,6 +176,9 @@ tasks.withType<Test>().configureEach {
             )
         },
     )
+    // A failing test prints its message (a time bound's measured time, the expected and actual
+    // values) in the build log, so a failure on CI can be read without the test report.
+    testLogging.exceptionFormat = TestExceptionFormat.FULL
     dependsOn(generateCoreBindings)
     // The tests load this library: a change of the core reruns them even when the bindings stay the same.
     inputs.file(hostCoreLibrary).withPathSensitivity(PathSensitivity.NONE)
