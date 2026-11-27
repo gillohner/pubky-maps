@@ -245,7 +245,10 @@ minute per run, again after a backoff while the homeserver cannot be reached (an
 short guard job, also when the app's process dies during a run); one the homeserver refuses is
 taken back with a message.
 
-The map also shows the places people referenced on Pubky (from zoom 12, from Pinakes, clustered).
+The map also shows the places people referenced on Pubky (from zoom 12, from Pinakes, clustered):
+places someone tagged, posted about or put in a collection. Places only in Pinakes' catalogues (every
+point of interest of OpenStreetMap) are left out (`referenced=true`), and where an area holds more
+than the map takes, the most active are kept.
 From zoom 14, one that the map itself has as a point of interest (a café, a museum, a station) is
 drawn in the Pubky teal instead: a badge with an icon of its kind and its name under it, before the
 map's own labels and whatever zoom the map would show that point at, each badge drawn even where two
@@ -284,8 +287,8 @@ the link text. The link the user had stays the place's URI.
   then Nexus tags/posts/people for every link of the place, and the lists) and caches what was shown
   in its own SQLite database (`place-cache.db`, never in a backup); `OpeningSchedule` evaluates OSM
   opening hours parsed by osm-opening-hours. The map's Pubky places layer (`map/MapPlacesLayer.kt`)
-  asks Pinakes for the view grown by half and widened to a 1/16° grid, at most 1,000 places, and
-  MapLibre clusters them. `map/MapPubkyPois.kt` asks the base map's loaded tiles (MapLibre's
+  asks Pinakes for the referenced places of the view grown by half and widened to a 1/16° grid, at
+  most 1,000 places, and MapLibre clusters them. `map/MapPubkyPois.kt` asks the base map's loaded tiles (MapLibre's
   `querySourceFeatures` on the style's point-of-interest layer, or its schema's when the style draws
   none) which of those places they hold, by the tile feature id `osm id × 10 + kind`, each time the
   map is idle from zoom 14, and draws those from the base map's own source, filtered by those ids.

@@ -3,8 +3,8 @@
 place) on 127.0.0.1 for the emulator place test, so it needs no public network: the Conditorei
 Schober's card, its lists, tags, posts and people, and the places in Zürich's old town. Other links
 are unknown (404), as on a real Pinakes. Valhalla's /route answers FOSSGIS' recorded route from
-Zürich HB for any request. Every request is logged as one JSON line (method, path, uri or uris, a
-route's costing and locations, User-Agent).
+Zürich HB for any request. Every request is logged as one JSON line (method, path, uri or uris,
+Pinakes' referenced filter, a route's costing and locations, User-Agent).
 
 Usage: place_fixture_server.py <port> <fixture dir> <request log>
 """
@@ -49,7 +49,7 @@ class Handler(BaseHTTPRequestHandler):
         url = urlparse(self.path)
         query = parse_qs(url.query)
         uri = query.get("uri", [None])[0]
-        self.log_request_line({"uri": uri})
+        self.log_request_line({"uri": uri, "referenced": query.get("referenced", [None])[0]})
         path = url.path
         if path == "/v1/resources/by-uri":
             if uri in SPELLINGS:
