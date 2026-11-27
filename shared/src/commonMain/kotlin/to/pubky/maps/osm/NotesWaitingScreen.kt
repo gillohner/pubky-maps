@@ -11,6 +11,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -67,7 +68,7 @@ fun NotesWaitingScreen(
             else -> {
                 item {
                     PageIntro(
-                        "No OpenStreetMap server could be reached when these notes were sent. They wait on this phone and go " +
+                        "No OpenStreetMap server could be reached when you sent these notes. They wait on this phone and go " +
                             "by themselves once one can be, also when the app is closed.",
                     )
                 }
@@ -76,7 +77,7 @@ fun NotesWaitingScreen(
                         onClick = onTryNow,
                         enabled = waiting.sending == null,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    ) { Text(if (waiting.sending == null) "Try now" else "Sending") }
+                    ) { Text(if (waiting.sending == null) "Try now" else "Sending…") }
                 }
                 for (note in notes) {
                     item(key = note.id) {
@@ -87,6 +88,9 @@ fun NotesWaitingScreen(
         }
     }
     val confirming = waiting?.notes?.firstOrNull { it.id == deleting && it.id != waiting.sending }
+    // A note that went on its way or left while asked about is no longer asked about: the question
+    // does not come back by itself once its try reached no server.
+    LaunchedEffect(confirming == null) { if (confirming == null) deleting = null }
     if (confirming != null) {
         AlertDialog(
             onDismissRequest = { deleting = null },

@@ -54,7 +54,16 @@ class NoteControllerTest {
         val notes = kept.toMutableList()
         var failPut = false
 
-        override fun waiting(): List<WaitingNote> = notes.sortedBy { it.writtenAt }
+        /** Reads that fail before the outbox answers, as a phone's storage may once. */
+        var failReads = 0
+
+        override fun waiting(): List<WaitingNote> {
+            if (failReads > 0) {
+                failReads--
+                error("disk busy")
+            }
+            return notes.sortedBy { it.writtenAt }
+        }
 
         override fun put(note: WaitingNote) {
             if (failPut) error("disk full")
@@ -416,7 +425,7 @@ class NoteControllerTest {
             runCurrent()
             // A note whose try the app stopped in may be on the map: it is not listed as waiting.
             assertEquals(
-                NotesWaiting(listOf(waiting("a", "First.", 10), waiting("b", "Second.", 20)), sending = "a"),
+                NotesWaiting(listOf(waiting("a", "First.", 10).copy(onItsWay = true), waiting("b", "Second.", 20)), sending = "a"),
                 controller.notesWaiting.value,
             )
             notes.hold!!.complete(Unit)
@@ -507,5 +516,55 @@ class NoteControllerTest {
                     .map { it.id },
             )
             assertEquals(true, controller.waiting.value)
+        }
+
+    @Test
+    fun notesTheStartCouldNotReadAreListedAndGoInALaterRound() =
+        runTest {
+            val notes = FakeNotes(NoteAnswer.Sent)
+            val outbox = FakeOutbox(waiting("a", "Closed.", 10)).apply { failReads = 2 }
+            val controller = controller(notes, outbox)
+            runCurrent()
+            assertEquals(emptyList(), notes.texts)
+            controller.flush()
+            runCurrent()
+            assertEquals(listOf("Closed."), notes.texts)
+            assertEquals(emptyList(), outbox.notes)
+        }
+
+    @Test
+    fun deletingTheLastNoteLeavesNothingWaiting() =
+        runTest {
+            val outbox = FakeOutbox(waiting("a", "Closed.", 10))
+            val controller = controller(FakeNotes(NoteAnswer.Unreachable), outbox)
+            runCurrent()
+            assertEquals(true, controller.waiting.value)
+            controller.withdraw("a")
+            runCurrent()
+            assertEquals(false, controller.waiting.value)
+            assertEquals(NotesWaiting(emptyList()), controller.notesWaiting.value)
+        }
+
+    @Test
+    fun aNoteThatCouldNotBeUnmarkedIsListedAsWaitingAndCanBeDeleted() =
+        runTest {
+            val notes = FakeNotes(NoteAnswer.Unreachable)
+            val outbox = FakeOutbox(waiting("a", "Closed.", 10)).apply { failUnmark = true }
+            val controller = controller(notes, outbox)
+            runCurrent()
+            // Read again by the next round, it is still marked on the phone, but it reached no server.
+            controller.flush()
+            outbox.failMark = true
+            runCurrent()
+            assertEquals(
+                listOf("a"),
+                controller.notesWaiting.value!!
+                    .notes
+                    .map { it.id },
+            )
+            controller.withdraw("a")
+            runCurrent()
+            assertEquals(emptyList(), outbox.notes)
+            assertEquals(false, controller.waiting.value)
         }
 }

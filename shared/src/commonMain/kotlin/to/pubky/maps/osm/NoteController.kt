@@ -194,17 +194,27 @@ class NoteController(
     }
 
     private suspend fun sendWaiting(box: NoteOutbox) {
-        val (mayBeSent, waiting) = outboxLock.withLock { read(box) }.partition { it.onItsWay && it.id !in notTried }
+        val read =
+            outboxLock.withLock {
+                // What the phone holds now: also notes an earlier read failed to see. A note missing
+                // from [kept] below was deleted by the user after this read.
+                onDisk { box.waiting() }?.also {
+                    kept = it
+                    publish()
+                } ?: emptyList()
+            }
+        val (mayBeSent, waiting) = read.partition { it.onItsWay && it.id !in notTried }
         for (note in mayBeSent) settle(box, note, NoteAnswer.NoAnswer.takeUnless { note.id in settled })
         for (note in waiting) {
             val marked =
                 outboxLock.withLock {
                     // The user deleted it after this round read the outbox.
                     if (kept.none { it.id == note.id }) return@withLock false
-                    (onDisk { box.setOnItsWay(note.id, true) } != null).also {
-                        if (it) {
+                    (onDisk { box.setOnItsWay(note.id, true) } != null).also { done ->
+                        if (done) {
                             notTried = notTried - note.id
                             trying = note.id
+                            kept = kept.map { if (it.id == note.id) it.copy(onItsWay = true) else it }
                             publish()
                         }
                     }

@@ -2,7 +2,12 @@ package to.pubky.maps.android
 
 import android.content.res.Configuration
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -94,6 +99,38 @@ class NotesWaitingTest {
     }
 
     @Test
+    fun theQuestionGoesWhenItsNoteGoesOnItsWayAndDoesNotComeBack() {
+        var waiting by mutableStateOf(NotesWaiting(listOf(schober, pin)))
+        compose.setContent {
+            PubkyMapsTheme {
+                NotesWaitingScreen(waiting, onTryNow = {}, onDelete = { deleted += it }, onBack = {}, zone = zurich)
+            }
+        }
+        compose.onNodeWithContentDescription("Delete the note about Conditorei Schober").performClick()
+        compose.onNodeWithText("Delete this note?").assertExists()
+        waiting = waiting.copy(sending = "a")
+        compose.waitForIdle()
+        compose.onNodeWithText("Delete this note?").assertDoesNotExist()
+        // Its try reached no server: it waits again, and nobody asked to delete it.
+        waiting = waiting.copy(sending = null)
+        compose.waitForIdle()
+        compose.onNodeWithText("Delete this note?").assertDoesNotExist()
+        assertEquals(emptyList<String>(), deleted)
+    }
+
+    @Test
+    fun thePageSaysWhileTheNotesAreReadAndWhenNoneWaits() {
+        var waiting by mutableStateOf<NotesWaiting?>(null)
+        compose.setContent {
+            PubkyMapsTheme { NotesWaitingScreen(waiting, onTryNow = {}, onDelete = {}, onBack = {}, zone = zurich) }
+        }
+        compose.onNodeWithText("Reading the notes on this phone…").assertExists()
+        compose.onNodeWithText("Try now").assertDoesNotExist()
+        waiting = NotesWaiting(emptyList())
+        compose.onNodeWithText("No notes wait on this phone.", substring = true).assertExists()
+    }
+
+    @Test
     fun tryNowSendsTheNotesNow() {
         show(NotesWaiting(listOf(schober)))
         compose.onNodeWithText("Try now").performClick()
@@ -105,9 +142,23 @@ class NotesWaitingTest {
     fun aNoteOnItsWayCannotBeDeleted() {
         show(NotesWaiting(listOf(schober, pin), sending = "a"))
         compose.onNodeWithContentDescription("Delete the note about Conditorei Schober").assertDoesNotExist()
-        compose.onNodeWithText("Sending…").assertExists()
+        // The row and the button, which waits for the round.
+        compose.onAllNodesWithText("Sending…").assertCountEquals(2)
         compose.onNodeWithText("Try now").assertDoesNotExist()
         compose.onNodeWithContentDescription("Delete the note about 47.37689, 8.54169").assertExists()
+    }
+
+    @Test
+    fun settingsHasAnOfflineGroupForWaitingNotesAlsoWithoutOfflineMaps() {
+        var notes by mutableStateOf<String?>(null)
+        compose.setContent {
+            PubkyMapsTheme { Settings(notes, offlineMaps = null) }
+        }
+        compose.onNodeWithText("Notes waiting").assertDoesNotExist()
+        compose.onNodeWithText("Offline").assertDoesNotExist()
+        notes = notesWaitingSummary(NotesWaiting(listOf(schober)))
+        compose.onNodeWithText("Offline").assertExists()
+        compose.onNodeWithText("Notes waiting").assertExists()
     }
 
     @Test
@@ -127,6 +178,7 @@ class NotesWaitingTest {
     private fun Settings(
         notesWaiting: String?,
         onOpen: () -> Unit = {},
+        offlineMaps: String? = "2 areas on this phone.",
     ) = SettingsScreen(
         appInfo = AppInfo(versionName = "0.1.0-edge.11", versionCode = 1_000_011),
         settings = AppSettings(),
@@ -136,7 +188,7 @@ class NotesWaitingTest {
         onFollowLocalRulesChange = {},
         onOpenLicences = {},
         onBack = {},
-        offlineMaps = "2 areas on this phone.",
+        offlineMaps = offlineMaps,
         notesWaiting = notesWaiting,
         onOpenNotesWaiting = onOpen,
     )
