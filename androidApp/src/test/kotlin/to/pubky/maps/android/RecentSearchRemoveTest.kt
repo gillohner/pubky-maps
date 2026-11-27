@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
@@ -97,7 +96,7 @@ class RecentSearchRemoveTest {
                         ),
                 ) {
                     val dark = isSystemInDarkTheme()
-                    Box(Modifier.fillMaxSize().background(if (dark) Color(0xFF2B2D31) else Color(0xFFF2EFE9)))
+                    Box(Modifier.fillMaxSize().background(placeholderMapColor(dark)))
                 }
             }
         }

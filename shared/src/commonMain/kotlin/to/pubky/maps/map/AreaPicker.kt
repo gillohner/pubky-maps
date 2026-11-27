@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
 import to.pubky.maps.config.AttributionLink
 import to.pubky.maps.ui.AppIcons
+import to.pubky.maps.ui.MapSurfaces
 
 /** The area picker over the map: plain state, so screenshots need no map. */
 data class AreaPickerUi(
@@ -128,11 +129,12 @@ private fun AreaPickerControls(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         // As tall as the search bar it replaces, and taller when a large font wraps the instruction, so
-        // no line is cut; the frame below takes what is left.
+        // no line is cut; the frame below takes what is left. It looks like that bar.
         Surface(
             modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth().heightIn(min = TopControlSize),
             shape = RoundedCornerShape(TopControlSize / 2),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            color = MapSurfaces.control,
+            border = MapSurfaces.edge,
             shadowElevation = 3.dp,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -156,6 +158,7 @@ private fun AreaPickerControls(
             modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.surface,
+            border = MapSurfaces.edge,
             shadowElevation = 3.dp,
         ) {
             Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)) {
