@@ -35,6 +35,7 @@ class AccountControllerTest {
             scope = backgroundScope,
             io = StandardTestDispatcher(testScheduler),
             now = { 1_000L },
+            webPages = FakeWebPagePlaces(),
         )
 
     private fun profile(
@@ -110,6 +111,29 @@ class AccountControllerTest {
             assertEquals("grant-secret", secrets.values[SecretStore.SESSION])
             assertNull(secrets.values[SecretStore.PENDING_SIGN_IN], "the flow's state is deleted after it")
             assertEquals("Ada", cache.stored?.name)
+        }
+
+    @Test
+    fun aBookmarkedWebPageThatIsNoPlaceIsLeftOutOfTheCachedBookmarks() =
+        runTest {
+            core.bookmarks =
+                listOf(
+                    SavedPlace(ARTICLE, "/priv/social/v1/bookmarks/a.json"),
+                    SavedPlace(MUSEUM, "/priv/social/v1/bookmarks/b.json"),
+                    SavedPlace(UNANSWERED, "/priv/social/v1/bookmarks/c.json"),
+                    SavedPlace("geo:47.1,8.5", "/priv/social/v1/bookmarks/d.json"),
+                )
+            val account = controller()
+            account.start()
+            account.onForeground()
+            signIn(account)
+
+            approve()
+            runCurrent()
+
+            val state = assertIs<AccountState.SignedIn>(account.state.value)
+            assertEquals(listOf("geo:47.1,8.5", UNANSWERED, MUSEUM), state.cached.bookmarks.map { it.place })
+            assertEquals(listOf("geo:47.1,8.5", UNANSWERED, MUSEUM), cache.stored?.bookmarks?.map { it.place })
         }
 
     @Test

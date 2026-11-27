@@ -114,6 +114,7 @@ class RealCoreSignInTest {
         scope = backgroundScope,
         io = StandardTestDispatcher(testScheduler),
         now = { 0 },
+        webPages = FakeWebPagePlaces(),
     )
 
     @Test

@@ -119,7 +119,7 @@ Settings:
   profile name, tags and bookmarks, kept on the phone so they stay readable offline, and signs out.
   Its tags and bookmarks are those on places (map links and web pages, the core's `mayBeMapPlace`):
   tags and bookmarks other apps put on their own Pubky objects, such as pubky.app posts and
-  profiles, are not listed or counted.
+  profiles, are not listed or counted, nor are bookmarked web pages Pinakes does not know or knows as no place.
 - **Server lists:** an ordered list of servers per service (map styles, Photon, Pinakes, Nexus,
   Overpass, Valhalla, OpenStreetMap API, Pkarr relays, sign-in relay). Users add, remove, reorder and reset them; servers run by Synonym are
   marked. The map uses its style list in order, the next style taking over when one fails to load;
@@ -229,8 +229,11 @@ shows only its places; other Pubky apps' objects in it (pubky.app posts, profile
 shared) are counted under its places ("3 other links not shown") and kept when the app edits it, and
 a collection that holds only such objects is left out. Bookmark keeps the place privately on the homeserver or on the phone only, per the
 setting; the **Bookmarks** screen (from the search page) lists bookmarks and collections (bookmarks of
-other Pubky apps' objects in the same folder, such as pubky.app posts, are left out); a collection
-opens as its own page with all of its description and its places, and back returns to Bookmarks. The map
+other Pubky apps' objects in the same folder, such as pubky.app posts, are left out, and so is a
+bookmarked web page that is no map link when Pinakes answers that it does not know the page or knows
+it as something other than a place, such as an article; when no Pinakes server answers, or not within
+10 seconds, it stays); a collection opens as its own page with all of its description and its places,
+and back returns to Bookmarks. The map
 shows each bookmarked place as a purple bookmark badge that opens it. The homeserver's bookmark holds
 only the link, so the place's name, point and summary (what and where it is, "Café · Napfgasse 4,
 8001 Zürich", as its page says once its card and offline district and town are in) are kept on the

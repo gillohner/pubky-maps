@@ -95,6 +95,8 @@ class AccountController(
     private val scope: CoroutineScope,
     private val io: CoroutineDispatcher,
     private val now: () -> Long,
+    /** Which bookmarked web pages are places; the others are left out of the cached bookmarks. */
+    private val webPages: WebPagePlaces,
     /** Waits between restore attempts while the homeserver is unreachable; the last one repeats. */
     private val retryDelays: List<Duration> = listOf(15.seconds, 30.seconds, 60.seconds, 120.seconds, 300.seconds),
 ) {
@@ -622,7 +624,7 @@ class AccountController(
         refreshJob =
             scope.launch(guard) {
                 try {
-                    val loaded = call { AccountLoader(core, now).load(publicKey) }
+                    val loaded = call { withPlaceBookmarksOnly(AccountLoader(core, now).load(publicKey), webPages) }
                     enqueue { if (session == current) refreshed(loaded) }
                 } catch (_: CoreFailure.Auth) {
                     enqueue { if (session == current) signedOut(notice = SESSION_ENDED) }

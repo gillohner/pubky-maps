@@ -29,6 +29,9 @@ data class AlsoOnLink(
     val derived: Boolean,
 )
 
+/** The schema.org type every place type comes from. */
+private const val PLACE_TYPE = "Place"
+
 /** The Pinakes card of a place: the link people referenced, read into a typed card. */
 @Serializable
 data class PlaceCardInfo(
@@ -56,8 +59,16 @@ data class PlaceCardInfo(
     val collections: Int,
     /** OpenStreetMap details, by OSM tag name (`opening_hours`, `phone`, ...). */
     val facts: Map<String, String>,
+    /** The schema.org types from `Thing` down to [type], e.g. `Thing, Place, CivicStructure, Museum`. */
+    val typePath: List<String> = emptyList(),
 ) {
     val point: GeoPoint? get() = if (lat != null && lon != null) geoPointOrNull(lat, lon) else null
+
+    /**
+     * Whether the card is of a place: its type is a schema.org Place, or it has a point on the map.
+     * A card of a page that is something else (an article, a book) is not.
+     */
+    val isPlace: Boolean get() = PLACE_TYPE in typePath || type == PLACE_TYPE || point != null
 
     /** The credit for [field] (`image`, `description`), when Pinakes took it from another source. */
     fun credit(field: String): PlaceCredit? = credits.firstOrNull { it.field == field }
