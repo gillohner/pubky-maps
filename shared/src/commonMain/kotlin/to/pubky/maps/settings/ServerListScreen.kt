@@ -56,6 +56,8 @@ import to.pubky.maps.ui.AppIcons
  * drag across three rows is one change of the stored list, not three. A drag the system cancels, or
  * one cut short by leaving the page, is saved where the row was let go too: what is on screen is what
  * is kept. TalkBack users get Move up and Move down on each row instead of the drag (WCAG 2.5.7).
+ * A drop that cannot be stored (the disk is full) leaves the dragged order on screen until the list
+ * changes again or the page is opened again; the app keeps using the stored order meanwhile.
  */
 @Composable
 fun ServerListScreen(

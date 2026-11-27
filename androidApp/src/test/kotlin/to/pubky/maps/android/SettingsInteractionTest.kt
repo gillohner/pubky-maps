@@ -224,6 +224,30 @@ class SettingsInteractionTest {
 
     @Test
     @Config(qualifiers = "$PHONE-notnight-mdpi")
+    fun aDragCutShortByLeavingThePageIsSavedWhereTheRowWas() {
+        settings = (AppSettings().withServerAdded(light, ownTiles, "My tiles") as AppSettings.AddServerResult.Added).settings
+        var onPage by mutableStateOf(true)
+        show { onUpdate ->
+            if (onPage) {
+                ServerListScreen(light, settings, { transform ->
+                    saves++
+                    onUpdate(transform)
+                }, onAddServer = {}, onBack = {})
+            }
+        }
+
+        dragOwnTilesUp(rows = 2)
+        assertEquals(0, saves)
+        // The page goes away under the finger (Back), so the drag never ends with a lift.
+        onPage = false
+        compose.waitForIdle()
+
+        assertEquals(listOf(ownTiles) + defaultLight, urls())
+        assertEquals("one save for the whole drag", 1, saves)
+    }
+
+    @Test
+    @Config(qualifiers = "$PHONE-notnight-mdpi")
     fun aDragAfterARemoveSavesTheOrderOfTheListLeft() {
         showLightStylesWithOwnTilesLast()
         compose.onNodeWithText("OpenFreeMap Liberty").performCustomAccessibilityActionWithLabel("Remove")
