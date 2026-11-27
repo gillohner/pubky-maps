@@ -19,6 +19,7 @@ import to.pubky.maps.status.ServicePart
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -459,8 +460,99 @@ class SearchControllerTest {
             assertEquals(SearchMode.Results, c.state.value.mode)
             assertNull(c.state.value.selected)
             assertTrue(c.back())
-            assertEquals(SearchState(textSetBySearch = 1), c.state.value)
+            assertEquals(SearchState(textSetBySearch = 1, picks = 1), c.state.value)
             assertFalse(c.back())
+        }
+
+    @Test
+    fun theMapMovesOncePerPickAndNotAgainWhenTheCardIsShownAgain() =
+        runTest {
+            val c = controller()
+            c.onQueryChange("kunsthaus", area)
+            c.submit(area)
+            advanceUntilIdle()
+            val museum =
+                c.state.value.results
+                    .first()
+            assertNull(c.state.value.pickToMoveTo, "no place picked yet")
+            c.select(museum)
+            val pick = assertNotNull(c.state.value.pickToMoveTo)
+            c.mapMoved(pick)
+            assertNull(c.state.value.pickToMoveTo, "the map moved for this pick")
+
+            // Back to the card from the bar is no new pick: the user's pan since stays.
+            c.startEditing()
+            assertNull(c.state.value.pickToMoveTo)
+            assertTrue(c.back())
+            assertEquals(SearchMode.Selected, c.state.value.mode)
+            assertNull(c.state.value.pickToMoveTo)
+
+            // The same place picked again moves the map again, as does one picked after leaving search.
+            c.select(museum)
+            val again = assertNotNull(c.state.value.pickToMoveTo)
+            assertTrue(again > pick)
+            c.mapMoved(again)
+            c.close()
+            assertNull(c.state.value.pickToMoveTo)
+            c.selectRecent(RecentSearch("kunsthaus", museum.place), area)
+            val afterClose = assertNotNull(c.state.value.pickToMoveTo, "a pick after closing search is new, not taken as moved")
+            assertTrue(afterClose > again)
+        }
+
+    @Test
+    fun aMoveReportedLateForAnEarlierPickDoesNotCountForTheLaterOne() =
+        runTest {
+            val c = controller()
+            c.onQueryChange("kunsthaus", area)
+            advanceUntilIdle()
+            val (first, second) =
+                c.state.value.results
+                    .take(2)
+            c.select(first)
+            val firstPick = assertNotNull(c.state.value.pickToMoveTo)
+            c.select(second)
+            val secondPick = assertNotNull(c.state.value.pickToMoveTo)
+            // The first pick's move, cut short by the second pick, ends after it.
+            c.mapMoved(firstPick)
+            assertEquals(secondPick, c.state.value.pickToMoveTo)
+            c.mapMoved(secondPick)
+            assertNull(c.state.value.pickToMoveTo)
+        }
+
+    @Test
+    fun leavingTheCardLeavesNothingToMoveToAndEveryWayOfPickingIsANewPick() =
+        runTest {
+            val c = controller()
+            c.onQueryChange("kunsthaus", area)
+            advanceUntilIdle()
+            val museum =
+                c.state.value.results
+                    .first()
+            c.select(museum)
+            val pick = assertNotNull(c.state.value.pickToMoveTo)
+            // Back to the results before the map moved: nothing left to move to (the map stops its move).
+            assertTrue(c.back())
+            assertNull(c.state.value.pickToMoveTo)
+            c.mapMoved(pick)
+
+            // Clearing the bar keeps the count, so the next pick is new.
+            c.clearQuery()
+            assertEquals(pick, c.state.value.picks)
+            // A typed point opens at once on Search.
+            c.onQueryChange("47.37, 8.54", area)
+            c.submit(area)
+            val typedPoint = assertNotNull(c.state.value.pickToMoveTo)
+            assertTrue(typedPoint > pick)
+            c.mapMoved(typedPoint)
+            // A lone result opens on Search.
+            c.close()
+            search.fixture = "conditorei-schober"
+            c.onQueryChange("conditorei schober", area)
+            c.submit(area)
+            advanceUntilIdle()
+            assertEquals(SearchMode.Selected, c.state.value.mode)
+            val lone = assertNotNull(c.state.value.pickToMoveTo)
+            assertTrue(lone > typedPoint)
         }
 
     @Test

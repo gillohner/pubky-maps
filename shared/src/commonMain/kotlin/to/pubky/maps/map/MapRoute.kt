@@ -425,11 +425,20 @@ fun MapRoute(
         val point = place?.point ?: return@LaunchedEffect
         mapState.moveToPlace(point, place.zoom ?: PLACE_ZOOM, rooms = roomsOf(place.uri).takeIf { shown?.place?.uri == place.uri })
     }
-    // A picked search result: the map moves to it, the same way.
-    LaunchedEffect(selected) {
+    // A picked search result: the map moves to it, the same way, once per pick (SearchState.pickToMoveTo):
+    // going back to its card or coming back from Settings keeps where the user has moved the map since.
+    // Leaving the card (Back, the bar, a pin, a link) stops a move still waiting for the page's room.
+    // A move cut short (the card left, Settings opened or the screen rotated during the wait or the
+    // animation) counts as done: moving later, when the user may have moved the map, would undo that.
+    LaunchedEffect(searchState?.pickToMoveTo) {
+        val pick = searchState?.pickToMoveTo ?: return@LaunchedEffect
         val picked = selected?.place ?: return@LaunchedEffect
-        val point = picked.point ?: return@LaunchedEffect
-        mapState.moveToPlace(point, picked.zoom ?: PLACE_ZOOM, rooms = roomsOf(picked.uri).takeIf { shown?.place?.uri == picked.uri })
+        try {
+            val point = picked.point ?: return@LaunchedEffect
+            mapState.moveToPlace(point, picked.zoom ?: PLACE_ZOOM, rooms = roomsOf(picked.uri).takeIf { shown?.place?.uri == picked.uri })
+        } finally {
+            search.controller.mapMoved(pick)
+        }
     }
     // A place tapped on the map opens its sheet or panel over the map, maybe over the place: once the
     // sheet has opened, a place it hides moves to the middle of the map left in view, as in Google
