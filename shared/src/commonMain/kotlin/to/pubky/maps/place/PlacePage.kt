@@ -82,6 +82,7 @@ import to.pubky.maps.links.LinkProvider
 import to.pubky.maps.links.OpenInAction
 import to.pubky.maps.routing.DirectionsCard
 import to.pubky.maps.routing.DirectionsUi
+import to.pubky.maps.routing.RouteStepList
 import to.pubky.maps.routing.RoutingIcons
 import to.pubky.maps.ui.AppIcons
 import to.pubky.maps.ui.TextIcon
@@ -372,7 +373,7 @@ private val SectionTitleWeight = FontWeight.SemiBold
 
 /**
  * The sections under the header, each shown only when it has something, each from its own source:
- * the card's photo and text, OSM details, Pubky tags, photos, posts, lists, "Also on" and the data
+ * the steps of the route the user opened, the card's photo and text, OSM details, Pubky tags, photos, posts, lists, "Also on" and the data
  * credits (with the card text's credit).
  */
 @Composable
@@ -383,6 +384,15 @@ fun PlaceSections(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier) {
+        val steps =
+            actions.directions
+                ?.directions
+                ?.shownSteps
+                .orEmpty()
+        if (steps.isNotEmpty()) {
+            SectionTitle("Steps")
+            RouteStepList(steps)
+        }
         val card = page.card
         if (page.cardLoading) LoadingBlock()
         card?.image?.let { image -> CardImage(image, card.credit("image"), actions) }

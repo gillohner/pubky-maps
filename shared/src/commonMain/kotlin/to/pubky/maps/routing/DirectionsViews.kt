@@ -4,12 +4,16 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -22,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
@@ -40,6 +45,8 @@ import kotlin.math.roundToInt
 data class DirectionsUi(
     val directions: Directions,
     val onMode: (TravelMode) -> Unit,
+    /** Opens (true) or closes the list of the route's steps. */
+    val onSteps: (Boolean) -> Unit,
     val onClose: () -> Unit,
     /** Asks again: for the route after a failure, for the position when it was missing. */
     val onRetry: () -> Unit,
@@ -116,7 +123,8 @@ fun routeStatusText(directions: Directions): String? =
 
 /**
  * The directions on a place page: the modes, then the route's time and length (the map draws its
- * line) or what stands in its way, with the routing server's credits under a found route.
+ * line) with the button that opens its steps ([RouteStepList]), or what stands in its way; the routing
+ * server's credits under a found route.
  */
 @Composable
 fun DirectionsCard(
@@ -161,7 +169,6 @@ fun DirectionsCard(
                         "${directions.mode.phrase.replaceFirstChar { it.uppercase() }} from your location",
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    RouteCredits(ui.credits)
                 } else {
                     routeStatusText(directions)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                     val status = directions.status
@@ -176,6 +183,68 @@ fun DirectionsCard(
                         }
 
                         else -> {}
+                    }
+                }
+            }
+            val found = directions.status as? RouteStatus.Found
+            if (found != null) {
+                // Outside the live region above: opening the steps is not read out as a new route.
+                Column(Modifier.padding(end = 12.dp)) {
+                    StepsButton(found.route.steps, directions.stepsShown, ui.onSteps)
+                    RouteCredits(ui.credits)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The button that opens the route's steps, as in Google Maps' directions; none when the server gave no
+ * steps. The list itself is [RouteStepList], in the page under the header: on a phone the header is
+ * the sheet's lowest stop, which a list inside it would stretch over the map.
+ */
+@Composable
+private fun StepsButton(
+    steps: List<RouteStep>,
+    shown: Boolean,
+    onSteps: (Boolean) -> Unit,
+) {
+    if (steps.isEmpty()) return
+    TextButton(
+        onClick = { onSteps(!shown) },
+        // Its label starts under the route's time.
+        modifier = Modifier.offset(x = (-12).dp).semantics { stateDescription = if (shown) "Expanded" else "Collapsed" },
+    ) {
+        Text(if (shown) "Hide steps" else "Steps")
+        Spacer(Modifier.width(4.dp))
+        Icon(if (shown) RoutingIcons.ExpandLess else RoutingIcons.ExpandMore, contentDescription = null, modifier = Modifier.size(18.dp))
+    }
+}
+
+/** The route's [steps] ([Directions.shownSteps]): each with its turn's icon, its sentence and how far the route then goes. */
+@Composable
+fun RouteStepList(
+    steps: List<RouteStep>,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier.padding(horizontal = 16.dp)) {
+        steps.forEachIndexed { i, step ->
+            if (i > 0) HorizontalDivider(Modifier.padding(start = 40.dp), color = MaterialTheme.colorScheme.outlineVariant)
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 10.dp).semantics(mergeDescendants = true) {},
+                verticalAlignment = Alignment.Top,
+            ) {
+                Icon(step.turn.icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.width(16.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(step.instruction, style = MaterialTheme.typography.bodyMedium)
+                    // Below 5 m the distance would read "0 m".
+                    if (step.meters >= 5) {
+                        Text(
+                            formatDistance(step.meters),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }

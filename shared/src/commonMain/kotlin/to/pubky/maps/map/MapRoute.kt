@@ -367,6 +367,12 @@ fun MapRoute(
 
     fun roomsOf(uri: String): Flow<DpRect?> = snapshotFlow { uncoveredMap?.takeIf { it.first == uri }?.second }
 
+    // Whether the phone sheet is at its top stop, with the room the page leaves.
+    var sheetAtTop by remember { mutableStateOf(false) }
+
+    fun pageRoomsOf(uri: String): Flow<PageRoom?> =
+        snapshotFlow { uncoveredMap?.takeIf { it.first == uri }?.second?.let { PageRoom(it, sheetAtTop) } }
+
     // Directions belong to the place they were opened on: another place, or none, closes them.
     val shownUri = shown?.place?.uri
     LaunchedEffect(directions, shownUri) {
@@ -375,12 +381,14 @@ fun MapRoute(
     }
     // A found route is fitted into the map its place page leaves in view, once per route
     // (Directions.routeToFit): coming back from Settings or a recreated activity (dark mode, language)
-    // keeps the user's pan.
+    // keeps the user's pan. One found while the page covers the map (another mode picked with the
+    // steps open, the sheet at its top) waits until the sheet rests with the map in view, at a lower
+    // stop however little map it leaves (routeRoom, PageRoom.holdsRoute).
     LaunchedEffect(foundRoute) {
         val open = directionsState ?: return@LaunchedEffect
         val route = open.routeToFit?.route ?: return@LaunchedEffect
+        val room = routeRoom(pageRoomsOf(open.placeUri))
         directions.routeFitted(route)
-        val room = uncoveredMap?.takeIf { it.first == open.placeUri }?.second
         mapState.animateCameraToBounds(
             BoundingBox(
                 west = route.points.minOf { it.lon },
@@ -398,6 +406,7 @@ fun MapRoute(
             DirectionsUi(
                 directions = directionsState,
                 onMode = directions::selectMode,
+                onSteps = directions::showSteps,
                 onClose = directions::close,
                 onRetry = {
                     if (directionsState.from == null) {
@@ -511,6 +520,7 @@ fun MapRoute(
         placePage = placePage,
         areaPicker = areaPicker,
         onUncoveredMap = { room -> uncoveredMap = room?.let { r -> shown?.place?.uri?.let { it to r } } },
+        onSheetAtTop = { sheetAtTop = it },
         placeCard =
             when {
                 placePage != null -> {

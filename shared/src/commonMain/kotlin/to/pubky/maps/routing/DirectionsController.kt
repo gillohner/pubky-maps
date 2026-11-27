@@ -40,7 +40,10 @@ sealed interface RouteStatus {
     data object Unreachable : RouteStatus
 }
 
-/** Directions to the place [placeUri] at [to], by [mode], from the user's position [from] once known. */
+/**
+ * Directions to the place [placeUri] at [to], by [mode], from the user's position [from] once known;
+ * [stepsShown] when the user opened the route's list of steps.
+ */
 data class Directions(
     val placeUri: String,
     val to: GeoPoint,
@@ -49,15 +52,20 @@ data class Directions(
     val status: RouteStatus,
     /** The map has fitted the found route ([DirectionsController.routeFitted]); false again for each new request. */
     val routeFitted: Boolean = false,
+    val stepsShown: Boolean = false,
 ) {
     /** The found route the map still has to fit, once per route. */
     val routeToFit: RouteStatus.Found? get() = (status as? RouteStatus.Found)?.takeIf { !routeFitted }
+
+    /** The steps the place page lists: the found route's, while the user has them open. */
+    val shownSteps: List<RouteStep> get() = if (stepsShown) (status as? RouteStatus.Found)?.route?.steps.orEmpty() else emptyList()
 }
 
 /**
  * Directions from the user's position to an open place, for the life of the process: one route at a
  * time, asked again when the mode changes (a newer request replaces one still running), the last mode
- * kept for the next place. Every routing server failing names routing in [health] until one answers.
+ * kept for the next place. The list of steps the user opened stays open for the routes by other modes
+ * to the same place. Every routing server failing names routing in [health] until one answers.
  * A position that has not come within [locatingTimeout] (a permission dialog dismissed, no fix
  * indoors) is missing; one that comes later still starts the route.
  */
@@ -73,6 +81,9 @@ class DirectionsController(
     /** The mode of the next directions: the one the user picked last, by car at first. */
     private var lastMode = TravelMode.Car
     private var request: Job? = null
+
+    /** The directions [request] asks the route for, as they were asked. */
+    private var asking: Directions? = null
     private var locating: Job? = null
 
     /**
@@ -126,6 +137,12 @@ class DirectionsController(
         if (changed.from != null) ask(changed) else set(changed)
     }
 
+    /** Opens or closes the list of the route's steps. */
+    fun showSteps(shown: Boolean) {
+        val current = state.value ?: return
+        if (current.stepsShown != shown) state.value = current.copy(stepsShown = shown)
+    }
+
     /** Asks again after a failure, from the same start. */
     fun retry() {
         val current = state.value ?: return
@@ -145,6 +162,7 @@ class DirectionsController(
     fun close() {
         request?.cancel()
         request = null
+        asking = null
         locating?.cancel()
         locating = null
         state.value = null
@@ -153,6 +171,7 @@ class DirectionsController(
     private fun set(directions: Directions) {
         request?.cancel()
         request = null
+        asking = null
         state.value = directions
     }
 
@@ -163,6 +182,7 @@ class DirectionsController(
         locating = null
         val asked = directions.copy(status = RouteStatus.Finding, routeFitted = false)
         state.value = asked
+        asking = asked
         request =
             scope.launch {
                 val status =
@@ -172,8 +192,10 @@ class DirectionsController(
                         RouteAnswer.Unreachable -> RouteStatus.Unreachable
                     }
                 if (status == RouteStatus.Unreachable) health?.failed(ServicePart.Routing) else health?.recovered(ServicePart.Routing)
-                // A newer request or a close replaced this one meanwhile (a cancel that came too late).
-                if (state.value === asked) state.value = asked.copy(status = status)
+                // A newer request or a close replaced this one meanwhile (a cancel that came too late);
+                // the steps opened or closed while it ran are kept.
+                val now = state.value
+                if (asking === asked && now != null) state.value = now.copy(status = status)
             }
     }
 }

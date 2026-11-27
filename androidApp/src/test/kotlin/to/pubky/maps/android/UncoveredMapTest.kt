@@ -85,15 +85,19 @@ class UncoveredMapTest {
 
     private var reported: DpRect? = null
     private var reports = 0
+    private var atTop: Boolean? = null
     private var shown by mutableStateOf(true)
+    private var sheetFull by mutableStateOf(false)
 
     private fun show(
         placeShown: Boolean,
         direction: LayoutDirection = LayoutDirection.Ltr,
         missing: Set<ServicePart> = emptySet(),
         mapUnavailable: Boolean = false,
+        full: Boolean = false,
     ) {
         shown = placeShown
+        sheetFull = full
         compose.setContent {
             CompositionLocalProvider(LocalLayoutDirection provides direction) {
                 PubkyMapsTheme {
@@ -111,12 +115,13 @@ class UncoveredMapTest {
                         placePage =
                             if (shown) {
                                 PlacePageSlot(
-                                    full = false,
+                                    full = sheetFull,
                                     sheet = {
                                         maxHeight,
                                         inset,
                                         ->
-                                        PlaceSheet(page, context, actions, SheetStop.Peek, {}, maxHeight, bottomInset = inset)
+                                        val stop = if (sheetFull) SheetStop.Full else SheetStop.Peek
+                                        PlaceSheet(page, context, actions, stop, {}, maxHeight, bottomInset = inset)
                                     },
                                     panel = { modifier -> PlacePanel(page, context, actions, modifier) },
                                 )
@@ -127,6 +132,7 @@ class UncoveredMapTest {
                             reported = it
                             reports++
                         },
+                        onSheetAtTop = { atTop = it },
                     ) { Box(Modifier.fillMaxSize()) }
                 }
             }
@@ -176,6 +182,24 @@ class UncoveredMapTest {
         assertTrue("the room ends at ${room.right}, the panel starts before ${close.left}", room.right <= close.left)
         assertEquals(1280f - 412f, room.right.value, 0f)
         assertEquals(0f, room.left.value, 0f)
+    }
+
+    /** A route found while the page covers the map waits for a lower stop (PageRoom.holdsRoute). */
+    @Test
+    @Config(qualifiers = "w412dp-h915dp-notnight-mdpi")
+    fun onAPhoneTheSheetAtItsTopIsReported() {
+        show(placeShown = true)
+        assertEquals(false, atTop)
+        sheetFull = true
+        compose.waitForIdle()
+        assertEquals(true, atTop)
+    }
+
+    @Test
+    @Config(qualifiers = "w1280dp-h800dp-notnight-mdpi")
+    fun onAWideScreenNoSheetIsAtItsTop() {
+        show(placeShown = true, full = true)
+        assertEquals(false, atTop)
     }
 
     @Test

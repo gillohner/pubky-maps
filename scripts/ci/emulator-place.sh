@@ -2,12 +2,13 @@
 # The place page on a running emulator, against recorded Pinakes and Nexus answers served on the
 # runner (scripts/ci/place_fixture_server.py through adb reverse; no public network): an
 # openstreetmap.org link to the Conditorei Schober opens the app on its place page, a sheet over the
-# map with the card's name and kind, the Pubky tags and the posts; the handle raises it to the whole
-# screen, where the lists holding the place show; back closes it. Directions, with location granted
+# map with the card's name and kind, the Pubky tags and the posts. Directions, with location granted
 # and the emulator's GPS at Zürich HB, ask the fixture Valhalla for a route by car from there to the
-# place, show its time and draw it on the map; Walk asks again on foot. A long-press on the map then
-# drops a pin: its page is named by its coordinates and asks no server; back closes it. Checks that Pinakes, Nexus
-# and Valhalla were asked with the app's User-Agent, Nexus for every spelling people used for the place.
+# place, show its time and draw it on the map; Walk asks again on foot. Its steps open and raise the
+# sheet to the whole screen, where the lists holding the place show; back closes it. A long-press on
+# the map then drops a pin: its page is named by its coordinates and asks no server; back closes it.
+# Checks that Pinakes, Nexus and Valhalla were asked with the app's User-Agent, Nexus for every
+# spelling people used for the place.
 # Usage: emulator-place.sh <apk> <out dir>
 set -euo pipefail
 
@@ -121,11 +122,21 @@ xy=$(wait_for "Walk" 5) || fail "no Walk mode in the directions"
 adb shell input tap $xy
 sleep 4
 check_alive "directions on foot"
-kill $gps 2> /dev/null || true
-
-xy=$(wait_for "Show more of the place" 5) || fail "no sheet handle"
+# The route's steps open under the header, the sheet raised to Full for them (the fixture's turn
+# instructions, as FOSSGIS gave them; the fixture answers every mode with the same route).
+xy=$(wait_for "Steps" 5) || fail "no Steps button under the route"
 adb shell input tap $xy
 sleep 2
+wait_for "Show less of the place" 5 > /dev/null || fail "opening the steps did not raise the sheet to the top"
+wait_for "Turn right onto Museumstrasse." 5 > /dev/null || fail "the route's steps did not open"
+screenshot place-steps
+check_alive "steps"
+# Closed again so the page is as long as before; the sheet stays at Full.
+xy=$(wait_for "Hide steps" 3) || fail "no Hide steps button"
+adb shell input tap $xy
+sleep 1
+kill $gps 2> /dev/null || true
+wait_for "Show less of the place" 3 > /dev/null || fail "closing the steps moved the sheet"
 found=""
 for _ in 1 2 3; do
     if wait_for "In 3 lists" 4 > /dev/null; then found=1; break; fi

@@ -7,6 +7,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.search.Fixtures
+import kotlin.math.round
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -22,6 +23,67 @@ class ValhallaTest {
         assertEquals(GeoPoint(47.370255, 8.548698), route.points.last())
         assertEquals(289.373, route.seconds, 0.001)
         assertEquals(1401.0, route.meters, 0.001)
+    }
+
+    @Test
+    fun aRouteAnswerGivesItsStepsInOrder() {
+        // The same answer, asked with turn instructions in English.
+        val steps = parseValhallaRoute(Fixtures.read("hauptbahnhof-kunsthaus.valhalla.json")).steps
+        assertEquals(
+            listOf(
+                RouteStep("Drive north.", Turn.Depart, 35.0),
+                RouteStep("Turn right onto Museumstrasse.", Turn.Right, 52.0),
+                RouteStep("Bear right onto Bahnhofquai.", Turn.SlightRight, 30.0),
+                RouteStep("Keep left to stay on Bahnhofquai.", Turn.KeepLeft, 406.0),
+                RouteStep("Turn left onto Rudolf-Brun-Brücke.", Turn.Left, 329.0),
+                RouteStep("Turn right onto Seilergraben.", Turn.Right, 205.0),
+                RouteStep("Bear right onto Hirschengraben.", Turn.SlightRight, 262.0),
+                RouteStep("Bear right onto Heimplatz.", Turn.SlightRight, 81.0),
+                RouteStep("Your destination is on the right.", Turn.Arrive, 0.0),
+            ),
+            steps.map { it.copy(meters = round(it.meters)) },
+        )
+    }
+
+    @Test
+    fun stepsOfEveryLegFollowEachOtherAndOnesWithoutASentenceAreLeftOut() {
+        val json =
+            """{"trip":{"legs":[{"shape":"${encode(GeoPoint(1.0, 2.0), GeoPoint(1.5, 2.5))}","maneuvers":[""" +
+                """{"type":1,"instruction":"Walk east.","length":0.5},{"type":99,"instruction":"Take the gondola.","length":1.2},""" +
+                """{"type":15,"instruction":" ","length":0.1}]},""" +
+                """{"shape":"${encode(
+                    GeoPoint(1.5, 2.5),
+                    GeoPoint(2.0, 3.0),
+                )}","maneuvers":[{"type":6,"instruction":"You have arrived."}]}],""" +
+                """"summary":{"time":60,"length":2.5}}}"""
+        assertEquals(
+            listOf(
+                RouteStep("Walk east.", Turn.Depart, 500.0),
+                RouteStep("Take the gondola.", Turn.Straight, 1200.0),
+                RouteStep("You have arrived.", Turn.Arrive, 0.0),
+            ),
+            parseValhallaRoute(json).steps,
+        )
+    }
+
+    @Test
+    fun maneuverTypesGiveTheStepsIcons() {
+        val turns = (0..43).associateWith(::valhallaTurn)
+        assertEquals(Turn.Depart, turns[2])
+        assertEquals(Turn.Arrive, turns[5])
+        assertEquals(Turn.SharpRight, turns[11])
+        assertEquals(Turn.UTurnLeft, turns[13])
+        assertEquals(Turn.SharpLeft, turns[14])
+        assertEquals(Turn.SlightLeft, turns[16])
+        assertEquals(Turn.Straight, turns[17])
+        assertEquals(Turn.KeepRight, turns[20])
+        assertEquals(Turn.KeepLeft, turns[19])
+        assertEquals(Turn.Merge, turns[38])
+        assertEquals(Turn.Roundabout, turns[26])
+        assertEquals(Turn.Ferry, turns[28])
+        assertEquals(Turn.Straight, turns[8])
+        // Every kind of step has a type that gives it.
+        assertEquals(Turn.entries.toSet(), turns.values.toSet())
     }
 
     @Test
@@ -49,10 +111,11 @@ class ValhallaTest {
     }
 
     @Test
-    fun theRequestAsksForTheLineOnlyByTheModesCosting() {
+    fun theRequestAsksForTheLineAndEnglishStepsByTheModesCosting() {
         val body = Json.parseToJsonElement(valhallaRouteBody(GeoPoint(47.0, 8.0), GeoPoint(47.5, 8.5), TravelMode.Bike)).jsonObject
         assertEquals("bicycle", body["costing"]!!.jsonPrimitive.content)
-        assertEquals("none", body["directions_type"]!!.jsonPrimitive.content)
+        assertEquals("instructions", body["directions_type"]!!.jsonPrimitive.content)
+        assertEquals("en-US", body["language"]!!.jsonPrimitive.content)
         assertEquals("polyline6", body["shape_format"]!!.jsonPrimitive.content)
         val locations = body["locations"]!!.jsonArray.map { it.jsonObject }
         assertEquals(listOf(47.0, 47.5), locations.map { it["lat"]!!.jsonPrimitive.double })
