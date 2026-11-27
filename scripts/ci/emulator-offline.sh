@@ -295,7 +295,8 @@ adb shell cmd uimode night no
 sleep 3
 expect_water offline-light-during-check "#3c78d8"
 age=$((SECONDS - app_started))
-failed=$(adb logcat -d -T "$since" | grep -c "loading style failed") || true
+adb logcat -d -T "$since" > "$out/logcat-during-check.txt" || fail "could not read the log of the theme switches"
+failed=$(grep -c "loading style failed" "$out/logcat-during-check.txt") || true
 echo "theme switches 23-${age} s after the start, styles failed meanwhile: $failed"
 ((failed == 0)) || fail "a map style failed to load during the update check's walk without a server"
 check_alive "theme switches during an update check"

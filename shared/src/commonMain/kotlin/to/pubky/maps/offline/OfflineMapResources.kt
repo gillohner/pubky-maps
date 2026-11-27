@@ -38,8 +38,8 @@ import kotlin.time.Instant
  * a provider every network request at once, also these, so without this a map made during a
  * download (a theme switch or rotation recreates it) would ask again for its cached style, and with
  * the map server unreachable the failed request would fail the style the map already showed. It is
- * answered as unchanged with the copy's own dates, which leaves the cache as it was; the map asks
- * again when it next loads the resource.
+ * answered as unchanged with the copy's own dates, which keeps its expiry in the cache; unlike
+ * MapLibre's own client, nothing asks again when the copy expires, only the next load of it.
  *
  * The client is made by [createClient] on the first request this provider loads, which MapLibre
  * runs on a background thread: the provider is set up on the main thread at app start and most
