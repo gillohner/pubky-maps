@@ -87,9 +87,9 @@ internal val StorageChoice.explanation: String
 internal val DataKind.title: String
     get() =
         when (this) {
-            DataKind.SavedPlaces -> "Saved places"
+            DataKind.SavedPlaces -> "Bookmarks"
             DataKind.HomeAndWork -> "Home and work"
-            DataKind.Lists -> "Lists"
+            DataKind.Lists -> "Collections"
             DataKind.CheckIns -> "Check-ins"
             DataKind.RecordedTracks -> "Recorded tracks"
             DataKind.LocationHistory -> "Location history"
@@ -102,7 +102,7 @@ internal val DataKind.description: String
     get() =
         when (this) {
             DataKind.SavedPlaces -> {
-                "Places you save for later."
+                "Places you bookmark for later."
             }
 
             DataKind.HomeAndWork -> {
@@ -110,7 +110,7 @@ internal val DataKind.description: String
             }
 
             DataKind.Lists -> {
-                "New lists of places you make (you can pick another place for each list)."
+                "New collections of places you make (you can pick another place for each collection)."
             }
 
             DataKind.CheckIns -> {
@@ -126,7 +126,7 @@ internal val DataKind.description: String
             }
 
             DataKind.PhotoLocations -> {
-                "The spot saved inside a photo. Phone only removes it before a photo is posted; camera and phone details are always removed."
+                "The spot stored inside a photo. Phone only removes it before a photo is posted; camera and phone details are always removed."
             }
 
             DataKind.Tags -> {

@@ -92,7 +92,7 @@ data class SearchActions(
     val onSelectRecent: (RecentSearch) -> Unit = {},
     val onClearQuery: () -> Unit = {},
     val onBack: () -> Unit = {},
-    /** Opens the user's saved places and lists; null where there are none. */
+    /** Opens the user's bookmarks and collections; null where there are none. */
     val onOpenSaved: (() -> Unit)? = null,
     /** Removes one recent search (a long press on it); null where the history cannot be changed. */
     val onRemoveRecent: ((RecentSearch) -> Unit)? = null,
@@ -214,8 +214,8 @@ fun SearchList(
             if (openSaved != null && state.query.isBlank()) {
                 item(key = "saved") {
                     ListItem(
-                        headlineContent = { Text("Saved") },
-                        supportingContent = { Text("Your saved places and lists") },
+                        headlineContent = { Text("Bookmarks") },
+                        supportingContent = { Text("Your bookmarks and collections") },
                         leadingContent = { Icon(WriteIcons.Bookmark, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                         modifier = Modifier.clickable(onClick = openSaved),
                     )

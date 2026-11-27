@@ -287,13 +287,13 @@ class SavedAndListsTest {
                 )
             }
         }
-        val button = compose.onNode(hasText("Create list with this place") and hasClickAction()).fetchSemanticsNode().boundsInRoot
+        val button = compose.onNode(hasText("Create collection with this place") and hasClickAction()).fetchSemanticsNode().boundsInRoot
         // "Public" is also the radio button's label; the badge is the one on the button's line, after it.
         val beside =
             compose.onAllNodesWithText("Public", useUnmergedTree = true).fetchSemanticsNodes().any { node ->
                 val badge = node.boundsInRoot
                 badge.left >= button.right && badge.top >= button.top && badge.bottom <= button.bottom
             }
-        assertTrue("the Public badge is not beside Create list with this place ($button)", beside)
+        assertTrue("the Public badge is not beside Create collection with this place ($button)", beside)
     }
 }

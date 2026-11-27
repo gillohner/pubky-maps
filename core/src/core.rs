@@ -1096,11 +1096,11 @@ impl PubkyMapsCore {
                         .map(|(_, edit)| (edit, entry.path.clone()))
                 })
                 .ok_or_else(|| CoreError::NotFound {
-                    reason: format!("list {post_id}"),
+                    reason: format!("collection {post_id}"),
                 })?;
             let head_json =
                 String::from_utf8(read_body(storage.get(head_path.as_str()).await?).await?)
-                    .map_err(|_| CoreError::validation("stored list is not UTF-8"))?;
+                    .map_err(|_| CoreError::validation("stored collection is not UTF-8"))?;
             match objects::edit_collection_in(
                 root,
                 author.clone(),

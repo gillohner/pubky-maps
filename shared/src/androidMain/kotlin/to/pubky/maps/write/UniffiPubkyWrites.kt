@@ -75,7 +75,7 @@ class UniffiPubkyWrites(
         place: String,
         remove: Boolean,
     ): OwnList {
-        val (private, id) = listAddress(listUri) ?: throw CoreFailure.Other("not a list: $listUri")
+        val (private, id) = listAddress(listUri) ?: throw CoreFailure.Other("not a collection: $listUri")
         val edit = if (remove) CollectionEdit.Remove(place) else CollectionEdit.Add(place, null)
         return mapped { core.editCollection(id, edit, private).toList(private) }
     }
@@ -120,6 +120,6 @@ class UniffiPubkyWrites(
 private fun BuiltObject.toWrite() = BuiltWrite(path = path, uri = uri, json = json)
 
 private fun BuiltObject.toList(private: Boolean): OwnList {
-    val (name, items) = listOfPost(json) ?: throw CoreFailure.Other("the core built an unreadable list")
+    val (name, items) = listOfPost(json) ?: throw CoreFailure.Other("the core built an unreadable collection")
     return OwnList(uri = uri, kept = if (private) Kept.Private else Kept.Public, name = name, items = items)
 }

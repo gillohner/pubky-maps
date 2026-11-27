@@ -194,11 +194,11 @@ done
 wait_for "Show less of the place" 3 > /dev/null || fail "the sheet's handle did not raise it to the top"
 found=""
 for _ in 1 2 3; do
-    if wait_for "In 3 lists" 4 > /dev/null; then found=1; break; fi
+    if wait_for "In 3 collections" 4 > /dev/null; then found=1; break; fi
     adb shell input swipe 540 1700 540 900 400
     sleep 1
 done
-[ -n "$found" ] || fail "the lists holding the place are not on the page"
+[ -n "$found" ] || fail "the collections holding the place are not on the page"
 wait_for "Posts" 5 > /dev/null || fail "no posts about the place"
 screenshot place-full
 check_alive "place page full"

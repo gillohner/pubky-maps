@@ -237,7 +237,7 @@ adb shell input keyevent KEYCODE_BACK
 wait_for "Map style, dark" 15 > /dev/null || fail "back from the server list did not return to Server lists"
 adb shell input keyevent KEYCODE_BACK
 wait_for "What is stored online" 15 > /dev/null || fail "back from Server lists did not return to Settings"
-visit "What is stored online" "Saved places" stored-online "Open in other apps"
+visit "What is stored online" "Bookmarks" stored-online "Open in other apps"
 visit "Open in other apps" "Organic Maps" open-in "What is stored online"
 
 # A setting survives a restart: switch "Follow local rules" off, restart the app, look again, and

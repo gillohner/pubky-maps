@@ -301,7 +301,7 @@ pub fn build_photo_post(
 
 fn list_full_error() -> CoreError {
     CoreError::validation(format!(
-        "a list holds at most {} places",
+        "a collection holds at most {} places",
         VALIDATION_LIMITS.collection_items_max_count
     ))
 }
@@ -441,15 +441,15 @@ pub(crate) fn edit_collection_in(
 ) -> Result<Option<BuiltObject>, CoreError> {
     let owner = owner_id(&author)?;
     let head: PubkySocialPost = serde_json::from_str(&head_json)
-        .map_err(|e| CoreError::validation(format!("stored list is not a post: {e}")))?;
+        .map_err(|e| CoreError::validation(format!("stored collection is not a post: {e}")))?;
     if head.kind != PubkySocialPostKind::Collection {
         return Err(CoreError::validation(format!(
-            "post {post_id} is a {} post, not a list",
+            "post {post_id} is a {} post, not a collection",
             head.kind
         )));
     }
     let mut content: PubkySocialCollectionContent = serde_json::from_str(&head.content)
-        .map_err(|e| CoreError::validation(format!("stored list content: {e}")))?;
+        .map_err(|e| CoreError::validation(format!("stored collection content: {e}")))?;
     let changed = match edit {
         CollectionEdit::Add { place, note } => {
             let uri = normalize_place_uri(place)?;
@@ -928,7 +928,7 @@ mod tests {
             },
         )
         .unwrap_err();
-        assert!(err.to_string().contains("not a list"), "{err}");
+        assert!(err.to_string().contains("not a collection"), "{err}");
     }
 
     #[test]

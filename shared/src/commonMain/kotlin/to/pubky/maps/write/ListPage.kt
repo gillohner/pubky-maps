@@ -68,25 +68,25 @@ fun ListPage(
     snackbarHostState: SnackbarHostState? = null,
 ) {
     // Each tick is sent at once, so there is nothing to confirm: Close (the X) only, and Undo in a snackbar.
-    WritePage(title = "Add to a list", place = state.placeName, onClose = onClose, snackbarHostState = snackbarHostState) {
+    WritePage(title = "Add to collection", place = state.placeName, onClose = onClose, snackbarHostState = snackbarHostState) {
         if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
         if (state.stale) {
             Text(
-                "Your lists could not be read now; these are as they were last time.",
+                "Your collections could not be read now; these are as they were last time.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         if (state.lists.isNotEmpty()) {
-            WriteSection("Your lists") {
+            WriteSection("Your collections") {
                 Column {
                     state.lists.forEach { choice -> ListRow(choice, onToggle) }
                 }
             }
         } else if (!state.loading) {
-            Text("You have no lists yet. Make one below.", style = MaterialTheme.typography.bodyMedium)
+            Text("You have no collections yet. Make one below.", style = MaterialTheme.typography.bodyMedium)
         }
-        WriteSection("New list") {
+        WriteSection("New collection") {
             OutlinedTextField(
                 value = state.newName,
                 onValueChange = onNewNameChange,
@@ -127,12 +127,12 @@ fun ListPage(
                 Button(
                     onClick = onCreate,
                     enabled = state.newName.isNotBlank() && state.newName.length <= LIST_NAME_MAX,
-                ) { Text("Create list with this place") }
+                ) { Text("Create collection with this place") }
                 KeptBadge(state.newKept)
             }
         }
         Text(
-            "A list holds up to ${OwnList.MAX_LIST_ITEMS} places. Each tick is sent at once.",
+            "A collection holds up to ${OwnList.MAX_LIST_ITEMS} places. Each tick is sent at once.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
