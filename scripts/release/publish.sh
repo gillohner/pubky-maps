@@ -9,8 +9,8 @@
 #   yet. Only then the release's target commit, title and notes name this build, and only then the
 #   files of older builds are removed: after a complete publish its target commit is the commit of the
 #   live feed (the tag may have failed to move, below), which is what the edge check above and
-#   edge-commit.py compare with. A run that fails after the feed is up fails red, with the release
-#   still naming the build before and keeping its files, until the next publish.
+#   edge-commit.py compare with. A run whose edit that names this build fails is red, and the release
+#   names the build before and keeps its files until the next publish.
 # - `v<x.y.z>`: the release of that existing tag, made as a draft, filled, then published, so
 #   releases/latest/download/update.json never points at a release without its feed. GitHub picks
 #   which release is "latest" by version (a backport does not take it over).
@@ -19,8 +19,10 @@
 # then the tag is deleted and made again at this commit; if that is refused too, it is put back and
 # the run only warns (the release's files are still this build's; its title names it).
 #
-# Every upload to a release and every edit of it is tried again when GitHub fails it (each gives the
-# same release when made twice); one that still fails after five tries fails the run.
+# Uploads, `release edit` calls and the v* publish are tried again when GitHub fails them (each gives
+# the same release when made twice); one that still fails after five tries fails the run. Making the
+# release and deleting old files are single calls: a second try after a lost answer would fail on the
+# release or file that the first one made or deleted.
 #
 # In GitHub Actions it writes `published=true` (or `false` when it published nothing) to the step's
 # outputs, so the job that installs the published APK runs only when there is one.
@@ -135,8 +137,13 @@ case $tag in
     mapfile -t files < <(find "$dist" -maxdepth 1 -type f ! -name "$feed" ! -name SHA256SUMS | sort)
     upload "${files[@]}"
     upload "$dist/$feed" "$dist/SHA256SUMS"
-    id=$(gh api "repos/$repo/releases/tags/$tag" --jq .id 2> /dev/null ||
-      gh api "repos/$repo/releases" --jq ".[] | select(.tag_name == \"$tag\") | .id" | head -1)
+    # From the list: GitHub's releases/tags/<tag> finds only published releases, not this draft.
+    ids=$(read_gh api "repos/$repo/releases?per_page=100" --jq ".[] | select(.tag_name == \"$tag\") | .id")
+    id=${ids%%$'\n'*}
+    if [ -z "$id" ]; then
+      echo "::error::GitHub lists no release of $tag" >&2
+      exit 1
+    fi
     change_gh api -X PATCH "repos/$repo/releases/$id" -F draft=false -F prerelease=false -f make_latest=legacy > /dev/null
     ;;
   *)
