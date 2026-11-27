@@ -56,11 +56,11 @@ suspend fun SnackbarHostState.showWriteMessage(message: WriteMessage) {
 val WriteIntent.signInReason: String
     get() =
         when (this) {
-            WriteIntent.Save -> "Sign in to save this place."
+            WriteIntent.Save -> "Sign in to bookmark this place."
             WriteIntent.Tag -> "Sign in to tag this place."
             WriteIntent.Post -> "Sign in to write about this place."
             WriteIntent.Photo -> "Sign in to add a photo of this place."
-            WriteIntent.AddToList -> "Sign in to add this place to a list."
+            WriteIntent.AddToList -> "Sign in to add this place to a collection."
         }
 
 /** The links of [target]'s place, spelled as the core stores them: every link of the open page when it is the same place. */

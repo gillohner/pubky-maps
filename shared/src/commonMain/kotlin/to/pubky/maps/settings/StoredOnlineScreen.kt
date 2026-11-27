@@ -43,8 +43,8 @@ fun StoredOnlineScreen(
     SettingsPage(title = "What is stored online", onBack = onBack) {
         item {
             PageIntro(
-                "Choose where each kind of data is kept. Saved places, lists, tags, posts and photos follow " +
-                    "these choices; Pubky Maps does not save the other kinds yet.",
+                "Choose where each kind of data is kept. Bookmarks, collections, tags, posts and photos follow " +
+                    "these choices; Pubky Maps does not store the other kinds yet.",
             )
         }
         item { SectionHeader("You choose") }

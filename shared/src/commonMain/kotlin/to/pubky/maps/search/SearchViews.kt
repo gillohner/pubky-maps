@@ -214,8 +214,8 @@ fun SearchList(
             if (openSaved != null && state.query.isBlank()) {
                 item(key = "saved") {
                     ListItem(
-                        headlineContent = { Text("Saved") },
-                        supportingContent = { Text("Your saved places and lists") },
+                        headlineContent = { Text("Bookmarks") },
+                        supportingContent = { Text("Your bookmarks and collections") },
                         leadingContent = { Icon(WriteIcons.Bookmark, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                         modifier = Modifier.clickable(onClick = openSaved),
                     )

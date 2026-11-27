@@ -125,16 +125,16 @@ def main():
         dev.fail("the Settings account row does not say the homeserver is unreachable")
     dev.screenshot("settings")
     dev.tap(NAME)
-    if dev.wait_for("Your homeserver can't be reached. Showing what this phone saved.", 20) is None:
+    if dev.wait_for("Your homeserver can't be reached. Showing this phone's copy.", 20) is None:
         dev.fail("the Account page does not say it shows saved data")
     nodes = dev.dump("account")
     shown = dev.texts(nodes)
     for _, label in TAGS:
         if label not in shown:
             dev.fail(f"the cached tag {label!r} is not on the Account page")
-    # No name is stored for the saved place here, so it reads as its link in words.
+    # No name is stored for the bookmark here, so it reads as its link in words.
     if "OpenStreetMap way 48210334" not in shown:
-        dev.fail("the cached saved place is not on the Account page")
+        dev.fail("the cached bookmark is not on the Account page")
     dev.screenshot("account")
     dev.check_alive("account page")
     dev.back()
@@ -170,9 +170,9 @@ def outbox_wakes_the_closed_app(dev):
                       "-p", PKG, check=False)
     if "Error" in started:
         dev.fail(f"the geo: link did not reach the app: {started.strip()}")
-    dev.tap("Save", timeout=30)
-    if dev.wait_for("Saved", 15) is None:
-        dev.fail("the place page does not show the place as saved")
+    dev.tap("Bookmark", timeout=30)
+    if dev.wait_for("Bookmarked", 15) is None:
+        dev.fail("the place page does not show the place as bookmarked")
     dev.screenshot("saved-waiting")
     deadline = time.time() + 30
     jobs = ""

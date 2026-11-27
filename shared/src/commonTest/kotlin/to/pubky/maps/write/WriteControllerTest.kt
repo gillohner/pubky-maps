@@ -903,7 +903,7 @@ class WriteControllerTest {
             runCurrent()
 
             assertEquals(emptyList(), sent)
-            assertEquals(listOf("“Coffee” already holds 100 places, the most a list can hold."), messages)
+            assertEquals(listOf("“Coffee” already holds 100 places, the most a collection can hold."), messages)
         }
 
     @Test

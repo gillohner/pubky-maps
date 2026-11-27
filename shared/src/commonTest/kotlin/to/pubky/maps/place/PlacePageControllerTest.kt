@@ -821,7 +821,7 @@ class PlacePageControllerTest {
             assertEquals(listOf("kept"), page.tags.map { it.label })
             // Read with no viewer; the signed-in user is one of its taggers, so it is theirs.
             assertTrue(page.tags.single().mine)
-            // "Offline: showing what was saved on" the day the area's tags were fetched.
+            // "Offline: showing the copy from" the day the area's tags were fetched.
             assertNull(page.savedAt)
             assertEquals(1_000, page.shownAt)
             // The links of the place as opened (its OSM element is the same link here).

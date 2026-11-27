@@ -231,11 +231,11 @@ fun PlaceHeader(
                         modifier = Modifier.size(18.dp),
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text(if (saved) "Saved" else "Save")
+                    Text(if (saved) "Bookmarked" else "Bookmark")
                 }
                 ActionButton(WriteIcons.Tag, "Tag", writes.onTag)
                 ActionButton(WriteIcons.Post, "Post", writes.onPost)
-                ActionButton(WriteIcons.AddToList, "Add to list", writes.onAddToList)
+                ActionButton(WriteIcons.AddToList, "Add to collection", writes.onAddToList)
             }
             actions.onShare?.let { share ->
                 if (writes != null) {
@@ -265,7 +265,7 @@ fun PlaceHeader(
 /**
  * "Start here", as CoMaps' "Route from" beside its "Route to": directions to the places opened next
  * start from this one (a hotel, a station) instead of the user's position. Chosen, it reads "Starting
- * here" and clears the start again, as Save reads "Saved" (the label is the state TalkBack reads).
+ * here" and clears the start again, as Bookmark reads "Bookmarked" (the label is the state TalkBack reads).
  */
 @Composable
 private fun StartHereButton(start: RouteStartChoice) {
@@ -319,7 +319,7 @@ private fun OfflineNote(
     val saved = page.shownAt?.let { Instant.fromEpochMilliseconds(it).toLocalDateTime(context.timeZone) }
     val text =
         when {
-            saved != null -> "Offline: showing what was saved on ${savedText(saved)}."
+            saved != null -> "Offline: showing the copy from ${savedText(saved)}."
             PlacePart.Card in page.failed && PlacePart.Social in page.failed -> "Offline: Pubky details could not load."
             else -> "Some Pubky details could not load."
         }
@@ -511,7 +511,7 @@ private fun SectionTitle(
     }
 }
 
-/** A section's add button beside its title ("Write a post", "Add to list"). */
+/** A section's add button beside its title ("Write a post", "Add to collection"). */
 @Composable
 private fun SectionAction(
     icon: ImageVector,
@@ -1167,11 +1167,11 @@ private fun ListsSection(
     Column {
         SectionTitle(
             when (count) {
-                0 -> "Lists"
-                1 -> "In 1 list"
-                else -> "In $count lists"
+                0 -> "Collections"
+                1 -> "In 1 collection"
+                else -> "In $count collections"
             },
-            action = writes?.let { w -> { SectionAction(WriteIcons.AddToList, "Add to list", w.onAddToList) } },
+            action = writes?.let { w -> { SectionAction(WriteIcons.AddToList, "Add to collection", w.onAddToList) } },
         )
         ownLists.forEach { list ->
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -1180,15 +1180,15 @@ private fun ListsSection(
                     KeptBadge(list.kept)
                     Spacer(Modifier.width(8.dp))
                     val places = if (list.items.size == 1) "1 place" else "${list.items.size} places"
-                    SmallText("Your list · $places" + if (list.pending) " · not sent yet" else "")
+                    SmallText("Your collection · $places" + if (list.pending) " · not sent yet" else "")
                 }
             }
         }
-        if (count == 0) SmallText("Not in any list yet.", Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+        if (count == 0) SmallText("Not in any collection yet.", Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
         others.forEach { list ->
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Text(list.name ?: "A list", style = MaterialTheme.typography.bodyLarge)
-                val by = if (list.mine) "Your list" else "By ${personName(list.author, people[list.author])}"
+                Text(list.name ?: "A collection", style = MaterialTheme.typography.bodyLarge)
+                val by = if (list.mine) "Your collection" else "By ${personName(list.author, people[list.author])}"
                 val places = list.itemCount?.let { if (it == 1) "1 place" else "$it places" }
                 SmallText(listOfNotNull(by, places).joinToString(" · "))
             }

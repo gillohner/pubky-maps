@@ -442,7 +442,7 @@ class WriteController(
             // The list as it is now: after "Removed from" a full list has room again for its Undo.
             val current = own.value.lists.firstOrNull { it.uri == list.uri } ?: list
             if (current.full) {
-                tell("“${list.name}” already holds ${OwnList.MAX_LIST_ITEMS} places, the most a list can hold.")
+                tell("“${list.name}” already holds ${OwnList.MAX_LIST_ITEMS} places, the most a collection can hold.")
                 return@enqueue
             }
             if (!editList(target, list, remove = false)) return@enqueue
@@ -537,7 +537,7 @@ class WriteController(
         }
     }
 
-    /** Reads the user's lists from the homeserver again (the "Add to list" page asks when it opens). */
+    /** Reads the user's lists from the homeserver again (the "Add to a collection" page asks when it opens). */
     fun refreshLists() = enqueue { loadLists() }
 
     /** Tries to send what waits now (the phone came online, the app came to the front). */
@@ -944,10 +944,10 @@ internal fun failedText(
             is WriteOp.Untag -> "remove the tag “${op.label}”"
             is WriteOp.Post -> "post your text"
             is WriteOp.Photo -> "post your photo"
-            is WriteOp.Save -> "save the place"
-            is WriteOp.Unsave -> "remove the saved place"
-            is WriteOp.CreateList -> "create the list “${op.name}”"
-            is WriteOp.EditList -> if (op.remove) "remove the place from the list" else "add the place to the list"
+            is WriteOp.Save -> "bookmark the place"
+            is WriteOp.Unsave -> "remove the bookmark"
+            is WriteOp.CreateList -> "create the collection “${op.name}”"
+            is WriteOp.EditList -> if (op.remove) "remove the place from the collection" else "add the place to the collection"
         }
     return "Couldn't $what" + (reason?.let { ": $it" } ?: ".")
 }

@@ -146,7 +146,7 @@ private fun SignedOut(
         reason?.let { Text(it, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary) }
         Text("Sign in with Pubky", style = MaterialTheme.typography.headlineSmall)
         Text(
-            "Sign in to tag places and save them with your Pubky identity. Pubky Ring holds your keys and " +
+            "Sign in to tag and bookmark places with your Pubky identity. Pubky Ring holds your keys and " +
                 "approves the sign-in; Pubky Maps never sees them.",
             style = MaterialTheme.typography.bodyLarge,
         )
@@ -301,9 +301,9 @@ private fun SignedIn(
         items = tags,
     )
     ItemSection(
-        title = "Saved places",
+        title = "Your bookmarks",
         count = state.cached.bookmarks.size,
-        empty = "No saved places yet.",
+        empty = "No bookmarks yet.",
         items = saved,
     )
     OutlinedButton(
@@ -358,7 +358,7 @@ private fun ConnectionLine(state: AccountState.SignedIn) {
             }
 
             Connection.Offline -> {
-                "Your homeserver can't be reached. Showing what this phone saved." to true
+                "Your homeserver can't be reached. Showing this phone's copy." to true
             }
         }
     Row(
@@ -434,7 +434,7 @@ fun AccountSettingsRow(
             }
 
             is AccountState.SignedOut -> {
-                "Sign in with Pubky Ring" to "Tag and save places with your Pubky identity"
+                "Sign in with Pubky Ring" to "Tag and bookmark places with your Pubky identity"
             }
 
             is AccountState.Unavailable -> {

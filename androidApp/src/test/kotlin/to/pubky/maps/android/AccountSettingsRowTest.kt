@@ -60,7 +60,7 @@ class AccountSettingsRowTest {
     @Test
     fun signedOutRowShowsWhatSigningInIsFor() {
         showAtLargeFont(AccountState.SignedOut())
-        assertShownWhole("Sign in with Pubky Ring", "Tag and save places with your Pubky identity")
+        assertShownWhole("Sign in with Pubky Ring", "Tag and bookmark places with your Pubky identity")
     }
 
     @Test

@@ -81,7 +81,7 @@ fun SavedScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Saved") },
+                title = { Text("Bookmarks") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(AppIcons.ArrowBack, contentDescription = "Back") } },
             )
         },
@@ -92,7 +92,7 @@ fun SavedScreen(
                 item(key = "places-title") { Title("Places") }
                 if (state.places.isEmpty()) {
                     item(key = "places-empty") {
-                        Hint("Places you save show here. Tap Save on a place's page.")
+                        Hint("Places you bookmark show here. Tap Bookmark on a place's page.")
                     }
                 }
                 items(state.places, key = { "place:${it.kept}:${it.place}" }) { row ->
@@ -101,9 +101,9 @@ fun SavedScreen(
                             .takeIf { RowText(row.place, row.name, row.summary).key() in placesToTellApart }
                     PlaceRow(row, savedLine(row.summary, where), onOpen)
                 }
-                item(key = "lists-title") { Title("Your lists") }
+                item(key = "lists-title") { Title("Your collections") }
                 if (state.lists.isEmpty()) {
-                    item(key = "lists-empty") { Hint("Lists you make show here. Tap Add to list on a place's page.") }
+                    item(key = "lists-empty") { Hint("Collections you make show here. Tap Add to collection on a place's page.") }
                 }
                 state.lists.forEach { list ->
                     item(key = "list:${list.uri}") {
@@ -148,7 +148,7 @@ fun SavedScreen(
                 }
                 if (!state.signedIn) {
                     item(key = "signed-out") {
-                        Hint("Sign in to see the places and lists you keep on your homeserver.")
+                        Hint("Sign in to see the bookmarks and collections you keep on your homeserver.")
                     }
                 }
             }
