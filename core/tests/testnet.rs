@@ -522,8 +522,9 @@ async fn place_objects_round_trip() {
     let mut expected = vec![place.to_string(), long.clone(), web_page.clone()];
     expected.sort();
     assert_eq!(places, expected);
-    // One bookmark a page: a page of another app's bookmark is skipped, never returned
-    // empty, because an empty page is the end of the listing.
+    // One bookmark a page: a page of another app's bookmark is skipped and the next page is
+    // read in the same call (fewer than 20 skipped pages in a row), so here no page before the
+    // end is empty.
     let mut paged = Vec::new();
     let mut cursor = None;
     loop {

@@ -440,6 +440,81 @@ fn saved_map_place(filename: &str, body: Option<&[u8]>) -> Option<String> {
         .filter(|target| may_be_map_place(target))
 }
 
+/// Where `list_bookmarks` reads the bookmark folder from: the homeserver, or a fake in tests.
+trait BookmarkFolder {
+    /// One listing page.
+    fn list(
+        &self,
+        options: &ListOptions,
+    ) -> impl Future<Output = Result<ListPage, CoreError>> + Send;
+    /// The body of the file at `path`, `None` when it is gone.
+    fn read(&self, path: &str) -> impl Future<Output = Result<Option<Vec<u8>>, CoreError>> + Send;
+}
+
+/// The signed-in user's bookmark folder on their homeserver.
+struct OwnBookmarks {
+    storage: SessionStorage,
+    dir: String,
+}
+
+impl BookmarkFolder for OwnBookmarks {
+    fn list(
+        &self,
+        options: &ListOptions,
+    ) -> impl Future<Output = Result<ListPage, CoreError>> + Send {
+        list_own(&self.storage, &self.dir, options)
+    }
+
+    fn read(&self, path: &str) -> impl Future<Output = Result<Option<Vec<u8>>, CoreError>> + Send {
+        get_optional(&self.storage, path)
+    }
+}
+
+/// The saved places of one `list_bookmarks` call. A page without a place is followed by the
+/// next one, up to [`MAX_SKIPPED_BOOKMARK_PAGES`]; after those the result is an empty page
+/// whose `next_cursor` continues after the last page read, so places listed after many
+/// other-app bookmarks are reached by the next call.
+async fn saved_place_page(
+    mut options: ListOptions,
+    folder: &impl BookmarkFolder,
+) -> Result<SavedPlacePage, CoreError> {
+    let mut places = Vec::new();
+    for _ in 0..MAX_SKIPPED_BOOKMARK_PAGES {
+        let page = folder.list(&options).await?;
+        for entry in page.entries {
+            let Some(filename) = bookmark_filename_of(&entry.path) else {
+                continue;
+            };
+            let body = if bookmark_needs_body(filename) {
+                match folder.read(&entry.path).await? {
+                    Some(body) => Some(body),
+                    None => continue,
+                }
+            } else {
+                None
+            };
+            if let Some(place) = saved_map_place(filename, body.as_deref()) {
+                places.push(SavedPlace {
+                    place,
+                    path: entry.path,
+                });
+            }
+        }
+        if !places.is_empty() || page.next_cursor.is_none() {
+            return Ok(SavedPlacePage {
+                places,
+                next_cursor: page.next_cursor,
+            });
+        }
+        options.cursor = page.next_cursor;
+    }
+    // MAX_SKIPPED_BOOKMARK_PAGES pages without a place: an empty page that is not the end.
+    Ok(SavedPlacePage {
+        places,
+        next_cursor: options.cursor,
+    })
+}
+
 /// One folder's read: its newest version as `(editId, JSON)`, `None` when it has none.
 type PostRead = Result<Option<(String, String)>, CoreError>;
 
@@ -1157,42 +1232,7 @@ impl PubkyMapsCore {
             let session = inner.session()?;
             let storage = session.storage();
             let dir = social_path(Root::Priv, PubkySocialBookmark::PATH_SEGMENT);
-            let mut options = options;
-            let mut places = Vec::new();
-            for _ in 0..MAX_SKIPPED_BOOKMARK_PAGES {
-                let page = list_own(&storage, &dir, &options).await?;
-                for entry in page.entries {
-                    let Some(filename) = bookmark_filename_of(&entry.path) else {
-                        continue;
-                    };
-                    let body = if bookmark_needs_body(filename) {
-                        match get_optional(&storage, &entry.path).await? {
-                            Some(body) => Some(body),
-                            None => continue,
-                        }
-                    } else {
-                        None
-                    };
-                    if let Some(place) = saved_map_place(filename, body.as_deref()) {
-                        places.push(SavedPlace {
-                            place,
-                            path: entry.path,
-                        });
-                    }
-                }
-                if !places.is_empty() || page.next_cursor.is_none() {
-                    return Ok(SavedPlacePage {
-                        places,
-                        next_cursor: page.next_cursor,
-                    });
-                }
-                options.cursor = page.next_cursor;
-            }
-            // 20 pages without a place: an empty page that is not the end.
-            Ok(SavedPlacePage {
-                places,
-                next_cursor: options.cursor,
-            })
+            saved_place_page(options, &OwnBookmarks { storage, dir }).await
         })
         .await
     }
@@ -1290,6 +1330,146 @@ mod tests {
             assert_eq!(saved_map_place(&stored.filename, body), None, "{other}");
         }
         assert_eq!(saved_map_place("not-base64!", None), None);
+    }
+
+    /// A bookmark folder in memory: the paths in listing order, `~` bodies by path (`None`:
+    /// the file is gone), and a count of listing reads. Its cursor is the number of entries
+    /// before the page. With `reads_fail`, every body read fails.
+    struct FakeBookmarks {
+        entries: Vec<(String, Option<Vec<u8>>)>,
+        lists: std::sync::atomic::AtomicUsize,
+        reads_fail: bool,
+    }
+
+    impl FakeBookmarks {
+        fn of(places: &[String]) -> Self {
+            let entries = places
+                .iter()
+                .map(|place| {
+                    let stored =
+                        objects::build_bookmark(SCAN_AUTHOR.into(), place.clone()).unwrap();
+                    let body = bookmark_filename_of(&stored.path)
+                        .is_some_and(bookmark_needs_body)
+                        .then(|| stored.json.into_bytes());
+                    (stored.path, body)
+                })
+                .collect();
+            Self {
+                entries,
+                lists: Default::default(),
+                reads_fail: false,
+            }
+        }
+
+        fn lists(&self) -> usize {
+            self.lists.load(std::sync::atomic::Ordering::SeqCst)
+        }
+    }
+
+    impl BookmarkFolder for FakeBookmarks {
+        fn list(
+            &self,
+            options: &ListOptions,
+        ) -> impl Future<Output = Result<ListPage, CoreError>> + Send {
+            self.lists.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let start: usize = options.cursor.as_deref().map_or(0, |c| c.parse().unwrap());
+            let end = (start + usize::from(options.limit)).min(self.entries.len());
+            let entries = self.entries[start..end]
+                .iter()
+                .map(|(path, _)| ListEntry {
+                    uri: format!("pubky://{SCAN_AUTHOR}{path}"),
+                    path: path.clone(),
+                })
+                .collect::<Vec<_>>();
+            let next_cursor = (!entries.is_empty()).then(|| end.to_string());
+            std::future::ready(Ok(ListPage {
+                entries,
+                next_cursor,
+            }))
+        }
+
+        fn read(
+            &self,
+            path: &str,
+        ) -> impl Future<Output = Result<Option<Vec<u8>>, CoreError>> + Send {
+            if self.reads_fail {
+                return std::future::ready(Err(CoreError::Network {
+                    reason: "timed out".into(),
+                }));
+            }
+            let body = self
+                .entries
+                .iter()
+                .find(|(stored, _)| stored == path)
+                .and_then(|(_, body)| body.clone());
+            std::future::ready(Ok(body))
+        }
+    }
+
+    #[tokio::test]
+    async fn a_place_after_more_skipped_pages_than_one_call_reads_comes_with_the_next_call() {
+        let skipped = MAX_SKIPPED_BOOKMARK_PAGES + 5;
+        let place = format!(
+            "https://www.google.com/maps/place/{}/@47.3703,8.548,17z",
+            "Kunsthaus".repeat(25)
+        );
+        let mut stored: Vec<String> = (0..skipped)
+            .map(|i| format!("pubky://{SCAN_AUTHOR}/pub/pubky.app/posts/0034A{i:07}"))
+            .collect();
+        stored.push(place.clone());
+        let folder = FakeBookmarks::of(&stored);
+        let one_a_page = |cursor| ListOptions {
+            cursor,
+            limit: 1,
+            ..ListOptions::default()
+        };
+
+        let first = saved_place_page(one_a_page(None), &folder).await.unwrap();
+        assert!(first.places.is_empty());
+        assert_eq!(folder.lists(), MAX_SKIPPED_BOOKMARK_PAGES);
+        assert_eq!(
+            first.next_cursor.as_deref(),
+            Some(MAX_SKIPPED_BOOKMARK_PAGES.to_string().as_str()),
+            "an empty page after the skip cap is not the end: it continues after the pages read"
+        );
+
+        let second = saved_place_page(one_a_page(first.next_cursor), &folder)
+            .await
+            .unwrap();
+        let places: Vec<&str> = second.places.iter().map(|p| p.place.as_str()).collect();
+        assert_eq!(places, vec![place.as_str()]);
+        assert_eq!(folder.lists(), skipped + 1);
+
+        let end = saved_place_page(one_a_page(second.next_cursor), &folder)
+            .await
+            .unwrap();
+        assert!(end.places.is_empty());
+        assert_eq!(end.next_cursor, None, "an empty listing is the end");
+    }
+
+    #[tokio::test]
+    async fn a_long_bookmark_whose_file_is_gone_is_skipped_and_a_failed_read_fails_the_call() {
+        let long = |name: &str| {
+            format!(
+                "https://www.google.com/maps/place/{}/@47.3703,8.548,17z",
+                name.repeat(25)
+            )
+        };
+        let (gone, kept) = (long("Kunsthaus"), long("Landesmuseum"));
+        let mut folder = FakeBookmarks::of(&[gone, kept.clone()]);
+        folder.entries[0].1 = None;
+
+        let page = saved_place_page(ListOptions::default(), &folder)
+            .await
+            .unwrap();
+        let places: Vec<&str> = page.places.iter().map(|p| p.place.as_str()).collect();
+        assert_eq!(places, vec![kept.as_str()]);
+
+        folder.reads_fail = true;
+        assert!(matches!(
+            saved_place_page(ListOptions::default(), &folder).await,
+            Err(CoreError::Network { .. })
+        ));
     }
 
     #[test]
