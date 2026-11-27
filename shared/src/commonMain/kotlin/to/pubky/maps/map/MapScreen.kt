@@ -479,6 +479,7 @@ private fun MapButton(
         modifier = modifier.size(size),
         shape = CircleShape,
         color = MapSurfaces.control,
+        border = MapSurfaces.edge,
         contentColor = if (tinted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
         shadowElevation = 3.dp,
     ) {
@@ -531,6 +532,7 @@ private fun MapUnavailableNotice(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
         color = MapSurfaces.notice,
+        border = MapSurfaces.edge,
         shadowElevation = 3.dp,
     ) {
         NoteWithAction(

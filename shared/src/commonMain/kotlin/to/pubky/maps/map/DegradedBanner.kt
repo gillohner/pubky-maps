@@ -28,6 +28,7 @@ internal fun DegradedBanner(
         modifier = modifier,
         shape = RoundedCornerShape(16.dp),
         color = MapSurfaces.notice,
+        border = MapSurfaces.edge,
         contentColor = MaterialTheme.colorScheme.onSurface,
         shadowElevation = 3.dp,
     ) {

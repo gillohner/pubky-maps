@@ -123,6 +123,7 @@ fun SearchBar(
         modifier = modifier.heightIn(min = SearchBarHeight).fillMaxWidth(),
         shape = RoundedCornerShape(SearchBarHeight / 2),
         color = if (elevated) MapSurfaces.control else MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = if (elevated) MapSurfaces.edge else null,
         shadowElevation = if (elevated) 3.dp else 0.dp,
     ) {
         Row(Modifier.heightIn(min = SearchBarHeight), verticalAlignment = Alignment.CenterVertically) {

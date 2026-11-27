@@ -48,6 +48,7 @@ fun PlaceCard(
         modifier = modifier.widthIn(max = MaxCardWidth).fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         color = MapSurfaces.card,
+        border = MapSurfaces.edge,
         shadowElevation = 3.dp,
     ) {
         Column(Modifier.padding(start = 16.dp, top = 8.dp, end = 8.dp, bottom = 12.dp)) {
@@ -117,6 +118,7 @@ fun OpeningLinkCard(modifier: Modifier = Modifier) {
         modifier = modifier.widthIn(max = MaxCardWidth).fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         color = MapSurfaces.card,
+        border = MapSurfaces.edge,
         shadowElevation = 3.dp,
     ) {
         Row(
