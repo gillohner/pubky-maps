@@ -241,7 +241,7 @@ fun SavedRoute(
     SavedScreen(
         state =
             SavedScreenState(
-                places = own.saved.map { SavedRow(it.place, it.name ?: own.names[it.place], it.kept, it.pending) },
+                places = own.saved.map { SavedRow(it.place, it.name ?: own.names[it.place], it.kept, it.pending, it.point) },
                 lists = own.lists,
                 names = own.names,
                 refreshing = refreshing || own.listsLoading,

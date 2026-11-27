@@ -14,6 +14,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.ui.PubkyMapsTheme
 import to.pubky.maps.write.Kept
 import to.pubky.maps.write.ListChoice
@@ -26,7 +27,8 @@ import to.pubky.maps.write.SavedScreenState
 
 /**
  * The Saved page names places the way the user knows them (a named place shows no OpenStreetMap id
- * or link), and the list page shows where a new list goes beside the button that makes it.
+ * or link) and tells two places of the same name apart by where they are, and the list page shows
+ * where a new list goes beside the button that makes it.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w412dp-h915dp")
@@ -80,6 +82,54 @@ class SavedAndListsTest {
         compose.onAllNodesWithText("Lindenhof").assertCountEquals(2)
         compose.onAllNodesWithText("OpenStreetMap node 270803095").assertCountEquals(0)
         compose.onAllNodesWithText("maps.app.goo.gl/x1").assertCountEquals(0)
+    }
+
+    @Test
+    fun twoPlacesOfTheSameNameAreToldApartByWhereTheyAre() {
+        val bahnhofbruecke = "https://www.openstreetmap.org/node/1"
+        val bellevue = "https://www.openstreetmap.org/node/2"
+        compose.setContent {
+            PubkyMapsTheme(darkTheme = false) {
+                SavedScreen(
+                    state =
+                        SavedScreenState(
+                            places =
+                                listOf(
+                                    SavedRow(bahnhofbruecke, "Coop", Kept.Private, point = GeoPoint(47.37586, 8.54253)),
+                                    SavedRow(bellevue, "Coop", Kept.Phone, point = GeoPoint(47.36722, 8.54493)),
+                                    SavedRow(osm, "Conditorei Schober", Kept.Private, point = GeoPoint(47.37220, 8.54460)),
+                                ),
+                            lists =
+                                listOf(
+                                    OwnList(
+                                        "phone:1",
+                                        Kept.Phone,
+                                        "Groceries",
+                                        listOf(bahnhofbruecke, bellevue, "https://www.openstreetmap.org/node/3"),
+                                        names =
+                                            mapOf(
+                                                bahnhofbruecke to "Coop",
+                                                bellevue to "Coop",
+                                                "https://www.openstreetmap.org/node/3" to "Migros",
+                                            ),
+                                    ),
+                                ),
+                            signedIn = true,
+                        ),
+                    onOpen = {},
+                    onBack = {},
+                )
+            }
+        }
+        compose.onNodeWithText("47.37586, 8.54253").assertExists()
+        compose.onNodeWithText("47.36722, 8.54493").assertExists()
+        // A name no other place has shows the name alone.
+        compose.onAllNodesWithText("47.3722, 8.5446").assertCountEquals(0)
+        compose.onNodeWithText("Groceries").performClick()
+        // In the list too, from the saved place's point; Migros, alone, has no line under it.
+        compose.onAllNodesWithText("47.37586, 8.54253").assertCountEquals(2)
+        compose.onAllNodesWithText("47.36722, 8.54493").assertCountEquals(2)
+        compose.onAllNodesWithText("OpenStreetMap node 3").assertCountEquals(0)
     }
 
     @Test

@@ -467,6 +467,8 @@ class WriteScreenshotTest {
                             SavedRow(osm, "Conditorei Schober", Kept.Private),
                             SavedRow("https://maps.app.goo.gl/x1", "Lindenhof", Kept.Private, pending = true),
                             SavedRow("geo:47.36667,8.55", null, Kept.Phone),
+                            SavedRow("https://www.openstreetmap.org/node/1", "Coop", Kept.Private, point = GeoPoint(47.37586, 8.54253)),
+                            SavedRow("https://www.openstreetmap.org/node/2", "Coop", Kept.Phone, point = GeoPoint(47.36722, 8.54493)),
                         ),
                     lists = listOf(coffee, OwnList("phone:1", Kept.Phone, "Sunday walks", emptyList())),
                     signedIn = true,
