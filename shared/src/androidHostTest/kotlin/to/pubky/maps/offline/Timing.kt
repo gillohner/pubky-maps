@@ -15,3 +15,19 @@ internal fun fastestOf(block: () -> Unit): Duration {
     repeat(3) { block() }
     return (1..10).minOf { measureTime(block) }
 }
+
+/**
+ * The fastest run of each of [a] and [b], as [fastestOf] takes it, with the two run in turns so that
+ * both see the same state of the machine (a compiled path, a busy CPU) when their times are compared.
+ */
+internal fun fastestOfEach(
+    a: () -> Unit,
+    b: () -> Unit,
+): Pair<Duration, Duration> {
+    repeat(3) {
+        a()
+        b()
+    }
+    val rounds = (1..10).map { measureTime(a) to measureTime(b) }
+    return rounds.minOf { it.first } to rounds.minOf { it.second }
+}
