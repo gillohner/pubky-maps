@@ -498,8 +498,14 @@ class WriteScreenshotTest {
                                 summary = "Park · Altstadt, Zürich",
                             ),
                             SavedRow("geo:47.36667,8.55", null, Kept.Phone),
-                            // Saved on another device, before summaries: told apart by their points.
-                            SavedRow("https://www.openstreetmap.org/node/1", "Coop", Kept.Private, point = GeoPoint(47.37586, 8.54253)),
+                            SavedRow(
+                                "https://www.openstreetmap.org/node/1",
+                                "Coop",
+                                Kept.Private,
+                                point = GeoPoint(47.37586, 8.54253),
+                                summary = "Supermarket · Bahnhofbrücke 1, 8001 Zürich",
+                            ),
+                            // Saved on another device, before summaries: told from the other Coop by its point.
                             SavedRow("https://www.openstreetmap.org/node/2", "Coop", Kept.Phone, point = GeoPoint(47.36722, 8.54493)),
                         ),
                     lists = listOf(coffee, OwnList("phone:1", Kept.Phone, "Sunday walks", emptyList())),
