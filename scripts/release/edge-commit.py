@@ -16,9 +16,10 @@ commit and warns. publish.sh then publishes such a build only when its commit co
 edge has, so edge never goes back; it can stay behind main until the next push to main.
 
 When edge already has a build of the chosen commit (the release's target commit, which publish.sh
-sets once that build's update feed is up), there is nothing to build: the run of a commit that an
-earlier run already built as main's head would otherwise publish the same code again under a higher
-versionCode, and edge installs would be offered it as an update.
+sets once that build's update feed is up, so it names the build of the last complete publish), there
+is nothing to build: the run of a commit that an earlier run already built as main's head would
+otherwise publish the same code again under a higher versionCode, and edge installs would be offered
+it as an update.
 
 Usage: edge-commit.py <owner/repo> <this run's commit>   (GH_TOKEN for `gh api`)
 Prints `sha=<commit>` and `build=true|false` for $GITHUB_OUTPUT; notices and warnings go to stderr.
