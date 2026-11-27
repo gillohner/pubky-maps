@@ -370,10 +370,14 @@ fun MapRoute(
         val open = directions?.directions?.value ?: return@LaunchedEffect
         if (open.placeUri != shownUri) directions.close()
     }
-    // A found route is fitted into the map its place page leaves in view, once per route.
+    // A found route is fitted into the map its place page leaves in view, once per route
+    // (Directions.routeToFit): coming back from Settings or a recreated activity (dark mode, language)
+    // keeps the user's pan.
     LaunchedEffect(foundRoute) {
-        val route = foundRoute?.route ?: return@LaunchedEffect
-        val room = uncoveredMap?.takeIf { it.first == directionsState.placeUri }?.second
+        val open = directionsState ?: return@LaunchedEffect
+        val route = open.routeToFit?.route ?: return@LaunchedEffect
+        directions?.routeFitted(route)
+        val room = uncoveredMap?.takeIf { it.first == open.placeUri }?.second
         mapState.animateCameraToBounds(
             BoundingBox(
                 west = route.points.minOf { it.lon },
@@ -716,15 +720,14 @@ private fun rememberMapSearch(
     // Search takes the bottom of the screen: a place opened from a link makes way.
     val searching = state.mode != SearchMode.Idle
     LaunchedEffect(searching) { if (searching) onCloseLinkedPlace() }
-    // The results of a search: the map shows those near the area searched, once per search (not
-    // again when a slower source adds results, after the user moved the map, or back from a place).
-    var fittedQuery by remember { mutableStateOf<String?>(null) }
+    // The results of a search: the map shows those near the area searched, once per search
+    // (SearchState.resultsToFit: not again when a slower source adds results, back from a place or
+    // from Settings, after the user moved the map). Keyed on the shown results, not on resultsToFit,
+    // so marking the fit done does not cancel its animation.
     val shownResults = state.results.takeIf { state.mode == SearchMode.Results && state.resultsAreCurrent }
-    if (state.mode == SearchMode.Idle) fittedQuery = null
     LaunchedEffect(shownResults) {
-        val points = shownResults?.mapNotNull { it.place.point }.orEmpty()
-        if (points.isEmpty() || fittedQuery == state.resultsQuery.trim()) return@LaunchedEffect
-        fittedQuery = state.resultsQuery.trim()
+        val points = state.resultsToFit?.mapNotNull { it.place.point } ?: return@LaunchedEffect
+        controller.resultsFitted(state.resultsQuery)
         val area = mapState.searchArea()
         // The results near the area searched; when none is (the map was elsewhere), those near the best one.
         val near =

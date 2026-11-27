@@ -57,12 +57,31 @@ data class SearchState(
     val picks: Int = 0,
     /** The last pick the map has moved for ([SearchController.mapMoved]). */
     val mapMovedFor: Int = 0,
+    /**
+     * The text whose results the map has been fitted to ([SearchController.resultsFitted]), trimmed;
+     * kept while search is open (also when the bar is cleared), gone once search closes.
+     */
+    val fittedQuery: String? = null,
 ) {
     /**
      * The pick the map still has to move to, once: the shown place's, until the map has moved for it.
      * Showing the same pick's card again (Back from the bar) is no new pick.
      */
     val pickToMoveTo: Int? get() = picks.takeIf { mode == SearchMode.Selected && selected != null && it != mapMovedFor }
+
+    /**
+     * The results the map still has to fit, once per search: shown on the map, answering the text in
+     * the bar, some with a point, for a text the map has not been fitted to. A slower source adding
+     * results, a place's card and back, or coming back from Settings fit nothing again.
+     */
+    val resultsToFit: List<SearchResult>?
+        get() =
+            results.takeIf { r ->
+                mode == SearchMode.Results &&
+                    resultsAreCurrent &&
+                    resultsQuery.trim() != fittedQuery &&
+                    r.any { it.place.point != null }
+            }
 
     val searching: Boolean get() = photon == SourceState.Loading || pinakes == SourceState.Loading
 
@@ -210,6 +229,12 @@ class SearchController(
      */
     fun mapMoved(pick: Int) = _state.update { it.copy(mapMovedFor = maxOf(it.mapMovedFor, pick)) }
 
+    /**
+     * The map has fitted the results for [query] (or started to: a fit cut short counts too). Called
+     * by the map, so the same search is not fitted again while it stays open.
+     */
+    fun resultsFitted(query: String) = _state.update { it.copy(fittedQuery = query.trim()) }
+
     /** A recent search was picked: a place opens again, a text is searched again. */
     fun selectRecent(
         entry: RecentSearch,
@@ -236,6 +261,7 @@ class SearchController(
                 textSetBySearch = it.textSetBySearch + 1,
                 picks = it.picks,
                 mapMovedFor = it.mapMovedFor,
+                fittedQuery = it.fittedQuery,
             )
         }
         select(result)
@@ -245,7 +271,13 @@ class SearchController(
     fun clearQuery() {
         cancelSearch()
         _state.update {
-            SearchState(mode = SearchMode.Editing, textSetBySearch = it.textSetBySearch + 1, picks = it.picks, mapMovedFor = it.mapMovedFor)
+            SearchState(
+                mode = SearchMode.Editing,
+                textSetBySearch = it.textSetBySearch + 1,
+                picks = it.picks,
+                mapMovedFor = it.mapMovedFor,
+                fittedQuery = it.fittedQuery,
+            )
         }
     }
 

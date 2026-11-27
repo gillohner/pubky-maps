@@ -47,7 +47,12 @@ data class Directions(
     val mode: TravelMode,
     val from: GeoPoint?,
     val status: RouteStatus,
-)
+    /** The map has fitted the found route ([DirectionsController.routeFitted]); false again for each new request. */
+    val routeFitted: Boolean = false,
+) {
+    /** The found route the map still has to fit, once per route. */
+    val routeToFit: RouteStatus.Found? get() = (status as? RouteStatus.Found)?.takeIf { !routeFitted }
+}
 
 /**
  * Directions from the user's position to an open place, for the life of the process: one route at a
@@ -127,6 +132,15 @@ class DirectionsController(
         if (current.from != null) ask(current)
     }
 
+    /**
+     * The map has fitted [route] (or started to: a fit cut short counts too), so coming back to the
+     * map does not fit it again over the user's pan. A route asked for since is still to be fitted.
+     */
+    fun routeFitted(route: Route) {
+        val current = state.value ?: return
+        if ((current.status as? RouteStatus.Found)?.route == route) state.value = current.copy(routeFitted = true)
+    }
+
     /** Closes the directions (the place closed, or the user closed them). */
     fun close() {
         request?.cancel()
@@ -147,7 +161,7 @@ class DirectionsController(
         request?.cancel()
         locating?.cancel()
         locating = null
-        val asked = directions.copy(status = RouteStatus.Finding)
+        val asked = directions.copy(status = RouteStatus.Finding, routeFitted = false)
         state.value = asked
         request =
             scope.launch {

@@ -500,6 +500,65 @@ class SearchControllerTest {
         }
 
     @Test
+    fun theMapFitsTheResultsOncePerSearchAndAgainAfterSearchCloses() =
+        runTest {
+            val c = controller()
+            c.onQueryChange("kunsthaus", area)
+            advanceUntilIdle()
+            assertNull(c.state.value.resultsToFit, "typing shows the list, not the results on the map")
+            c.submit(area)
+            advanceUntilIdle()
+            val results = assertNotNull(c.state.value.resultsToFit)
+            assertEquals(c.state.value.results, results)
+            c.resultsFitted(" kunsthaus ")
+            // Coming back from Settings, from a place's card or from the bar fits nothing again.
+            assertNull(c.state.value.resultsToFit)
+            c.select(results.first())
+            assertTrue(c.back())
+            assertEquals(SearchMode.Results, c.state.value.mode)
+            assertNull(c.state.value.resultsToFit)
+            c.startEditing()
+            assertTrue(c.back())
+            assertNull(c.state.value.resultsToFit)
+            // Clearing the bar and asking the same text again keeps the user's map too.
+            c.clearQuery()
+            c.onQueryChange("kunsthaus", area)
+            c.submit(area)
+            advanceUntilIdle()
+            assertNull(c.state.value.resultsToFit)
+            // So does the same text picked from the recent searches.
+            c.selectRecent(RecentSearch("kunsthaus"), area)
+            advanceUntilIdle()
+            assertEquals(SearchMode.Results, c.state.value.mode)
+            assertNull(c.state.value.resultsToFit)
+
+            // Another text is another search; so is the same text once search was closed.
+            c.onQueryChange("kunsthaus zürich", area)
+            c.submit(area)
+            advanceUntilIdle()
+            assertNotNull(c.state.value.resultsToFit)
+            c.resultsFitted("kunsthaus zürich")
+            c.close()
+            c.onQueryChange("kunsthaus zürich", area)
+            c.submit(area)
+            advanceUntilIdle()
+            assertNotNull(c.state.value.resultsToFit)
+        }
+
+    @Test
+    fun resultsWithoutAPointLeaveNothingToFit() =
+        runTest {
+            val c = controller()
+            c.onQueryChange("kunsthaus", area)
+            c.submit(area)
+            advanceUntilIdle()
+            val shown = c.state.value
+            assertNotNull(shown.resultsToFit)
+            val withoutPoints = shown.copy(results = shown.results.map { it.copy(place = it.place.copy(point = null)) })
+            assertNull(withoutPoints.resultsToFit)
+        }
+
+    @Test
     fun aMoveReportedLateForAnEarlierPickDoesNotCountForTheLaterOne() =
         runTest {
             val c = controller()
