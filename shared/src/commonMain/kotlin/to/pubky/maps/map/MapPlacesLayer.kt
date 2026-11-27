@@ -258,7 +258,7 @@ private fun omtKeyOf(
 // without `charity` and `ice_cream`, which it also takes from `office` and `amenity`. `charity` goes
 // by its class (`class=office`, `subclass=charity` is a charity's office, not a shop); `ice_cream`
 // is named by [TAG_LABELS_BY_VALUE] before its key is asked for.
-private val OMT_SHOP_VALUES =
+internal val OMT_SHOP_VALUES =
     setOf(
         "accessories",
         "alcohol",

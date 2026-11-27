@@ -234,6 +234,10 @@ short guard job, also when the app's process dies during a run); one the homeser
 taken back with a message.
 
 The map also shows the places people referenced on Pubky (from zoom 12, from Pinakes, clustered).
+From zoom 14, one that the map itself has as a point of interest (a café, a museum, a station) is
+drawn in the Pubky teal instead: a badge with an icon of its kind and its name under it, before the
+map's own labels and whatever zoom the map would show that point at, each badge drawn even where two
+of them meet (a name with no room is left out); tapping it opens its page. The others stay teal dots.
 When no Pinakes server answers, the map's status line says so.
 
 **Map links.** Links from other map apps open in Pubky Maps: tapped (`geo:`, `om://`, `cm://`,
@@ -269,7 +273,11 @@ the link text. The link the user had stays the place's URI.
   in its own SQLite database (`place-cache.db`, never in a backup); `OpeningSchedule` evaluates OSM
   opening hours parsed by osm-opening-hours. The map's Pubky places layer (`map/MapPlacesLayer.kt`)
   asks Pinakes for the view grown by half and widened to a 1/16° grid, at most 1,000 places, and
-  MapLibre clusters them. `offline/OfflinePubkyPlaces.kt` keeps the layer's places of each offline
+  MapLibre clusters them. `map/MapPubkyPois.kt` asks the base map's loaded tiles (MapLibre's
+  `querySourceFeatures` on the style's point-of-interest layer, or its schema's when the style draws
+  none) which of those places they hold, by the tile feature id `osm id × 10 + kind`, each time the
+  map is idle from zoom 14, and draws those from the base map's own source, filtered by those ids.
+  `offline/OfflinePubkyPlaces.kt` keeps the layer's places of each offline
   area (the area widened to the same grid) and Nexus' tags of them in `offline-pubky-places.db`
   (never in a backup), which the layer reads when every Pinakes server fails, and a place page when
   every Nexus server does. `offline/OfflinePlaceDetails.kt` keeps the OSM details of each offline

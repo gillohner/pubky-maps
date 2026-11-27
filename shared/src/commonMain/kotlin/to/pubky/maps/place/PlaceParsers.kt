@@ -360,6 +360,8 @@ data class MapPlace(
     val type: String?,
     /** OpenStreetMap's `key/value` category, e.g. `amenity/cafe`. */
     val category: String?,
+    /** [type] and its schema.org ancestors, e.g. `[Thing, Place, LocalBusiness, FoodEstablishment, CafeOrCoffeeShop]`. */
+    val typePath: List<String> = emptyList(),
 )
 
 /**
@@ -379,7 +381,7 @@ fun parseMapPlaces(json: String): MapPlacesPage {
         page.items.mapNotNull { card ->
             val point = card.point ?: return@mapNotNull null
             if (geoPointOrNull(point.lat, point.lon) == null) return@mapNotNull null
-            MapPlace(card.uri, card.name?.trim()?.ifEmpty { null }, point.lat, point.lon, card.type, card.category)
+            MapPlace(card.uri, card.name?.trim()?.ifEmpty { null }, point.lat, point.lon, card.type, card.category, card.typePath)
         }
     val kept = places.mapTo(HashSet()) { it.uri }
     val refs = page.items.filter { it.uri in kept && it.refs.isNotEmpty() }.associate { it.uri to it.refs }
@@ -400,4 +402,5 @@ private data class PinakesSearchCard(
     val category: String? = null,
     val point: PinakesPoint? = null,
     val refs: List<String> = emptyList(),
+    @SerialName("type_path") val typePath: List<String> = emptyList(),
 )

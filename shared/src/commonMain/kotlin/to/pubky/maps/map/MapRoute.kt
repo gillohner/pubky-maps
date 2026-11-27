@@ -200,6 +200,7 @@ fun MapRoute(
             .orEmpty()
     val savedPins by rememberUpdatedState(remember(saved) { savedPins(saved) })
     var clusterTarget by remember { mutableStateOf<Position?>(null) }
+    val poiTiles = remember { PoiTiles() }
     val scope = rememberCoroutineScope()
     val searchState =
         search
@@ -236,9 +237,24 @@ fun MapRoute(
             routePoints?.let { RouteLine(it) }
             routeStart?.let { RouteStartMark(it) }
             LocationIndicatorLayer(id = "user-location", locationState = locationState)
-            if (pubkyPlaces.isNotEmpty()) {
+            // The Pubky places the base map has as points of interest are drawn highlighted; the others are dots.
+            val pubkyPois = remember(pubkyPlaces, poiTiles.base, poiTiles.found) { poiTiles.split(pubkyPlaces) }
+            val poiBase = poiTiles.base
+            if (poiBase != null && pubkyPois.highlights.isNotEmpty()) {
+                PubkyPoiHighlights(
+                    poiBase,
+                    pubkyPois,
+                    dark = dark,
+                    onSelect = { place ->
+                        search?.controller?.close()
+                        onClosePlace()
+                        tapped = place.toPlaceRef()
+                    },
+                )
+            }
+            if (pubkyPois.dots.isNotEmpty()) {
                 MapPlacesPins(
-                    pubkyPlaces,
+                    pubkyPois.dots,
                     onSelect = { place ->
                         search?.controller?.close()
                         onClosePlace()
@@ -265,6 +281,8 @@ fun MapRoute(
                 if (search != null) SearchPins(pins.results, pins.selected, onSelect = search.controller::select)
             }
         }
+
+    TrackPubkyPois(poiTiles, mapState, pubkyPlaces)
 
     // A style that fails to load hands over to the next one in the list.
     LaunchedEffect(mapState, sources) {
@@ -909,7 +927,7 @@ private suspend fun MapState.tappedPoi(offset: DpOffset): PlaceRef? {
 }
 
 /** A tile feature's properties that are text or numbers, as text. */
-private fun JsonObject?.strings(): Map<String, String> =
+internal fun JsonObject?.strings(): Map<String, String> =
     this
         ?.mapNotNull { (key, value) -> (value as? JsonPrimitive)?.contentOrNull?.let { key to it } }
         ?.toMap()
