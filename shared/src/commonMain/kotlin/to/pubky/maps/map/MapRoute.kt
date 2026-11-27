@@ -570,11 +570,13 @@ fun MapRoute(
                             // Anywhere, also on a point of interest: the point itself, as in Google Maps.
                             longClick {
                                 onEvent { event ->
-                                    if (places == null || pickingArea) return@onEvent ClickResult.Pass
+                                    // No position while the map cannot yet convert screen points.
+                                    val at = event.position
+                                    if (places == null || pickingArea || at == null) return@onEvent ClickResult.Pass
                                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                     search?.controller?.close()
                                     onClosePlace()
-                                    tapped = droppedPin(event.position.latitude, event.position.longitude)
+                                    tapped = droppedPin(at.latitude, at.longitude)
                                     ClickResult.Consume
                                 }
                             }

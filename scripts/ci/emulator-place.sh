@@ -152,9 +152,11 @@ wait_for_start "47.3" 5 > /dev/null || fail "the dropped pin's page is not named
 wait_for "Directions" 5 > /dev/null || fail "no Directions on the dropped pin's page"
 screenshot place-dropped-pin
 check_alive "dropped pin"
+# Its page asks Pinakes and Nexus nothing (the places layer is held while it is open, see layerMayAsk).
 if grep -q "geo:" "$log"; then fail "the dropped pin's point was sent to a server"; fi
 adb shell input keyevent KEYCODE_BACK
 sleep 2
+wait_for "Show my location" 10 > /dev/null || fail "back did not return to the map from the dropped pin"
 if wait_for_start "Dropped pin" 2 > /dev/null; then fail "back did not close the dropped pin's page"; fi
 check_alive "after the dropped pin"
 

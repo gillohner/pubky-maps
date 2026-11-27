@@ -180,8 +180,8 @@ fun viewBox(
 
 /**
  * Whether the layer may ask for the area in view. Not while the page of typed coordinates or of a
- * dropped pin is open and the user has not moved the map since: the view is centred on the point,
- * which never leaves the phone.
+ * dropped pin is open and the user has not moved the map since: the view is around the point (centred
+ * on typed coordinates), which never leaves the phone.
  */
 fun layerMayAsk(
     shownSource: PlaceSource?,
