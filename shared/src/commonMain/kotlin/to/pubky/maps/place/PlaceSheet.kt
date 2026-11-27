@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import to.pubky.maps.ui.MapSurfaces
 import to.pubky.maps.ui.SheetFlingVelocity
 
 /** The height of the drag handle strip at the top of the sheet. */
@@ -273,7 +274,11 @@ private fun Handle(
     }
 }
 
-/** The place page on a wide screen: a panel beside the map, the whole page scrolling. */
+/**
+ * The place page on a wide screen: a panel beside the map, the whole page scrolling. It floats over
+ * the map like the search bar above it, so it takes the same edge in dark ([MapSurfaces]), where its
+ * shadow does not show and its `surface` is 1.05:1 on OpenFreeMap Dark's land (1.25:1 on VersaTiles').
+ */
 @Composable
 fun PlacePanel(
     page: PlacePageState,
@@ -285,6 +290,7 @@ fun PlacePanel(
         modifier = modifier,
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surface,
+        border = MapSurfaces.edge,
         shadowElevation = 3.dp,
     ) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
