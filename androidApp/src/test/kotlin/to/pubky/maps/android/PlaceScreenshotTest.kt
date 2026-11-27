@@ -680,6 +680,31 @@ class PlaceScreenshotTest {
             Page(sparse, actions = directionsTo(RouteStatus.NoLocation(permissionOff = true)))
         }
 
+    /** The routing server did not answer: Try again starts under the status text, as Settings above. */
+    @Test
+    fun directionsUnreachablePhoneLight() =
+        capture("place-directions-unreachable", Device.Phone, dark = false) {
+            Page(sparse, actions = directionsTo(RouteStatus.Unreachable))
+        }
+
+    @Test
+    fun directionsUnreachablePhoneDark() =
+        capture("place-directions-unreachable", Device.Phone, dark = true) {
+            Page(sparse, actions = directionsTo(RouteStatus.Unreachable))
+        }
+
+    @Test
+    fun directionsUnreachableTabletLight() =
+        capture("place-directions-unreachable", Device.Tablet, dark = false) {
+            Page(sparse, actions = directionsTo(RouteStatus.Unreachable))
+        }
+
+    @Test
+    fun directionsUnreachableTabletDark() =
+        capture("place-directions-unreachable", Device.Tablet, dark = true) {
+            Page(sparse, actions = directionsTo(RouteStatus.Unreachable))
+        }
+
     @Test
     fun directionsTooFarPhoneLight() =
         capture("place-directions-too-far", Device.Phone, dark = false) {
