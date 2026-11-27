@@ -27,6 +27,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.measureTime
 
 /** The offline places on this machine's SQLite (the app uses Android's), and MapLibre's database as MapLibre lays it out. */
@@ -420,24 +421,39 @@ class OfflinePlaceIndexDatabaseTest {
             }
         val stored = measureTime { index.replace("a", 0, places + towns) }
         println("60,064 places stored in $stored")
-        index.find("bäckerei")
-        val took = measureTime { assertEquals(30, index.find("bäck")?.size) }
-        assertTrue(took.inWholeMilliseconds < 100, "search took $took")
+        // Each search is timed by its fastest of 10 warm rounds (fastestOf): a single cold search on
+        // a shared CI runner can wait for the JIT, the CPU or a collection past the bound.
+        val took = fastestOf { assertEquals(30, index.find("bäck")?.size) }
+        println("'bäck' in $took")
+        assertTrue(took < SEARCH_BOUND, "search took $took at best")
         // A word of every place, and its first letter as the user starts typing it: their nearest
         // places are looked up around the map centre, not among all 60,000.
         for (common in listOf("place", "p")) {
-            index.find(common)
-            val tookCommon = measureTime { assertEquals(30, index.find(common)?.size) }
-            assertTrue(tookCommon.inWholeMilliseconds < 100, "search for '$common' took $tookCommon")
+            val tookCommon = fastestOf { assertEquals(30, index.find(common)?.size) }
+            println("'$common' in $tookCommon")
+            assertTrue(tookCommon < SEARCH_BOUND, "search for '$common' took $tookCommon at best")
         }
+        // Without the box, 'place' reads all its places through its word's index, several times the
+        // work of the box, so a box that stops being used fails here even where reading them all stays
+        // within the bound. The two are timed in turns, so both see the same state of the machine.
+        val (throughWord, aroundCentre) =
+            JdbcSqliteDriver("jdbc:sqlite:${File(dir, "offline-places.db").path}", Properties()).use { driver ->
+                val withoutBox = SqlOfflinePlaceIndex(driver, io = Dispatchers.Unconfined, boxFrom = Long.MAX_VALUE)
+                fastestOfEach(
+                    { assertEquals(30, withoutBox.find("place")?.size) },
+                    { assertEquals(30, index.find("place")?.size) },
+                )
+            }
+        println("'place' through its word's index in $throughWord, around the centre in $aroundCentre")
+        assertTrue(aroundCentre * 3 < throughWord, "'place' around the centre took $aroundCentre, through its word's index $throughWord")
         // Two words, one a town's: looked up around the map centre and around the town.
-        val inTown = measureTime { assertEquals(30, index.find("bäck ${TOWNS[0]}")?.size) }
-        assertTrue(inTown.inWholeMilliseconds < 100, "search in a town took $inTown")
+        val inTown = fastestOf { assertEquals(30, index.find("bäck ${TOWNS[0]}")?.size) }
+        println("'bäck ${TOWNS[0]}' in $inTown")
+        assertTrue(inTown < SEARCH_BOUND, "search in a town took $inTown at best")
         // A place page's district and town, by a point among them (a tapped place the tiles have no element of).
-        index.localityOf(null, GeoPoint(47.35, 8.50), null)
-        val locality = measureTime { assertNotNull(index.localityOf(null, GeoPoint(47.36, 8.52), null)) }
+        val locality = fastestOf { assertNotNull(index.localityOf(null, GeoPoint(47.36, 8.52), null)) }
         println("a locality in $locality")
-        assertTrue(locality.inWholeMilliseconds < 50, "a locality took $locality")
+        assertTrue(locality < LOCALITY_BOUND, "a locality took $locality at best")
     }
 
     @Test
@@ -720,5 +736,11 @@ class OfflinePlaceIndexDatabaseTest {
     private companion object {
         val WORDS = listOf("Bäckerei", "Café", "Apotheke", "Kiosk", "Metzgerei", "Bar")
         val TOWNS = listOf("Uster", "Wetzikon", "Dübendorf", "Wallisellen", "Kloten", "Bülach", "Horgen", "Thalwil")
+
+        /** An offline search's time on the test city, as README.md gives it. */
+        val SEARCH_BOUND = 100.milliseconds
+
+        /** Looking up the district and town a place page names, by a point among them. */
+        val LOCALITY_BOUND = 50.milliseconds
     }
 }
