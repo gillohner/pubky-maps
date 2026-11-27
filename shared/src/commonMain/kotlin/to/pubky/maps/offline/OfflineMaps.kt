@@ -525,13 +525,19 @@ class OfflineMaps(
      * once it is over its size limit (MapLibre counts the freed space at the next start), and MapLibre
      * compacts its database after each delete. [finished] has the metadata a check just stored, which
      * the store may not list yet. A replacement that fails keeps the old pack; the next update tries
-     * again.
+     * again. A style with a pack still marked [PackMetadata.replacing] (beside its old pack, or as the
+     * style's only pack: one the store refused to settle or to delete, or one of this process whose
+     * old pack's delete failed) keeps its pack: once the old one went, [visible] would list that pack
+     * beside the new one, so the area's percent and size would count both, and both would stay
+     * listed if the new one's mark failed. An update after the leftover is settled replaces it ([settle]
+     * at each check for a leftover of a process before, at the next start for one of this process).
      */
     private suspend fun replacePacks(
         area: String,
         finished: Map<Any, PackMetadata>,
     ) {
         for (old in areaPacks.filter { it.areaId == area }) {
+            if (packs.any { it.areaId == area && it.style == old.style && it.metadata?.replacing == true }) continue
             val metadata = finished[old.handle] ?: old.metadata ?: continue
             if (!replace(area, old.handle, metadata.copy(replacing = false))) return
         }
@@ -577,21 +583,29 @@ class OfflineMaps(
             return false
         } finally {
             new?.let { handle ->
-                started.value -= handle
-                stopping.value -= handle
                 halted -= handle
-                // A deleted area's packs go with it: [delete] waits for this run and deletes them.
-                if (area !in deleted) {
-                    createdFor[area]?.removeAll { it === handle }
-                    if (!oldGoing) {
+                // A deleted area's packs go with it: [delete] waits for this run, deletes them and
+                // only then takes them out of [started].
+                if (area in deleted) return@let
+                createdFor[area]?.removeAll { it === handle }
+                if (!oldGoing) {
+                    val gone =
                         withContext(NonCancellable) {
                             runCatching {
                                 store.pause(handle)
                                 store.delete(handle)
-                            }
+                            }.isSuccess
                         }
+                    // Only paused: its requests may still be on their way until MapLibre says so ([watch]).
+                    if (!gone && stateOf(handle) == PackState.Downloading) {
+                        stopping.value += handle
+                        return@let
                     }
                 }
+                // Only now, as in [delete]: until the pack is gone or paused, its requests may still
+                // be on their way, and they stay throttled.
+                started.value -= handle
+                stopping.value -= handle
             }
         }
     }
