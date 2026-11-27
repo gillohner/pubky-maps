@@ -41,7 +41,8 @@ import to.pubky.maps.search.SourceAnswer
 import to.pubky.maps.search.searchHttpEngine
 import to.pubky.maps.search.searchUserAgent
 import kotlin.math.abs
-import kotlin.math.roundToLong
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
@@ -276,17 +277,35 @@ private const val QUERY_TIMEOUT_S = 180
 internal fun overpassDetailsQuery(bounds: AreaBounds): String {
     val columns = OsmDetails.KEYS.joinToString(",") { "\"$it\"" }
     val keys = OsmDetails.KEYS.joinToString("|")
-    val box = listOf(bounds.south, bounds.west, bounds.north, bounds.east).joinToString(",", transform = ::degrees)
+    val box =
+        listOf(
+            degrees(bounds.south, up = false),
+            degrees(bounds.west, up = false),
+            degrees(bounds.north, up = true),
+            degrees(bounds.east, up = true),
+        ).joinToString(",")
     return "[out:csv(::type,::id,$columns;false)][timeout:$QUERY_TIMEOUT_S][bbox:$box];" +
         "nwr[name][~\"^($keys)$\"~\".\"];out qt;make $END_LINE;out;"
 }
 
-/** [value] with six decimals and never in exponent notation ("8.000010", "-0.000100"). */
-private fun degrees(value: Double): String {
-    val micro = (abs(value) * 1_000_000).roundToLong()
-    val sign = if (value < 0 && micro != 0L) "-" else ""
-    return "$sign${micro / 1_000_000}.${(micro % 1_000_000).toString().padStart(6, '0')}"
+/**
+ * [value] with six decimals, rounded [up] or down (so a box is never cut inward), and never in
+ * exponent notation ("8.000010", "-0.000100"). A value that already has six decimals keeps them,
+ * whatever the binary noise of its product.
+ */
+private fun degrees(
+    value: Double,
+    up: Boolean,
+): String {
+    val scaled = value * 1_000_000
+    val micro = (if (up) ceil(scaled - ROUNDING_SLACK) else floor(scaled + ROUNDING_SLACK)).toLong()
+    val sign = if (micro < 0) "-" else ""
+    val whole = abs(micro)
+    return "$sign${whole / 1_000_000}.${(whole % 1_000_000).toString().padStart(6, '0')}"
 }
+
+/** A thousandth of the last decimal (0.1 mm): below it a product's binary noise is not rounded outward. */
+private const val ROUNDING_SLACK = 0.001
 
 /**
  * The elements of an answer to [overpassDetailsQuery], each with the tags it has a value for; null

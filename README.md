@@ -95,17 +95,16 @@ deletes its places.
 **Place details without a connection:** once an area is listed, the app asks the Overpass list for
 the OpenStreetMap details of its named places (opening hours, phone, website, email, wheelchair
 access, cuisine, operator, floor, bitcoin payments: the tags a place page shows) in the area's
-whole zoom-14 tiles (what its map and place index hold), as one query that
-answers only those tags as CSV (a few MB for the largest area one download may take) and ends with
-an end line, so an answer a server cut off goes to the next server, as does an empty one (a server
-may hold one region only: the first default, dresel.systems, holds Europe); an area is kept with no
-details only when every server answered it empty. Each Overpass server learns which areas the user
-keeps. They are kept by element in
-`offline-places.db`, apart from the places read from the tiles, fetched again after a week on a
+whole zoom-14 tiles (what its map and place index hold), as one query that answers only those tags
+as CSV (a few MB for the largest area one download may take) and ends with an end line, so an answer
+a server cut off goes to the next server, as does an empty one (a server may hold one region only:
+the first default, dresel.systems, holds Europe); an area is kept with no details only when every
+server answered it empty. Each Overpass server learns which areas the user keeps. They are kept by
+element in `offline-places.db`, apart from the places read from the tiles, fetched again after a week on a
 network Android does not count as metered, one area at a time and 10 s apart, and deleted with the
 area; an area that fails is asked again after 30 minutes, then twice as long after each failure, up
 to a day. A place page whose Pinakes card has no OSM details (no card could be loaded, Pinakes has
-none for the place, or its card brings none, as today's cards do) shows the details kept for its
+none for the place, or its card brings none) shows the details kept for its
 element, and the offline note says when they were fetched; a card with OSM details shows only its own.
 
 Settings:

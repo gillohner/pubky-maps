@@ -17,6 +17,9 @@ import kotlinx.coroutines.withContext
 import to.pubky.maps.search.SourceAnswer
 import kotlin.time.Clock
 
+/** The OSM details a card brings; null when there is no card or it has none. */
+private fun PlaceCardInfo?.osmDetails(): OsmDetails? = this?.facts?.let(OsmDetails::from)
+
 /** A part of the place page that loads on its own. */
 enum class PlacePart { Card, Social, Posts, Lists }
 
@@ -81,8 +84,7 @@ data class PlacePageState(
      */
     val osm: OsmDetails? get() = cardOsm ?: keptDetails?.facts?.let(OsmDetails::from)
 
-    /** The OSM details the card brings; null when it has none (Pinakes gives no facts for most cards). */
-    private val cardOsm: OsmDetails? get() = card?.facts?.let(OsmDetails::from)
+    private val cardOsm: OsmDetails? get() = card.osmDetails()
 
     /** Tags, the user's own first, then by count; each tag's taggers friends first. */
     val tags: List<PlaceTag>
@@ -244,7 +246,7 @@ class PlacePageController(
                     cached?.card
                 }
             }
-        if (card?.facts?.let(OsmDetails::from) == null) loadDetails(place)
+        if (card.osmDetails() == null) loadDetails(place)
         coroutineScope {
             launch { loadSocial(place, card, viewer) }
             launch { loadLists(place, card, viewer) }

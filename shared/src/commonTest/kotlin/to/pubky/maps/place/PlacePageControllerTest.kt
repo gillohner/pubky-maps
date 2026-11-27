@@ -37,7 +37,7 @@ internal class FakePlaceData : PlaceData {
     /** Replies Nexus has for the Schober (newest first), 20 per page. */
     var replies: List<PlacePost> = parseNexusPosts(PlaceFixtures.read("nexus-replies-schober.json"), PlaceFixtures.NEXUS)
 
-    /** The OSM details the Schober's card brings; null as the recorded card (Pinakes gives none today). */
+    /** The OSM details the Schober's card brings; null keeps the recorded card's (none). */
     var schoberFacts: Map<String, String>? = null
 
     private fun <T> pinakes(value: () -> T): SourceAnswer<T> =

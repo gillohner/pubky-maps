@@ -157,8 +157,8 @@ class OverpassDetailsTest {
             assertEquals(5, answer.value.size)
             assertEquals(listOf("busy.example", "cut.example", "ok.example"), asked.map { it.first })
             assertEquals(List(3) { overpassDetailsQuery(tileBounds(zurich)) }, asked.map { it.second })
-            // The whole zoom-14 tiles the area touches, which its map and place index hold, not only the picked box.
-            assertTrue("[bbox:47.353711,8.503418,47.398349,8.569336]" in asked.first().second!!)
+            // The whole zoom-14 tiles the area touches (its map and place index hold them), rounded outward.
+            assertTrue("[bbox:47.353710,8.503417,47.398350,8.569336]" in asked.first().second!!)
 
             asked.clear()
             overpass.detailsIn(zurich)
