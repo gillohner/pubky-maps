@@ -42,9 +42,17 @@ data class OwnList(
     val names: Map<String, String> = emptyMap(),
     /** What it is about, as the user wrote it (pubky.app shows it under the name); null when it has none. */
     val description: String? = null,
+    /**
+     * How many of its items are not places (another app's posts or profiles: pubky.app shares the
+     * folder). The core leaves them out of [items] and keeps them in the list when it is edited.
+     */
+    val otherItems: Int = 0,
 ) {
-    /** The spec's cap: a list holds at most this many places. */
-    val full: Boolean get() = items.size >= MAX_LIST_ITEMS
+    /** The spec's cap: a list holds at most this many items, places or not. */
+    val full: Boolean get() = items.size + otherItems >= MAX_LIST_ITEMS
+
+    /** "3 other links", for [otherItems]. */
+    val otherItemsText: String get() = if (otherItems == 1) "1 other link" else "$otherItems other links"
 
     companion object {
         const val MAX_LIST_ITEMS = 100

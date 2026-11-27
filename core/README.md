@@ -63,9 +63,13 @@ It bundles the `pubky` SDK (0.18), `pubky-social-specs` (1.0.0-rc.2) and the wor
   failed. Link requests give up after 5 s to connect and 10 s in all. `placeFromText(text)` gives
   the same place from the text alone (no network, no core instance), to show at once.
 - Objects: `tagPlace` and `untagPlace`, `postReview`, `postPhoto` (JPEG/PNG/WebP, no HEIC,
-  EXIF stripped by the caller), `createCollection` and `editCollection` (at most 100 places;
-  `private` puts the list under `/priv/social/v1/posts/`), `listCollections(private, skip)` (the
+  EXIF stripped by the caller), `createCollection` and `editCollection` (at most 100 items;
+  `private` puts the list under `/priv/social/v1/posts/`; an edit returns the list as
+  `listCollections` gives it), `listCollections(private, skip)` (the
   user's lists: the newest version of each of their posts, newest posts first, at most 2000;
+  each list's `items` are only those that can be places, as for bookmarks below, the others
+  (another app's posts or profiles) counted in `otherItems` and kept by edits; a list holding
+  only such objects is left out, one without items is kept;
   `otherPostIds` are posts that are not lists, to pass as `skip` next time, and `unreadPostIds`
   folders that could not be read now), and `bookmarkPlace`, `removeBookmark` and `listBookmarks`
   (only bookmarks that can be places: map links the link reader reads and web pages, which a

@@ -169,7 +169,7 @@ fun ListPage(
             }
         }
         Text(
-            "A collection holds up to ${OwnList.MAX_LIST_ITEMS} places. Each tick is sent at once.",
+            "A collection holds up to ${OwnList.MAX_LIST_ITEMS} items. Each tick is sent at once.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -187,6 +187,7 @@ private fun ListRow(
     val count = list.items.size
     val detail =
         when {
+            list.full && !choice.holds && list.otherItems > 0 -> "Full: $count places and ${list.otherItemsText}"
             list.full && !choice.holds -> "Full: $count of ${OwnList.MAX_LIST_ITEMS} places"
             count == 1 -> "1 place"
             else -> "$count places"

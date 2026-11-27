@@ -467,7 +467,7 @@ async fn place_objects_round_trip() {
         )
         .await
         .unwrap();
-    assert_ne!(added.edit_id, list.edit_id);
+    assert_ne!(Some(added.edit_id.clone()), list.edit_id);
     let removed = core
         .edit_collection(
             list.id.clone(),
@@ -490,14 +490,9 @@ async fn place_objects_round_trip() {
         .await
         .unwrap();
     assert_eq!(head.edit_id, removed.edit_id, "a no-op edit writes nothing");
-    let newest: serde_json::Value = serde_json::from_str(&head.json).unwrap();
-    let content: serde_json::Value =
-        serde_json::from_str(newest["content"].as_str().unwrap()).unwrap();
-    assert_eq!(content["items"].as_array().unwrap().len(), 1);
-    assert_eq!(
-        content["items"][0]["uri"],
-        "https://www.openstreetmap.org/way/4"
-    );
+    assert_eq!(head.items.len(), 1);
+    assert_eq!(head.items[0].uri, "https://www.openstreetmap.org/way/4");
+    assert_eq!(head.items[0].note.as_deref(), Some("terrace"));
 
     // Saved places, short and long; bookmarks of other apps' Pubky objects in the same folder
     // (a pubky.app post) are not saved places, a web page is kept (a Pinakes card can be one).
@@ -620,7 +615,7 @@ async fn own_lists_public_and_private() {
         .await
         .unwrap();
     let scan = core.list_collections(false, vec![]).await.unwrap();
-    assert_eq!(scan.collections[0].edit_id, added.edit_id.unwrap());
+    assert_eq!(scan.collections[0].edit_id, added.edit_id);
     assert_eq!(scan.collections[0].items.len(), 1);
     assert_eq!(scan.collections[0].items[0].uri, place);
 
@@ -642,11 +637,78 @@ async fn own_lists_public_and_private() {
         )
         .await
         .unwrap();
-    assert!(
-        removed
-            .path
-            .starts_with(&format!("/priv/social/v1/posts/{}/", private.id))
+    assert!(removed.private);
+    assert_eq!(removed.uri, private.uri);
+    assert_eq!(
+        removed.description.as_deref(),
+        Some("Only mine"),
+        "an edit keeps the description"
     );
     let scan = core.list_collections(true, vec![]).await.unwrap();
     assert!(scan.collections[0].items.is_empty());
+    assert_eq!(scan.collections[0].edit_id, removed.edit_id);
+
+    // A list that also holds another app's objects (pubky.app shares the posts folder): the
+    // app is shown only its places, the others counted, and its edits keep them.
+    let post = format!(
+        "pubky://{}/pub/pubky.app/posts/0034A0000001",
+        ring.public_key().z32()
+    );
+    let mixed = core
+        .create_collection(
+            "Reading and coffee".into(),
+            None,
+            vec![
+                CollectionItem {
+                    uri: post.clone(),
+                    note: Some("theirs".into()),
+                },
+                CollectionItem {
+                    uri: place.into(),
+                    note: None,
+                },
+            ],
+            false,
+        )
+        .await
+        .unwrap();
+    let scan = core.list_collections(false, vec![]).await.unwrap();
+    let shown = scan
+        .collections
+        .iter()
+        .find(|list| list.id == mixed.id)
+        .unwrap();
+    assert_eq!(shown.items.len(), 1);
+    assert_eq!(shown.items[0].uri, place);
+    assert_eq!(shown.other_items, 1);
+    let edited = core
+        .edit_collection(
+            mixed.id.clone(),
+            CollectionEdit::Remove {
+                place: place.into(),
+            },
+            false,
+        )
+        .await
+        .unwrap();
+    assert!(edited.items.is_empty());
+    assert_eq!(edited.other_items, 1, "the edit kept the other app's post");
+    let scan = core.list_collections(false, vec![]).await.unwrap();
+    assert!(
+        scan.collections.iter().all(|list| list.id != mixed.id),
+        "with no place left it is not a list of places"
+    );
+    let edited = core
+        .edit_collection(
+            mixed.id.clone(),
+            CollectionEdit::Add {
+                place: "geo:47.37687,8.54169".into(),
+                note: None,
+            },
+            false,
+        )
+        .await
+        .unwrap();
+    assert_eq!(edited.items.len(), 1);
+    assert_eq!(edited.other_items, 1);
 }

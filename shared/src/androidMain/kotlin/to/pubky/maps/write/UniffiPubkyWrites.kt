@@ -79,7 +79,7 @@ class UniffiPubkyWrites(
     ): OwnList {
         val (private, id) = listAddress(listUri) ?: throw CoreFailure.Other("not a collection: $listUri")
         val edit = if (remove) CollectionEdit.Remove(place) else CollectionEdit.Add(place, null)
-        return mapped { core.editCollection(id, edit, private).toList(private) }
+        return mapped { core.editCollection(id, edit, private).toOwnList() }
     }
 
     override suspend fun lists(
@@ -111,7 +111,13 @@ class UniffiPubkyWrites(
         }
 }
 
-/** A list as the core read it from the homeserver, its description (written here or on pubky.app) kept. */
+/**
+ * A list as the core read it from the homeserver, its description (written here or on pubky.app) kept.
+ * The core gives only a list's places in its items; the other items are counted, never shown or dropped.
+ * An edit that took the last place out of a list that also holds other links leaves it shown with no
+ * places until the next scan leaves it out, so the user can still tick it again in Add to collection; a
+ * list with no items at all stays.
+ */
 internal fun OwnCollection.toOwnList() =
     OwnList(
         uri = uri,
@@ -119,17 +125,7 @@ internal fun OwnCollection.toOwnList() =
         name = name,
         items = items.map { it.uri },
         description = listDescription(description),
+        otherItems = otherItems.toInt(),
     )
 
 private fun BuiltObject.toWrite() = BuiltWrite(path = path, uri = uri, json = json)
-
-private fun BuiltObject.toList(private: Boolean): OwnList {
-    val list = listOfPost(json) ?: throw CoreFailure.Other("the core built an unreadable collection")
-    return OwnList(
-        uri = uri,
-        kept = if (private) Kept.Private else Kept.Public,
-        name = list.name,
-        items = list.items,
-        description = list.description,
-    )
-}

@@ -907,6 +907,23 @@ class WriteControllerTest {
         }
 
     @Test
+    fun aListFullWithAnotherAppsLinksRefusesAnotherPlace() =
+        runTest {
+            signedIn()
+            val writer = controller()
+            // The spec's cap counts every item: 98 places and 2 pubky.app posts the app does not show.
+            val full = coffeeList.copy(items = (1..98).map { "geo:$it,1" }, otherItems = 2)
+            assertTrue(full.full)
+            assertFalse(full.copy(otherItems = 1).full)
+
+            writer.addToList(target, full)
+            runCurrent()
+
+            assertEquals(emptyList(), sent)
+            assertEquals(listOf("“Coffee” already holds 98 places and 2 other links, the most a collection can hold."), messages)
+        }
+
+    @Test
     fun aNewListGoesWhereTheUserChose() =
         runTest {
             signedIn()

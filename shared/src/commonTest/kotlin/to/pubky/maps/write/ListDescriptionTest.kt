@@ -19,13 +19,4 @@ class ListDescriptionTest {
         assertEquals(null, listDescription(" \n "))
         assertEquals("Worth the walk", listDescription(" Worth the walk "))
     }
-
-    @Test
-    fun aListPostsDescriptionIsRead() {
-        val content = """{\"name\":\"Cake\",\"description\":\" Worth the walk \",\"items\":[{\"uri\":\"geo:1,2\"}]}"""
-        val post = """{"kind":"collection","content":"$content"}"""
-        assertEquals(ListPost("Cake", "Worth the walk", listOf("geo:1,2")), listOfPost(post))
-        val without = """{"kind":"collection","content":"{\"name\":\"Cake\",\"items\":[]}"}"""
-        assertEquals(ListPost("Cake", null, emptyList()), listOfPost(without))
-    }
 }
