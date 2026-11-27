@@ -26,6 +26,8 @@ data class SavedEntry(
     val point: GeoPoint? = null,
     /** Saved from the page of a point of its own (a dropped pin, typed coordinates): see [OwnData.pointPlaces]. */
     val pointPage: Boolean = false,
+    /** What and where it is ("Café · Napfgasse 4, 8001 Zürich"), as its page said; null when this phone does not know. */
+    val summary: String? = null,
 )
 
 /** A post or photo written on this phone, until the place page's next load from Nexus has it. */
@@ -76,6 +78,8 @@ data class OwnData(
      * another app, a Pubky place someone tagged) is read as its link is, with its card and tags.
      */
     val pointPlaces: Set<String> = emptySet(),
+    /** What and where the places the user wrote about are ([SavedEntry.summary]), by place as the core spells it. */
+    val summaries: Map<String, String> = emptyMap(),
 ) {
     /** What the user has about the place whose links are [links] (each spelled as the core stores it). */
     fun forPlace(links: Set<String>): OwnPlace {
@@ -128,6 +132,10 @@ data class PhoneSaved(
     val name: String?,
     val savedAt: Long,
     val point: GeoPoint? = null,
+    /** What and where it is, as its page said when it was saved ([SavedEntry.summary]). */
+    val summary: String? = null,
+    /** [summary] was taken without Pinakes and a card ([KeptSummary.partial]): a full line replaces it. */
+    val summaryPartial: Boolean = false,
 )
 
 /**
@@ -136,7 +144,8 @@ data class PhoneSaved(
  * top, in order, so a write shows at once and disappears again when it is dropped. Places are
  * compared as [normalize] spells them. [labels] are the names stored for the places the user wrote
  * about (by place; a stored place may be spelled otherwise than the core spells it, so they are
- * compared by [normalize]), [points] where they are (by place as the core spells it).
+ * compared by [normalize]), [points] where they are and [summaries] what and where they are (both by
+ * place as the core spells it).
  */
 internal fun ownData(
     viewer: String?,
@@ -147,6 +156,7 @@ internal fun ownData(
     confirmed: List<Confirmed>,
     labels: Map<String, String>,
     points: Map<String, GeoPoint> = emptyMap(),
+    summaries: Map<String, String> = emptyMap(),
     normalize: (String) -> String,
 ): OwnData {
     val signedIn = viewer != null && cached?.publicKey == viewer
@@ -157,7 +167,8 @@ internal fun ownData(
     val named = labels.mapKeys { normalize(it.key) }
     phone.saved.forEach {
         val place = normalize(it.place)
-        saved["phone|$place"] = SavedEntry(place, Kept.Phone, it.name, point = it.point ?: geoLinkPoint(it.place))
+        saved["phone|$place"] =
+            SavedEntry(place, Kept.Phone, it.name, point = it.point ?: geoLinkPoint(it.place), summary = it.summary)
     }
     phone.lists.forEach { ownLists[it.uri] = it.copy(items = it.items.map(normalize)) }
     if (signedIn) {
@@ -168,7 +179,7 @@ internal fun ownData(
         cached.bookmarks.forEach { bookmark ->
             val place = normalize(bookmark.place)
             saved["home|$place"] =
-                SavedEntry(place, Kept.Private, named[place], point = pointOf(place, points))
+                SavedEntry(place, Kept.Private, named[place], point = pointOf(place, points), summary = summaries[place])
         }
         lists.forEach { ownLists[it.uri] = it.copy(items = it.items.map(normalize)) }
         val readAt = cached.refreshedAt ?: 0
@@ -189,7 +200,7 @@ internal fun ownData(
                 op is WriteOp.CreateList || op is WriteOp.EditList -> {}
 
                 !reflected -> {
-                    apply(op, pending = false, tags, saved, ownLists, named, points, normalize)
+                    apply(op, pending = false, tags, saved, ownLists, named, points, summaries, normalize)
                 }
             }
         }
@@ -197,7 +208,7 @@ internal fun ownData(
             when (op) {
                 is WriteOp.Post -> posts += OwnPost(normalize(op.place), op.text, op.at, uri = null)
                 is WriteOp.Photo -> posts += OwnPost(normalize(op.place), op.caption.orEmpty(), op.at, uri = null, photoFile = op.file)
-                else -> apply(op, pending = true, tags, saved, ownLists, named, points, normalize)
+                else -> apply(op, pending = true, tags, saved, ownLists, named, points, summaries, normalize)
             }
         }
     }
@@ -217,6 +228,9 @@ internal fun ownData(
             phone.saved.mapNotNull { saved -> saved.name?.let { normalize(saved.place) to it } }.toMap() +
                 (if (signedIn) named else emptyMap()),
         pointPlaces = pointPlaces,
+        summaries =
+            phone.saved.mapNotNull { saved -> saved.summary?.let { normalize(saved.place) to it } }.toMap() +
+                (if (signedIn) summaries else emptyMap()),
     )
 }
 
@@ -229,6 +243,7 @@ private fun apply(
     /** Names by place as the core spells it. */
     named: Map<String, String>,
     points: Map<String, GeoPoint>,
+    summaries: Map<String, String>,
     normalize: (String) -> String,
 ) {
     val place = normalize(op.place)
@@ -243,7 +258,7 @@ private fun apply(
 
         is WriteOp.Save -> {
             saved["home|$place"] =
-                SavedEntry(place, Kept.Private, named[place], pending, pointOf(place, points))
+                SavedEntry(place, Kept.Private, named[place], pending, pointOf(place, points), summary = summaries[place])
         }
 
         is WriteOp.Unsave -> {

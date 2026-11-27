@@ -56,6 +56,8 @@ data class PlacePageState(
      * opened without an address or a locality; null when no area covers it.
      */
     val locality: String? = null,
+    /** The offline areas are asked for [locality]: the page has no address yet and may get one. */
+    val localityLoading: Boolean = false,
     /**
      * The OSM details kept for the offline areas, for a page whose card has none (no card could be
      * loaded, Pinakes has none, or it brings no OSM details); null when no area keeps any for the place.
@@ -151,8 +153,10 @@ class PlacePageController(
         if (current != null && current.place.uri == place.uri) {
             if (current.place != place) {
                 val locality = current.locality ?: current.place.locality
-                _state.value = current.copy(place = place, locality = locality)
-                if (locality == null && localityJob?.isActive != true) localityJob = scope.launch { loadLocality(place) }
+                val lookUp = locality == null && localityJob?.isActive != true && needsLocality(place)
+                // Marked in the same update, as in [load]: a save meanwhile keeps no summary without the district and town.
+                _state.value = current.copy(place = place, locality = locality, localityLoading = current.localityLoading || lookUp)
+                if (lookUp) localityJob = scope.launch { loadLocality(place) }
             }
             return
         }
@@ -200,10 +204,18 @@ class PlacePageController(
      */
     private suspend fun loadLocality(place: PlaceRef) {
         val localities = localities ?: return
-        val point = place.point?.takeIf { place.pinned && place.address == null && place.locality == null } ?: return
-        val locality = withContext(io) { runCatching { localities.localityOf(place.osm, point, place.name) }.getOrNull() } ?: return
-        update(place) { it.copy(locality = locality) }
+        val point = place.point?.takeIf { needsLocality(place) } ?: return
+        try {
+            val locality = withContext(io) { runCatching { localities.localityOf(place.osm, point, place.name) }.getOrNull() }
+            update(place) { it.copy(locality = locality ?: it.locality, localityLoading = false) }
+        } finally {
+            update(place) { it.copy(localityLoading = false) }
+        }
     }
+
+    /** Whether the offline areas are asked for [place]'s district and town ([loadLocality]). */
+    private fun needsLocality(place: PlaceRef): Boolean =
+        localities != null && place.point != null && place.pinned && place.address == null && place.locality == null
 
     /** The OSM details the offline areas keep for the element of a place whose card has none. */
     private suspend fun loadDetails(place: PlaceRef) {
@@ -217,16 +229,21 @@ class PlacePageController(
         // Coordinates the user typed or a pin dropped on the map never leave the phone (search's rule):
         // no source is asked; the offline areas are on the phone.
         if (place.source == PlaceSource.Coordinates) {
-            update(place) { it.copy(loading = emptySet()) }
+            // Marked at once, so a dropped pin's page does not offer "Dropped pin" alone as its summary to a save.
+            update(place) { it.copy(loading = emptySet(), localityLoading = needsLocality(place)) }
             loadLocality(place)
             return
         }
         val viewer = viewer()
         // Saved for another account (or signed in when the user now is not): nothing in it is theirs.
         val cached = cache?.let { withContext(io) { runCatching { it.read(place.uri) }.getOrNull() } }?.forViewer(viewer)
+        // After the cache, so a saved street address is not replaced by the district and town for a moment;
+        // marked in the same update, so the page never looks settled without them (a save keeps its summary).
+        val lookUpLocality = cached?.card?.address == null && needsLocality(place)
         if (cached != null) {
             update(place) {
                 it.copy(
+                    localityLoading = lookUpLocality,
                     card = cached.card,
                     social = cached.social,
                     people = cached.people.associateBy { p -> p.id },
@@ -238,8 +255,10 @@ class PlacePageController(
                 )
             }
         }
-        // After the cache, so a saved street address is not replaced by the district and town for a moment.
-        if (cached?.card?.address == null) localityJob = scope.launch { loadLocality(place) }
+        if (lookUpLocality) {
+            if (cached == null) update(place) { it.copy(localityLoading = true) }
+            localityJob = scope.launch { loadLocality(place) }
+        }
         // A cached card without OSM details shows with the ones the offline areas keep before Pinakes is
         // asked again: the page is then laid out as it stays, instead of the kept rows arriving above
         // the coordinates when Pinakes answers.

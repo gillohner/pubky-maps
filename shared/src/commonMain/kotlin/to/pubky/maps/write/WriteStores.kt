@@ -15,7 +15,7 @@ private val storeJson =
 
 /**
  * The signed-in user's writes on this phone: the outbox, their lists as last read, the posts known
- * not to be lists, and the names and points of places they wrote about. It lives in the account cache's
+ * not to be lists, and the names, points and summaries of places they wrote about. It lives in the account cache's
  * database, so sign-out deletes it with the rest of the account. Calls block on disk.
  */
 interface WriteStore {
@@ -56,7 +56,35 @@ interface WriteStore {
         place: String,
         point: GeoPoint,
     )
+
+    /** What and where the places the user wrote about are ("Café · Napfgasse 4, 8001 Zürich"), by place as the core spells it. */
+    fun summaries(): Map<String, KeptSummary>
+
+    fun putSummary(
+        place: String,
+        summary: KeptSummary,
+    )
 }
+
+/**
+ * A place's line as its page said it: [partial] when Pinakes could not be reached and no card was kept
+ * ([to.pubky.maps.place.summaryPartial]), so a later full line replaces it ([replacedBy]).
+ */
+data class KeptSummary(
+    val text: String,
+    val partial: Boolean = false,
+)
+
+/**
+ * Whether [summary] (a page's line, [partial] as [KeptSummary.partial]) is kept over this one: when none
+ * is kept, or a full line comes for a partial one. A full line kept stays, so a later offline page
+ * with less to say does not replace it; a partial one stays until a full one comes, as another
+ * offline page says no more for certain.
+ */
+internal fun KeptSummary?.replacedBy(
+    summary: String?,
+    partial: Boolean,
+): Boolean = summary != null && (this == null || (this.partial && !partial))
 
 /** [WriteStore] in the account cache's SQLite database ([to.pubky.maps.cache.SqlAccountCache] clears it). */
 class SqlWriteStore(
@@ -124,6 +152,16 @@ class SqlWriteStore(
     ) {
         queries.putPlacePoint(place, point.lat, point.lon)
     }
+
+    override fun summaries(): Map<String, KeptSummary> =
+        queries.placeSummaries().executeAsList().associate { it.place to KeptSummary(it.summary, it.partial != 0L) }
+
+    override fun putSummary(
+        place: String,
+        summary: KeptSummary,
+    ) {
+        queries.putPlaceSummary(place, summary.text, if (summary.partial) 1L else 0L)
+    }
 }
 
 /** What the user keeps on this phone only. Calls block on disk. */
@@ -158,8 +196,9 @@ class SqlPhoneStore(
         PhoneData(
             saved =
                 queries
-                    .savedPlaces { place, name, savedAt, lat, lon ->
-                        PhoneSaved(place, name, savedAt, if (lat != null && lon != null) geoPointOrNull(lat, lon) else null)
+                    .savedPlaces { place, name, savedAt, lat, lon, summary, summaryPartial ->
+                        val point = if (lat != null && lon != null) geoPointOrNull(lat, lon) else null
+                        PhoneSaved(place, name, savedAt, point, summary, summaryPartial != 0L)
                     }.executeAsList(),
             lists =
                 queries.lists().executeAsList().mapNotNull {
@@ -169,7 +208,15 @@ class SqlPhoneStore(
         )
 
     override fun save(saved: PhoneSaved) {
-        queries.putSavedPlace(saved.place, saved.name, saved.savedAt, saved.point?.lat, saved.point?.lon)
+        queries.putSavedPlace(
+            saved.place,
+            saved.name,
+            saved.savedAt,
+            saved.point?.lat,
+            saved.point?.lon,
+            saved.summary,
+            if (saved.summaryPartial) 1L else 0L,
+        )
     }
 
     override fun unsave(place: String) {

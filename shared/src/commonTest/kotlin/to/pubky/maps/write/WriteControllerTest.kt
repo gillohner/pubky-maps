@@ -35,6 +35,7 @@ private const val ME = "8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo"
 private const val OSM = "https://www.openstreetmap.org/node/270803095"
 private const val GOOGLE = "https://maps.app.goo.gl/x1"
 private val SCHOBER = GeoPoint(47.37159, 8.54531)
+private const val SCHOBER_SUMMARY = "Café · Napfgasse 4, 8001 Zürich"
 private const val TAGGED_COFFEE = "Tagged “coffee”. Tags are public."
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -457,6 +458,178 @@ class WriteControllerTest {
                 next.own.value.saved
                     .single(),
             )
+        }
+
+    @Test
+    fun aSaveKeepsWhatAndWhereThePlaceIsForTheSavedPageAndReadsItBackAtTheNextStart() =
+        runTest {
+            signedIn()
+            val writer = controller()
+            runCurrent()
+
+            writer.save(WriteTarget("https://osm.org/node/270803095", "Conditorei Schober", SCHOBER, summary = SCHOBER_SUMMARY))
+            runCurrent()
+
+            assertEquals(mapOf(OSM to KeptSummary(SCHOBER_SUMMARY)), store.summaries(), "as the core spells the place")
+            assertEquals(
+                SCHOBER_SUMMARY,
+                writer.own.value.saved
+                    .single()
+                    .summary,
+            )
+            val next = controller()
+            runCurrent()
+            assertEquals(
+                SavedEntry(OSM, Kept.Private, "Conditorei Schober", point = SCHOBER, summary = SCHOBER_SUMMARY),
+                next.own.value.saved
+                    .single(),
+            )
+        }
+
+    @Test
+    fun aPlaceSavedOnThePhoneKeepsWhatAndWhereItIs() =
+        runTest {
+            settings = AppSettings().withStorage(DataKind.SavedPlaces, StorageChoice.PhoneOnly)
+            account.value = AccountState.SignedOut()
+            val writer = controller()
+
+            writer.save(target.copy(summary = SCHOBER_SUMMARY))
+            runCurrent()
+
+            assertEquals(listOf(PhoneSaved(OSM, "Conditorei Schober", 1_000L, SCHOBER, summary = SCHOBER_SUMMARY)), phone.data.saved)
+            assertEquals(SCHOBER_SUMMARY, writer.own.value.summaries[OSM], "list entries read it too")
+        }
+
+    @Test
+    fun aSavedPlaceWithNoSummaryKeepsTheOneItsPageShowsAndAKeptOneStays() =
+        runTest {
+            // Saved before its card loaded, or on another device.
+            phone.data = PhoneData(saved = listOf(PhoneSaved(OSM, "Schober", 7L, SCHOBER)))
+            account.value =
+                AccountState.SignedIn(
+                    AccountUser(ME, "Ada"),
+                    CachedAccount(ME, "Ada", 500, emptyList(), listOf(CachedBookmark("/b/1", OSM))),
+                    Connection.Online,
+                )
+            val writer = controller()
+
+            writer.remember(target.copy(summary = SCHOBER_SUMMARY), setOf(OSM))
+            writer.remember(WriteTarget(GOOGLE, "Not mine", SCHOBER, summary = "Bar · Somewhere"), setOf(GOOGLE))
+            runCurrent()
+
+            assertEquals(
+                listOf(SCHOBER_SUMMARY, SCHOBER_SUMMARY),
+                writer.own.value.saved
+                    .map { it.summary },
+                "on the phone and on the homeserver",
+            )
+            assertEquals(mapOf(OSM to KeptSummary(SCHOBER_SUMMARY)), store.summaries(), "a place not the user's keeps nothing")
+
+            // A page with less to say (offline, no card) does not replace what was kept.
+            writer.remember(target.copy(summary = "Altstadt, Zürich", summaryPartial = true), setOf(OSM))
+            runCurrent()
+            assertEquals(
+                listOf(SCHOBER_SUMMARY, SCHOBER_SUMMARY),
+                writer.own.value.saved
+                    .map { it.summary },
+            )
+            assertEquals(
+                SCHOBER_SUMMARY,
+                phone.data.saved
+                    .single()
+                    .summary,
+            )
+            assertEquals(emptyList(), sent, "nothing goes to the homeserver")
+        }
+
+    @Test
+    fun aSummaryTakenWithoutPinakesIsReplacedByTheOneOfAPageWithACard() =
+        runTest {
+            phone.data = PhoneData(saved = listOf(PhoneSaved(OSM, "Schober", 7L, SCHOBER)))
+            signedIn()
+            val writer = controller()
+            runCurrent()
+            val offline = target.copy(summary = "Café · Altstadt, Zürich", summaryPartial = true)
+
+            // Saved while Pinakes could not be reached: the district and town are all the page had.
+            writer.save(offline)
+            writer.remember(offline, setOf(OSM))
+            runCurrent()
+            assertEquals(mapOf(OSM to KeptSummary("Café · Altstadt, Zürich", partial = true)), store.summaries())
+            assertEquals(
+                PhoneSaved(OSM, "Schober", 7L, SCHOBER, "Café · Altstadt, Zürich", summaryPartial = true),
+                phone.data.saved.single(),
+            )
+
+            // Opened again online: the card's address replaces it, on the phone and on the homeserver.
+            writer.remember(target.copy(summary = SCHOBER_SUMMARY), setOf(OSM))
+            runCurrent()
+            assertEquals(mapOf(OSM to KeptSummary(SCHOBER_SUMMARY)), store.summaries())
+            assertEquals(PhoneSaved(OSM, "Schober", 7L, SCHOBER, SCHOBER_SUMMARY), phone.data.saved.single())
+            assertEquals(
+                listOf(SCHOBER_SUMMARY, SCHOBER_SUMMARY),
+                writer.own.value.saved
+                    .map { it.summary },
+            )
+
+            // A later offline page does not take the full line back.
+            writer.remember(offline, setOf(OSM))
+            runCurrent()
+            assertEquals(mapOf(OSM to KeptSummary(SCHOBER_SUMMARY)), store.summaries())
+            assertEquals(
+                SCHOBER_SUMMARY,
+                phone.data.saved
+                    .single()
+                    .summary,
+            )
+        }
+
+    @Test
+    fun aHomeSaveUnsavedAndSavedAgainOnlineGetsTheFullSummary() =
+        runTest {
+            signedIn()
+            val writer = controller()
+            runCurrent()
+
+            writer.save(target.copy(summary = "Café · Altstadt, Zürich", summaryPartial = true))
+            runCurrent()
+            writer.unsave(target, setOf(OSM))
+            runCurrent()
+            writer.save(target.copy(summary = SCHOBER_SUMMARY))
+            runCurrent()
+
+            assertEquals(mapOf(OSM to KeptSummary(SCHOBER_SUMMARY)), store.summaries())
+            assertEquals(
+                SCHOBER_SUMMARY,
+                writer.own.value.saved
+                    .single()
+                    .summary,
+            )
+        }
+
+    @Test
+    fun aListedPlaceKeepsTheSummaryItsPageShowsAndALaterWriteDoesNotReplaceIt() =
+        runTest {
+            val listed = OwnList("pubky://me/pub/social/v1/posts/L1", Kept.Public, "Coffee", listOf(OSM))
+            store.stored = listOf(listed)
+            writes.scans =
+                mapOf(
+                    false to ListScan(emptyList(), emptyList(), unreadPostIds = listOf("L1")),
+                    true to ListScan(emptyList(), emptyList()),
+                )
+            signedIn()
+            val writer = controller()
+            runCurrent()
+
+            // Added to the list from the Add to list page, whose target carries no summary: the page fills it.
+            writer.remember(target.copy(summary = SCHOBER_SUMMARY), setOf(OSM))
+            runCurrent()
+            assertEquals(SCHOBER_SUMMARY, writer.own.value.summaries[OSM], "the list entry says what and where it is")
+
+            // Tagged later from a page with less to say (offline, no card).
+            writer.tag(target.copy(summary = "Altstadt, Zürich", summaryPartial = true), "cake")
+            runCurrent()
+            assertEquals(mapOf(OSM to KeptSummary(SCHOBER_SUMMARY)), store.summaries())
         }
 
     @Test

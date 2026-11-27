@@ -3,8 +3,10 @@ package to.pubky.maps.place
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Runnable
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -559,6 +561,69 @@ class PlacePageControllerTest {
                     .place.uri,
             )
             assertNull(pages.state.value!!.locality)
+        }
+
+    @Test
+    fun noSummaryIsKeptWhileTheOfflineDistrictAndTownAreLookedUp() =
+        runTest {
+            val held = HeldDispatcher()
+            val pages = controller(FakePlaceData().apply { pinakesDown = true }, localities = Hottingen(), io = held)
+            val summaries = mutableListOf<String?>()
+            backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { pages.state.collect { summaries += it?.summary } }
+            pages.open(tapped)
+            advanceUntilIdle()
+
+            val waiting = pages.state.value!!
+            assertFalse(waiting.cardLoading, "Pinakes answered (it is down)")
+            assertTrue(waiting.localityLoading)
+            assertNull(waiting.summary, "not the category alone, which a save would keep for good")
+
+            held.runAll()
+            advanceUntilIdle()
+            assertFalse(pages.state.value!!.localityLoading)
+            assertEquals(listOf("Café · Hottingen, Zürich"), summaries.filterNotNull().distinct())
+            assertTrue(pages.state.value!!.summaryPartial, "no card: a page with one replaces this line")
+        }
+
+    @Test
+    fun theSamePlaceOpenedAgainWithAPointKeepsNoSummaryWhileItsDistrictAndTownAreLookedUp() =
+        runTest {
+            val held = HeldDispatcher()
+            val pages = controller(FakePlaceData().apply { pinakesDown = true }, localities = Hottingen(), io = held)
+            // A link not resolved yet (no point, so nothing to look up), then the same café with its point.
+            pages.open(tapped.copy(point = null))
+            advanceUntilIdle()
+            assertEquals("Café", pages.state.value!!.summary)
+            pages.open(tapped)
+            runCurrent()
+
+            assertEquals(1, held.waiting)
+            assertTrue(pages.state.value!!.localityLoading)
+            assertNull(pages.state.value!!.summary, "not the category alone, which a save would keep")
+            held.runAll()
+            advanceUntilIdle()
+            assertFalse(pages.state.value!!.localityLoading)
+            assertEquals("Café · Hottingen, Zürich", pages.state.value!!.summary)
+        }
+
+    @Test
+    fun aDroppedPinKeepsNoSummaryWhileItsDistrictAndTownAreLookedUp() =
+        runTest {
+            val held = HeldDispatcher()
+            val pages = controller(FakePlaceData(), localities = Hottingen(), io = held)
+            val summaries = mutableListOf<String?>()
+            backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { pages.state.collect { summaries += it?.summary } }
+            pages.open(droppedPin(47.37031, 8.55601))
+            advanceUntilIdle()
+
+            assertTrue(pages.state.value!!.localityLoading)
+            assertNull(pages.state.value!!.summary, "not \"$DROPPED_PIN\" alone, which a save would keep for good")
+
+            held.runAll()
+            advanceUntilIdle()
+            assertFalse(pages.state.value!!.localityLoading)
+            assertEquals(listOf("$DROPPED_PIN · Hottingen, Zürich"), summaries.filterNotNull().distinct())
+            assertFalse(pages.state.value!!.summaryPartial, "no card is asked for a dropped pin: this line is all there is")
         }
 
     @Test

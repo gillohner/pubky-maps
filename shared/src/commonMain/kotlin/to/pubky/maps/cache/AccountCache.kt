@@ -100,5 +100,6 @@ class SqlAccountCache(
         queries.deleteOtherPosts()
         queries.deletePlaceLabels()
         queries.deletePlacePoints()
+        queries.deletePlaceSummaries()
     }
 }

@@ -80,11 +80,21 @@ class SqlWriteStoreTest {
         store.putLabel("geo:1,2", "Bench")
         store.putPoint("https://osm.org/node/1", GeoPoint(47.37, 8.54))
         store.putPoint("https://osm.org/node/1", GeoPoint(47.38, 8.55))
+        store.putSummary("https://osm.org/node/1", KeptSummary("Café · Hottingen, Zürich", partial = true))
+        store.putSummary("https://osm.org/node/1", KeptSummary("Café · Napfgasse 4, 8001 Zürich"))
+        store.putSummary("geo:1,2", KeptSummary("Bench · Lindenhof, Zürich", partial = true))
 
         assertEquals(setOf("A", "B"), store.otherPosts(false).toSet())
         assertEquals(listOf("C"), store.otherPosts(true))
         assertEquals(mapOf("geo:1,2" to "Bench"), store.labels())
         assertEquals(mapOf("https://osm.org/node/1" to GeoPoint(47.38, 8.55)), store.points())
+        assertEquals(
+            mapOf(
+                "https://osm.org/node/1" to KeptSummary("Café · Napfgasse 4, 8001 Zürich"),
+                "geo:1,2" to KeptSummary("Bench · Lindenhof, Zürich", partial = true),
+            ),
+            store.summaries(),
+        )
     }
 
     @Test
@@ -97,6 +107,7 @@ class SqlWriteStoreTest {
         store.putList(list)
         store.putLabel("geo:1,2", "Bench")
         store.putPoint("geo:1,2", GeoPoint(1.0, 2.0))
+        store.putSummary("geo:1,2", KeptSummary("Bench · Lindenhof, Zürich"))
 
         cache.replace(CachedAccount(USER, "Ada", 1, emptyList(), emptyList()))
         assertEquals(1, store.queue().size, "a refresh of the cache keeps what waits to be sent")
@@ -107,6 +118,7 @@ class SqlWriteStoreTest {
         assertEquals(emptyList(), store.lists())
         assertEquals(emptyMap(), store.labels())
         assertEquals(emptyMap(), store.points(), "where the user's saved places are goes with the account")
+        assertEquals(emptyMap(), store.summaries())
     }
 
     @Test
@@ -132,7 +144,7 @@ class SqlWriteStoreTest {
             "CREATE TABLE bookmark (path TEXT NOT NULL PRIMARY KEY, place TEXT NOT NULL)",
             "INSERT INTO account VALUES ('$USER', 'Ada', 7)",
         ).forEach { driver.execute(null, it, 0) }
-        assertEquals(3L, CacheDatabase.Schema.version)
+        assertEquals(4L, CacheDatabase.Schema.version)
 
         CacheDatabase.Schema.migrate(driver, 1, CacheDatabase.Schema.version)
 
@@ -172,6 +184,35 @@ class SqlWriteStoreTest {
     }
 
     @Test
+    fun aVersionThreeCacheKeepsItsNamesAndPointsAndGainsSummaries() {
+        val driver = JdbcSqliteDriver("jdbc:sqlite:${File(dir, "v3.db").path}", Properties())
+        // The schema before saved places had summaries: version 2's tables plus 2.sqm.
+        listOf(
+            "CREATE TABLE account (public_key TEXT NOT NULL PRIMARY KEY, name TEXT, refreshed_at INTEGER)",
+            "CREATE TABLE tag (path TEXT NOT NULL PRIMARY KEY, place TEXT NOT NULL, label TEXT NOT NULL, created_at INTEGER NOT NULL)",
+            "CREATE TABLE bookmark (path TEXT NOT NULL PRIMARY KEY, place TEXT NOT NULL)",
+            "CREATE TABLE outbox (seq INTEGER PRIMARY KEY AUTOINCREMENT, op TEXT NOT NULL)",
+            "CREATE TABLE own_list (uri TEXT NOT NULL PRIMARY KEY, private INTEGER NOT NULL, list TEXT NOT NULL)",
+            "CREATE TABLE other_post (private INTEGER NOT NULL, id TEXT NOT NULL, PRIMARY KEY (private, id))",
+            "CREATE TABLE place_label (place TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL)",
+            "CREATE TABLE place_point (place TEXT NOT NULL PRIMARY KEY, lat REAL NOT NULL, lon REAL NOT NULL)",
+            "INSERT INTO place_label VALUES ('geo:1,2', 'Bench')",
+            "INSERT INTO place_point VALUES ('geo:1,2', 1.0, 2.0)",
+        ).forEach { driver.execute(null, it, 0) }
+
+        CacheDatabase.Schema.migrate(driver, 3, CacheDatabase.Schema.version)
+
+        val store = SqlWriteStore(driver)
+        assertEquals(mapOf("geo:1,2" to "Bench"), store.labels())
+        assertEquals(mapOf("geo:1,2" to GeoPoint(1.0, 2.0)), store.points())
+        assertEquals(emptyMap(), store.summaries())
+        store.putSummary("geo:1,2", KeptSummary("Bench · Lindenhof, Zürich"))
+        assertEquals(mapOf("geo:1,2" to KeptSummary("Bench · Lindenhof, Zürich")), store.summaries())
+        SqlAccountCache(driver).clear()
+        assertEquals(emptyMap(), store.summaries(), "sign-out deletes them with the account")
+    }
+
+    @Test
     fun phoneOnlyDataIsKeptInItsOwnDatabase() {
         val driver = JdbcSqliteDriver("jdbc:sqlite:${File(dir, "phone-data.db").path}", Properties())
         PhoneDataDatabase.Schema.create(driver)
@@ -179,8 +220,8 @@ class SqlWriteStoreTest {
         val phoneList = OwnList("phone:1", Kept.Phone, "Picnic spots", listOf("geo:1,2"), names = mapOf("geo:1,2" to "Lake"))
 
         phone.save(PhoneSaved("geo:1,2", "Lake", 10))
-        phone.save(PhoneSaved("geo:3,4", null, 20))
-        phone.save(PhoneSaved("https://www.openstreetmap.org/node/1", "Schober", 30, GeoPoint(47.37159, 8.54531)))
+        phone.save(PhoneSaved("geo:3,4", null, 20, summary = "Hottingen, Zürich", summaryPartial = true))
+        phone.save(PhoneSaved("https://www.openstreetmap.org/node/1", "Schober", 30, GeoPoint(47.37159, 8.54531), "Café · Napfgasse 4"))
         phone.putList(phoneList)
         phone.unsave("geo:1,2")
         phone.putPointPlace("geo:3,4")
@@ -190,8 +231,8 @@ class SqlWriteStoreTest {
         val read = SqlPhoneStore(driver).read()
         assertEquals(
             listOf(
-                PhoneSaved("https://www.openstreetmap.org/node/1", "Schober", 30, GeoPoint(47.37159, 8.54531)),
-                PhoneSaved("geo:3,4", null, 20),
+                PhoneSaved("https://www.openstreetmap.org/node/1", "Schober", 30, GeoPoint(47.37159, 8.54531), "Café · Napfgasse 4"),
+                PhoneSaved("geo:3,4", null, 20, summary = "Hottingen, Zürich", summaryPartial = true),
             ),
             read.saved,
         )
@@ -209,7 +250,7 @@ class SqlWriteStoreTest {
             "CREATE TABLE flag (name TEXT NOT NULL PRIMARY KEY)",
             "INSERT INTO saved_place VALUES ('https://www.openstreetmap.org/node/1', 'Schober', 10)",
         ).forEach { driver.execute(null, it, 0) }
-        assertEquals(3L, PhoneDataDatabase.Schema.version)
+        assertEquals(4L, PhoneDataDatabase.Schema.version)
 
         PhoneDataDatabase.Schema.migrate(driver, 1, PhoneDataDatabase.Schema.version)
 
@@ -226,5 +267,35 @@ class SqlWriteStoreTest {
         )
         phone.putPointPlace("geo:3,4")
         assertEquals(setOf("geo:3,4"), phone.read().pointPlaces)
+    }
+
+    @Test
+    fun aVersionThreePhoneStoreKeepsItsSavedPlacesAndPointPlacesAndGainsSummaries() {
+        val driver = JdbcSqliteDriver("jdbc:sqlite:${File(dir, "v3-phone.db").path}", Properties())
+        // The schema before saved places had summaries: version 1's tables plus 1.sqm and 2.sqm.
+        listOf(
+            "CREATE TABLE saved_place (place TEXT NOT NULL PRIMARY KEY, name TEXT, saved_at INTEGER NOT NULL, lat REAL, lon REAL)",
+            "CREATE TABLE phone_list (uri TEXT NOT NULL PRIMARY KEY, list TEXT NOT NULL)",
+            "CREATE TABLE flag (name TEXT NOT NULL PRIMARY KEY)",
+            "CREATE TABLE point_place (place TEXT NOT NULL PRIMARY KEY)",
+            "INSERT INTO saved_place VALUES ('https://www.openstreetmap.org/node/1', 'Schober', 10, 47.37159, 8.54531)",
+            "INSERT INTO point_place VALUES ('geo:3,4')",
+        ).forEach { driver.execute(null, it, 0) }
+
+        PhoneDataDatabase.Schema.migrate(driver, 3, PhoneDataDatabase.Schema.version)
+
+        val phone = SqlPhoneStore(driver)
+        assertEquals(
+            listOf(PhoneSaved("https://www.openstreetmap.org/node/1", "Schober", 10, GeoPoint(47.37159, 8.54531))),
+            phone.read().saved,
+        )
+        assertEquals(setOf("geo:3,4"), phone.read().pointPlaces)
+        phone.save(
+            PhoneSaved("https://www.openstreetmap.org/node/1", "Schober", 10, GeoPoint(47.37159, 8.54531), "Café", summaryPartial = true),
+        )
+        assertEquals(
+            PhoneSaved("https://www.openstreetmap.org/node/1", "Schober", 10, GeoPoint(47.37159, 8.54531), "Café", summaryPartial = true),
+            phone.read().saved.single(),
+        )
     }
 }

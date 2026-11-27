@@ -1,0 +1,4 @@
+-- Version 4: what and where each saved place is, for the line under its name on the Saved page.
+
+ALTER TABLE saved_place ADD COLUMN summary TEXT;
+ALTER TABLE saved_place ADD COLUMN summary_partial INTEGER NOT NULL DEFAULT 0;
