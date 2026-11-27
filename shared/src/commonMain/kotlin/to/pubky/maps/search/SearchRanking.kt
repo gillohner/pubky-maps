@@ -39,7 +39,8 @@ data class SearchResult(
     val score: Double = 0.0,
     /**
      * The place's OSM `opening_hours` as an offline area keeps them for its element, for the row's
-     * "Open · Closes 18:00"; null when no downloaded area keeps hours for it.
+     * "Open · Closes 18:00"; null when no downloaded area keeps hours for it. A place page whose Pinakes
+     * card has OSM details shows the card's hours instead, which may be newer than the area's last fetch.
      */
     val openingHours: String? = null,
 ) {

@@ -296,7 +296,9 @@ check_alive "search in the offline maps"
 # Its page has no Pinakes card without a connection: the details kept for the area stand in.
 xy=$(wait_for "Fixture Bakery" 5) || fail "no offline result to open"
 adb shell input tap $xy
-# The phone number first: the row it was opened from also says "Open 24 hours".
+# The phone number first: the row it was opened from also says "Open 24 hours". The list leaves the
+# screen once a result is picked (MapScreen shows it only while typing or with the results), so the
+# hours below are the page's.
 wait_for "+41 44 000 00 00" 20 > /dev/null || fail "the offline place page does not show the phone number kept for the area"
 wait_for "Open 24 hours" 5 > /dev/null || fail "the offline place page does not show the opening hours kept for the area"
 screenshot offline-place-details

@@ -312,7 +312,9 @@ class SearchControllerTest {
             val c = controller()
             c.onQueryChange("kunsthaus", area)
             advanceUntilIdle()
-            val card = c.state.value.results.single()
+            val card =
+                c.state.value.results
+                    .single()
             assertTrue(card.onPubky)
             assertEquals("Tu-Su 10:00-18:00", card.openingHours)
         }
