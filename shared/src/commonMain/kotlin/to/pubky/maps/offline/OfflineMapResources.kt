@@ -33,6 +33,14 @@ import kotlin.time.Instant
  * every http(s) resource, the map's own without a limit. Otherwise MapLibre loads them itself. A
  * download's request that gets new data from the map server is told to [fetchedNewData].
  *
+ * A map request whose cached copy is still fresh is not fetched: MapLibre has given the map that
+ * copy already, and its own client would ask the server only once the copy expires. MapLibre hands
+ * a provider every network request at once, also these, so without this a map made during a
+ * download (a theme switch or rotation recreates it) would ask again for its cached style, and with
+ * the map server unreachable the failed request would fail the style the map already showed. It is
+ * answered as unchanged with the copy's own dates, which keeps its expiry in the cache; unlike
+ * MapLibre's own client, nothing asks again when the copy expires, only the next load of it.
+ *
  * The client is made by [createClient] on the first request this provider loads, which MapLibre
  * runs on a background thread: the provider is set up on the main thread at app start and most
  * starts never download, so a client made with the provider would be main-thread work at every
@@ -57,6 +65,7 @@ class OfflineMapResources(
             url = request.url,
             priorEtag = request.priorEtag,
             priorModified = request.priorModified,
+            priorExpires = request.priorExpires,
             range = request.range,
         )
 
@@ -66,10 +75,14 @@ class OfflineMapResources(
         url: String,
         priorEtag: String? = null,
         priorModified: Instant? = null,
+        priorExpires: Instant? = null,
         range: LongRange? = null,
     ): MapResourceLoad {
         val fetch = suspend { fetch(url, priorEtag, priorModified, range) }
-        if (!offline) return fetch()
+        if (!offline) {
+            if (priorExpires != null && priorExpires > clock.now()) return MapResourceLoad.NotModified(priorModified, priorExpires)
+            return fetch()
+        }
         return downloads.withPermit { fetch() }.also { if (it is MapResourceLoad.Bytes) fetchedNewData() }
     }
 
