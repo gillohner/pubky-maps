@@ -117,6 +117,7 @@ data class PlaceList(
     val uri: String,
     val author: String,
     val name: String?,
+    /** How many of its items can be places (other apps' objects in it are not counted); null when unreadable. */
     val itemCount: Int?,
     /** The signed-in user's own list. */
     val mine: Boolean,

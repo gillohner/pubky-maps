@@ -1,5 +1,6 @@
 package to.pubky.maps.place
 
+import kotlinx.serialization.json.JsonPrimitive
 import okio.FileSystem
 import okio.Path.Companion.toPath
 import kotlin.test.Test
@@ -16,6 +17,12 @@ internal object PlaceFixtures {
 
     const val NEXUS = "https://nexus.example.org"
     const val TESTER = "466weoro4e45cxdfdtxfjcuss1x6w91dfjn9mcmkksh6fexmx5xy"
+
+    /**
+     * A stand-in for the core's `mayBeMapPlace` that takes web links only (the fixtures' items are
+     * web links or `pubky://` objects); the real rule is checked in the host test RealCorePlaceCountTest.
+     */
+    val webLinks: (String) -> Boolean = { it.startsWith("https://") || it.startsWith("http://") }
 }
 
 class PlaceParsersTest {
@@ -97,15 +104,43 @@ class PlaceParsersTest {
         assertNull(refs.cursor)
         assertEquals(PlaceFixtures.TESTER, refs.items[0].author)
 
-        val lists = parseNexusCollections(read("nexus-collection-posts.json"), viewer = PlaceFixtures.TESTER)
+        val lists = parseNexusCollections(read("nexus-collection-posts.json"), viewer = PlaceFixtures.TESTER, PlaceFixtures.webLinks)
         assertEquals(
             listOf("Card review: every card type", "Card review: places and events", "RTI audit list (test data)"),
             lists.map { it.name },
         )
-        assertEquals(listOf(63, 10, 2), lists.map { it.itemCount })
+        // The first list holds 63 items, two of them other apps' pubky:// objects (a Loopky deck, a room).
+        assertEquals(listOf(61, 10, 2), lists.map { it.itemCount })
         assertTrue(lists.all { it.mine })
-        assertFalse(parseNexusCollections(read("nexus-collection-posts.json"), viewer = null).any { it.mine })
+        assertFalse(parseNexusCollections(read("nexus-collection-posts.json"), viewer = null, PlaceFixtures.webLinks).any { it.mine })
         assertEquals(refs.items.map { it.uri }, lists.map { it.uri })
+    }
+
+    @Test
+    fun aListCountsOnlyTheItemsTheRuleTakes() {
+        val osmOnly = { uri: String -> uri.startsWith("https://www.openstreetmap.org/") }
+        val lists = parseNexusCollections(read("nexus-collection-posts.json"), viewer = null, osmOnly)
+        assertEquals(listOf(7, 7, 1), lists.map { it.itemCount })
+    }
+
+    @Test
+    fun anItemWithoutAUriIsNotCountedAndItemsThatAreNoListAreUnknown() {
+        fun post(
+            id: String,
+            content: String,
+        ) = """{"details": {"id": "$id", "author": "a", "kind": "collection", "deleted": false,
+            |"uri": "pubky://a/pub/social/v1/posts/$id", "content": ${JsonPrimitive(content)}}}
+            """.trimMargin()
+        val json =
+            listOf(
+                post(
+                    "A",
+                    """{"name": "Mixed", "items": [{"uri": "https://osm.org/node/1"}, {"name": "no uri"}, "https://x.org", {"uri": 5}]}""",
+                ),
+                post("B", """{"name": "Odd", "items": {"uri": "https://osm.org/node/1"}}"""),
+            ).joinToString(",", "[", "]")
+        val lists = parseNexusCollections(json, viewer = null) { true }
+        assertEquals(listOf(1, null), lists.map { it.itemCount })
     }
 
     @Test

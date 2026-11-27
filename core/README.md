@@ -47,6 +47,9 @@ It bundles the `pubky` SDK (0.18), `pubky-social-specs` (1.0.0-rc.2) and the wor
 - Places: `normalizePlaceUri`, `osmPlaceUri` and `geoPlaceUri`. Places are canonical OSM URLs,
   `geo:lat,lon` with at most 5 fraction digits, or the link the user pasted (an Android
   search link `geo:0,0?q=<name or address>` is kept as it is, never moved to 0,0).
+  `mayBeMapPlace(target)` says whether a bookmark's or collection item's target can be a place
+  (a map link or a web page; not another app's `pubky://` object): the rule `listBookmarks`
+  filters with, for counting other users' collections in the app.
 - Map links (from the `map-links` crate in `core/map-links`): `parseMapLink(url)` and
   `findMapLink(sharedText)` read a Google Maps, Apple Maps, Waze, OpenStreetMap, OsmAnd,
   Organic Maps, CoMaps, HERE or `geo:` link from its text (name, point, OSM element, zoom,
