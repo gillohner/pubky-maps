@@ -75,6 +75,10 @@ DELETE FROM area WHERE id = ?;
 countWordFrom:
 SELECT COUNT(*) FROM word WHERE word >= :from AND word < :until;
 
+-- How many places have the word itself.
+countWord:
+SELECT COUNT(*) FROM word WHERE word = :word;
+
 -- The places with a word in [from, until), nearest to the point first (in degrees, which is
 -- enough to pick the nearest few hundred).
 withWordFrom:
@@ -90,6 +94,36 @@ SELECT DISTINCT place.* FROM word JOIN place ON place.id = word.place
 WHERE word.word = :word
 ORDER BY place.tag_key = 'place' DESC, (place.lat - :lat) * (place.lat - :lat) + (place.lon - :lon) * (place.lon - :lon)
 LIMIT :limit;
+
+-- withWordFrom and withWord within a box around the point, through the index of the points: for a
+-- word so common that its nearest places lie close by, where the word's index would read every
+-- place that has it. withWordIn leaves out the town and district labels (labelsWithWord has them).
+withWordFromIn:
+SELECT place.* FROM place
+WHERE place.lat BETWEEN :south AND :north AND place.lon BETWEEN :west AND :east
+AND EXISTS (SELECT 1 FROM word WHERE word.place = place.id AND word.word >= :from AND word.word < :until)
+ORDER BY (place.lat - :lat) * (place.lat - :lat) + (place.lon - :lon) * (place.lon - :lon)
+LIMIT :limit;
+
+withWordIn:
+SELECT place.* FROM place
+WHERE place.tag_key != 'place' AND place.lat BETWEEN :south AND :north AND place.lon BETWEEN :west AND :east
+AND EXISTS (SELECT 1 FROM word WHERE word.place = place.id AND word.word = :word)
+ORDER BY (place.lat - :lat) * (place.lat - :lat) + (place.lon - :lon) * (place.lon - :lon)
+LIMIT :limit;
+
+-- The town and district labels with the word, nearest to the point first.
+labelsWithWord:
+SELECT place.* FROM place
+WHERE place.tag_key = 'place'
+AND EXISTS (SELECT 1 FROM word WHERE word.place = place.id AND word.word = :word)
+ORDER BY (place.lat - :lat) * (place.lat - :lat) + (place.lon - :lon) * (place.lon - :lon)
+LIMIT :limit;
+
+-- How many places lie in the box (read from the index of the points alone).
+countIn:
+SELECT COUNT(*) FROM place
+WHERE lat BETWEEN :south AND :north AND lon BETWEEN :west AND :east;
 
 -- The localities stored for an OpenStreetMap element, one per area that has it.
 localitiesOf:

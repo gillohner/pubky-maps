@@ -15,6 +15,7 @@ import to.pubky.maps.search.distanceMeters
 import to.pubky.maps.search.normalizeForMatch
 import kotlin.math.PI
 import kotlin.math.cos
+import kotlin.math.sqrt
 
 /** Search in the places of the offline areas, for when the search servers cannot be reached. */
 fun interface OfflinePlaceSearch {
@@ -33,12 +34,16 @@ fun interface OfflinePlaceSearch {
  * The places of each offline area in SQLite ([OfflinePlacesDatabase]). [replace], [delete] and
  * [localityOf] block on disk: call them off the main thread; [search] moves to [io] itself.
  */
-class SqlOfflinePlaceIndex(
+class SqlOfflinePlaceIndex internal constructor(
     driver: SqlDriver,
-    private val io: CoroutineDispatcher = Dispatchers.IO,
+    private val io: CoroutineDispatcher,
+    /** A word with this many places or fewer is read through its index alone ([nearest]); tests set it to read every word so. */
+    private val boxFrom: Long,
 ) : OfflinePlaceSearch,
     OfflinePlaceStore,
     OfflineLocality {
+    constructor(driver: SqlDriver, io: CoroutineDispatcher = Dispatchers.IO) : this(driver, io, BOX_FROM)
+
     private val queries = OfflinePlacesDatabase(driver).offlinePlacesQueries
 
     override fun areas(): Map<String, Long> = queries.areas().executeAsList().associate { it.id to it.new_data_at }
@@ -137,25 +142,13 @@ class SqlOfflinePlaceIndex(
             val counts = words.associateWith { queries.countWordFrom(it, it.until()).executeAsOne() }
             val centre = area.centre
 
-            /** The places nearest [at] with a word of their name or category that starts with [word]. */
-            fun named(
-                word: String,
-                at: GeoPoint,
-            ): List<OfflinePlace> {
-                val starting = queries.withWordFrom(word, word.until(), at.lat, at.lon, CANDIDATES, placeOfRow).executeAsList()
-                if (counts.getValue(word) <= CANDIDATES) return starting
-                // Too many start with it for the nearest few hundred to hold every one: those with
-                // the word itself ("Uster", not "Usterstrasse") are looked up too.
-                return starting + queries.withWord(word, at.lat, at.lon, CANDIDATES, placeOfRow).executeAsList()
-            }
-
             // Every word looks up the places it names, the rarest first (often the name, not the
             // category every restaurant has); a word too common to look up cheaply only filters.
             // A place's district and town are not in the index, so its own word finds it and the
             // others may match where it lies: "bahnhofstrasse winterthur", and a town's name finds
             // the town and its streets, not every shop in it.
             val asked = words.sortedBy { counts.getValue(it) }.filterIndexed { i, w -> i == 0 || counts.getValue(w) <= COMMON }
-            val nearCentre = asked.flatMap { named(it, centre) }
+            val nearCentre = asked.flatMap { named(it, centre, counts.getValue(it)) }
             // "cafe uster": the other words, common ones too (but not one or two letters still being
             // typed), are looked up around the town or district as well, which can be farther than
             // the nearest few hundred cafés.
@@ -165,7 +158,11 @@ class SqlOfflinePlaceIndex(
                     .filter { wordsOf(it.copy(category = null)).let { own -> own.size < words.size && words.containsAll(own) } }
                     .minByOrNull { distanceMeters(it.point, centre) }
             val aroundTown = words.filter { it in asked || it.length >= MIN_COMMON_LETTERS }
-            val nearTown = town?.let { t -> (aroundTown - wordsOf(t.copy(category = null))).flatMap { named(it, t.point) } }.orEmpty()
+            val nearTown =
+                town
+                    ?.let { t ->
+                        (aroundTown - wordsOf(t.copy(category = null))).flatMap { named(it, t.point, counts.getValue(it)) }
+                    }.orEmpty()
             val found = (nearCentre + nearTown).distinct().sortedBy { distanceMeters(it.point, centre) }
             val matching =
                 found
@@ -177,6 +174,76 @@ class SqlOfflinePlaceIndex(
             val (exact, others) = matching.partition { normalizeForMatch(it.name) == typed }
             (exact + others).take(RESULTS)
         }
+
+    /**
+     * [search]'s candidates for [word]: the places nearest [at] with a word of their name or
+     * category that starts with it ([count] such words in the index), and when there are more than
+     * the nearest few hundred, also those with the word itself, town and district labels first.
+     */
+    internal fun named(
+        word: String,
+        at: GeoPoint,
+        count: Long = queries.countWordFrom(word, word.until()).executeAsOne(),
+    ): List<OfflinePlace> {
+        val until = word.until()
+        val starting =
+            nearest(at, count) {
+                if (it == null) {
+                    queries.withWordFrom(word, until, at.lat, at.lon, CANDIDATES, placeOfRow).executeAsList()
+                } else {
+                    queries
+                        .withWordFromIn(it.south, it.north, it.west, it.east, word, until, at.lat, at.lon, CANDIDATES, placeOfRow)
+                        .executeAsList()
+                }
+            }
+        if (count <= CANDIDATES) return starting
+        // Too many start with it for the nearest few hundred to hold every one: those with
+        // the word itself ("Uster", not "Usterstrasse") are looked up too, town and
+        // district labels first.
+        val exact = queries.countWord(word).executeAsOne()
+        if (exact <= boxFrom) return starting + queries.withWord(word, at.lat, at.lon, CANDIDATES, placeOfRow).executeAsList()
+        val labels = queries.labelsWithWord(word, at.lat, at.lon, CANDIDATES, placeOfRow).executeAsList()
+        if (labels.size >= CANDIDATES) return starting + labels
+        val others =
+            nearest(at, exact) {
+                if (it == null) {
+                    queries.withWord(word, at.lat, at.lon, CANDIDATES, placeOfRow).executeAsList().filter { p -> p.key != "place" }
+                } else {
+                    queries.withWordIn(it.south, it.north, it.west, it.east, word, at.lat, at.lon, CANDIDATES, placeOfRow).executeAsList()
+                }
+            }
+        return starting + labels + others.take(CANDIDATES.toInt() - labels.size)
+    }
+
+    /**
+     * The [CANDIDATES] places nearest [at] that [find] gives, nearest first, for a word with [count]
+     * rows in the word index. [find] reads them within a box (half its side in degrees, as the
+     * queries measure distances), or everywhere for null, through the word's index, which reads
+     * all [count]. A common word's nearest places mostly lie close by, and a box around [at] reads
+     * only the places in it: the box grows until its nearest [CANDIDATES] lie within its circle, so
+     * that no place outside is nearer. It reads everywhere instead when the box would hold as many
+     * places as [count], when the first circle has none of the word's places, or after [BOX_STEPS].
+     */
+    private fun nearest(
+        at: GeoPoint,
+        count: Long,
+        find: (Box?) -> List<OfflinePlace>,
+    ): List<OfflinePlace> {
+        if (count <= boxFrom) return find(null)
+        var half = FIRST_BOX_DEGREES
+        repeat(BOX_STEPS) {
+            val box = Box(at.lat - half, at.lat + half, at.lon - half, at.lon + half)
+            if (queries.countIn(box.south, box.north, box.west, box.east).executeAsOne() >= count) return find(null)
+            val found = find(box)
+            val inCircle = found.count { squared(it.point.lat - at.lat) + squared(it.point.lon - at.lon) <= half * half }
+            if (inCircle >= CANDIDATES) return found
+            // None near: nothing says they are closer than elsewhere ("1" in house numbers of another town).
+            if (inCircle == 0) return find(null)
+            // A box with the places of the word as dense as this circle has them holds the nearest.
+            half *= (sqrt(CANDIDATES.toDouble() / inCircle) * SPARE).coerceIn(MIN_GROWTH, MAX_GROWTH)
+        }
+        return find(null)
+    }
 
     private companion object {
         /** How near a place of the areas (north, south, east or west) a point must be for their labels to name it. */
@@ -193,8 +260,29 @@ class SqlOfflinePlaceIndex(
 
         /** A common word shorter than this is not looked up around a town either. */
         const val MIN_COMMON_LETTERS = 3
+
+        /**
+         * Reading this many places through a word's index takes a few milliseconds; below it a box
+         * that misses would cost more than it can save.
+         */
+        const val BOX_FROM = 5_000L
+
+        /** Half the side of the first box [nearest] reads, in degrees (about 1 km). */
+        const val FIRST_BOX_DEGREES = 0.01
+
+        /** How much the box's side grows at a step, at least and at most. */
+        const val MIN_GROWTH = 1.5
+        const val MAX_GROWTH = 8.0
+
+        /** How much larger the next box is than the density in the last circle asks. */
+        const val SPARE = 1.2
+
+        /** How many boxes [nearest] tries before it reads everywhere. */
+        const val BOX_STEPS = 6
     }
 }
+
+private fun squared(x: Double) = x * x
 
 /** The first string after every string that starts with this one: the end of its index range. */
 private fun String.until(): String = dropLast(1) + (last() + 1)

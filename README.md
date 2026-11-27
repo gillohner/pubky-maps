@@ -75,6 +75,10 @@ When Photon cannot be reached, search answers from these places: every typed wor
 the name, the category or the district and town ("bahnhofstrasse winterthur"), and at least one of
 the name or category, so a town's name finds the town and its streets, not every shop in it. The
 rarest word, and every other word that is not in thousands of places, looks them up nearest first;
+a word in more than 5,000 places ("s" as the user starts typing "street") is looked up within a box
+around the point that grows until it holds the nearest few hundred, while it holds fewer places than
+the word, so it does not read every place with the word (under 100 ms for a word of all 60,000
+places of `OfflinePlaceIndexDatabaseTest`, where reading them took more);
 when the query names a town or district, the other words are looked up around it too ("cafe uster"
 from Zürich). A place named exactly as typed passes also when farther than the others, and a town's
 label before the places named after it. They are merged with Pinakes when it answers. A result
