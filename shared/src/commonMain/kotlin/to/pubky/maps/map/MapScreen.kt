@@ -66,6 +66,7 @@ import to.pubky.maps.search.SearchMode
 import to.pubky.maps.search.SearchState
 import to.pubky.maps.status.ServicePart
 import to.pubky.maps.ui.AppIcons
+import to.pubky.maps.ui.NoteWithAction
 import to.pubky.maps.ui.rememberSafeLinkOpener
 
 /** Space between the screen's safe area and the map controls. */
@@ -503,6 +504,12 @@ internal fun AttributionBar(
     }
 }
 
+/**
+ * Says that no map style could load, with Retry beside the text when the text fits on one line beside
+ * it (a tablet at the normal font), else under it at the end: beside a wrapped text, 'connection.'
+ * would go alone on a second line on a phone, and at 200 % font the text would get three lines of two
+ * words. See [NoteWithAction].
+ */
 @Composable
 private fun MapUnavailableNotice(
     onRetry: () -> Unit,
@@ -514,17 +521,19 @@ private fun MapUnavailableNotice(
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shadowElevation = 3.dp,
     ) {
-        Row(
+        NoteWithAction(
+            note = {
+                // The end padding keeps the text 16 dp from the notice's end edge, as from its start, when
+                // it takes the whole width; beside Retry it is the gap between them. The same padding
+                // above and below keeps the text centred on Retry's line when they share one.
+                Text(
+                    text = "The map could not load. Check your connection.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 8.dp, end = 8.dp),
+                )
+            },
+            action = { TextButton(onClick = onRetry) { Text("Retry") } },
             modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text = "The map could not load. Check your connection.",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(onClick = onRetry) { Text("Retry") }
-        }
+        )
     }
 }
