@@ -2,13 +2,13 @@
 # The place page on a running emulator, against recorded Pinakes and Nexus answers served on the
 # runner (scripts/ci/place_fixture_server.py through adb reverse; no public network): an
 # openstreetmap.org link to the Conditorei Schober opens the app on its place page, a sheet over the
-# map with the card's name and kind, the Pubky tags and the posts; the handle raises it to the whole
-# screen, where the lists holding the place show; back closes it. Directions, with location granted
+# map with the card's name and kind, the Pubky tags and the posts. Directions, with location granted
 # and the emulator's GPS at Zürich HB, ask the fixture Valhalla for a route by car from there to the
-# place, show its time and draw it on the map; Walk asks again on foot, and its steps open. A
-# long-press on the map then drops a pin: its page is named by its coordinates and asks no server;
-# back closes it. Checks that Pinakes, Nexus and Valhalla were asked with the app's User-Agent, Nexus
-# for every spelling people used for the place.
+# place, show its time and draw it on the map; Walk asks again on foot. Its steps open and raise the
+# sheet to the whole screen, where the lists holding the place show; back closes it. A long-press on
+# the map then drops a pin: its page is named by its coordinates and asks no server; back closes it.
+# Checks that Pinakes, Nexus and Valhalla were asked with the app's User-Agent, Nexus for every
+# spelling people used for the place.
 # Usage: emulator-place.sh <apk> <out dir>
 set -euo pipefail
 
