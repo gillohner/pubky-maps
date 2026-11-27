@@ -56,7 +56,7 @@ def main() -> None:
 
     collections = request(f"{pinakes}/v1/resources/{schober['id']}/collections?limit=20")
     save(out, "pinakes-collections-schober.json", collections)
-    save(out, "pinakes-bbox-zurich.json", request(f"{pinakes}/v1/search?" + urllib.parse.urlencode({"bbox": BBOX, "type": "Place", "limit": 500})))
+    save(out, "pinakes-bbox-zurich.json", request(f"{pinakes}/v1/search?" + urllib.parse.urlencode({"bbox": BBOX, "type": "Place", "referenced": "true", "sort": "activity", "limit": 500})))
 
     views = request(
         f"{nexus}/v1/stream/resources/by_ids?limit_tags=20&limit_taggers=5",

@@ -45,12 +45,12 @@ data class MapPlacesState(
 
 /**
  * The map's Pubky places layer: the places people referenced on Pubky in view, from Pinakes'
- * `search?bbox=&type=Place`, until Pinakes has a cluster endpoint. Asked when the camera stops, from
- * zoom [MIN_ZOOM] in, for the view grown by half on each side (so small pans need no request), at
- * most [MAX_PAGES] pages of 500. Asked again when the view leaves that area, when it was cut at the
- * cap and the user zoomed in two levels, or after [maxAge]. When every Pinakes server fails, the
- * places kept for the offline areas ([offline]) are shown where one overlaps the asked area, and
- * elsewhere what is shown stays.
+ * `search?bbox=&type=Place&referenced=true`, until Pinakes has a cluster endpoint. Asked when the
+ * camera stops, from zoom [MIN_ZOOM] in, for the view grown by half on each side (so small pans need
+ * no request), at most [MAX_PAGES] pages of 500, the most active first. Asked again when the view
+ * leaves that area, when it was cut at the cap and the user zoomed in two levels, or after [maxAge].
+ * When every Pinakes server fails, the places kept for the offline areas ([offline]) are shown where
+ * one overlaps the asked area, and elsewhere what is shown stays.
  */
 class MapPlacesLayer(
     private val data: PlaceData,

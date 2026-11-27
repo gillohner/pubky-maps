@@ -41,7 +41,12 @@ interface PlaceData {
         viewer: String?,
     ): SourceAnswer<CollectionRefs>
 
-    /** Places in [bbox] (west, south, east, north), one page from [cursor]. */
+    /**
+     * The places someone referenced on Pubky in [bbox] (west, south, east, north), one page from
+     * [cursor], most active first. Places only in Pinakes' catalogues (every OSM point of interest)
+     * are left out: the map marks a place as a Pubky place only when people tagged, posted about or
+     * collected it.
+     */
     suspend fun placesIn(
         bbox: GeoBox,
         cursor: String?,
@@ -149,6 +154,8 @@ class HttpPlaceData(
                 url(server, "v1", "search") {
                     append("bbox", listOf(bbox.west, bbox.south, bbox.east, bbox.north).joinToString(",") { formatCoordinate(it) })
                     append("type", "Place")
+                    append("referenced", "true")
+                    append("sort", "activity")
                     append("limit", MAP_PAGE.toString())
                     if (cursor != null) append("cursor", cursor)
                 }

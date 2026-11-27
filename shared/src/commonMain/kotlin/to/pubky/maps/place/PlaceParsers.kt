@@ -374,7 +374,7 @@ data class MapPlacesPage(
     val refs: Map<String, List<String>> = emptyMap(),
 )
 
-/** Reads a Pinakes search answer (`GET /v1/search?bbox=…&type=Place`); cards without a point are dropped. */
+/** Reads a Pinakes search answer (`GET /v1/search?bbox=…&type=Place&referenced=true`); cards without a point are dropped. */
 fun parseMapPlaces(json: String): MapPlacesPage {
     val page = SearchJson.decodeFromString(PinakesSearchPage.serializer(), json)
     val places =

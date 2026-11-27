@@ -8,8 +8,8 @@
 # interest, so the badge has to win against the map's own icon and label) and the dark map
 # (OpenFreeMap Dark, which draws none: the schema's layer is used). A tap at the badge opens the
 # place's page (a dot or the map's own icon there would open it too: this checks that the badge
-# leaves the page reachable). The name under the badge is checked for its teal. Screenshots at zoom
-# 16 and 14 are kept for a look.
+# leaves the page reachable). The name under the badge is checked for its teal, and every places
+# request for Pinakes' referenced filter. Screenshots at zoom 16 and 14 are kept for a look.
 # Usage: emulator-pubky-pois.sh <apk> <out dir>
 set -euo pipefail
 
@@ -66,6 +66,10 @@ open_at() {
         sleep 1
     done
     grep -q '"/v1/search"' "$log" || fail "the map did not ask Pinakes for its places ($1)"
+    # Only places someone referenced on Pubky are Pubky places, not every point of interest of
+    # Pinakes' OpenStreetMap catalogue.
+    unfiltered=$(grep '"/v1/search"' "$log" | grep -vc '"referenced": "true"' || true)
+    [ "$unfiltered" = 0 ] || fail "the map asked Pinakes $unfiltered times for places without referenced=true ($1)"
     sleep 8
     screenshot "$1"
     check_alive "$1"
