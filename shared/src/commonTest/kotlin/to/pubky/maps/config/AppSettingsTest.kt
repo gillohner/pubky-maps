@@ -179,6 +179,22 @@ class AppSettingsTest {
     }
 
     @Test
+    fun aDroppedServerTakesItsNewPlaceAndTheOthersKeepTheirOrder() {
+        val light = Service.MapStyleLight
+        val (first, second) = ServerDefaults.lists[light].map { it.url }
+        val third = "https://tiles.example.org/style.json"
+        val added = defaults.added(light, third)
+
+        assertEquals(listOf(third, first, second), added.withServerMovedTo(light, third, 0).urls(light))
+        assertEquals(listOf(second, third, first), added.withServerMovedTo(light, first, 2).urls(light))
+        assertEquals(listOf(second, first, third), added.withServerMovedTo(light, first, 1).urls(light))
+        assertEquals(added, added.withServerMovedTo(light, second, 1), "dropped where it was")
+        assertEquals(added, added.withServerMovedTo(light, first, 3), "past the end")
+        assertEquals(added, added.withServerMovedTo(light, first, -1), "before the top")
+        assertEquals(added, added.withServerMovedTo(light, "https://gone.example", 0), "no longer in the list")
+    }
+
+    @Test
     fun serversCanBeRemovedButNotTheLastOne() {
         val relays = defaults.withServerRemoved(Service.PkarrRelay, "https://pkarr.pubky.app")
 
