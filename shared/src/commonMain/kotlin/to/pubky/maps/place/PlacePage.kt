@@ -68,6 +68,7 @@ import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -1020,7 +1021,14 @@ private fun PhotosSection(
                         ) {
                             Icon(WriteIcons.AddPhoto, contentDescription = null)
                             Spacer(Modifier.height(8.dp))
-                            Text("Add photo", style = MaterialTheme.typography.labelLarge)
+                            // At a large font the label wraps: centred it stays under the icon, and the
+                            // padding keeps its lines off the tile's rounded edges.
+                            Text(
+                                "Add photo",
+                                style = MaterialTheme.typography.labelLarge,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(horizontal = 8.dp),
+                            )
                         }
                     }
                 }

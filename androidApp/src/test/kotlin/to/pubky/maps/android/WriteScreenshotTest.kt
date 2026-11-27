@@ -36,6 +36,7 @@ import to.pubky.maps.place.PlacePageActions
 import to.pubky.maps.place.PlacePageContext
 import to.pubky.maps.place.PlacePageState
 import to.pubky.maps.place.PlacePanel
+import to.pubky.maps.place.PlacePart
 import to.pubky.maps.place.PlacePerson
 import to.pubky.maps.place.PlacePost
 import to.pubky.maps.place.PlaceRef
@@ -269,6 +270,30 @@ class WriteScreenshotTest {
         capture("write-place-sections", Device.TallPhone, dark = true) {
             PlaceWithWritesEverySectionShot()
         }
+
+    /**
+     * Every section at the largest font size (200 %), offline with a tag waiting to be sent: the
+     * offline note, the tag's clock, "Add tag" and the "Public" badge, whose icons grow with their text.
+     */
+    @Composable
+    private fun PlaceWaitingLargeFontShot() {
+        // As the app shows a page opened before: tags and posts from the phone's copy of the day before.
+        val offline =
+            page.copy(
+                failed = setOf(PlacePart.Card, PlacePart.Social, PlacePart.Posts, PlacePart.Lists),
+                socialAt = 1_795_510_000_000,
+            )
+        val waiting = actions(ownPlace).let { it.copy(writes = it.writes?.copy(waiting = true)) }
+        PlacePanel(offline, context, waiting, Modifier.fillMaxSize())
+    }
+
+    @Test
+    fun placeWaitingLargeFontTallPhoneLight() =
+        capture("write-place-waiting", Device.TallPhone, dark = false, largeFont = true) { PlaceWaitingLargeFontShot() }
+
+    @Test
+    fun placeWaitingLargeFontTallPhoneDark() =
+        capture("write-place-waiting", Device.TallPhone, dark = true, largeFont = true) { PlaceWaitingLargeFontShot() }
 
     @Composable
     private fun PlaceNothingYetShot() {
