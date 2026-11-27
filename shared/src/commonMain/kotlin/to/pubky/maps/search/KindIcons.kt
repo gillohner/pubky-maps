@@ -127,3 +127,17 @@ internal fun badgeIcon(
         ).addPath(PathParser().parsePathString(KIND_GLYPHS[kind] ?: DOT).toNodes(), fill = SolidColor(Color.White))
         .clearGroup()
         .build()
+
+/** A round map badge's ring to hold another icon: [fill] inside a [ring] outline, the size of [badgeIcon]. */
+internal fun ringIcon(
+    fill: Color,
+    ring: Color,
+): ImageVector =
+    ImageVector
+        .Builder(name = "Ring", defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f)
+        .addPath(
+            PathParser().parsePathString(BADGE).toNodes(),
+            fill = SolidColor(fill),
+            stroke = SolidColor(ring),
+            strokeLineWidth = 2f,
+        ).build()

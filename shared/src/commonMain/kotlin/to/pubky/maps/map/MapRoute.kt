@@ -244,6 +244,7 @@ fun MapRoute(
                 PubkyPoiHighlights(
                     poiBase,
                     pubkyPois,
+                    poiTiles.icons,
                     dark = dark,
                     onSelect = { place ->
                         search?.controller?.close()
@@ -282,7 +283,7 @@ fun MapRoute(
             }
         }
 
-    TrackPubkyPois(poiTiles, mapState, pubkyPlaces)
+    TrackPubkyPois(poiTiles, mapState, pubkyPlaces, places?.styleIcons)
 
     // A style that fails to load hands over to the next one in the list.
     LaunchedEffect(mapState, sources) {

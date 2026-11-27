@@ -2,11 +2,13 @@
 # Pubky places on the base map, on a running emulator, against the recorded Pinakes places of Zürich
 # (scripts/ci/place_fixture_server.py through adb reverse) and the live map styles: the map opens at
 # zoom 16 on the Conditorei Schober (node 270803095), which Pinakes holds and the base map has as a
-# point of interest, so it is drawn highlighted (MapPubkyPois.kt: a teal badge with its kind's glyph
-# and its name in teal), not as a small teal dot beside the map's own icon. Checked by the share of
-# the badge's teal at the screen's centre in the light (OpenFreeMap Liberty, which draws points of
-# interest, so the badge has to win against the map's own icon and label) and the dark map
-# (OpenFreeMap Dark, which draws none: the schema's layer is used). A tap at the badge opens the
+# point of interest, so it is drawn highlighted (MapPubkyPois.kt), not as a small teal dot beside the
+# map's own icon. On the light map (OpenFreeMap Liberty, which draws points of interest, so the
+# highlight has to win against the map's own icon and label) it is the style's own café icon (read
+# from its style and sprite, StyleIcons.kt) in a teal ring: checked by the ring's teal around the
+# screen's centre and the cup's orange in it. On the dark map (OpenFreeMap Dark, which draws none:
+# the schema's layer is used, and there is no icon of the style's) it is a teal badge with its
+# kind's glyph: checked by the badge's teal at the centre. A tap at the badge opens the
 # place's page (a dot or the map's own icon there would open it too: this checks that the badge
 # leaves the page reachable). The name under the badge is checked for its teal, and every places
 # request for Pinakes' referenced filter. Screenshots at zoom 16 and 14 are kept for a look.
@@ -89,6 +91,25 @@ expect_badge() {
         fail "the Conditorei Schober is not highlighted on the map ($1; share of the badge's teal at the centre: $share)"
 }
 
+# expect_ring NAME: the style's own café icon in the highlight's teal ring. The ring's teal (#00897B,
+# a 2 dp ring of 24 dp) is ~9 % of the box of expect_badge, less its anti-aliased edges ~5 %; the bar
+# is 3 % (the map's own icon has no teal); the cup's orange (#D97200, OpenFreeMap's cafe image) is in a ~10 x 10 dp box at the centre,
+# where a dot or a badge would be teal; its bar is 8 %.
+expect_ring() {
+    local stats ring cup
+    stats=$(python3 -I "$here/png_stats.py" "$out/$1.png" 0.455 0.478 0.545 0.522 '#00897b') ||
+        fail "png_stats could not read $1.png"
+    ring=$(awk '{print $3}' <<< "$stats")
+    stats=$(python3 -I "$here/png_stats.py" "$out/$1.png" 0.488 0.4945 0.512 0.5055 '#d97200') ||
+        fail "png_stats could not read $1.png"
+    cup=$(awk '{print $3}' <<< "$stats")
+    echo "$1: ring teal share $ring, cup orange share at the centre $cup"
+    python3 -I -c "import sys; sys.exit(0 if float(sys.argv[1]) >= 0.03 else 1)" "$ring" ||
+        fail "the Conditorei Schober is not highlighted on the map ($1; share of the ring's teal: $ring)"
+    python3 -I -c "import sys; sys.exit(0 if float(sys.argv[1]) >= 0.08 else 1)" "$cup" ||
+        fail "the Conditorei Schober's highlight does not show the map's own café icon ($1; share of its orange: $cup)"
+}
+
 # expect_name NAME SHADE: the name under the badge is drawn in the name's teal SHADE (#00695C light,
 # #4DB6AC dark), not in the map's own label colour. The CI emulator's renderer drops the green
 # channel of every map text, the base style's own too (Liberty's water names, #495E91, come out
@@ -111,7 +132,7 @@ print(sum(float(subprocess.check_output([sys.executable, "-I", f"{here}/png_stat
 
 adb shell cmd uimode night no
 open_at pois-z16-light 16
-expect_badge pois-z16-light
+expect_ring pois-z16-light
 expect_name '#00695c' pois-z16-light
 open_at pois-z14-light 14
 

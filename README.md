@@ -253,9 +253,11 @@ places someone tagged, posted about or put in a collection. Places only in Pinak
 point of interest of OpenStreetMap) are left out (`referenced=true`), and where an area holds more
 than the map takes, the most active are kept.
 From zoom 14, one that the map itself has as a point of interest (a café, a museum, a station) is
-drawn in the Pubky teal instead: a badge with an icon of its kind and its name under it, before the
-map's own labels and whatever zoom the map would show that point at, each badge drawn even where two
-of them meet (a name with no room is left out); tapping it opens its page. The others stay teal dots.
+drawn highlighted instead: the map's own icon for it in a teal ring (read from the map style's
+files, the icon tinted teal where the style colours its icons itself), or a teal badge with an icon
+of its kind where the style has no icon for it, with its name in teal under it, before the map's own
+labels and whatever zoom the map would show that point at, each drawn even where two of them meet (a
+name with no room is left out); tapping it opens its page. The others stay teal dots.
 When no Pinakes server answers, the map's status line says so.
 
 **Map links.** Links from other map apps open in Pubky Maps: tapped (`geo:`, `om://`, `cm://`,

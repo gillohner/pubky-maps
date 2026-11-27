@@ -12,6 +12,7 @@ import to.pubky.maps.config.Service
 import to.pubky.maps.config.loadedServers
 import to.pubky.maps.core.mayBeMapPlace
 import to.pubky.maps.map.MapPlacesLayer
+import to.pubky.maps.map.StyleIcons
 import to.pubky.maps.offline.KeptPubkyPlaces
 import to.pubky.maps.osm.HttpOsmNotes
 import to.pubky.maps.osm.NoteController
@@ -36,7 +37,8 @@ import java.io.File
  * with no card shows the OSM details the offline areas keep ([details]), and directions to a place
  * come from the Valhalla servers of the list, and notes about a place go to the OpenStreetMap API
  * servers of the list (a note no server could be reached for waits in the no-backup folder until the
- * phone is online). Create it once per process.
+ * phone is online); the Pubky places the base map has as points of interest take its own icons from
+ * the map style's files. Create it once per process.
  */
 fun androidPlaceServices(
     context: Context,
@@ -50,9 +52,10 @@ fun androidPlaceServices(
     details: KeptPlaceDetails,
 ): PlaceServices {
     fun servers(service: Service): List<String> = (settings.value ?: AppSettings()).servers[service].map { it.url }
+    val client = searchHttpClient(appVersion)
     val data =
         HttpPlaceData(
-            client = searchHttpClient(appVersion),
+            client = client,
             pinakesServers = { servers(Service.Pinakes) },
             nexusServers = { servers(Service.Nexus) },
             mayBeMapPlace = ::mayBeMapPlace,
@@ -91,5 +94,6 @@ fun androidPlaceServices(
                 io = Dispatchers.IO,
                 ready = { settings.filterNotNull().first() },
             ),
+        styleIcons = StyleIcons(client),
     )
 }
