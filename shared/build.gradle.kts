@@ -103,6 +103,7 @@ kotlin {
             api(libs.kotlinx.datetime)
             implementation(libs.coil.compose)
             implementation(libs.coil.network.ktor3)
+            implementation(libs.reorderable)
         }
         androidMain {
             kotlin.srcDir(files(coreBindingsDir).builtBy(generateCoreBindings))

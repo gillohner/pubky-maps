@@ -50,7 +50,7 @@ fun AddServerScreen(
         }
     }
     SettingsPage(title = "Add server", onBack = onDone) {
-        item { PageIntro("Added at the end of ${service.title}. Move it up to use it first.") }
+        item { PageIntro("Added at the end of ${service.title}. Move it to the top to use it first.") }
         item {
             OutlinedTextField(
                 value = url,

@@ -228,7 +228,7 @@ xy=$(wait_for "Add server" 15) || fail "the Map style, light list did not open"
 screenshot server-list
 check_alive "server list"
 adb shell input tap $xy
-wait_for "Added at the end of Map style, light. Move it up to use it first." 15 > /dev/null || fail "the Add server page did not open"
+wait_for "Added at the end of Map style, light. Move it to the top to use it first." 15 > /dev/null || fail "the Add server page did not open"
 screenshot add-server
 check_alive "add server page"
 adb shell input keyevent KEYCODE_BACK

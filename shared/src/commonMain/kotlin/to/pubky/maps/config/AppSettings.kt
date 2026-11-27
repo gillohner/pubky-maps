@@ -179,11 +179,24 @@ data class AppSettings(
         url: String,
         steps: Int,
     ): AppSettings {
+        val from = servers[service].indexOfFirst { it.url == url }
+        return if (from < 0) this else withServerMovedTo(service, url, from + steps)
+    }
+
+    /**
+     * Puts the server with address [url] at [index] in [service]'s list (where a drag dropped it), the
+     * others keeping their order around it. An index outside the list or a server no longer in it
+     * changes nothing.
+     */
+    fun withServerMovedTo(
+        service: Service,
+        url: String,
+        index: Int,
+    ): AppSettings {
         val list = servers[service].toMutableList()
         val from = list.indexOfFirst { it.url == url }
-        val to = from + steps
-        if (from < 0 || to !in list.indices) return this
-        list.add(to, list.removeAt(from))
+        if (from < 0 || index !in list.indices || index == from) return this
+        list.add(index, list.removeAt(from))
         return withServerList(service, list)
     }
 

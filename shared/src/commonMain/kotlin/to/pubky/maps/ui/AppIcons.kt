@@ -44,6 +44,9 @@ object AppIcons {
                 "c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z",
         )
 
+    /** The handle a server row is dragged by in its list. */
+    val DragHandle: ImageVector = icon("DragHandle", "M20 9H4v2h16V9zM4 15h16v-2H4v2z")
+
     val Search: ImageVector =
         icon(
             "Search",

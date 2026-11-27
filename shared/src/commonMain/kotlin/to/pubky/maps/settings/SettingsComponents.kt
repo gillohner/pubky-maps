@@ -2,12 +2,15 @@ package to.pubky.maps.settings
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -33,12 +36,25 @@ import to.pubky.maps.ui.AppIcons
 private val MaxContentWidth = 720.dp
 
 /** A settings page: a top bar with a back arrow and a list, centred on wide screens. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SettingsPage(
     title: String,
     onBack: () -> Unit,
     content: LazyListScope.() -> Unit,
+) {
+    SettingsScaffold(title, onBack) { barsPadding -> SettingsList(barsPadding, rememberLazyListState(), content) }
+}
+
+/**
+ * A settings page's top bar with a back arrow over [body], which gets the room the bars take; for a page
+ * whose list needs that room before it is laid out (a drag scrolls the list when it nears the bars).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun SettingsScaffold(
+    title: String,
+    onBack: () -> Unit,
+    body: @Composable (barsPadding: PaddingValues) -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -51,14 +67,23 @@ internal fun SettingsPage(
                 },
             )
         },
-    ) { padding ->
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-            LazyColumn(
-                contentPadding = padding,
-                modifier = Modifier.widthIn(max = MaxContentWidth).fillMaxWidth(),
-                content = content,
-            )
-        }
+    ) { padding -> body(padding) }
+}
+
+/** A settings page's list under its bars, centred on wide screens. */
+@Composable
+internal fun SettingsList(
+    barsPadding: PaddingValues,
+    state: LazyListState,
+    content: LazyListScope.() -> Unit,
+) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        LazyColumn(
+            state = state,
+            contentPadding = barsPadding,
+            modifier = Modifier.widthIn(max = MaxContentWidth).fillMaxWidth(),
+            content = content,
+        )
     }
 }
 
