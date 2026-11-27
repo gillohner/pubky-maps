@@ -112,7 +112,11 @@ pub struct OwnCollection {
     pub private: bool,
     pub name: String,
     pub description: Option<String>,
+    /// Its items that can be places on a map, in the list's order.
     pub items: Vec<CollectionItem>,
+    /// How many of its items are not places (another app's posts or profiles: the folders are
+    /// shared with pubky.app). They are not in `items`, and an edit keeps them in the list.
+    pub other_items: u32,
 }
 
 /// The lists found among the user's posts in one root.
@@ -542,23 +546,11 @@ fn collection_scan(
         let Some((edit_id, json)) = found else {
             continue;
         };
-        match objects::collection_of(&json) {
-            Some(content) => collections.push(OwnCollection {
-                uri: objects::post_uri_in(root, author, &id),
-                id,
-                edit_id,
-                private,
-                name: content.name,
-                description: content.description,
-                items: content
-                    .items
-                    .into_iter()
-                    .map(|item| CollectionItem {
-                        uri: item.uri,
-                        note: item.note,
-                    })
-                    .collect(),
-            }),
+        match own_collection(root, author, id.clone(), edit_id, private, &json) {
+            // Only another app's objects: not a list of places. Not a known non-list either,
+            // as places can be added to it later.
+            Some(list) if list.items.is_empty() && list.other_items > 0 => {}
+            Some(list) => collections.push(list),
             None if objects::post_kind_of(&json).is_some() => other_post_ids.push(id),
             None => {}
         }
@@ -570,6 +562,40 @@ fn collection_scan(
         collections,
         other_post_ids,
         unread_post_ids,
+    })
+}
+
+/// The list that version `edit_id` of post `id` holds, as the app shows it: only the items
+/// that can be places on a map ([`may_be_map_place`]), the others counted. `None` when the
+/// post is not a list.
+fn own_collection(
+    root: Root,
+    author: &str,
+    id: String,
+    edit_id: String,
+    private: bool,
+    json: &str,
+) -> Option<OwnCollection> {
+    let content = objects::collection_of(json)?;
+    let all = content.items.len();
+    let items: Vec<CollectionItem> = content
+        .items
+        .into_iter()
+        .filter(|item| may_be_map_place(&item.uri))
+        .map(|item| CollectionItem {
+            uri: item.uri,
+            note: item.note,
+        })
+        .collect();
+    Some(OwnCollection {
+        uri: objects::post_uri_in(root, author, &id),
+        id,
+        edit_id,
+        private,
+        name: content.name,
+        description: content.description,
+        other_items: u32::try_from(all - items.len()).unwrap_or(u32::MAX),
+        items,
     })
 }
 
@@ -1067,14 +1093,15 @@ impl PubkyMapsCore {
     }
 
     /// Adds a place to, or removes one from, a list: reads the newest version from the
-    /// homeserver, applies the edit, writes a new version. Returns the newest version
-    /// (unchanged when the edit was a no-op).
+    /// homeserver, applies the edit, writes a new version. Returns the list as its newest
+    /// version holds it (unchanged when the edit was a no-op), its items that are not places
+    /// counted as in [`Self::list_collections`] and kept in the list.
     pub async fn edit_collection(
         &self,
         post_id: String,
         edit: CollectionEdit,
         private: bool,
-    ) -> Result<BuiltObject, CoreError> {
+    ) -> Result<OwnCollection, CoreError> {
         let inner = Arc::clone(&self.inner);
         self.run(async move {
             let session = inner.session()?;
@@ -1101,7 +1128,7 @@ impl PubkyMapsCore {
             let head_json =
                 String::from_utf8(read_body(storage.get(head_path.as_str()).await?).await?)
                     .map_err(|_| CoreError::validation("stored collection is not UTF-8"))?;
-            match objects::edit_collection_in(
+            let (edit_id, json) = match objects::edit_collection_in(
                 root,
                 author.clone(),
                 post_id.clone(),
@@ -1111,23 +1138,24 @@ impl PubkyMapsCore {
             )? {
                 Some(built) => {
                     storage.put(built.path.as_str(), built.json.clone()).await?;
-                    Ok(built)
+                    let edit_id = built
+                        .edit_id
+                        .ok_or_else(|| CoreError::internal("an edited post has no editId"))?;
+                    (edit_id, built.json)
                 }
-                None => Ok(BuiltObject {
-                    uri: objects::post_uri_in(root, &author, &post_id),
-                    id: post_id,
-                    edit_id: Some(head_edit),
-                    path: head_path,
-                    json: head_json,
-                }),
-            }
+                None => (head_edit, head_json),
+            };
+            own_collection(root, &author, post_id, edit_id, private, &json)
+                .ok_or_else(|| CoreError::internal("an edited collection is not a collection"))
         })
         .await
     }
 
     /// The user's lists in `/pub` (or with `private`, `/priv`): every post folder is read
     /// (newest version only), newest posts first, except those in `skip`, at most 2000 posts. A folder whose
-    /// newest version cannot be read as a post is left out of both results.
+    /// newest version cannot be read as a post is left out of both results. Each list holds only
+    /// its items that can be places on a map, the others counted (`other_items`); a list whose
+    /// items are all other apps' objects is left out, a list without items is kept.
     pub async fn list_collections(
         &self,
         private: bool,
@@ -1289,6 +1317,81 @@ mod tests {
         assert_eq!(scan.collections[0].name, "Coffee");
         assert_eq!(scan.other_post_ids, vec![review.id]);
         assert_eq!(scan.unread_post_ids, vec!["0034A0000001".to_string()]);
+    }
+
+    /// A read of a list at post `id` holding `uris`.
+    fn scanned_list(id: &str, name: &str, uris: &[&str]) -> (String, PostRead) {
+        let items = uris
+            .iter()
+            .map(|uri| CollectionItem {
+                uri: (*uri).into(),
+                note: None,
+            })
+            .collect();
+        let list = objects::build_collection(SCAN_AUTHOR.into(), name.into(), None, items).unwrap();
+        (id.into(), Ok(Some((id.into(), list.json))))
+    }
+
+    #[test]
+    fn a_list_shows_its_places_and_counts_other_apps_objects() {
+        let post = format!("pubky://{SCAN_AUTHOR}/pub/pubky.app/posts/0034A0000001");
+        let profile = format!("pubky://{SCAN_AUTHOR}/pub/pubky.app/profile.json");
+        let mixed = scanned_list(
+            "0034A0000003",
+            "Coffee",
+            &[
+                post.as_str(),
+                "https://www.openstreetmap.org/node/1",
+                profile.as_str(),
+                "geo:47.37687,8.54169",
+                "https://www.kunsthaus.ch/",
+            ],
+        );
+        let empty = scanned_list("0034A0000002", "New", &[]);
+        let others_only = scanned_list(
+            "0034A0000001",
+            "Reading",
+            &[post.as_str(), profile.as_str()],
+        );
+        let (mixed_id, empty_id, others_id) =
+            (mixed.0.clone(), empty.0.clone(), others_only.0.clone());
+
+        let scan = collection_scan(
+            Root::Pub,
+            SCAN_AUTHOR,
+            false,
+            vec![mixed, empty, others_only],
+        )
+        .unwrap();
+
+        let ids: Vec<&str> = scan.collections.iter().map(|c| c.id.as_str()).collect();
+        assert!(ids.contains(&mixed_id.as_str()), "{ids:?}");
+        assert!(
+            ids.contains(&empty_id.as_str()),
+            "a list without items is kept"
+        );
+        assert!(
+            !ids.contains(&others_id.as_str()),
+            "a list of other apps' objects is left out"
+        );
+        assert!(
+            !scan.other_post_ids.contains(&others_id),
+            "places can be added to it later: it is read again"
+        );
+        let mixed = scan.collections.iter().find(|c| c.id == mixed_id).unwrap();
+        let uris: Vec<&str> = mixed.items.iter().map(|i| i.uri.as_str()).collect();
+        assert_eq!(
+            uris,
+            [
+                "https://www.openstreetmap.org/node/1",
+                "geo:47.37687,8.54169",
+                "https://www.kunsthaus.ch/"
+            ]
+        );
+        assert_eq!(mixed.other_items, 2);
+        let empty = scan.collections.iter().find(|c| c.id == empty_id).unwrap();
+        assert!(empty.items.is_empty());
+        assert_eq!(empty.other_items, 0);
     }
 
     #[test]

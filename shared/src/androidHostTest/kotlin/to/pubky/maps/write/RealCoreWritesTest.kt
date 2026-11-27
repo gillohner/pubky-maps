@@ -85,10 +85,12 @@ class RealCoreWritesTest {
     }
 
     @Test
-    fun aListIsACollectionPostTheAppReadsBack() {
+    fun aListIsACollectionPostTheAppFindsByItsAddress() {
         val list = buildCollection(AUTHOR, "Coffee", null, listOf(CollectionItem("https://osm.org/node/270803095", null)))
 
-        assertEquals(ListPost("Coffee", null, listOf(PLACE)), listOfPost(list.json))
+        val body = json(list.json)
+        assertEquals("collection", body["kind"]!!.jsonPrimitive.content)
+        assertTrue(PLACE in body["content"]!!.jsonPrimitive.content, "the core spells the OSM link canonically")
         assertEquals(false to list.id, listAddress(list.uri))
         assertEquals(true to list.id, listAddress(list.uri.replace("/pub/", "/priv/")))
     }
@@ -98,8 +100,8 @@ class RealCoreWritesTest {
         val writes = UniffiPubkyWrites(core())
         val list = writes.buildList(AUTHOR, "Coffee", "Where to sit with a book", listOf("https://osm.org/node/270803095"), private = false)
 
-        assertEquals(ListPost("Coffee", "Where to sit with a book", listOf(PLACE)), listOfPost(list.json))
         val content = json(json(list.json)["content"]!!.jsonPrimitive.content)
+        assertEquals("Coffee", content["name"]!!.jsonPrimitive.content)
         assertEquals("Where to sit with a book", content["description"]!!.jsonPrimitive.content, "the spec's field, as pubky.app reads it")
         assertFailsWith<CoreFailure> { writes.buildList(AUTHOR, "Coffee", "x".repeat(501), listOf(PLACE), private = false) }
     }
@@ -115,10 +117,18 @@ class RealCoreWritesTest {
                 "Coffee",
                 description,
                 listOf(CollectionItem(PLACE, null)),
+                2u,
             ).toOwnList()
 
         assertEquals(
-            OwnList("pubky://$AUTHOR/priv/social/v1/posts/L1", Kept.Private, "Coffee", listOf(PLACE), description = "Where to sit"),
+            OwnList(
+                "pubky://$AUTHOR/priv/social/v1/posts/L1",
+                Kept.Private,
+                "Coffee",
+                listOf(PLACE),
+                description = "Where to sit",
+                otherItems = 2,
+            ),
             read(" Where to sit "),
         )
         assertEquals(null, read("  ").description, "a blank one is none")

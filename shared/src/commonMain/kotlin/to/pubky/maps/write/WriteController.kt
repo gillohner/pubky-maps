@@ -433,7 +433,7 @@ class WriteController(
         send()
     }
 
-    /** Adds the place to [list]; a full list (100 places) refuses it. */
+    /** Adds the place to [list]; a full list (100 items, places or another app's links) refuses it. */
     fun addToList(
         target: WriteTarget,
         list: OwnList,
@@ -442,7 +442,13 @@ class WriteController(
             // The list as it is now: after "Removed from" a full list has room again for its Undo.
             val current = own.value.lists.firstOrNull { it.uri == list.uri } ?: list
             if (current.full) {
-                tell("“${list.name}” already holds ${OwnList.MAX_LIST_ITEMS} places, the most a collection can hold.")
+                val holds =
+                    if (current.otherItems == 0) {
+                        "${OwnList.MAX_LIST_ITEMS} places"
+                    } else {
+                        "${current.items.size} places and ${current.otherItemsText}"
+                    }
+                tell("“${list.name}” already holds $holds, the most a collection can hold.")
                 return@enqueue
             }
             if (!editList(target, list, remove = false)) return@enqueue

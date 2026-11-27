@@ -155,6 +155,18 @@ fun SavedScreen(
                                 modifier = Modifier.padding(start = 40.dp).clickable { onOpen(place, name) },
                             )
                         }
+                        // Another app's posts or profiles in the collection (pubky.app shares the folder): counted, not listed.
+                        if (list.otherItems > 0) {
+                            item(key = "list:${list.uri}:others") {
+                                val why = if (list.otherItems == 1) "it is not a place" else "they are not places"
+                                Text(
+                                    "${list.otherItemsText} not shown: $why.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(start = 56.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                                )
+                            }
+                        }
                     }
                 }
                 if (!state.signedIn) {

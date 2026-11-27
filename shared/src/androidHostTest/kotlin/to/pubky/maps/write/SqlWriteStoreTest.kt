@@ -73,6 +73,24 @@ class SqlWriteStoreTest {
     }
 
     @Test
+    fun aListKeepsItsCountOfOtherAppsLinks() {
+        val db = accountDb()
+        val store = SqlWriteStore(db)
+        val mixed = list.copy(otherItems = 3)
+        store.replaceLists(private = false, listOf(mixed))
+
+        assertEquals(listOf(mixed), store.lists())
+
+        // A list kept before the count existed reads with no other links counted, as it was kept, until the next scan.
+        CacheDatabase(db).cacheQueries.putOwnList(
+            "pubky://$USER/pub/social/v1/posts/0034A0000009",
+            0L,
+            """{"uri":"pubky://$USER/pub/social/v1/posts/0034A0000009","kept":"Public","name":"Old","items":["geo:1,2"]}""",
+        )
+        assertEquals(0, store.lists().single { it.name == "Old" }.otherItems)
+    }
+
+    @Test
     fun knownNonListsAndNamesAreKept() {
         val store = SqlWriteStore(accountDb())
         store.addOtherPosts(private = false, listOf("A", "B"))
