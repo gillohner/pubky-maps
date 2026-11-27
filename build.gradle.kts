@@ -22,6 +22,15 @@ subprojects {
             exclude { it.file.path.contains("/build/") }
         }
     }
+    // ktlint's lint and format tasks keep the absolute path of every file they read, and on their next
+    // run read again each such file that exists. From the build cache, those paths name the checkout
+    // that stored the entry: with two checkouts of this repository on one machine (sharing
+    // ~/.gradle/caches/build-cache-1), a check then fails on the other checkout's half-written files,
+    // and a format served from the cache leaves this checkout's files unformatted. Both tasks are
+    // quick (they re-read only changed files between runs), so they are never taken from the cache.
+    tasks.withType<org.jlleitschuh.gradle.ktlint.tasks.BaseKtLintCheckTask>().configureEach {
+        outputs.doNotCacheIf("ktlint's results name the files of the checkout that stored them") { true }
+    }
     // A warning in the app's own code fails the build (a deprecated call, a check that is always
     // true), so none piles up unseen; test code is left out, its warnings fail nothing.
     tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask<*>>().configureEach {
