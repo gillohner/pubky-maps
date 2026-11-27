@@ -3,6 +3,7 @@ package to.pubky.maps.write
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -30,7 +31,9 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.place.PlaceIcons
+import to.pubky.maps.place.formatCoordinate
 import to.pubky.maps.ui.AppIcons
 
 /** A saved place or a list entry on the Saved screen: the place as stored, its name when known. */
@@ -39,6 +42,8 @@ data class SavedRow(
     val name: String?,
     val kept: Kept,
     val pending: Boolean = false,
+    /** Where it is, when known: told under its name when another place has the same name. */
+    val point: GeoPoint? = null,
 )
 
 /** What the Saved screen shows. */
@@ -67,6 +72,8 @@ fun SavedScreen(
     onBack: () -> Unit,
 ) {
     var openList by rememberSaveable { mutableStateOf<String?>(null) }
+    val sameNamedPlaces = sharedNames(state.places.map { it.place to it.name })
+    val points = state.places.mapNotNull { row -> row.point?.let { row.place to it } }.toMap()
     Scaffold(
         topBar = {
             TopAppBar(
@@ -85,7 +92,8 @@ fun SavedScreen(
                     }
                 }
                 items(state.places, key = { "place:${it.kept}:${it.place}" }) { row ->
-                    PlaceRow(row, onOpen)
+                    val where = whereText(row.place, row.point ?: points[row.place]).takeIf { sameName(row.name) in sameNamedPlaces }
+                    PlaceRow(row, where, onOpen)
                 }
                 item(key = "lists-title") { Title("Your lists") }
                 if (state.lists.isEmpty()) {
@@ -102,7 +110,7 @@ fun SavedScreen(
                                     Text(if (list.items.size == 1) "1 place" else "${list.items.size} places")
                                 }
                             },
-                            leadingContent = { Icon(WriteIcons.AddToList, contentDescription = null) },
+                            leadingContent = { Icon(WriteIcons.SavedList, contentDescription = null) },
                             trailingContent = {
                                 Icon(
                                     if (expanded) PlaceIcons.ExpandLess else PlaceIcons.ExpandMore,
@@ -113,10 +121,18 @@ fun SavedScreen(
                         )
                     }
                     if (openList == list.uri) {
+                        val names = list.items.associateWith { list.names[it] ?: state.names[it] }
+                        val sameNamedEntries = sharedNames(names.toList())
                         items(list.items, key = { "list:${list.uri}:$it" }) { place ->
-                            val name = list.names[place] ?: state.names[place]
+                            val name = names[place]
                             ListItem(
                                 headlineContent = { Text(name ?: placeText(place), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                supportingContent =
+                                    if (sameName(name) in sameNamedEntries) {
+                                        { Text(whereText(place, points[place]), maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                                    } else {
+                                        null
+                                    },
                                 modifier = Modifier.padding(start = 40.dp).clickable { onOpen(place) },
                             )
                         }
@@ -135,14 +151,19 @@ fun SavedScreen(
 @Composable
 private fun PlaceRow(
     row: SavedRow,
+    where: String?,
     onOpen: (String) -> Unit,
 ) {
     ListItem(
         headlineContent = { Text(row.name ?: placeText(row.place), maxLines = 1, overflow = TextOverflow.Ellipsis) },
         supportingContent = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                KeptBadge(row.kept)
-                if (row.pending) Text("Not sent yet", maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Column {
+                // Above the badge, as a map app's saved list puts a place's address under its name.
+                if (where != null) Text(where, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    KeptBadge(row.kept)
+                    if (row.pending) Text("Not sent yet", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
         },
         leadingContent = { Icon(WriteIcons.Bookmark, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
@@ -171,9 +192,35 @@ private fun Hint(text: String) {
 }
 
 /**
- * A place's link in words, shown only for one whose name is not known: "OpenStreetMap node 270803095",
- * "47.37687, 8.54169". A named place shows its name alone, as map apps' saved lists do: the link is
- * the app's reference, not something the user reads.
+ * The names (as [sameName] compares them) that two or more different places have among [places]
+ * (place, name): those rows need more than their name to be told apart. A place kept twice (on the
+ * phone and on the homeserver) is one place; a place without a name shows its link and is never one.
+ */
+internal fun sharedNames(places: List<Pair<String, String?>>): Set<String> =
+    places
+        .mapNotNull { (place, name) -> sameName(name)?.let { it to place } }
+        .distinct()
+        .groupBy({ it.first }, { it.second })
+        .filterValues { it.size > 1 }
+        .keys
+
+/** A name as the eye compares two rows: case and the spaces around it do not tell places apart. */
+internal fun sameName(name: String?): String? = name?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
+
+/**
+ * Where a place is, for one whose name another place shares: its point ("47.37689, 8.54169"), else
+ * its link in words. Saved places store no address, and the point is what tells two Coops apart.
+ */
+internal fun whereText(
+    place: String,
+    point: GeoPoint?,
+): String = point?.let { "${formatCoordinate(it.lat)}, ${formatCoordinate(it.lon)}" } ?: placeText(place)
+
+/**
+ * A place's link in words: "OpenStreetMap node 270803095", "47.37687, 8.54169". It is a row's name only
+ * for a place whose name is not known, and the line under a shared name only when its point is not
+ * known: a named place shows its name alone, as map apps' saved lists do, because the link is the
+ * app's reference, not something the user reads.
  */
 internal fun placeText(place: String): String {
     val osm = Regex("^https://www\\.openstreetmap\\.org/(node|way|relation)/(\\d+)$").matchEntire(place)
