@@ -123,6 +123,9 @@ internal object RoutingIcons {
 
     val ExpandLess: ImageVector = icon("ExpandLess", "M12 8l-6 6 1.41 1.41L12 10.83l4.59 4.58L18 14z")
 
+    /** Swaps a route's start and destination, as Google Maps' directions do. */
+    val SwapVert: ImageVector = icon("SwapVert", "M16 17.01V10h-2v7.01h-3L15 21l4-3.99h-3zM9 3L5 6.99h3V14h2V6.99h3L9 3z")
+
     /** Mirrored in right-to-left languages, where the previous step is on the right. */
     val ChevronLeft: ImageVector = icon("ChevronLeft", "M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z", autoMirror = true)
 

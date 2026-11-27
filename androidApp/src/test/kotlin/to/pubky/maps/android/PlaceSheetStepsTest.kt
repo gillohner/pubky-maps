@@ -139,6 +139,7 @@ class PlaceSheetStepsTest {
                                         shownStep = it
                                     },
                                     onClose = {},
+                                    onSwap = {},
                                     onRetry = {},
                                     onOpenSettings = null,
                                     credits = emptyList(),

@@ -328,12 +328,16 @@ class PlaceScreenshotTest {
             onDirections = {},
         )
 
-    /** Directions to the Kunsthaus from Zürich HB, in [status]; found: FOSSGIS' route by car. */
+    /**
+     * Directions to the Kunsthaus from Zürich HB, in [status], or back from it when [reversed]; found:
+     * FOSSGIS' route by car.
+     */
     private fun directionsTo(
         status: RouteStatus,
         mode: TravelMode = TravelMode.Car,
         stepsShown: Boolean = false,
         shownStep: Int? = null,
+        reversed: Boolean = false,
     ) = actions.copy(
         directions =
             DirectionsUi(
@@ -342,15 +346,17 @@ class PlaceScreenshotTest {
                         kunsthausRef.uri,
                         kunsthausRef.point!!,
                         mode,
-                        from = GeoPoint(47.3779, 8.5403),
+                        position = GeoPoint(47.3779, 8.5403),
                         status,
                         stepsShown = stepsShown,
                         shownStep = shownStep,
+                        reversed = reversed,
                     ),
                 onMode = {},
                 onSteps = {},
                 onStep = {},
                 onClose = {},
+                onSwap = {},
                 onRetry = {},
                 onOpenSettings = {},
                 credits = routeCredits(ServerDefaults.lists, null),
@@ -504,6 +510,31 @@ class PlaceScreenshotTest {
 
     @Test
     fun directionsTabletDark() = capture("place-directions", Device.Tablet, dark = true) { Page(rich, actions = directionsTo(foundRoute)) }
+
+    /** The user swapped start and destination: the route from the place back to them, on foot. */
+    @Test
+    fun directionsBackPhoneLight() =
+        capture("place-directions-back", Device.Phone, dark = false) {
+            Page(rich, actions = directionsTo(foundRoute, TravelMode.Walk, reversed = true))
+        }
+
+    @Test
+    fun directionsBackPhoneDark() =
+        capture("place-directions-back", Device.Phone, dark = true) {
+            Page(rich, actions = directionsTo(foundRoute, TravelMode.Walk, reversed = true))
+        }
+
+    @Test
+    fun directionsBackTabletLight() =
+        capture("place-directions-back", Device.Tablet, dark = false) {
+            Page(rich, actions = directionsTo(foundRoute, TravelMode.Walk, reversed = true))
+        }
+
+    @Test
+    fun directionsBackTabletDark() =
+        capture("place-directions-back", Device.Tablet, dark = true) {
+            Page(rich, actions = directionsTo(foundRoute, TravelMode.Walk, reversed = true))
+        }
 
     @Test
     fun directionsPeekLargeFontPhoneLight() =

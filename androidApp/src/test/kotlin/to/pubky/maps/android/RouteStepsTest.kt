@@ -83,6 +83,8 @@ class RouteStepsTest {
         shown: () -> Boolean,
         onStep: (Int) -> Unit = {},
         shownStep: () -> Int? = { null },
+        reversed: () -> Boolean = { false },
+        onSwap: () -> Unit = {},
     ) {
         compose.setContent {
             PubkyMapsTheme(darkTheme = false) {
@@ -107,11 +109,13 @@ class RouteStepsTest {
                                     status,
                                     stepsShown = shown(),
                                     shownStep = shownStep(),
+                                    reversed = reversed(),
                                 ),
                                 onMode = {},
                                 onSteps = onSteps,
                                 onStep = onStep,
                                 onClose = {},
+                                onSwap = onSwap,
                                 onRetry = {},
                                 onOpenSettings = null,
                                 credits = emptyList(),
@@ -187,6 +191,28 @@ class RouteStepsTest {
         compose.onNodeWithContentDescription("Next step").assertIsNotEnabled()
         compose.onNodeWithContentDescription("Previous step").assertIsEnabled()
         assertEquals(listOf(1, 0, 3), tapped)
+    }
+
+    @Test
+    fun theSwapButtonTurnsTheRouteAroundAndSaysWhichWayItGoes() {
+        var reversed by mutableStateOf(false)
+        var swaps = 0
+        card(found(steps), {}, { false }, reversed = { reversed }, onSwap = {
+            swaps += 1
+            reversed = !reversed
+        })
+        compose.onNodeWithText("By car from your location").assertExists()
+        compose
+            .onNodeWithContentDescription("Swap start and destination")
+            .assert(stateIs("From your location"))
+            .performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("By car to your location").assertExists()
+        compose.onNodeWithText("By car from your location").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Swap start and destination").assert(stateIs("To your location")).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("By car from your location").assertExists()
+        assertEquals(2, swaps)
     }
 
     @Test

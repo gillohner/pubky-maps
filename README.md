@@ -170,7 +170,9 @@ phone the sheet rises to the top for them and, lowered again, keeps the map with
 A tapped step is marked on the line, the map moves to it (zoom 17, in the middle of the map the page
 leaves in view) and the route card shows the step with buttons to the previous and the next one; on
 a phone the sheet goes down to its lowest stop for it. The list stays open for the other modes (a
-new route marks no step). Another place, or closing the page, ends them. Without a position, a route or a
+new route marks no step). The swap button beside the modes routes the other way, from the place back
+to the user's position, and again to the place; the next place starts from the user again. Another
+place, or closing the page, ends them. Without a position, a route or a
 server, the page says which is missing (with Settings when location access is off for good), and
 every server failing names routing in the map's line of missing parts. Directions do not follow the
 user's position or speak while they travel, and need a connection.

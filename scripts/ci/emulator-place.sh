@@ -4,9 +4,9 @@
 # openstreetmap.org link to the Conditorei Schober opens the app on its place page, a sheet over the
 # map with the card's name and kind, the Pubky tags and the posts. Directions, with location granted
 # and the emulator's GPS at Zürich HB, ask the fixture Valhalla for a route by car from there to the
-# place, show its time and draw it on the map; Walk asks again on foot. Its steps open and raise the
-# sheet to the whole screen; a tapped step lowers it and the map moves to that turn, as does the
-# route card's next step. The lists holding the place show at the top; back closes it. A long-press on
+# place, show its time and draw it on the map; Walk asks again on foot, the swap button from the place
+# back to the fix and again to the place. Its steps open and raise the sheet to the whole screen; a
+# tapped step lowers it and the map moves to that turn, as does the route card's next step. The lists holding the place show at the top; back closes it. A long-press on
 # the map then drops a pin: its page is named by its coordinates and asks no server; back closes it.
 # Checks that Pinakes, Nexus and Valhalla were asked with the app's User-Agent, Nexus for every
 # spelling people used for the place.
@@ -123,6 +123,13 @@ xy=$(wait_for "Walk" 5) || fail "no Walk mode in the directions"
 adb shell input tap $xy
 sleep 4
 check_alive "directions on foot"
+# Swapped, the route goes from the place back to the GPS fix; swapped again, to the place.
+xy=$(wait_for "Swap start and destination" 5) || fail "no swap button in the route card"
+adb shell input tap $xy
+wait_for "On foot to your location" 20 > /dev/null || fail "the swapped route does not say it goes to the user's location"
+check_alive "swapped directions"
+adb shell input tap $xy
+wait_for "On foot from your location" 20 > /dev/null || fail "swapping again did not route from the user's location"
 # The route's steps open under the header, the sheet raised to Full for them (the fixture's turn
 # instructions, as FOSSGIS gave them; the fixture answers every mode with the same route).
 xy=$(wait_for "Steps" 5) || fail "no Steps button under the route"
@@ -232,11 +239,14 @@ assert any(p.endswith("/collections") for p in paths), paths
 agents = {l["ua"] for l in lines}
 assert all(a.startswith(("PubkyMaps/", "pubky-maps-core/")) for a in agents), agents
 assert all(l["ua"].startswith("PubkyMaps/") for l in lines if l["path"].startswith("/v1/stream/")), agents
-# Directions: by car from the GPS fix to the card's point, then on foot from the same start.
+# Directions: by car from the GPS fix to the card's point, then on foot from the same start, swapped
+# (from the card's point back to the fix) and swapped again.
 routes = [l for l in lines if l["path"] == "/route"]
-assert [r["costing"] for r in routes] == ["auto", "pedestrian"], routes
-for r in routes:
+assert [r["costing"] for r in routes] == ["auto", "pedestrian", "pedestrian", "pedestrian"], routes
+for i, r in enumerate(routes):
     start, end = r["locations"]
+    if i == 2:
+        start, end = end, start
     assert abs(start["lat"] - 47.3779) < 1e-3 and abs(start["lon"] - 8.5403) < 1e-3, r
     assert abs(end["lat"] - 47.3708689) < 1e-6 and abs(end["lon"] - 8.5418241) < 1e-6, r
     assert r["ua"].startswith("PubkyMaps/"), r

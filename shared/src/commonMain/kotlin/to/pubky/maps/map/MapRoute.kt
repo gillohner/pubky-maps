@@ -434,9 +434,10 @@ fun MapRoute(
                 onSteps = directions::showSteps,
                 onStep = directions::showStep,
                 onClose = directions::close,
+                onSwap = directions::swap,
                 onRetry = {
-                    if (directionsState.from == null) {
-                        startDirections(directionsState.placeUri, directionsState.to)
+                    if (directionsState.position == null) {
+                        startDirections(directionsState.placeUri, directionsState.place)
                     } else {
                         directions.retry()
                     }

@@ -54,6 +54,8 @@ data class DirectionsUi(
     /** Shows the step at this index of the list on the map. */
     val onStep: (Int) -> Unit,
     val onClose: () -> Unit,
+    /** Swaps the route's start and destination ([Directions.reversed]). */
+    val onSwap: () -> Unit,
     /** Asks again: for the route after a failure, for the position when it was missing. */
     val onRetry: () -> Unit,
     /** Opens the app's system settings, where location access is turned on. */
@@ -102,6 +104,12 @@ fun stepPositionText(
     return if (meters >= 5) "$position · ${formatDistance(meters)}" else position
 }
 
+/** "By car from your location", "On foot to your location": which way a found route goes. */
+fun routeWayText(directions: Directions): String {
+    val way = if (directions.reversed) "to your location" else "from your location"
+    return "${directions.mode.phrase.replaceFirstChar { it.uppercase() }} $way"
+}
+
 /** What the directions say while they have no route to show; null once a route is found. */
 fun routeStatusText(directions: Directions): String? =
     when (val status = directions.status) {
@@ -110,10 +118,11 @@ fun routeStatusText(directions: Directions): String? =
         }
 
         is RouteStatus.NoLocation -> {
+            val needed = if (directions.reversed) "Directions end at your location." else "Directions start from your location."
             if (status.permissionOff) {
-                "Directions start from your location. Location access is off for Pubky Maps."
+                "$needed Location access is off for Pubky Maps."
             } else {
-                "Directions start from your location. Is location turned on?"
+                "$needed Is location turned on?"
             }
         }
 
@@ -127,9 +136,21 @@ fun routeStatusText(directions: Directions): String? =
 
         is RouteStatus.NoRoute -> {
             when (status.reason) {
-                NoRouteReason.TooFar -> "Too far for a route ${directions.mode.phrase}."
-                NoRouteReason.NoRoadNear -> "No road or path ${directions.mode.phrase} near your location or the place."
-                NoRouteReason.NotConnected -> "No route ${directions.mode.phrase} from your location to this place."
+                NoRouteReason.TooFar -> {
+                    "Too far for a route ${directions.mode.phrase}."
+                }
+
+                NoRouteReason.NoRoadNear -> {
+                    "No road or path ${directions.mode.phrase} near your location or the place."
+                }
+
+                NoRouteReason.NotConnected -> {
+                    if (directions.reversed) {
+                        "No route ${directions.mode.phrase} from this place to your location."
+                    } else {
+                        "No route ${directions.mode.phrase} from your location to this place."
+                    }
+                }
             }
         }
 
@@ -139,9 +160,10 @@ fun routeStatusText(directions: Directions): String? =
     }
 
 /**
- * The directions on a place page: the modes, then the route's time and length (the map draws its
- * line) with the button that opens its steps ([RouteStepList]), or what stands in its way; the routing
- * server's credits under a found route. A step tapped in the list shows above the button with the
+ * The directions on a place page: the modes and the button that swaps start and destination, then the
+ * route's time and length (the map draws its line) and which way it goes, with the button that opens
+ * its steps ([RouteStepList]), or what stands in its way; the routing server's credits under a found
+ * route. A step tapped in the list shows above the button with the
  * way to the previous and the next one ([StepPreview]).
  */
 @Composable
@@ -170,6 +192,17 @@ fun DirectionsCard(
                         )
                     }
                 }
+                // As in Google Maps' directions: the way back from the place (home from a restaurant,
+                // a one-way street the other way) without leaving the page.
+                IconButton(
+                    onClick = ui.onSwap,
+                    modifier =
+                        Modifier.semantics {
+                            stateDescription = if (directions.reversed) "To your location" else "From your location"
+                        },
+                ) {
+                    Icon(RoutingIcons.SwapVert, contentDescription = "Swap start and destination")
+                }
                 IconButton(onClick = ui.onClose) { Icon(AppIcons.Close, contentDescription = "Close directions") }
             }
             Column(
@@ -183,10 +216,7 @@ fun DirectionsCard(
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Medium,
                     )
-                    Text(
-                        "${directions.mode.phrase.replaceFirstChar { it.uppercase() }} from your location",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                    Text(routeWayText(directions), style = MaterialTheme.typography.bodyMedium)
                 } else {
                     routeStatusText(directions)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                     val status = directions.status
