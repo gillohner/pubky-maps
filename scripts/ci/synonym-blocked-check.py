@@ -5,6 +5,8 @@ run of the outbox job, on excerpts of real dumps. How the job ran again (rerun_a
 on attempt 2; both count, a restart whose run has not set its own guard yet waits, and no start since
 the kill waits. That the kill ended a run (died_since), runs 45837259115 and 45874052666: a STOP naming
 a dead process counts whichever way Android noticed it, other stops and stops before the kill do not.
+How it waits for the phone's network (await_network), on a fake clock: a name that resolved once and
+then not (Wi-Fi dropping after the boot, run 46040293875) is waited for until it kept resolving.
 CI: android.yml, build job.
 
 Usage: synonym-blocked-check.py
@@ -119,7 +121,55 @@ expect(blocked.enqueued(android, 2), 29.865, "enqueued(job 2)")
 expect(blocked.enqueued(android, 1), 30.533, "enqueued(job 1)")
 expect(blocked.enqueued(dump([job(1, "b7bfa85", "173ms")], []), 2), None, "enqueued(no job 2)")
 
+
+class Phone:
+    """A fake clock and a phone whose names resolve while `up(t, host)` is true; each check takes a second."""
+
+    def __init__(self, up):
+        self.t = 0.0
+        self.up = up
+
+    def resolves(self, host):
+        self.t += 1.0
+        return self.up(self.t, host)
+
+    def now(self):
+        return self.t
+
+    def sleep(self, s):
+        self.t += s
+
+
+def await_network(up, hosts=("tiles.versatiles.org",)):
+    """What await_network returns on a phone where names resolve while `up(t, host)`, and when."""
+    phone = Phone(up)
+    problem = blocked.await_network(phone.resolves, list(hosts), now=phone.now, sleep=phone.sleep)
+    return problem, phone.t
+
+
+# A check is a second, then 2 s until the next one.
+# Run 46040293875 attempt 1: the first check resolves, Wi-Fi drops right after it (the log ends there, so
+# its return at 20 s is made up); the test goes on only once the name kept resolving for the settle time
+# after that (checks at 22..34 s).
+expect(await_network(lambda t, h: t <= 1 or t >= 20), (None, 34.0), "Wi-Fi up, down, up again")
+# Up from the start: on after the settle time (checks at 1..13 s), not at the first check.
+expect(await_network(lambda t, h: True), (None, 13.0), "up from the start")
+# Every host is checked in each round; the settle time counts from the round's end.
+expect(await_network(lambda t, h: True, ("a.example", "b.example")), (None, 14.0), "two hosts up")
+expect(await_network(lambda t, h: h != "b.example", ("a.example", "b.example")),
+       ("b.example does not resolve on the phone after 120 s", 122.0), "a host that never resolves")
+expect(await_network(lambda t, h: False, ("a.example", "b.example")),
+       ("a.example, b.example do not resolve on the phone after 120 s", 122.0), "no network, two hosts")
+expect(await_network(lambda t, h: False), ("tiles.versatiles.org does not resolve on the phone after 120 s", 121.0),
+       "no network")
+# A network that comes up just before the wait is over gets its settle time.
+expect(await_network(lambda t, h: t >= 115), (None, 127.0), "a network up late")
+# A network that comes and goes for the whole wait is no network either: it fails on its first miss after it.
+expect(await_network(lambda t, h: t % 9 < 6),
+       ("the phone's network did not stay up for 10 s in 120 s (tiles.versatiles.org does not resolve)", 124.0),
+       "a network that comes and goes")
+
 if failures:
     print("FAIL synonym-blocked.py:\n  " + "\n  ".join(failures))
     sys.exit(1)
-print("synonym-blocked.py reads the job states as Android 15 writes them")
+print("synonym-blocked.py waits for a network that stays up and reads the job states as Android 15 writes them")
