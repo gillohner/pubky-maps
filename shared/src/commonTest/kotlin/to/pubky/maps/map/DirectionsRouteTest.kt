@@ -3,6 +3,12 @@ package to.pubky.maps.map
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import org.maplibre.compose.util.DpPadding
 import to.pubky.maps.config.AppSettings
 import to.pubky.maps.config.AttributionLink
@@ -11,8 +17,10 @@ import to.pubky.maps.config.Service
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class DirectionsRouteTest {
     @Test
     fun aRouteIsFittedInsideTheMapThePageLeavesInView() {
@@ -33,6 +41,55 @@ class DirectionsRouteTest {
         assertTrue(roomHoldsRoute(DpRect(0.dp, 80.dp, 412.dp, 490.dp)))
         assertTrue(roomHoldsRoute(DpRect(424.dp, 80.dp, 1280.dp, 800.dp)))
     }
+
+    @Test
+    fun aRouteFoundWithTheSheetAtItsTopIsFittedWhereTheSheetStops() =
+        runTest {
+            // The steps open at Full: the map left has no height.
+            val rooms = MutableStateFlow<DpRect?>(DpRect(0.dp, 80.dp, 412.dp, 80.dp))
+            var got: DpRect? = null
+            val job = launch { got = routeRoom(rooms) }
+            advanceTimeBy(ROOM_SETTLE_MS * 4)
+            runCurrent()
+            assertNull(got)
+            // The sheet lowered to Half: a new, taller room every frame, the first ones already tall
+            // enough for a route.
+            for (bottom in listOf(160, 240, 320, 400, 460)) {
+                rooms.value = DpRect(0.dp, 80.dp, 412.dp, bottom.dp)
+                advanceTimeBy(16)
+                runCurrent()
+                assertNull(got)
+            }
+            val half = DpRect(0.dp, 80.dp, 412.dp, 500.dp)
+            rooms.value = half
+            advanceTimeBy(ROOM_SETTLE_MS + 1)
+            runCurrent()
+            assertEquals(half, got)
+            assertTrue(job.isCompleted)
+        }
+
+    @Test
+    fun aRouteFoundAtRestIsFittedIntoTheRoomThere() =
+        runTest {
+            val half = DpRect(0.dp, 80.dp, 412.dp, 500.dp)
+            var got: DpRect? = null
+            launch { got = routeRoom(MutableStateFlow(half)) }
+            advanceTimeBy(ROOM_SETTLE_MS + 1)
+            runCurrent()
+            assertEquals(half, got)
+        }
+
+    @Test
+    fun aRouteFoundBeforeThePageReportsARoomIsFittedAtOnce() =
+        runTest {
+            var done = false
+            launch {
+                assertNull(routeRoom(MutableStateFlow(null)))
+                done = true
+            }
+            runCurrent()
+            assertTrue(done)
+        }
 
     @Test
     fun withoutARoomYetTheBottomHalfIsLeftForTheSheet() {

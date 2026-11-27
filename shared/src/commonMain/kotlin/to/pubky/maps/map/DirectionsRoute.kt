@@ -8,8 +8,10 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.maplibre.compose.location.LocationPermission
 import org.maplibre.compose.location.LocationState
@@ -131,6 +133,21 @@ private val ROUTE_MIN_ROOM = 96.dp
  */
 internal fun roomHoldsRoute(room: DpRect): Boolean =
     room.right - room.left >= ROUTE_MARGIN * 2 + ROUTE_MIN_ROOM && room.bottom - room.top >= ROUTE_MARGIN * 2 + ROUTE_MIN_ROOM
+
+/**
+ * The room a found route is fitted into, from [rooms] (the map its place page leaves in view): null at
+ * once when the page has reported none yet, as before its first layout; else the first room that
+ * holds the route ([roomHoldsRoute]) and stays the same for [settleMs]. The room is reported on every
+ * frame of the sheet's move, so a route found with the sheet at its top waits for where the sheet
+ * stops, not for the first frame of its way down that is tall enough.
+ */
+internal suspend fun routeRoom(
+    rooms: Flow<DpRect?>,
+    settleMs: Long = ROOM_SETTLE_MS,
+): DpRect? {
+    if (rooms.first() == null) return null
+    return settled(rooms, settleMs).first { roomHoldsRoute(it) }
+}
 
 /**
  * The padding that fits a route into [room], the map a place page leaves in view on a map of [size]:

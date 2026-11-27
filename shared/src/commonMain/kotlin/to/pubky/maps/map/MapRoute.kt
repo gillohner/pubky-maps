@@ -41,7 +41,6 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
@@ -377,11 +376,12 @@ fun MapRoute(
     // A found route is fitted into the map its place page leaves in view, once per route
     // (Directions.routeToFit): coming back from Settings or a recreated activity (dark mode, language)
     // keeps the user's pan. One found while the page covers the map (another mode picked with the
-    // steps open, the sheet at its top) waits until the map is back in view (roomHoldsRoute).
+    // steps open, the sheet at its top) waits until the sheet rests where the map is back in view
+    // (routeRoom).
     LaunchedEffect(foundRoute) {
         val open = directionsState ?: return@LaunchedEffect
         val route = open.routeToFit?.route ?: return@LaunchedEffect
-        val room = roomsOf(open.placeUri).first { it == null || roomHoldsRoute(it) }
+        val room = routeRoom(roomsOf(open.placeUri))
         directions.routeFitted(route)
         mapState.animateCameraToBounds(
             BoundingBox(
