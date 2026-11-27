@@ -121,34 +121,49 @@ fun routeCredits(
     return credits + ServerDefaults.fixTheMap
 }
 
-/** Room around a fitted route, past the map's edges of [room]. */
+/** Room around a fitted route, past the map's edges of [room]; less in a room under 4 x as tall or wide. */
 private val ROUTE_MARGIN = 32.dp
 
-/** The least map, past [ROUTE_MARGIN] on each side, that a route is fitted into. */
-private val ROUTE_MIN_ROOM = 96.dp
+/** The least map, across and down, that a route is fitted into: less is no map in view. */
+private val ROUTE_MIN_ROOM = 24.dp
 
-/**
- * Whether [room] leaves enough map to fit a route into: not when the place page covers about all of
- * it (the phone sheet at its top, as with the route's steps open), where the route would be framed in
- * a strip of no height.
- */
-internal fun roomHoldsRoute(room: DpRect): Boolean =
-    room.right - room.left >= ROUTE_MARGIN * 2 + ROUTE_MIN_ROOM && room.bottom - room.top >= ROUTE_MARGIN * 2 + ROUTE_MIN_ROOM
+/** The least map, across and down, a phone sheet at its top stop leaves for a route; less is the page covering the map. */
+private val ROUTE_ROOM_AT_TOP = ROUTE_MARGIN * 2 + 96.dp
+
+/** The map a place page leaves in view ([room]), and whether the phone sheet is at its top stop ([sheetAtTop]). */
+internal data class PageRoom(
+    val room: DpRect,
+    val sheetAtTop: Boolean,
+) {
+    /**
+     * Whether a found route is fitted into [room] now. Not while the page covers the map: the sheet at
+     * its top leaves no map, with the route's steps open, or a strip ([ROUTE_ROOM_AT_TOP]) when the page
+     * is short; nor while there is about no map in view ([ROUTE_MIN_ROOM]), as while the sheet is
+     * dragged up to its top. A lower stop's room is taken however small: at the largest font, or on a
+     * short phone, the lowest stop leaves about 120 dp of map or less, and the route is fitted there
+     * between smaller margins ([routeFitPadding]).
+     */
+    val holdsRoute: Boolean
+        get() {
+            val least = if (sheetAtTop) ROUTE_ROOM_AT_TOP else ROUTE_MIN_ROOM
+            return room.right - room.left >= least && room.bottom - room.top >= least
+        }
+}
 
 /**
  * The room a found route is fitted into, from [rooms] (the map its place page leaves in view): the
- * first room that holds the route ([roomHoldsRoute]) and stays the same for [settleMs]. The room is
- * reported on every frame of the sheet's move, so a route found with the sheet at its top waits for
- * where the sheet stops, not for the first frame of its way down that is tall enough. Null when the
- * page reports no room within [OPEN_ROOM_WAIT_MS]: a page laid out anew (a rotation, a return from
- * Settings) reports its room in its first frames, and the route is not fitted behind it meanwhile.
+ * first room that holds the route ([PageRoom.holdsRoute]) and stays the same for [settleMs]. The room
+ * is reported on every frame of the sheet's move, so a route found while the page covers the map
+ * waits for where the sheet rests with the map in view. Null when the page reports no room within
+ * [OPEN_ROOM_WAIT_MS]: a page laid out anew (a rotation, a return from Settings) reports its room in
+ * its first frames, and the route is not fitted behind it meanwhile.
  */
 internal suspend fun routeRoom(
-    rooms: Flow<DpRect?>,
+    rooms: Flow<PageRoom?>,
     settleMs: Long = ROOM_SETTLE_MS,
 ): DpRect? {
     withTimeoutOrNull(OPEN_ROOM_WAIT_MS) { rooms.filterNotNull().first() } ?: return null
-    return settled(rooms, settleMs).first { roomHoldsRoute(it) }
+    return settled(rooms, settleMs).first { it.holdsRoute }.room
 }
 
 /**
@@ -162,10 +177,19 @@ internal fun routeFitPadding(
     if (room == null || size == null) {
         return DpPadding(left = ROUTE_MARGIN, top = 136.dp, right = ROUTE_MARGIN, bottom = (size?.height ?: 800.dp) / 2)
     }
+    // The room's part on the map, and a margin inside it that leaves at least half of it to the route.
+    val left = room.left.coerceAtLeast(0.dp)
+    val top = room.top.coerceAtLeast(0.dp)
+    val right = (size.width - room.right).coerceAtLeast(0.dp)
+    val bottom = (size.height - room.bottom).coerceAtLeast(0.dp)
+    val across = (size.width - left - right).coerceAtLeast(0.dp)
+    val down = (size.height - top - bottom).coerceAtLeast(0.dp)
+    val marginAcross = ROUTE_MARGIN.coerceAtMost(across / 4)
+    val marginDown = ROUTE_MARGIN.coerceAtMost(down / 4)
     return DpPadding(
-        left = room.left.coerceAtLeast(0.dp) + ROUTE_MARGIN,
-        top = room.top.coerceAtLeast(0.dp) + ROUTE_MARGIN,
-        right = (size.width - room.right).coerceAtLeast(0.dp) + ROUTE_MARGIN,
-        bottom = (size.height - room.bottom).coerceAtLeast(0.dp) + ROUTE_MARGIN,
+        left = left + marginAcross,
+        top = top + marginDown,
+        right = right + marginAcross,
+        bottom = bottom + marginDown,
     )
 }

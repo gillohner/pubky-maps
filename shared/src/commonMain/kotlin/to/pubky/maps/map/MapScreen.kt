@@ -121,6 +121,7 @@ data class MapSearch(
  * area picker over it. While a place page shows, [onUncoveredMap] is given the part of the map it
  * leaves in view (under the search bar and the notices under it, above the sheet and the controls
  * riding on it, or beside the panel and above the credits), in the map's dp; null while none shows.
+ * [onSheetAtTop] is told whether the phone sheet is at its top stop.
  */
 @Composable
 fun MapScreen(
@@ -137,6 +138,7 @@ fun MapScreen(
     placePage: PlacePageSlot? = null,
     areaPicker: AreaPickerUi? = null,
     onUncoveredMap: (DpRect?) -> Unit = {},
+    onSheetAtTop: (Boolean) -> Unit = {},
     map: @Composable () -> Unit,
 ) {
     BoxWithConstraints(modifier.fillMaxSize()) {
@@ -156,6 +158,9 @@ fun MapScreen(
         val panelRoom =
             if (pagePanel && areaPicker == null) panelUncoveredMap(maxWidth, maxHeight, roomTop, LocalLayoutDirection.current) else null
         if (!pageSheet || areaPicker != null) SideEffect { report(panelRoom) }
+        val sheetAtTop = pageSheet && areaPicker == null && placePage.full
+        val reportAtTop by rememberUpdatedState(onSheetAtTop)
+        SideEffect { reportAtTop(sheetAtTop) }
         map()
         if (areaPicker != null) {
             AreaPickerOverlay(areaPicker, attribution)
