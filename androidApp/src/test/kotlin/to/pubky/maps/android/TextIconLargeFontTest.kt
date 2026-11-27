@@ -23,9 +23,9 @@ import to.pubky.maps.write.Kept
 import to.pubky.maps.write.KeptBadge
 
 /**
- * The icon of a "Public"/"Private"/"On this phone" badge grows with the font as its label does: 14 dp
- * at the normal font, 28 dp at Android's largest font size (200 %), where a 14 dp icon beside 28 sp
- * "Public" reads as a dot.
+ * The icon of a "Public"/"Private"/"On this phone" badge grows with the font as its 14 sp label does:
+ * 14 dp at the normal font, 26 dp at Android's largest font size (200 %, whose non-linear curve draws
+ * 14 sp at 26 dp), where a 14 dp icon beside "Public" reads as a dot.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -67,7 +67,7 @@ class TextIconLargeFontTest {
     @Test
     fun atLargeFontTheBadgeIconGrowsWithItsLabel() {
         show(2f) { KeptBadge(Kept.Public) }
-        assertNear(28.dp, badgeIconWidth("Public"))
+        assertNear(26.dp, badgeIconWidth("Public"))
     }
 
     @Test
@@ -78,7 +78,7 @@ class TextIconLargeFontTest {
                 KeptBadge(Kept.Phone)
             }
         }
-        assertNear(28.dp, badgeIconWidth("Private"))
-        assertNear(28.dp, badgeIconWidth("On this phone"))
+        assertNear(26.dp, badgeIconWidth("Private"))
+        assertNear(26.dp, badgeIconWidth("On this phone"))
     }
 }
