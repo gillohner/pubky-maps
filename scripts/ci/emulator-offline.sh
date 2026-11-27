@@ -281,9 +281,11 @@ check_alive "offline map drawn without a connection"
 # style and tiles are fresh in MapLibre's cache: asking the unreachable server for them again would
 # fail the style the map already drew, and the map would fall back to nothing (run 45865109025).
 # Whether the new map asks for its style again varies, but it always asks for the area's tiles: so
-# no tile and no style may fail to load meanwhile (the source's TileJSON, served with max-age=0, is
-# rightly asked again and fails). The screenshots wait 3 s, as a failed style blanks the map only
-# after its cached copy drew.
+# no style and no tile the area's packs hold may fail to load meanwhile (scripts/ci/tile_failures.py;
+# the source's TileJSON, served with max-age=0, is rightly asked again and fails). A tile outside the
+# area fails without a server and does not count: the start's world view, which a slow emulator can
+# still be drawing when the window opens. The screenshots wait 3 s, as a failed style blanks the map
+# only after its cached copy drew.
 open_at "$zurich"
 since=$(adb shell date +"'%m-%d %H:%M:%S.000'" | tr -d '\r')
 wait_for "Settings" 30 > /dev/null || fail "the map screen did not appear offline before the update check"
@@ -298,9 +300,11 @@ sleep 3
 expect_water offline-light-during-check "#3c78d8"
 age=$((SECONDS - app_started))
 adb logcat -d -T "$since" > "$out/logcat-during-check.txt" || fail "could not read the log of the theme switches"
-failed=$(grep -E "loading style failed|Failed to load tile" "$out/logcat-during-check.txt") || true
-echo "theme switches 23-${age} s after the start, tiles and styles failed meanwhile: $(grep -c . <<< "$failed")"
-[ -z "$failed" ] || fail "the map's cached tiles or style failed to load during the update check's walk without a server: ${failed:0:300}"
+rc=0
+failed=$(python3 -I "$here/tile_failures.py" "$out/logcat-during-check.txt" "$out/maplibre-updated.db") || rc=$?
+echo "theme switches 23-${age} s after the start; meanwhile ${failed%%$'\n'*}"
+((rc != 2)) || fail "could not check the failed loads against the area's tiles: $failed"
+((rc == 0)) || fail "the map's cached tiles or style failed to load during the update check's walk without a server: ${failed:0:400}"
 check_alive "theme switches during an update check"
 
 # Without any server, search answers from the places in the area's tiles (by the bakery's word:
