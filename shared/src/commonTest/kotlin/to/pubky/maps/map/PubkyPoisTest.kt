@@ -15,7 +15,16 @@ class PubkyPoisTest {
         uri: String,
         category: String? = null,
         type: String? = null,
-    ) = MapPlace(uri = uri, name = uri.substringAfterLast('/'), lat = 47.37, lon = 8.54, type = type, category = category)
+        typePath: List<String> = emptyList(),
+    ) = MapPlace(
+        uri = uri,
+        name = uri.substringAfterLast('/'),
+        lat = 47.37,
+        lon = 8.54,
+        type = type,
+        category = category,
+        typePath = typePath,
+    )
 
     private val schober = place("https://www.openstreetmap.org/node/270803095", category = "amenity/cafe")
     private val kunsthaus = place("https://www.openstreetmap.org/relation/3768127", type = "Museum")
@@ -81,7 +90,13 @@ class PubkyPoisTest {
         assertEquals(PlaceKind.Food, pubkyPois(listOf(schober), found).highlights.single().kind)
         // Without a category, the schema type wins over the tile's kind.
         assertEquals(PlaceKind.Culture, pubkyPois(listOf(kunsthaus), found).highlights.single().kind)
-        // A type of no kind the app knows leaves it to the tile.
+        // A type is known by its ancestors, as Pinakes sends them: a café is a FoodEstablishment.
+        val path = listOf("Thing", "Organization", "Place", "LocalBusiness", "FoodEstablishment", "CafeOrCoffeeShop")
+        assertEquals(
+            PlaceKind.Food,
+            pubkyPois(listOf(kunsthaus.copy(type = "CafeOrCoffeeShop", typePath = path)), found).highlights.single().kind,
+        )
+        // A type without its ancestors (a place kept offline) that is of no kind the app knows leaves it to the tile.
         val cafe = kunsthaus.copy(type = "CafeOrCoffeeShop")
         assertEquals(PlaceKind.Shop, pubkyPois(listOf(cafe), found).highlights.single().kind)
         // A category that says no kind leaves it to the tile.

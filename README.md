@@ -235,8 +235,8 @@ taken back with a message.
 The map also shows the places people referenced on Pubky (from zoom 12, from Pinakes, clustered).
 From zoom 14, one that the map itself has as a point of interest (a café, a museum, a station) is
 drawn in the Pubky teal instead: a badge with an icon of its kind and its name under it, before the
-map's own labels and whatever zoom the map would show that point at; tapping it opens its page. The
-others stay teal dots.
+map's own labels and whatever zoom the map would show that point at, each badge drawn even where two
+of them meet (a name with no room is left out); tapping it opens its page. The others stay teal dots.
 When no Pinakes server answers, the map's status line says so.
 
 **Map links.** Links from other map apps open in Pubky Maps: tapped (`geo:`, `om://`, `cm://`,

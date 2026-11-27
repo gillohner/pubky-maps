@@ -183,6 +183,8 @@ class PlaceParsersTest {
         val schober = page.places.single { it.uri == "https://www.openstreetmap.org/node/270803095" }
         assertEquals("Conditorei schober", schober.name)
         assertEquals("CafeOrCoffeeShop", schober.type)
+        // With its ancestors, which give its kind (PubkyPois).
+        assertEquals(listOf("Thing", "Organization", "Place", "LocalBusiness", "FoodEstablishment", "CafeOrCoffeeShop"), schober.typePath)
         // The other spellings people referenced, for asking Nexus about all of them.
         assertEquals(
             listOf(

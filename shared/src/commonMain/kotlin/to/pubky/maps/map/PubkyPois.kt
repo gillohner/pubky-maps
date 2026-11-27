@@ -113,11 +113,16 @@ fun pubkyPois(
     return PubkyPois(highlights, dots)
 }
 
-/** The kind Pinakes gives a place: its OSM category, or its schema.org type; null when neither says. */
+/**
+ * The kind Pinakes gives a place: its OSM category, or its schema.org type with its ancestors (a
+ * `CafeOrCoffeeShop` is a `FoodEstablishment`); null when neither says. A place kept for offline use
+ * has its type without the ancestors (the offline store keeps no type path), so only a type
+ * [placeKindOf] lists itself gives it a kind; for the others the tile's kind is taken.
+ */
 private fun MapPlace.kind(): PlaceKind? {
     val fromCategory =
         category?.let { placeKindOf(it.substringBefore('/'), it.substringAfter('/', "").ifEmpty { null }, photonType = null) }
-    val fromType = type?.let { placeKindOf(listOf(it)) }
+    val fromType = placeKindOf(typePath.ifEmpty { listOfNotNull(type) })
     return listOf(fromCategory, fromType).firstOrNull { it != null && it != PlaceKind.Other }
 }
 

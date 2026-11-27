@@ -170,7 +170,8 @@ private fun idIn(ids: List<Long>): Expression<BooleanValue> =
  * The base map's points of interest that are Pubky places, drawn over the base map's own: a teal
  * badge with the kind's glyph and the name in teal under it, from [POI_HIGHLIGHT_MIN_ZOOM] whatever
  * the style's own zoom for that point is. They are placed before every label of the base map, so a
- * label in their way gives way (the point's own icon and name among them). Tapping one opens its place.
+ * label in their way gives way (the point's own icon and name among them). Every badge is drawn, also
+ * where two meet; a name with no room is left out. Tapping one opens its place.
  */
 @Composable
 internal fun PubkyPoiHighlights(
@@ -224,6 +225,10 @@ private fun PubkyPoiLayer(
         minZoom = POI_HIGHLIGHT_MIN_ZOOM.toFloat(),
         filter = idIn(ids),
         iconImage = image(painter, PubkyPoiSize),
+        // A highlighted place has no dot (pubkyPois.dots), so its badge is always drawn, also over
+        // another Pubky badge it would collide with; it still takes its room from the labels drawn
+        // after it, the base map's.
+        iconAllowOverlap = const(true),
         // Without a font of the style's, the badge draws no name and leaves the map's own in place.
         iconIgnorePlacement = const(font == null),
         textField = format(span(if (font != null) feature["name"].asString(const("")) else const(""))),

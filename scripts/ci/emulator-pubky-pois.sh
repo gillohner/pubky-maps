@@ -8,7 +8,8 @@
 # interest, so the badge has to win against the map's own icon and label) and the dark map
 # (OpenFreeMap Dark, which draws none: the schema's layer is used). A tap at the badge opens the
 # place's page (a dot or the map's own icon there would open it too: this checks that the badge
-# leaves the page reachable). Screenshots at zoom 16 and 14 are kept for a look.
+# leaves the page reachable). The name under the badge is checked for its teal. Screenshots at zoom
+# 16 and 14 are kept for a look.
 # Usage: emulator-pubky-pois.sh <apk> <out dir>
 set -euo pipefail
 
@@ -84,14 +85,36 @@ expect_badge() {
         fail "the Conditorei Schober is not highlighted on the map ($1; share of the badge's teal at the centre: $share)"
 }
 
+# expect_name NAME SHADE: the name under the badge is drawn in the name's teal SHADE (#00695C light,
+# #4DB6AC dark), not in the map's own label colour. The CI emulator's renderer drops the green
+# channel of every map text, the base style's own too (Liberty's water names, #495E91, come out
+# #490091), while icons keep it; so the row counts in the shade as drawn there (green 0) or as a phone
+# draws it. The box is the row of "Conditorei schober" under the badge: the name is ~17 % of it on
+# light and ~9 % on dark (thinner letters on the dark style's halo), any other colour ~0 %; the bar
+# is 5 %.
+expect_name() {
+    local shade=$1 as_drawn share
+    as_drawn="#${shade:1:2}00${shade:5:2}"
+    share=$(python3 -I -c '
+import subprocess, sys
+here, png, *shades = sys.argv[1:]
+print(sum(float(subprocess.check_output([sys.executable, "-I", f"{here}/png_stats.py", png, "0.36", "0.515", "0.64", "0.533", s], text=True).split()[2]) for s in shades))
+' "$here" "$out/$2.png" "$shade" "$as_drawn") || fail "png_stats could not read $2.png"
+    echo "$2: name shade share under the badge $share"
+    python3 -I -c "import sys; sys.exit(0 if float(sys.argv[1]) >= 0.05 else 1)" "$share" ||
+        fail "the Conditorei Schober's name is not drawn in the Pubky teal ($2; share of $shade or $as_drawn: $share)"
+}
+
 adb shell cmd uimode night no
 open_at pois-z16-light 16
 expect_badge pois-z16-light
+expect_name '#00695c' pois-z16-light
 open_at pois-z14-light 14
 
 adb shell cmd uimode night yes
 open_at pois-z16-dark 16
 expect_badge pois-z16-dark
+expect_name '#4db6ac' pois-z16-dark
 adb shell cmd uimode night no
 
 # A tap on the badge opens the place's page (the Pinakes place).
