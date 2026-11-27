@@ -304,7 +304,8 @@ class OfflineMaps(
      * [PackMetadata.replacing] another by a process that ended is settled first ([settle]), and its
      * area is checked once the settle has ended, also when the store refused it, so a leftover the
      * store keeps refusing to settle does not keep its area from updates: it stays listed, hidden
-     * beside the pack it was to replace or walked as the area's pack of its style ([visible]).
+     * beside the pack it was to replace or walked as the area's pack of its style ([visible]). A
+     * settle the store does not list within [SETTLE_LISTED] leaves its area to the next check.
      */
     internal fun checkForUpdates() {
         val leftovers =

@@ -18,6 +18,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -890,6 +891,36 @@ class OfflineMapsTest {
             assertEquals(listOf(light), store.resumed)
             assertTrue(store.all().none { it.metadata?.replacing == true })
             assertEquals(listOf(light, dark), store.updating())
+        }
+
+    @Test
+    fun aSettledLeftoverTheStoreListsLateIsWalkedAtTheNextCheck() =
+        runTest(UnconfinedTestDispatcher()) {
+            // As above, but the store lists the settle only after SETTLE_LISTED.
+            val (store, offline) = readyArea()
+            val leftover = store.all().first { it.style == light }
+            store.update(leftover.handle) { it.copy(metadata = it.metadata!!.copy(replacing = true)) }
+            store.holdListing = true
+            advanceTimeBy(FIRST_CHECK + SETTLE_LISTED)
+            runCurrent()
+            // Given up: the area waits for the next check, which reads the pack as the store lists it.
+            assertEquals(emptyList(), store.resumed)
+            assertFalse(offline.downloading)
+            store.listHeld()
+            runCurrent()
+            assertTrue(store.all().none { it.metadata?.replacing == true })
+            // A late listing starts no walk of its own.
+            advanceTimeBy(CHECK_INTERVAL - SETTLE_LISTED - 1.milliseconds)
+            runCurrent()
+            assertEquals(emptyList(), store.resumed)
+            assertEquals(emptyList(), store.updating())
+            advanceTimeBy(1.milliseconds)
+            runCurrent()
+            assertEquals(listOf(light), store.resumed)
+            assertEquals(listOf(light, dark), store.updating())
+            assertTrue(offline.downloading)
+            // Its mark did not write back the replacing the store had settled.
+            assertTrue(store.all().none { it.metadata?.replacing == true })
         }
 
     @Test
