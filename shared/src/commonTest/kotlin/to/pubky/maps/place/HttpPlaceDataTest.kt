@@ -28,7 +28,7 @@ class HttpPlaceDataTest {
                         respond(PlaceFixtures.read("pinakes-bbox-zurich.json"), HttpStatusCode.OK, json)
                     },
                 )
-            val data = HttpPlaceData(client, { listOf("https://pinakes.example.org") }, { emptyList() })
+            val data = HttpPlaceData(client, { listOf("https://pinakes.example.org") }, { emptyList() }, mayBeMapPlace = { true })
 
             val answer = data.placesIn(zurich, cursor = "next")
 
@@ -59,7 +59,12 @@ class HttpPlaceDataTest {
                     },
                 )
             val data =
-                HttpPlaceData(client, { listOf("https://old.example.org", "https://pinakes.example.org") }, { emptyList() })
+                HttpPlaceData(
+                    client,
+                    { listOf("https://old.example.org", "https://pinakes.example.org") },
+                    { emptyList() },
+                    mayBeMapPlace = { true },
+                )
 
             val answer = data.placesIn(zurich, cursor = null)
 
