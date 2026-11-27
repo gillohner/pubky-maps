@@ -36,6 +36,9 @@ class OfflineMapsTest {
 
         /** A pack whose delete fails. */
         var failDeleteOf: Any? = null
+
+        /** A pack whose metadata the store refuses to change. */
+        var failMetadataOf: Any? = null
         val deleted = ArrayList<String>()
 
         /** While set, a delete waits until it is completed (MapLibre's delete runs on its own thread). */
@@ -98,8 +101,8 @@ class OfflineMapsTest {
 
         override fun resume(handle: Any) {
             val pack = ready.first { it.handle === handle }
-            if (pack.metadata?.replacing == true) {
-                val old = ready.first { it.style == pack.style && it.metadata?.replacing != true }
+            val old = ready.firstOrNull { it.style == pack.style && it.metadata?.replacing != true }
+            if (pack.metadata?.replacing == true && old != null) {
                 update(handle) {
                     it.copy(progress = if (linksAtOnce) old.progress else PackProgress(PackState.Downloading, 10, 100))
                 }
@@ -125,6 +128,7 @@ class OfflineMapsTest {
             handle: Any,
             metadata: PackMetadata,
         ) {
+            if (handle === failMetadataOf) error("disk full")
             if (holdListing) {
                 held += {
                     update(
@@ -573,7 +577,13 @@ class OfflineMapsTest {
             assertEquals(3_100_000, map.bytes)
             assertTrue(offline.downloading)
 
+            val gate = CompletableDeferred<Unit>()
+            store.deleteGate = gate
             advanceTimeBy(REPLACE_TIMEOUT)
+            runCurrent()
+            // Given up, the new pack's requests stay throttled until it is deleted.
+            assertTrue(offline.downloading)
+            gate.complete(Unit)
             runCurrent()
             assertEquals(listOf(light), store.replacements)
             assertEquals(listOf(light), store.deleted)
@@ -581,6 +591,23 @@ class OfflineMapsTest {
             assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
             assertFalse(offline.downloading)
             assertNull(offline.problem.value)
+        }
+
+    @Test
+    fun aReplacementGivenUpWhoseDeleteFailsIsThrottledUntilItIsPaused() =
+        runTest(UnconfinedTestDispatcher()) {
+            val (store, offline) = readyArea()
+            store.linksAtOnce = false
+            updateBothStyles(store)
+            store.failDeleteOf = store.all().single { it.metadata?.replacing == true }.handle
+            advanceTimeBy(REPLACE_TIMEOUT)
+            runCurrent()
+            assertEquals(listOf(light), store.paused.takeLast(1))
+            // Paused, not deleted: its requests may still be on their way until MapLibre says so.
+            assertTrue(offline.downloading)
+            store.replacementProgress(light, PackProgress(PackState.Paused, 10, 100))
+            assertFalse(offline.downloading)
+            assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
         }
 
     @Test
@@ -631,12 +658,42 @@ class OfflineMapsTest {
         }
 
     @Test
+    fun anUpdateDoesNotReplaceAStyleBesideANewPackWhoseOldOnesDeleteFailed() =
+        runTest(UnconfinedTestDispatcher()) {
+            val (store, offline) = readyArea()
+            val oldLight = store.all().first { it.style == light }.handle
+            store.failDeleteOf = oldLight
+            updateBothStyles(store)
+            val left = store.all().single { it.metadata?.replacing == true }
+            val mostLight = mostShownOf(store, light)
+            // The next check finds a new release again.
+            advanceTimeBy(CHECK_INTERVAL - QUIET_CHECK * 2)
+            runCurrent()
+            offline.fetchedNewData()
+            advanceTimeBy(QUIET_CHECK * 2)
+            runCurrent()
+            // The light style keeps its packs; the dark one, left at the failed light replacement, is replaced now.
+            assertEquals(listOf(light, dark), store.replacements)
+            assertEquals(1, mostLight())
+            assertTrue(store.all().any { it.handle === oldLight })
+            assertTrue(store.all().any { it.handle === left.handle })
+            assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
+            assertFalse(offline.downloading)
+        }
+
+    @Test
     fun deletingAnAreaDuringAReplacementDeletesEveryPackOnce() =
         runTest(UnconfinedTestDispatcher()) {
             val (store, offline) = readyArea()
             store.linksAtOnce = false
             updateBothStyles(store)
+            val gate = CompletableDeferred<Unit>()
+            store.deleteGate = gate
             offline.delete("area-1")
+            runCurrent()
+            // The new pack's requests stay throttled until the delete has removed it.
+            assertTrue(offline.downloading)
+            gate.complete(Unit)
             runCurrent()
             assertEquals(emptyList(), store.all())
             assertEquals(listOf(dark, light, light), store.deleted.sorted())
@@ -732,6 +789,70 @@ class OfflineMapsTest {
             assertEquals(listOf(light, dark, light), store.resumed)
             assertTrue(store.all().any { it.handle === leftover.handle })
             assertEquals(emptyList(), store.deleted)
+        }
+
+    /** Records the most packs of [style] that made up the area at once ([visible]) while the store changed. */
+    private fun TestScope.mostShownOf(
+        store: FakeStore,
+        style: String,
+    ): () -> Int {
+        var most = 0
+        backgroundScope.launch {
+            store.packs.collect { state ->
+                val packs = (state as? PackStoreState.Ready)?.packs ?: return@collect
+                most = maxOf(most, visible(packs).count { it.style == style })
+            }
+        }
+        return { most }
+    }
+
+    @Test
+    fun anUpdateDoesNotReplaceAStyleBesideALeftoverTheStoreRefusesToSettle() =
+        runTest(UnconfinedTestDispatcher()) {
+            val (store, offline, leftover) = readyAreaWithALeftover()
+            val oldLight = store.all().first { it.style == light && it.metadata?.replacing != true }
+            store.failDeleteOf = leftover.handle
+            val mostLight = mostShownOf(store, light)
+            updateBothStyles(store)
+            // Replaced, the light style would list the leftover beside its new pack once the old one went.
+            assertEquals(listOf(dark), store.replacements)
+            assertEquals(listOf(dark), store.deleted)
+            assertEquals(1, mostLight())
+            assertTrue(store.all().any { it.handle === oldLight.handle })
+            assertTrue(store.all().any { it.handle === leftover.handle })
+            assertEquals(listOf(light, dark), visible(store.all()).map { it.style })
+            val map = offline.maps().single()
+            assertEquals(OfflineMapStatus.Ready, map.status)
+            assertEquals(3_100_000, map.bytes)
+            assertFalse(offline.downloading)
+        }
+
+    @Test
+    fun anUpdateDoesNotReplaceALeftoverTheStoreRefusesToUnmark() =
+        runTest(UnconfinedTestDispatcher()) {
+            // The light pack's old one went, the process ended before its replacement was unmarked,
+            // and the store refuses to unmark it: it is the area's light pack, still marked.
+            val (store, offline) = readyArea()
+            val leftover = store.all().first { it.style == light }
+            store.update(leftover.handle) { it.copy(metadata = it.metadata!!.copy(replacing = true)) }
+            store.failMetadataOf = leftover.handle
+            val mostLight = mostShownOf(store, light)
+            advanceTimeBy(FIRST_CHECK)
+            runCurrent()
+            assertEquals(listOf(light), store.resumed)
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            // The dark walk finds a new release.
+            assertEquals(listOf(light, dark), store.resumed)
+            offline.fetchedNewData()
+            advanceTimeBy(QUIET_CHECK)
+            runCurrent()
+            // A new light pack would be listed beside the leftover until it is gone.
+            assertEquals(listOf(dark), store.replacements)
+            assertEquals(1, mostLight())
+            assertTrue(store.all().any { it.handle === leftover.handle })
+            assertEquals(OfflineMapStatus.Ready, offline.maps().single().status)
+            assertFalse(offline.downloading)
         }
 
     @Test
