@@ -56,9 +56,10 @@ class UniffiPubkyWrites(
     override fun buildList(
         author: String,
         name: String,
+        description: String?,
         places: List<String>,
         private: Boolean,
-    ): BuiltWrite = mapped { coreBuildList(author, name, null, places.map { CollectionItem(it, null) }, private).toWrite() }
+    ): BuiltWrite = mapped { coreBuildList(author, name, description, places.map { CollectionItem(it, null) }, private).toWrite() }
 
     override suspend fun put(
         path: String,
@@ -94,6 +95,7 @@ class UniffiPubkyWrites(
                             kept = if (list.private) Kept.Private else Kept.Public,
                             name = list.name,
                             items = list.items.map { it.uri },
+                            description = listDescription(list.description),
                         )
                     },
                 otherPostIds = scan.otherPostIds,
@@ -120,6 +122,12 @@ class UniffiPubkyWrites(
 private fun BuiltObject.toWrite() = BuiltWrite(path = path, uri = uri, json = json)
 
 private fun BuiltObject.toList(private: Boolean): OwnList {
-    val (name, items) = listOfPost(json) ?: throw CoreFailure.Other("the core built an unreadable collection")
-    return OwnList(uri = uri, kept = if (private) Kept.Private else Kept.Public, name = name, items = items)
+    val list = listOfPost(json) ?: throw CoreFailure.Other("the core built an unreadable collection")
+    return OwnList(
+        uri = uri,
+        kept = if (private) Kept.Private else Kept.Public,
+        name = list.name,
+        items = list.items,
+        description = list.description,
+    )
 }

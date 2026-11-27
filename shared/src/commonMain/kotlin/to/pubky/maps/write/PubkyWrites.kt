@@ -45,10 +45,11 @@ interface PubkyWrites {
         caption: String?,
     ): BuiltPhoto
 
-    /** A list holding [places]: public under `/pub`, [private] under `/priv`. */
+    /** A list holding [places], with [description] when not null: public under `/pub`, [private] under `/priv`. */
     fun buildList(
         author: String,
         name: String,
+        description: String?,
         places: List<String>,
         private: Boolean,
     ): BuiltWrite

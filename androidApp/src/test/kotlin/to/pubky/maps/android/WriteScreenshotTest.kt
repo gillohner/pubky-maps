@@ -166,7 +166,14 @@ class WriteScreenshotTest {
 
     private val emptyPage = page.copy(social = PlaceSocial(emptyList(), emptyList(), 0, 0), posts = emptyList(), people = emptyMap())
 
-    private val coffee = OwnList("pubky://$me/pub/social/v1/posts/L1", Kept.Public, "Coffee in Zürich", listOf(osm, "geo:47.37,8.54"))
+    private val coffee =
+        OwnList(
+            "pubky://$me/pub/social/v1/posts/L1",
+            Kept.Public,
+            "Coffee in Zürich",
+            listOf(osm, "geo:47.37,8.54"),
+            description = "Quiet cafés with a seat by the window, good for an hour with a book or a laptop on a rainy afternoon.",
+        )
 
     private fun writes(own: OwnPlace) =
         PlaceWriteActions(
@@ -460,10 +467,12 @@ class WriteScreenshotTest {
                             ),
                         ),
                     newName = "Cake",
+                    newDescription = "Worth the walk",
                     newKept = Kept.Public,
                 ),
             onToggle = {},
             onNewNameChange = {},
+            onNewDescriptionChange = {},
             onNewKeptChange = {},
             onCreate = {},
             onClose = {},

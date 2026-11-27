@@ -194,6 +194,7 @@ fun ListRoute(
             .filter { signedIn || it == Kept.Phone }
     val preferred = Kept.of(settings.storage(DataKind.Lists))
     var newName by rememberSaveable { mutableStateOf("") }
+    var newDescription by rememberSaveable { mutableStateOf("") }
     var newKept by rememberSaveable { mutableStateOf(if (preferred in choices) preferred else Kept.Phone) }
     val snackbars = remember { SnackbarHostState() }
     WriteMessages(writes, snackbars)
@@ -208,6 +209,7 @@ fun ListRoute(
                 loading = own.listsLoading,
                 stale = signedIn && !own.listsLoaded && !own.listsLoading,
                 newName = newName,
+                newDescription = newDescription,
                 newKept = newKept,
                 keptChoices = choices,
             ),
@@ -215,10 +217,12 @@ fun ListRoute(
             if (choice.holds) writes.removeFromList(target, links, choice.list) else writes.addToList(target, choice.list)
         },
         onNewNameChange = { newName = it },
+        onNewDescriptionChange = { newDescription = it },
         onNewKeptChange = { newKept = it },
         onCreate = {
-            writes.createList(target, newName, newKept)
+            writes.createList(target, newName, newKept, newDescription)
             newName = ""
+            newDescription = ""
         },
         onClose = onClose,
         snackbarHostState = snackbars,
