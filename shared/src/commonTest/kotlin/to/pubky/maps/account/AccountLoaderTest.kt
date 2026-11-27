@@ -63,6 +63,29 @@ class AccountLoaderTest {
         }
 
     @Test
+    fun anEmptyPageOfSavedPlacesWithACursorIsNotTheEnd() =
+        runTest {
+            // The core's page after 20 listing pages of other apps' bookmarks: no place, more to come.
+            core.bookmarkPages =
+                listOf(
+                    listOf(SavedPlace("geo:0,1", "/priv/social/v1/bookmarks/a.json")),
+                    emptyList(),
+                    listOf(SavedPlace("geo:1,2", "/priv/social/v1/bookmarks/~b.json")),
+                )
+
+            assertEquals(listOf("geo:0,1", "geo:1,2"), AccountLoader(core) { 0 }.load(USER).bookmarks.map { it.place })
+        }
+
+    @Test
+    fun aListingWhoseCursorNeverEndsStopsAfterTheLastAllowedRead() =
+        runTest {
+            core.bookmarkPages = List(MAX_PAGE_READS + 50) { emptyList() }
+
+            assertEquals(emptyList(), AccountLoader(core) { 0 }.load(USER).bookmarks)
+            assertEquals(MAX_PAGE_READS, core.bookmarkReads)
+        }
+
+    @Test
     fun theShortIdShowsTheStartAndTheEndOfTheKey() {
         assertEquals("pubky8pin…5ewo", shortPubkyId(USER))
     }

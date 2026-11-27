@@ -499,17 +499,57 @@ async fn place_objects_round_trip() {
         "https://www.openstreetmap.org/way/4"
     );
 
-    // Saved places, short and long.
-    let long = format!("https://maps.example.com/?q={}", "x".repeat(200));
+    // Saved places, short and long; bookmarks of other apps' Pubky objects in the same folder
+    // (a pubky.app post) are not saved places, a web page is kept (a Pinakes card can be one).
+    let long = format!(
+        "https://www.google.com/maps/place/{}/@47.3703,8.548,17z",
+        "Kunsthaus".repeat(25)
+    );
     core.bookmark_place(place.into()).await.unwrap();
     core.bookmark_place(long.clone()).await.unwrap();
+    let author = "8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo";
+    for other in [
+        format!("pubky://{author}/pub/pubky.app/posts/0034A0000001"),
+        format!("pubky://{author}/pub/pubky.app/posts/0034A0000002"),
+    ] {
+        core.bookmark_place(other).await.unwrap();
+    }
+    let web_page = format!("https://example.com/{}", "x".repeat(200));
+    core.bookmark_place(web_page.clone()).await.unwrap();
     let saved = core.list_bookmarks(ListOptions::default()).await.unwrap();
     let mut places: Vec<String> = saved.places.iter().map(|p| p.place.clone()).collect();
     places.sort();
-    let mut expected = vec![place.to_string(), long.clone()];
+    let mut expected = vec![place.to_string(), long.clone(), web_page.clone()];
     expected.sort();
     assert_eq!(places, expected);
+    // One bookmark a page: a page of another app's bookmark is skipped and the next page is
+    // read in the same call (fewer than 20 skipped pages in a row), so here no page before the
+    // end is empty.
+    let mut paged = Vec::new();
+    let mut cursor = None;
+    loop {
+        let page = core
+            .list_bookmarks(ListOptions {
+                cursor: cursor.take(),
+                limit: 1,
+                ..ListOptions::default()
+            })
+            .await
+            .unwrap();
+        if page.places.is_empty() {
+            assert_eq!(page.next_cursor, None);
+            break;
+        }
+        paged.extend(page.places.into_iter().map(|p| p.place));
+        cursor = page.next_cursor;
+        if cursor.is_none() {
+            break;
+        }
+    }
+    paged.sort();
+    assert_eq!(paged, expected);
     core.remove_bookmark(long).await.unwrap();
+    core.remove_bookmark(web_page).await.unwrap();
     let saved = core.list_bookmarks(ListOptions::default()).await.unwrap();
     assert_eq!(saved.places.len(), 1);
     assert_eq!(saved.places[0].place, place);

@@ -23,6 +23,13 @@ internal const val TAGS_DIR = "/pub/social/v1/tags/"
 /** At most this many tags and saved places are read (a page holds 100). */
 internal const val MAX_ITEMS = 2000
 
+/**
+ * At most this many pages are asked for in one listing. A page of saved places can be empty and not be
+ * the last (the core skips other apps' bookmarks), so the listing ends on a missing cursor, and this
+ * bounds it against a cursor that never ends.
+ */
+internal const val MAX_PAGE_READS = 100
+
 /** Tag files are read this many at a time. */
 private const val PARALLEL_READS = 6
 
@@ -99,6 +106,7 @@ internal class AccountLoader(
     private suspend fun <T> pages(read: suspend (cursor: String?) -> Page<T>): List<T> {
         val items = mutableListOf<T>()
         var cursor: String? = null
+        var reads = 0
         do {
             val page =
                 try {
@@ -109,7 +117,8 @@ internal class AccountLoader(
                 }
             items += page.items
             cursor = page.nextCursor
-        } while (cursor != null && page.items.isNotEmpty() && items.size < MAX_ITEMS)
+            reads++
+        } while (cursor != null && items.size < MAX_ITEMS && reads < MAX_PAGE_READS)
         return items.take(MAX_ITEMS)
     }
 }

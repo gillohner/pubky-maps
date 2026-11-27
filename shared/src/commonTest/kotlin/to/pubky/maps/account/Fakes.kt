@@ -28,6 +28,12 @@ class FakePubkyCore : PubkyCore {
     val files = mutableMapOf<String, ByteArray>()
     var tagPaths = listOf<String>()
     var bookmarks = listOf<SavedPlace>()
+
+    /** When set, saved places are listed in these pages instead of [bookmarks] in one. */
+    var bookmarkPages: List<List<SavedPlace>>? = null
+
+    /** How many pages of [bookmarkPages] were asked for. */
+    var bookmarkReads = 0
     var failReads: CoreFailure? = null
 
     /** When set, listing waits for it (a slow homeserver). */
@@ -110,6 +116,12 @@ class FakePubkyCore : PubkyCore {
 
     override suspend fun listBookmarks(cursor: String?): Page<SavedPlace> {
         failReads?.let { throw it }
+        bookmarkPages?.let { pages ->
+            // The cursor is the index of the next page; a page can be empty and not be the last.
+            val at = cursor?.toInt() ?: 0
+            bookmarkReads++
+            return Page(pages.getOrElse(at) { emptyList() }, if (at + 1 < pages.size) (at + 1).toString() else null)
+        }
         if (bookmarks.isEmpty()) throw CoreFailure.NotFound("/priv/social/v1/bookmarks/")
         return Page(if (cursor == null) bookmarks else emptyList(), if (cursor == null) "end" else null)
     }
