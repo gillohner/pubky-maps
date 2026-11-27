@@ -52,7 +52,18 @@ data class SearchState(
     val selected: SearchResult? = null,
     /** Counts the times search itself set [query] (not typing), so the bar takes the new text. */
     val textSetBySearch: Int = 0,
+    /** Counts the picks (the same place picked again counts again); never goes back, also not on [SearchController.close]. */
+    val picks: Int = 0,
+    /** The last pick the map has moved for ([SearchController.mapMoved]). */
+    val mapMovedFor: Int = 0,
 ) {
+    /**
+     * The pick the map still has to move to, once: the shown place's, until the map has moved for it.
+     * Going back to its card from the bar, or coming back from Settings, is no new pick and keeps
+     * where the user has moved the map since.
+     */
+    val pickToMoveTo: Int? get() = picks.takeIf { mode == SearchMode.Selected && selected != null && it != mapMovedFor }
+
     val searching: Boolean get() = photon == SourceState.Loading || pinakes == SourceState.Loading
 
     /** Neither source could be reached: search is offline. */
@@ -187,8 +198,14 @@ class SearchController(
                 ),
             )
         }
-        _state.update { it.copy(mode = SearchMode.Selected, selected = result) }
+        _state.update { it.copy(mode = SearchMode.Selected, selected = result, picks = it.picks + 1) }
     }
+
+    /**
+     * The map has moved for [pick] (or will not: the user moved it first, or the move was given up).
+     * Called by the map, so a later look at the same pick does not move it again.
+     */
+    fun mapMoved(pick: Int) = _state.update { it.copy(mapMovedFor = maxOf(it.mapMovedFor, pick)) }
 
     /** A recent search was picked: a place opens again, a text is searched again. */
     fun selectRecent(
@@ -214,6 +231,8 @@ class SearchController(
                 resultsQuery = place.title,
                 results = listOf(result),
                 textSetBySearch = it.textSetBySearch + 1,
+                picks = it.picks,
+                mapMovedFor = it.mapMovedFor,
             )
         }
         select(result)
@@ -222,14 +241,16 @@ class SearchController(
     /** Empties the bar and keeps typing. */
     fun clearQuery() {
         cancelSearch()
-        _state.update { SearchState(mode = SearchMode.Editing, textSetBySearch = it.textSetBySearch + 1) }
+        _state.update {
+            SearchState(mode = SearchMode.Editing, textSetBySearch = it.textSetBySearch + 1, picks = it.picks, mapMovedFor = it.mapMovedFor)
+        }
     }
 
     /** Leaves search: the map as it was, the bar empty, and no search outage named on the map. */
     fun close() {
         cancelSearch()
         health?.recovered(ServicePart.Search)
-        _state.update { SearchState(textSetBySearch = it.textSetBySearch + 1) }
+        _state.update { SearchState(textSetBySearch = it.textSetBySearch + 1, picks = it.picks, mapMovedFor = it.mapMovedFor) }
     }
 
     /** The place card's close button: back to the results, or out of search for a lone result. */
