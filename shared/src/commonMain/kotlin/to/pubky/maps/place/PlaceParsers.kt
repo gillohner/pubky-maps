@@ -3,6 +3,7 @@ package to.pubky.maps.place
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -201,11 +202,14 @@ fun parseNexusUsers(
 
 /**
  * Reads Nexus' collection posts (`POST /v1/stream/posts/by_ids`) as lists: a collection's content is
- * `{"name", "items": [...]}`; other posts and unknown ones are skipped.
+ * `{"name", "items": [{"uri"}, ...]}`; other posts and unknown ones are skipped. A list counts only
+ * its items whose URI [mayBeMapPlace] (the core's rule, the one the user's bookmarks are filtered with),
+ * so another app's objects in it (a pubky.app post, a profile) are not called places.
  */
 fun parseNexusCollections(
     json: String,
     viewer: String?,
+    mayBeMapPlace: (String) -> Boolean,
 ): List<PlaceList> =
     SearchJson
         .parseToJsonElement(json)
@@ -225,10 +229,20 @@ fun parseNexusCollections(
                         ?.contentOrNull
                         ?.trim()
                         ?.ifEmpty { null },
-                itemCount = content?.get("items")?.let { runCatching { it.jsonArray.size }.getOrNull() },
+                itemCount = (content?.get("items") as? JsonArray)?.let { placeCount(it, mayBeMapPlace) },
                 mine = post.author == viewer,
             )
         }
+
+/** How many of a collection's [items] point at something that may be a place; an item without a URI is not one. */
+private fun placeCount(
+    items: JsonArray,
+    mayBeMapPlace: (String) -> Boolean,
+): Int =
+    items.count { item ->
+        val uri = ((item as? JsonObject)?.get("uri") as? JsonPrimitive)?.takeIf { it.isString }?.content
+        uri != null && mayBeMapPlace(uri)
+    }
 
 /** `author:postId` of a `pubky://<author>/pub/social/v1/posts/<id>` post, as Nexus' by_ids takes it. */
 internal fun globalPostId(uri: String): String? {

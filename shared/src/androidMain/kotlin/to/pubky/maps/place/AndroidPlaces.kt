@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.first
 import to.pubky.maps.config.AppSettings
 import to.pubky.maps.config.Service
 import to.pubky.maps.config.loadedServers
+import to.pubky.maps.core.mayBeMapPlace
 import to.pubky.maps.map.MapPlacesLayer
 import to.pubky.maps.offline.KeptPubkyPlaces
 import to.pubky.maps.osm.HttpOsmNotes
@@ -54,6 +55,7 @@ fun androidPlaceServices(
             client = searchHttpClient(appVersion),
             pinakesServers = { servers(Service.Pinakes) },
             nexusServers = { servers(Service.Nexus) },
+            mayBeMapPlace = ::mayBeMapPlace,
         )
     val driver = AndroidSqliteDriver(PlaceCacheDatabase.Schema, context, File(context.noBackupFilesDir, "place-cache.db").path)
     // State lives on the main thread; requests run on Ktor's own threads, the cache on IO.

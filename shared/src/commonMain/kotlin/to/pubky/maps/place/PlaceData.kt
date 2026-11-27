@@ -72,7 +72,7 @@ interface PlaceData {
         viewer: String?,
     ): SourceAnswer<List<PlacePerson>>
 
-    /** The collection posts [postUris] (at most 100) as named lists. */
+    /** The collection posts [postUris] (at most 100) as named lists, each counting the items that can be places. */
     suspend fun lists(
         postUris: List<String>,
         viewer: String?,
@@ -119,6 +119,8 @@ class HttpPlaceData(
     private val client: HttpClient,
     private val pinakesServers: () -> List<String>,
     private val nexusServers: () -> List<String>,
+    /** Whether a collection item's URI can be a place (the core's `mayBeMapPlace`), for [lists]' counts. */
+    private val mayBeMapPlace: (String) -> Boolean,
 ) : PlaceData {
     private val pinakes = ServerFallback()
     private val nexus = ServerFallback()
@@ -221,7 +223,7 @@ class HttpPlaceData(
         nexus.first(nexusServers()) { server ->
             val ids = postUris.mapNotNull(::globalPostId).take(BATCH)
             val body = JsonObject(mapOf("post_ids" to JsonArray(ids.map(::JsonPrimitive))))
-            parseNexusCollections(post(url(server, "v1", "stream", "posts", "by_ids"), body.toString()), viewer)
+            parseNexusCollections(post(url(server, "v1", "stream", "posts", "by_ids"), body.toString()), viewer, mayBeMapPlace)
         }
 
     /** The body of a 2xx answer, null on 404; any other status is a failure of the server. */

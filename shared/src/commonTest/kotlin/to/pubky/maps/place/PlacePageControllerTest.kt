@@ -141,7 +141,7 @@ internal class FakePlaceData : PlaceData {
     override suspend fun lists(
         postUris: List<String>,
         viewer: String?,
-    ) = nexus { parseNexusCollections(PlaceFixtures.read("nexus-collection-posts.json"), viewer) }
+    ) = nexus { parseNexusCollections(PlaceFixtures.read("nexus-collection-posts.json"), viewer, PlaceFixtures.webLinks) }
 
     companion object {
         const val SCHOBER = "https://www.openstreetmap.org/node/270803095"
