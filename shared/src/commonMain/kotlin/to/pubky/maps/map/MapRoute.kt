@@ -376,7 +376,7 @@ fun MapRoute(
     LaunchedEffect(foundRoute) {
         val open = directionsState ?: return@LaunchedEffect
         val route = open.routeToFit?.route ?: return@LaunchedEffect
-        directions?.routeFitted(route)
+        directions.routeFitted(route)
         val room = uncoveredMap?.takeIf { it.first == open.placeUri }?.second
         mapState.animateCameraToBounds(
             BoundingBox(
