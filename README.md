@@ -204,7 +204,9 @@ sign-out) and the page says so: it is sent when the phone has a network again, w
 comes to the front, and by the outbox's background job with the app closed, oldest first. Each try is
 marked first, so a note whose try was cut off (the app stopped before the answer) is dropped as one
 that may be on the map, never sent twice. A waiting note not taken then leaves the phone, and a page
-of this run of the app still open says why. A note not sent at once keeps its text on the page to
+of this run of the app still open says why. While notes wait, Settings has "Notes waiting": each note
+with its place, its text and when it was written, "Try now", and a delete (asked first) for any note
+whose try is not under way, so it never goes. A note not sent at once keeps its text on the page to
 send again. A note page Android brought back after stopping the app still thanks for a sent note,
 says a waiting note waits (also when another run of the app has sent it since), and one whose note
 was on its way or got no answer in time says it may be on the map already, so none offers the same

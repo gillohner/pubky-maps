@@ -403,4 +403,109 @@ class NoteControllerTest {
             assertEquals(listOf("Closed."), notes.texts)
             assertEquals(NoteSend.Sent, controller.sends.value["a"])
         }
+
+    @Test
+    fun theNotesWaitingListShowsWaitingNotesOldestFirstAndTheOneOnItsWay() =
+        runTest {
+            val notes = FakeNotes(NoteAnswer.Unreachable, NoteAnswer.Unreachable)
+            notes.hold = CompletableDeferred()
+            val cutOff = waiting("cut", "Cut off.", 5).copy(onItsWay = true)
+            val outbox = FakeOutbox(waiting("b", "Second.", 20), waiting("a", "First.", 10), cutOff)
+            val controller = controller(notes, outbox)
+            assertNull(controller.notesWaiting.value)
+            runCurrent()
+            // A note whose try the app stopped in may be on the map: it is not listed as waiting.
+            assertEquals(
+                NotesWaiting(listOf(waiting("a", "First.", 10), waiting("b", "Second.", 20)), sending = "a"),
+                controller.notesWaiting.value,
+            )
+            notes.hold!!.complete(Unit)
+            runCurrent()
+            assertEquals(NotesWaiting(listOf(waiting("a", "First.", 10), waiting("b", "Second.", 20))), controller.notesWaiting.value)
+            controller.send("c", target, "Third.")
+            runCurrent()
+            assertEquals(
+                listOf("a", "b", "c"),
+                controller.notesWaiting.value!!
+                    .notes
+                    .map { it.id },
+            )
+        }
+
+    @Test
+    fun aWithdrawnNoteLeavesThePhoneAndNeverGoes() =
+        runTest {
+            val notes = FakeNotes(NoteAnswer.Unreachable, NoteAnswer.Sent)
+            val outbox = FakeOutbox(waiting("a", "First.", 10), waiting("b", "Second.", 20))
+            val controller = controller(notes, outbox)
+            runCurrent()
+            controller.withdraw("a")
+            runCurrent()
+            assertEquals(listOf("b"), outbox.notes.map { it.id })
+            assertEquals(
+                listOf("b"),
+                controller.notesWaiting.value!!
+                    .notes
+                    .map { it.id },
+            )
+            assertNull(controller.sends.value["a"])
+            controller.flush()
+            runCurrent()
+            assertEquals(listOf("First.", "Second."), notes.texts)
+            assertEquals(emptyList(), outbox.notes)
+            assertEquals(false, controller.waiting.value)
+        }
+
+    @Test
+    fun aNoteOnItsWayCannotBeWithdrawn() =
+        runTest {
+            val notes = FakeNotes(NoteAnswer.Sent)
+            notes.hold = CompletableDeferred()
+            val outbox = FakeOutbox(waiting("a", "Closed.", 10))
+            val controller = controller(notes, outbox)
+            runCurrent()
+            controller.withdraw("a")
+            runCurrent()
+            assertEquals(listOf("a"), outbox.notes.map { it.id })
+            assertEquals("a", controller.notesWaiting.value!!.sending)
+            notes.hold!!.complete(Unit)
+            runCurrent()
+            assertEquals(NoteSend.Sent, controller.sends.value["a"])
+        }
+
+    @Test
+    fun aNoteWithdrawnWhileTheRoundSendsAnEarlierOneIsNotTried() =
+        runTest {
+            val notes = FakeNotes(NoteAnswer.Sent, NoteAnswer.Sent)
+            notes.hold = CompletableDeferred()
+            val outbox = FakeOutbox(waiting("a", "First.", 10), waiting("b", "Second.", 20))
+            val controller = controller(notes, outbox)
+            runCurrent()
+            // The round read both notes and is sending "a".
+            controller.withdraw("b")
+            runCurrent()
+            notes.hold!!.complete(Unit)
+            runCurrent()
+            assertEquals(listOf("First."), notes.texts)
+            assertEquals(emptyList(), outbox.marks.filter { it.first == "b" })
+            assertEquals(NotesWaiting(emptyList()), controller.notesWaiting.value)
+        }
+
+    @Test
+    fun aNoteThePhoneCouldNotDeleteStaysListed() =
+        runTest {
+            val outbox = FakeOutbox(waiting("a", "Closed.", 10))
+            val controller = controller(FakeNotes(NoteAnswer.Unreachable), outbox)
+            runCurrent()
+            outbox.failDelete = true
+            controller.withdraw("a")
+            runCurrent()
+            assertEquals(
+                listOf("a"),
+                controller.notesWaiting.value!!
+                    .notes
+                    .map { it.id },
+            )
+            assertEquals(true, controller.waiting.value)
+        }
 }
