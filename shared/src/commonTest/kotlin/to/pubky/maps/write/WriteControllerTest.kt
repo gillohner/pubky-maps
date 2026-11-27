@@ -21,6 +21,7 @@ import to.pubky.maps.config.AppSettings
 import to.pubky.maps.config.DataKind
 import to.pubky.maps.config.StorageChoice
 import to.pubky.maps.links.GeoPoint
+import to.pubky.maps.place.PlaceSource
 import kotlin.coroutines.ContinuationInterceptor
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -404,6 +405,28 @@ class WriteControllerTest {
             writer.save(target.copy(pointPage = true))
             runCurrent()
             assertEquals(setOf("geo:47.36,8.55", "geo:47.35,8.54"), phone.data.pointPlaces)
+        }
+
+    @Test
+    fun theSavedPageOpensOnlyAPointSavedFromItsOwnPageWithoutAskingAnyServer() =
+        runTest {
+            signedIn()
+            val writer = controller()
+            runCurrent()
+            // A dropped pin saved from its page, and a geo: link from another app saved from its public page.
+            writer.save(WriteTarget("geo:47.37031,8.55601", "Home", pointPage = true))
+            writer.save(WriteTarget("geo:47.36,8.55", "Kunsthalle"))
+            writer.createList(WriteTarget("geo:47.35,8.54", null, pointPage = true), "Walks", Kept.Phone)
+            runCurrent()
+            val own = writer.own.value
+
+            val home = savedPagePoint("geo:47.37031,8.55601", "Home", own)
+            assertEquals(PlaceSource.Coordinates, home?.source)
+            assertEquals("Home", home?.name)
+            assertEquals(GeoPoint(47.37031, 8.55601), home?.point)
+            assertEquals(PlaceSource.Coordinates, savedPagePoint("geo:47.35,8.54", "Bench", own)?.source, "a list entry too")
+            assertNull(savedPagePoint("geo:47.36,8.55", "Kunsthalle", own), "a public geo: place is read as its link is")
+            assertNull(savedPagePoint(target.uri, target.name, own))
         }
 
     @Test
