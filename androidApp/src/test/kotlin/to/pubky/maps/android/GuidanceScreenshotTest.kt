@@ -124,6 +124,10 @@ class GuidanceScreenshotTest {
         credits = routeCredits(ServerDefaults.lists, (status as? RouteStatus.Found)?.server),
     )
 
+    /** 120 m off the route, the map following the user, the directions [changed]. */
+    private fun offRoute(changed: (Directions) -> Directions) =
+        guidance(onTheWay.copy(offRoute = true, offBy = 120.0)).let { it.copy(directions = changed(it.directions)) }
+
     @Composable
     private fun Guiding(
         ui: GuidanceUi,
@@ -183,11 +187,36 @@ class GuidanceScreenshotTest {
             Guiding(guidance(onTheWay.copy(offRoute = true, offBy = 120.0), following = false))
         }
 
-    /** The new route could not be asked: why, with Find a new route again; routing named as missing. */
+    /** No new route came: why, with Find a new route again, the route still guiding; routing named as missing. */
     @Test
     fun newRouteUnreachablePhoneDark() =
         capture("guidance-unreachable", Device.Phone, dark = true) {
-            Guiding(guidance(null, status = RouteStatus.Unreachable), missing = setOf(ServicePart.Routing))
+            Guiding(offRoute { it.copy(noNewRoute = RouteStatus.Unreachable) }, missing = setOf(ServicePart.Routing))
+        }
+
+    /** Off the route, a new route asked for by itself: the route on the map and what is left of it stay meanwhile. */
+    @Test
+    fun reroutingPhoneLight() =
+        capture("guidance-rerouting", Device.Phone, dark = false) {
+            Guiding(offRoute { it.copy(rerouting = true) })
+        }
+
+    @Test
+    fun reroutingPhoneDark() =
+        capture("guidance-rerouting", Device.Phone, dark = true) {
+            Guiding(offRoute { it.copy(rerouting = true) })
+        }
+
+    @Test
+    fun reroutingTabletLight() =
+        capture("guidance-rerouting", Device.Tablet, dark = false) {
+            Guiding(offRoute { it.copy(rerouting = true) })
+        }
+
+    @Test
+    fun reroutingTabletDark() =
+        capture("guidance-rerouting", Device.Tablet, dark = true) {
+            Guiding(offRoute { it.copy(rerouting = true) })
         }
 
     @Test

@@ -15,6 +15,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 class DirectionsControllerTest {
     private val here = GeoPoint(47.3779, 8.5403)
@@ -41,7 +43,7 @@ class DirectionsControllerTest {
     private fun TestScope.controller(
         routing: Routing,
         health: ServiceHealth? = null,
-    ) = DirectionsController(routing, this, health)
+    ) = DirectionsController(routing, this, health, timeSource = testScheduler.timeSource)
 
     @Test
     fun aKnownPositionAsksForTheRouteByCarAtOnce() =
@@ -686,13 +688,17 @@ class DirectionsControllerTest {
             val again = Route(listOf(off, kunsthaus), seconds = 400.0, meters = 1900.0)
             routing.answer = { RouteAnswer.Found(again, "s") }
             c.routeAgainFrom(off)
-            assertEquals(RouteStatus.Finding, c.directions.value?.status)
-            assertNull(c.directions.value?.progress)
+            // The route the user is on stays on the map, and where they are on it, until the new one comes.
+            val asking = assertNotNull(c.directions.value)
+            assertEquals(RouteStatus.Found(route, "s"), asking.status)
+            assertTrue(asking.rerouting)
+            assertEquals(true, asking.progress?.offRoute)
             advanceUntilIdle()
             assertEquals(Triple(off, kunsthaus, TravelMode.Car), routing.asked.last())
             val d = assertNotNull(c.directions.value)
             assertTrue(d.guiding)
             assertEquals(RouteStatus.Found(again, "s"), d.status)
+            assertEquals(false, d.rerouting)
             assertEquals(false, d.progress?.offRoute)
             assertEquals(400.0, d.progress?.secondsLeft ?: 0.0, 1.0)
             // The map follows the user: the new route is not fitted over that.
@@ -716,9 +722,196 @@ class DirectionsControllerTest {
             c.routeAgainFrom(GeoPoint(47.3800, 8.5300))
             runCurrent()
             c.endGuidance()
+            // The card waits for the new route, not one from where the user was.
+            assertEquals(RouteStatus.Finding, c.directions.value?.status)
+            assertEquals(false, c.directions.value?.rerouting)
             gate.complete(Unit)
             advanceUntilIdle()
             assertEquals(false, c.directions.value?.guiding)
             assertNotNull(c.directions.value?.routeToFit)
+        }
+
+    /** Guidance on [route] from [here], with one position off it already (no new route asked yet). */
+    private fun TestScope.guidedOffOnce(routing: FakeRouting): DirectionsController {
+        val c = controller(routing)
+        c.start("osm:node/1", kunsthaus, here)
+        advanceUntilIdle()
+        c.startGuidance(here)
+        c.guide(off)
+        return c
+    }
+
+    private val off = GeoPoint(47.3800, 8.5300)
+
+    /** [p] moved [meters] east. */
+    private fun east(
+        p: GeoPoint,
+        meters: Double,
+    ) = GeoPoint(p.lat, p.lon + meters / (111_320.0 * kotlin.math.cos(p.lat * kotlin.math.PI / 180)))
+
+    @Test
+    fun offTheRouteTwiceInARowAsksForANewRouteByItselfAndKeepsGuidingMeanwhile() =
+        runTest {
+            val routing = FakeRouting { RouteAnswer.Found(route, "s") }
+            val c = guidedOffOnce(routing)
+            // One position off the route may be a fix that jumped: nothing asked yet.
+            assertEquals(1, routing.asked.size)
+            assertEquals(false, c.directions.value?.rerouting)
+            val again = Route(listOf(off, kunsthaus), seconds = 400.0, meters = 1900.0)
+            routing.answer = { RouteAnswer.Found(again, "s") }
+            val gate = CompletableDeferred<Unit>()
+            routing.gate = gate
+            val further = east(off, 5.0)
+            c.guide(further)
+            runCurrent()
+            assertEquals(Triple(further, kunsthaus, TravelMode.Car), routing.asked.last())
+            val asking = assertNotNull(c.directions.value)
+            assertTrue(asking.rerouting)
+            assertEquals(RouteStatus.Found(route, "s"), asking.status)
+            // Positions meanwhile still go on the route the user is on, and ask nothing more.
+            c.guide(off)
+            assertEquals(2, routing.asked.size)
+            assertEquals(off, c.directions.value?.position)
+            assertEquals("Finding a new route…", guidanceText(assertNotNull(c.directions.value), "K").title)
+            gate.complete(Unit)
+            advanceUntilIdle()
+            val d = assertNotNull(c.directions.value)
+            assertEquals(RouteStatus.Found(again, "s"), d.status)
+            assertEquals(false, d.rerouting)
+            assertEquals(false, d.progress?.offRoute)
+            assertTrue(d.guiding)
+            assertNull(d.routeToFit)
+        }
+
+    @Test
+    fun theFixGuidanceStartedFromSentAgainIsNotASecondPositionOffTheRoute() =
+        runTest {
+            val routing = FakeRouting { RouteAnswer.Found(route, "s") }
+            val c = controller(routing)
+            c.start("osm:node/1", kunsthaus, here)
+            advanceUntilIdle()
+            // Start off the route (the route begins on the road): the map's location sends the same fix again.
+            val at = Instant.parse("2026-11-28T05:00:00Z")
+            c.startGuidance(off, measuredAt = at)
+            c.guide(off, measuredAt = at)
+            advanceUntilIdle()
+            assertEquals(1, routing.asked.size)
+            // A new fix at the same point (the user stands there) is another position.
+            c.guide(off, measuredAt = at + 1.seconds)
+            advanceUntilIdle()
+            assertEquals(2, routing.asked.size)
+        }
+
+    @Test
+    fun oneFixOffTheRouteBetweenTwoOnItAsksForNothing() =
+        runTest {
+            val routing = FakeRouting { RouteAnswer.Found(route, "s") }
+            val c = guidedOffOnce(routing)
+            c.guide(here)
+            c.guide(off)
+            advanceUntilIdle()
+            assertEquals(1, routing.asked.size)
+            assertEquals(
+                true,
+                c.directions.value
+                    ?.progress
+                    ?.offRoute,
+            )
+        }
+
+    @Test
+    fun backOnTheRouteBeforeTheNewOneCameItIsNoLongerAskedFor() =
+        runTest {
+            val routing = FakeRouting { RouteAnswer.Found(route, "s") }
+            val c = guidedOffOnce(routing)
+            val gate = CompletableDeferred<Unit>()
+            routing.gate = gate
+            routing.answer = { RouteAnswer.Found(Route(listOf(off, kunsthaus), seconds = 400.0, meters = 1900.0), "s") }
+            c.guide(off)
+            runCurrent()
+            assertEquals(true, c.directions.value?.rerouting)
+            c.guide(here)
+            gate.complete(Unit)
+            advanceUntilIdle()
+            val d = assertNotNull(c.directions.value)
+            assertEquals(false, d.rerouting)
+            assertEquals(RouteStatus.Found(route, "s"), d.status)
+            assertEquals(false, d.progress?.offRoute)
+        }
+
+    @Test
+    fun noNewRouteKeepsTheRouteGuidingAndSaysWhy() =
+        runTest {
+            val health = ServiceHealth()
+            val routing = FakeRouting { RouteAnswer.Found(route, "s") }
+            val c = controller(routing, health)
+            c.start("osm:node/1", kunsthaus, here)
+            advanceUntilIdle()
+            c.startGuidance(here)
+            routing.answer = { RouteAnswer.Unreachable }
+            c.guide(off)
+            c.guide(off)
+            advanceUntilIdle()
+            val d = assertNotNull(c.directions.value)
+            assertTrue(d.guiding)
+            assertEquals(RouteStatus.Found(route, "s"), d.status)
+            assertEquals(false, d.rerouting)
+            assertEquals(RouteStatus.Unreachable, d.noNewRoute)
+            assertTrue(ServicePart.Routing in health.missing.value)
+            assertEquals(
+                GuidanceText(
+                    "No new route",
+                    "Can't reach the routing server. Check your connection.",
+                    GuidanceIcon.Other,
+                    routeAgain = true,
+                ),
+                guidanceText(d, "K"),
+            )
+            // Back on the route, it guides them as before.
+            c.guide(here)
+            assertNull(c.directions.value?.noNewRoute)
+            assertEquals(
+                false,
+                c.directions.value
+                    ?.progress
+                    ?.offRoute,
+            )
+        }
+
+    @Test
+    fun aNewRouteIsAskedByItselfAgainOnlyAfterTheSpacingAndOnceTheUserMovedOn() =
+        runTest {
+            // The server's new route starts on a road out of the user's reach: still off it.
+            val routing = FakeRouting { RouteAnswer.Found(route, "s") }
+            val c = guidedOffOnce(routing)
+            c.guide(off)
+            advanceUntilIdle()
+            assertEquals(2, routing.asked.size)
+            assertEquals(
+                true,
+                c.directions.value
+                    ?.progress
+                    ?.offRoute,
+            )
+            // Standing there, long after: the same route would come again.
+            advanceTimeBy(REROUTE_SPACING * 3)
+            repeat(3) { c.guide(east(off, 10.0)) }
+            advanceUntilIdle()
+            assertEquals(2, routing.asked.size)
+            // Find a new route asks at once.
+            c.routeAgainFrom(off)
+            advanceUntilIdle()
+            assertEquals(3, routing.asked.size)
+            // Moved on, but within the spacing of the last one; then after it.
+            val moved = east(off, 80.0)
+            c.guide(moved)
+            c.guide(moved)
+            advanceUntilIdle()
+            assertEquals(3, routing.asked.size)
+            advanceTimeBy(REROUTE_SPACING)
+            c.guide(moved)
+            advanceUntilIdle()
+            assertEquals(4, routing.asked.size)
+            assertEquals(Triple(moved, kunsthaus, TravelMode.Car), routing.asked.last())
         }
 }

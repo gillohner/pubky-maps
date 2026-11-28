@@ -13,6 +13,21 @@ import to.pubky.maps.status.ServicePart
 import kotlin.math.abs
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
+
+/**
+ * How many positions in a row off the route ask for a new route: one fix that jumped (a reflection
+ * between houses) is not taken for a wrong turn, two are, a second or two after it.
+ */
+internal const val REROUTE_AFTER_FIXES = 2
+
+/**
+ * How long after a new route was asked for while guiding the next one is asked by itself: well within
+ * FOSSGIS' one request a second, and a driver who keeps off the new route too gets another within it.
+ */
+internal val REROUTE_SPACING = 10.seconds
 
 /** Where a route to a place stands. */
 sealed interface RouteStatus {
@@ -101,6 +116,16 @@ data class Directions(
     val guiding: Boolean = false,
     /** Where the user is on the route while it guides them, from their last position; null before one is known on this route. */
     val progress: RouteProgress? = null,
+    /**
+     * While the route guides the user: a new route from where they are is asked for
+     * ([DirectionsController.guide]); this one stays on the map and guides them until it comes.
+     */
+    val rerouting: Boolean = false,
+    /**
+     * While the route guides the user: why the last new route asked for did not come
+     * ([RouteStatus.NoRoute], [RouteStatus.Unreachable]); this one still guides them.
+     */
+    val noNewRoute: RouteStatus? = null,
 ) {
     /**
      * Whether the route can guide the user ([DirectionsController.startGuidance]): a found route
@@ -136,8 +161,9 @@ data class Directions(
  * mode, so the start of a day out (a hotel, a station) serves the places looked at from there. The list of steps the user opened stays open for the routes by other modes or the
  * other way to the same place; a step tapped in it is marked on the map until the list closes or another route
  * comes. A route from the user's position can guide them ([startGuidance]): their place on it from
- * each position ([guide]), a new route from where they are on request ([routeAgainFrom]) until they
- * end it. Every routing server failing names routing in [health] until one answers.
+ * each position ([guide]), and a new route from where they are once they are off it, by itself or on
+ * request ([routeAgainFrom]), until they end it; the route keeps guiding them while a new one is asked
+ * for and when none comes. Every routing server failing names routing in [health] until one answers.
  * A position that has not come within [locatingTimeout] (a permission dialog dismissed, no fix
  * indoors) is missing; one that comes later still starts the route.
  */
@@ -146,6 +172,7 @@ class DirectionsController(
     private val scope: CoroutineScope,
     private val health: ServiceHealth? = null,
     private val locatingTimeout: Duration = 30.seconds,
+    private val timeSource: TimeSource = TimeSource.Monotonic,
 ) {
     private val state = MutableStateFlow<Directions?>(null)
     val directions: StateFlow<Directions?> = state.asStateFlow()
@@ -164,6 +191,15 @@ class DirectionsController(
 
     /** The accuracy of the last position the guidance had, for the progress on a new route from there. */
     private var accuracy: Double? = null
+
+    /** How many positions in a row were off the route guiding the user, for [REROUTE_AFTER_FIXES]. */
+    private var offFixes = 0
+
+    /** Where and when the last new route was asked for while guiding the user, for [mayRerouteFrom]. */
+    private var rerouted: Pair<GeoPoint, TimeMark>? = null
+
+    /** When the last position the guidance had was measured, so the same fix sent again is not counted twice. */
+    private var measured: Instant? = null
 
     /** Every [start] so far, for [Directions.opening]. */
     private var openings = 0
@@ -323,29 +359,65 @@ class DirectionsController(
     fun startGuidance(
         position: GeoPoint?,
         accuracyMeters: Double? = null,
+        measuredAt: Instant? = null,
     ) {
         val current = state.value ?: return
         if (!current.canGuide || current.guiding) return
+        offFixes = 0
+        rerouted = null
+        measured = null
         val started = current.copy(guiding = true, stepsShown = false, shownStep = null, routeFitted = true, progress = null)
         state.value = started
-        if (position != null) guide(position, accuracyMeters)
+        if (position != null) guide(position, accuracyMeters, measuredAt)
     }
 
     /**
-     * The user's [position] while the route guides them (within [accuracyMeters], when known): where
-     * they are on it now, looked for from where they were ([routeProgress]). None while a new route
-     * is asked for.
+     * The user's [position] while the route guides them (within [accuracyMeters], when known; measured
+     * at [measuredAt], when known: the fix Start began with, sent again by the map, is one position): where
+     * they are on it now, looked for from where they were ([routeProgress]). Off the route on
+     * [REROUTE_AFTER_FIXES] positions in a row, a new route from there is asked for by itself
+     * ([mayRerouteFrom]), as Google Maps and OsmAnd reroute; back on the route before it comes, it is
+     * no longer asked for.
      */
     fun guide(
         position: GeoPoint,
         accuracyMeters: Double? = null,
+        measuredAt: Instant? = null,
     ) {
         val current = state.value ?: return
         val route = (current.status as? RouteStatus.Found)?.route ?: return
         if (!current.guiding) return
         accuracy = accuracyMeters
         val progress = routeProgress(route, position, current.progress?.onRouteAlong ?: 0.0, accuracyMeters)
-        state.value = current.copy(progress = progress, position = position)
+        if (!progress.offRoute) {
+            offFixes = 0
+            if (current.rerouting) {
+                request?.cancel()
+                request = null
+                asking = null
+            }
+            state.value = current.copy(progress = progress, position = position, rerouting = false, noNewRoute = null)
+            return
+        }
+        val sameFix = measuredAt != null && measuredAt == measured
+        measured = measuredAt
+        if (!sameFix) offFixes += 1
+        val now = current.copy(progress = progress, position = position)
+        state.value = now
+        if (!now.rerouting && offFixes >= REROUTE_AFTER_FIXES && mayRerouteFrom(position)) reroute(now)
+    }
+
+    /**
+     * Whether a new route may be asked for by itself from [position]: not within [REROUTE_SPACING] of
+     * the last one asked for (also one dropped as the user came back on the route), and not until the
+     * user moved [OFF_ROUTE_METERS] from where it was asked, so a user
+     * who stays off a new route (it starts on the nearest road, out of reach of a fix in a park; no
+     * server answered) is not asked a route for again and again from the same place; Find a new route
+     * asks still.
+     */
+    private fun mayRerouteFrom(position: GeoPoint): Boolean {
+        val (at, mark) = rerouted ?: return true
+        return mark.elapsedNow() >= REROUTE_SPACING && metersBetween(at, position) >= OFF_ROUTE_METERS
     }
 
     /**
@@ -355,7 +427,7 @@ class DirectionsController(
     fun routeAgainFrom(position: GeoPoint) {
         val current = state.value ?: return
         if (!current.guiding) return
-        ask(current.copy(position = position))
+        reroute(current.copy(position = position))
     }
 
     /**
@@ -365,8 +437,16 @@ class DirectionsController(
     fun endGuidance() {
         val current = state.value ?: return
         if (!current.guiding) return
-        val finding = current.status == RouteStatus.Finding
-        state.value = current.copy(guiding = false, progress = null, routeFitted = current.routeFitted && !finding)
+        // A new route still asked for comes as any other route: the card waits for it.
+        state.value =
+            current.copy(
+                guiding = false,
+                progress = null,
+                status = if (current.rerouting) RouteStatus.Finding else current.status,
+                routeFitted = current.routeFitted && !current.rerouting,
+                rerouting = false,
+                noNewRoute = null,
+            )
     }
 
     /** Asks again after a failure, between the same points. */
@@ -406,10 +486,8 @@ class DirectionsController(
         request?.cancel()
         locating?.cancel()
         locating = null
-        // A step tapped on the route before is not one of the next route's. While it guides the user
-        // the map follows them: a new route is not fitted.
-        val asked =
-            directions.copy(status = RouteStatus.Finding, routeFitted = directions.guiding, shownStep = null, progress = null)
+        // A step tapped on the route before is not one of the next route's.
+        val asked = directions.copy(status = RouteStatus.Finding, routeFitted = false, shownStep = null)
         state.value = asked
         asking = asked
         request =
@@ -420,29 +498,60 @@ class DirectionsController(
                     } else {
                         routing.route(origin, asked.place, asked.mode)
                     }
-                val status =
-                    when (answer) {
-                        is RouteAnswer.Found -> RouteStatus.Found(answer.route, answer.server)
-                        is RouteAnswer.NoRoute -> RouteStatus.NoRoute(answer.reason)
-                        RouteAnswer.Unreachable -> RouteStatus.Unreachable
-                    }
-                if (status == RouteStatus.Unreachable) health?.failed(ServicePart.Routing) else health?.recovered(ServicePart.Routing)
+                val status = statusOf(answer)
                 // A newer request or a close replaced this one meanwhile (a cancel that came too late);
                 // the steps opened or closed while it ran are kept.
                 val now = state.value
-                if (asking === asked && now != null) {
-                    // Guidance goes on along the new route from where the user is (none found: it says why).
-                    val route = (status as? RouteStatus.Found)?.route
-                    val progress =
-                        if (now.guiding &&
-                            route != null
-                        ) {
-                            now.position?.let { routeProgress(route, it, accuracyMeters = accuracy) }
-                        } else {
-                            null
-                        }
-                    state.value = now.copy(status = status, progress = progress)
-                }
+                if (asking === asked && now != null) state.value = now.copy(status = status)
             }
+    }
+
+    /**
+     * Asks for a new route from the guided user's position in [directions] to the place, the route
+     * they are on kept on the map and guiding them meanwhile: once found it guides them from where
+     * they are then (the map follows them, so it is not fitted); none found, the route they are on
+     * stays and [Directions.noNewRoute] says why. Ended meanwhile, the answer is the card's route.
+     */
+    private fun reroute(directions: Directions) {
+        val position = directions.position ?: return
+        request?.cancel()
+        rerouted = position to timeSource.markNow()
+        val asked = directions.copy(rerouting = true, noNewRoute = null)
+        state.value = asked
+        asking = asked
+        request =
+            scope.launch {
+                val status = statusOf(routing.route(position, asked.place, asked.mode))
+                val now = state.value
+                if (asking !== asked || now == null) return@launch
+                state.value =
+                    when {
+                        !now.guiding -> {
+                            now.copy(status = status)
+                        }
+
+                        status is RouteStatus.Found -> {
+                            offFixes = 0
+                            val progress = now.position?.let { routeProgress(status.route, it, accuracyMeters = accuracy) }
+                            now.copy(status = status, progress = progress, rerouting = false)
+                        }
+
+                        else -> {
+                            now.copy(rerouting = false, noNewRoute = status)
+                        }
+                    }
+            }
+    }
+
+    /** The status of [answer]; every server failing names routing in [health] until one answers. */
+    private fun statusOf(answer: RouteAnswer): RouteStatus {
+        val status =
+            when (answer) {
+                is RouteAnswer.Found -> RouteStatus.Found(answer.route, answer.server)
+                is RouteAnswer.NoRoute -> RouteStatus.NoRoute(answer.reason)
+                RouteAnswer.Unreachable -> RouteStatus.Unreachable
+            }
+        if (status == RouteStatus.Unreachable) health?.failed(ServicePart.Routing) else health?.recovered(ServicePart.Routing)
+        return status
     }
 }

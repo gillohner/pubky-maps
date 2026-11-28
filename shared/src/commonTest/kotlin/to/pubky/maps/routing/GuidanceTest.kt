@@ -4,6 +4,7 @@ import kotlinx.datetime.TimeZone
 import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.map.arrivalText
 import to.pubky.maps.search.Fixtures
+import to.pubky.maps.search.formatDistance
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -130,14 +131,22 @@ class GuidanceTest {
         assertEquals("You're off the route", off.title)
         assertTrue(off.routeAgain)
         assertFalse(off.titleIsDistance)
-        val finding = guiding(null).copy(status = RouteStatus.Finding)
-        assertEquals(GuidanceText("Finding a new route…", null, GuidanceIcon.Other), guidanceText(finding, "K"))
-        val failed = guidanceText(finding.copy(status = RouteStatus.Unreachable), "K")
+        val offBy120 = guiding(routeProgress(route, east(route.points[20], 120.0), previousAlong = along[20]))
+        val finding = guidanceText(offBy120.copy(rerouting = true), "K")
+        assertEquals("Finding a new route…", finding.title)
+        assertEquals("You're about ${formatDistance(offBy120.progress!!.offBy)} off the route", finding.detail)
+        assertFalse(finding.routeAgain)
+        val failed = guidanceText(offBy120.copy(noNewRoute = RouteStatus.Unreachable), "K")
         assertEquals(
             GuidanceText("No new route", "Can't reach the routing server. Check your connection.", GuidanceIcon.Other, routeAgain = true),
             failed,
         )
-        assertEquals(null, guidanceLeftText(finding))
+        // Back on the route, a new route not found is no longer the banner's news.
+        val onIt = guiding(routeProgress(route, route.points[20], previousAlong = along[20])).copy(noNewRoute = RouteStatus.Unreachable)
+        assertTrue(guidanceText(onIt, "K").titleIsDistance)
+        assertFalse(guidanceText(onIt, "K").routeAgain)
+        assertEquals("Finding your location…", guidanceText(guiding(null), "K").title)
+        assertEquals(null, guidanceLeftText(guiding(null)))
     }
 
     @Test

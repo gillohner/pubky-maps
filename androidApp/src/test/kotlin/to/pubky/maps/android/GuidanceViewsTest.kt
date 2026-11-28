@@ -120,12 +120,24 @@ class GuidanceViewsTest {
     private fun guiding(
         progress: RouteProgress,
         following: Boolean,
+        rerouting: Boolean = false,
+        noNewRoute: RouteStatus? = null,
     ) {
         compose.setContent {
             PubkyMapsTheme(darkTheme = false) {
                 val ui =
                     GuidanceUi(
-                        Directions("osm:node/1", kunsthaus, TravelMode.Car, hb, found, guiding = true, progress = progress),
+                        Directions(
+                            "osm:node/1",
+                            kunsthaus,
+                            TravelMode.Car,
+                            hb,
+                            found,
+                            guiding = true,
+                            progress = progress,
+                            rerouting = rerouting,
+                            noNewRoute = noNewRoute,
+                        ),
                         placeName = "Kunsthaus",
                         arrival = "12:05",
                         following = following,
@@ -169,5 +181,25 @@ class GuidanceViewsTest {
         assertEquals(1, again)
         compose.onNodeWithText("Re-centre").performClick()
         assertEquals(1, recentred)
+    }
+
+    @Test
+    fun whileANewRouteIsAskedForTheRouteStillSaysWhatIsLeftAndOffersNoOther() {
+        guiding(onTheWay.copy(offRoute = true, offBy = 120.0), following = true, rerouting = true)
+        compose.onNodeWithText("Finding a new route…").assertExists()
+        compose.onNodeWithText("You're about 120 m off the route").assertExists()
+        compose.onNodeWithText("Find a new route").assertDoesNotExist()
+        compose.onNodeWithText("3 min · 900 m").assertExists()
+        compose.onNodeWithText("Routing: Valhalla by FOSSGIS · © OpenStreetMap contributors · Report a map error").assertExists()
+    }
+
+    @Test
+    fun noNewRouteSaysWhyAndOffersOneAgain() {
+        guiding(onTheWay.copy(offRoute = true, offBy = 120.0), following = true, noNewRoute = RouteStatus.Unreachable)
+        compose.onNodeWithText("No new route").assertExists()
+        compose.onNodeWithText("Can't reach the routing server. Check your connection.").assertExists()
+        compose.onNodeWithText("Find a new route").performClick()
+        assertEquals(1, again)
+        compose.onNodeWithText("3 min · 900 m").assertExists()
     }
 }

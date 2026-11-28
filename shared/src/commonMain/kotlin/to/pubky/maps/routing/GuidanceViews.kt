@@ -42,7 +42,7 @@ data class GuidanceUi(
     val following: Boolean,
     /** The map follows the user again. */
     val onRecenter: () -> Unit,
-    /** Asks for a new route from the user's position: off the route, or after a new route was not found. */
+    /** Asks for a new route from the user's position at once: off the route, also after a new route was not found. */
     val onRouteAgain: () -> Unit,
     val onEnd: () -> Unit,
     /** The routing server's credits and the link to report a map error, as under the route on its card. */
@@ -75,20 +75,27 @@ sealed interface GuidanceIcon {
 
 /**
  * What the banner says while [directions] guide the user to [placeName]: the next step ("150 m",
- * "Turn right onto Museumstrasse."), "Now" for it under 10 m, that they arrived, that they are off
- * the route (with a new route to ask for), that a new route is asked for, or why none came.
+ * "Turn right onto Museumstrasse."), "Now" for it under 10 m, that they arrived, or that they are off
+ * the route: a new route asked for, why none came (with a new route to ask for again), or, before
+ * one is asked, a new route to ask for. Before their place on the route is known, that it is looked for.
  */
 fun guidanceText(
     directions: Directions,
     placeName: String,
 ): GuidanceText {
     val found = directions.status as? RouteStatus.Found
-    if (found == null) {
-        if (directions.status == RouteStatus.Finding) return GuidanceText("Finding a new route…", null, GuidanceIcon.Other)
-        return GuidanceText("No new route", routeStatusText(directions), GuidanceIcon.Other, routeAgain = true)
-    }
-    val progress = directions.progress ?: return GuidanceText("Finding your location…", null, GuidanceIcon.Other)
+    val progress = directions.progress
+    if (found == null || progress == null) return GuidanceText("Finding your location…", null, GuidanceIcon.Other)
+    val noNewRoute = directions.noNewRoute
     return when {
+        progress.offRoute && directions.rerouting -> {
+            GuidanceText("Finding a new route…", "You're about ${formatDistance(progress.offBy)} off the route", GuidanceIcon.Other)
+        }
+
+        progress.offRoute && noNewRoute != null -> {
+            GuidanceText("No new route", routeStatusText(directions.copy(status = noNewRoute)), GuidanceIcon.Other, routeAgain = true)
+        }
+
         progress.offRoute -> {
             GuidanceText("You're off the route", "About ${formatDistance(progress.offBy)} from it", GuidanceIcon.Other, routeAgain = true)
         }

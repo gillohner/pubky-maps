@@ -85,7 +85,7 @@ internal fun rememberGuidance(
         if (!guiding) return@LaunchedEffect
         snapshotFlow { locationState.lastLocation }
             .filterNotNull()
-            .collect { directions.guide(it.point, it.accuracyMeters) }
+            .collect { directions.guide(it.point, it.accuracyMeters, it.measuredAt) }
     }
     // The first value is the reason of the move that is already over.
     LaunchedEffect(guiding) {
