@@ -323,6 +323,10 @@ switch_street_photos() {
 # in the settings, so it goes off again for the steps after.
 started=$(adb shell am start -W -a android.intent.action.VIEW -d "'geo:48.8606,2.3376?z=16'" -p "$pkg" 2>&1) || true
 if grep -q "Error" <<< "$started"; then fail "the map link to Paris did not reach the app: $started"; fi
+# The link opens its point's page in the sheet, where my location (and Layers above it) ride on the
+# sheet without Layers; closing it leaves the map at Paris.
+xy=$(wait_for "Close" 20) || fail "the map link to Paris opened no page"
+adb shell input tap $xy
 switch_street_photos true
 shown=""
 for _ in $(seq 1 15); do
