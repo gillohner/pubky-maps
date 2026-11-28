@@ -81,14 +81,16 @@ private val PubkyPoiSize = DpSize(24.dp, 24.dp)
 private val STYLE_ICONS_RETRY = 30.seconds
 
 /**
- * The base map's sources of points of interest, the font its labels use and its lowest layer of
- * place names ([placeNamesLayerOf]), read from the style at [styleUrl].
+ * The base map's sources of points of interest, the font its labels use, its lowest layer of
+ * place names ([placeNamesLayerOf]) and its lowest label layer ([lowestLabelLayerOf]), read from the
+ * style at [styleUrl].
  */
 internal data class PoiBase(
     val sources: List<PoiSource>,
     val font: List<String>?,
     val styleUrl: String?,
     val placeNames: String?,
+    val labels: String? = null,
 )
 
 /**
@@ -234,7 +236,7 @@ private suspend fun MapState.poiBase(styleUrl: String?): PoiBase? =
         val layers = style.layers.toList()
         val refs = layers.map { StyleLayerRef(it.source, it.sourceLayer, it.id, it.type) }
         val fonts = layers.filter { it.type == "symbol" }.map { it.getProperty("text-font") }
-        PoiBase(poiSourcesOf(refs), highlightFont(fonts), styleUrl, placeNamesLayerOf(refs))
+        PoiBase(poiSourcesOf(refs), highlightFont(fonts), styleUrl, placeNamesLayerOf(refs), lowestLabelLayerOf(refs))
     } catch (e: CancellationException) {
         throw e
     } catch (_: Exception) {

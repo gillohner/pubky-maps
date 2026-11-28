@@ -39,7 +39,8 @@ import java.io.File
  * servers of the list (a note no server could be reached for waits in the no-backup folder until the
  * phone is online); the Pubky places the base map has as points of interest take its own icons from
  * the map style's files, and a page shows the street-level photos of its place from the Panoramax
- * servers of the list. Create it once per process.
+ * servers of the list, which also draw where they have photos on the map when the user turns that
+ * layer on. Create it once per process.
  */
 fun androidPlaceServices(
     context: Context,
@@ -97,5 +98,6 @@ fun androidPlaceServices(
             ),
         styleIcons = StyleIcons(client),
         streetPhotos = StreetPhotosController(HttpPanoramax(client, servers = { servers(Service.Panoramax) }), main, health),
+        streetPhotoLayer = StreetPhotoLayer(HttpStreetPhotoTiles(client), main, health),
     )
 }

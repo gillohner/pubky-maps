@@ -33,11 +33,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,6 +49,9 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
@@ -73,6 +78,7 @@ import to.pubky.maps.status.ServicePart
 import to.pubky.maps.ui.AppIcons
 import to.pubky.maps.ui.MapSurfaces
 import to.pubky.maps.ui.NoteWithAction
+import to.pubky.maps.ui.SystemBack
 import to.pubky.maps.ui.rememberSafeLinkOpener
 
 /** Space between the screen's safe area and the map controls. */
@@ -147,8 +153,15 @@ fun MapScreen(
     onSheetAtTop: (Boolean) -> Unit = {},
     /** A route guiding the user: the map shows only its banner and bar, no search or place page. */
     guidance: GuidanceUi? = null,
+    /** The layers the map can draw; null shows no Layers button. */
+    layers: MapLayersUi? = null,
     map: @Composable () -> Unit,
 ) {
+    // Kept on rotation, as Google Maps keeps its Layers sheet open; closed when guidance or the area
+    // picker takes the map, so it does not come back over the map after them.
+    var layersOpen by rememberSaveable { mutableStateOf(false) }
+    val mapTaken = guidance != null || areaPicker != null
+    LaunchedEffect(mapTaken) { if (mapTaken) layersOpen = false }
     BoxWithConstraints(modifier.fillMaxSize()) {
         val wide = maxWidth >= SidePanelMinWidth
         val mode = search?.state?.mode ?: SearchMode.Idle
@@ -180,9 +193,12 @@ fun MapScreen(
             return@BoxWithConstraints
         }
         StatusBarScrim()
+        val layersShown = layers != null && layersOpen
         BoxWithConstraints(
             Modifier
                 .fillMaxSize()
+                // Under the open layers panel the controls are out of TalkBack's reach, as under a modal sheet.
+                .then(if (layersShown) Modifier.clearAndSetSemantics {} else Modifier)
                 .windowInsetsPadding(WindowInsets.safeDrawing)
                 .padding(MapControlMargin),
         ) {
@@ -270,6 +286,8 @@ fun MapScreen(
                         onMyLocation,
                         snackbarHostState,
                         creditsStart = if (pagePanel) SidePanelWidth + MapControlMargin else 0.dp,
+                        layers = layers,
+                        onOpenLayers = { layersOpen = true },
                     )
                     if (placeCard != null) {
                         Box(Modifier.padding(top = MapControlMargin)) { placeCard() }
@@ -327,6 +345,12 @@ fun MapScreen(
         }
         if (search != null && !wide && mode == SearchMode.Editing) {
             SearchPage(search)
+        }
+        // Over everything else, as a modal sheet; opened from the Layers button, which shows where my
+        // location does not ride on a sheet (the map alone, with a place card, beside a tablet's panel).
+        if (layers != null && layersOpen) {
+            SystemBack { layersOpen = false }
+            MapLayersPanel(layers, onClose = { layersOpen = false })
         }
     }
 }
@@ -412,7 +436,9 @@ internal fun PlaceSheetWithControls(
 
 /**
  * My location at the end, and under it the data credits in the bottom start corner, on a line of
- * their own so they never run under the button; snackbars above both.
+ * their own so they never run under the button; snackbars above both. With [layers], the Layers
+ * button sits above my location: the top end under the search bar is where a phone's notices take
+ * the whole width and the compass shows up, and the map's other round button is down here.
  */
 @Composable
 private fun BottomControls(
@@ -422,12 +448,26 @@ private fun BottomControls(
     creditsStart: Dp = 0.dp,
     /** False where the screen shows its snackbars elsewhere (the place sheet has its own host). */
     snackbars: Boolean = true,
+    layers: MapLayersUi? = null,
+    onOpenLayers: () -> Unit = {},
 ) {
     Column(Modifier.fillMaxWidth()) {
         if (snackbars) {
             SnackbarHost(
                 hostState = snackbarHostState,
                 modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = MapControlMargin),
+            )
+        }
+        if (layers != null) {
+            // Tinted while a layer is on, as the voice switch is while it speaks.
+            MapButton(
+                icon = AppIcons.Layers,
+                contentDescription = "Map layers",
+                onClick = onOpenLayers,
+                size = TopControlSize,
+                tinted = layers.streetPhotos,
+                stateDescription = if (layers.streetPhotos) "Street-level photos on" else null,
+                modifier = Modifier.align(Alignment.End).padding(end = 4.dp, bottom = MapControlMargin),
             )
         }
         MapButton(
@@ -526,11 +566,13 @@ private fun MapButton(
     modifier: Modifier = Modifier,
     tinted: Boolean = false,
     badge: Boolean = false,
+    /** What TalkBack says of the button's state after its name; null for none. */
+    stateDescription: String? = null,
 ) {
     Box(modifier.size(size)) {
         Surface(
             onClick = onClick,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().semantics { stateDescription?.let { this.stateDescription = it } },
             shape = CircleShape,
             color = MapSurfaces.control,
             border = MapSurfaces.edge,

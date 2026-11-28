@@ -120,6 +120,9 @@ object AppIcons {
                 "m-1-6h-3V8h-2v5H8l4 4 4-4z",
         )
 
+    val Layers: ImageVector =
+        icon("Layers", "M11.99 18.54l-7.37-5.73L3 14.07l9 7 9-7-1.63-1.27-7.38 5.74zM12 16l7.36-5.73L21 9l-9-7-9 7 1.63 1.27L12 16z")
+
     val Share: ImageVector =
         icon(
             "Share",

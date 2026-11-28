@@ -18,7 +18,7 @@ class SettingsCodecTest {
             .withServerRemoved(Service.PkarrRelay, "https://pkarr.pubky.org")
             .withStorage(DataKind.CheckIns, StorageChoice.Public)
             .withOpenIn(OpenInApp.Waze, false)
-            .copy(followLocalRules = false, voiceGuidance = false)
+            .copy(followLocalRules = false, voiceGuidance = false, streetPhotosLayer = true)
 
     private fun assertAdded(result: AppSettings.AddServerResult) = (result as AppSettings.AddServerResult.Added).settings
 
@@ -46,6 +46,14 @@ class SettingsCodecTest {
         assertTrue("\"followLocalRules\": false" in codec.encode(AppSettings(followLocalRules = false)))
         assertFalse("voiceGuidance" in text, text)
         assertTrue("\"voiceGuidance\": false" in codec.encode(AppSettings(voiceGuidance = false)))
+        assertFalse("streetPhotosLayer" in text, text)
+        assertTrue("\"streetPhotosLayer\": true" in codec.encode(AppSettings(streetPhotosLayer = true)))
+    }
+
+    @Test
+    fun theStreetPhotoLayerIsOffUntilTheUserTurnsItOn() {
+        assertFalse(codec.decode("{}").streetPhotosLayer)
+        assertTrue(codec.decode("""{"schemaVersion": $SETTINGS_SCHEMA_VERSION, "streetPhotosLayer": true}""").streetPhotosLayer)
     }
 
     @Test
