@@ -33,7 +33,7 @@ import to.pubky.maps.write.SavedScreenState
 
 /**
  * A collection on the Bookmarks page opens as its own page, as Google Maps, CoMaps and OsmAnd open a
- * list: its name in the top bar, its places without the bookmarks around them; the back arrow and the
+ * list: its name in the top bar, its places without the bookmarks or other collections; the back arrow and the
  * system back return to the Bookmarks page, and the next system back leaves it.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -83,12 +83,12 @@ class CollectionPageTest {
 
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithText("Bookmarks").assertExists()
-        compose.onNodeWithText("Lindenhof").assertExists()
+        compose.onNodeWithText("Bookmarked places").assertExists()
         assertEquals("the arrow on a collection's page goes back to Bookmarks, not out of it", 0, backs)
 
         compose.onNode(hasText("Coffee in Zürich") and hasClickAction()).performClick()
         pressBack()
-        compose.onNodeWithText("Lindenhof").assertExists()
+        compose.onNodeWithText("Bookmarked places").assertExists()
         assertFalse(compose.activity.isFinishing)
 
         // On the Bookmarks page, back is no longer the page's: it goes on to the app.
@@ -135,28 +135,28 @@ class CollectionPageTest {
         lists = listOf(walks)
         compose.waitForIdle()
         compose.onNodeWithText("Bookmarks").assertExists()
-        compose.onNodeWithText("Lindenhof").assertExists()
+        compose.onNodeWithText("Bookmarked places").assertExists()
         compose.onAllNodesWithText("Coffee in Zürich").assertCountEquals(0)
         compose.onAllNodesWithText("Conditorei Schober").assertCountEquals(0)
         // The page is forgotten: a later read that has the collection again does not open it by itself.
         lists = listOf(coffee, walks)
         compose.waitForIdle()
-        compose.onNodeWithText("Lindenhof").assertExists()
+        compose.onNodeWithText("Bookmarked places").assertExists()
         compose.onAllNodesWithText("Conditorei Schober").assertCountEquals(0)
     }
 
     @Test
-    fun backFromACollectionFindsTheBookmarksWhereTheyWere() {
-        val many = (1..30).map { SavedRow("https://www.openstreetmap.org/node/$it", "Place $it", Kept.Private) }
+    fun backFromACollectionFindsTheBookmarksPageWhereItWas() {
+        val many = (1..30).map { OwnList("phone:$it", Kept.Phone, "Collection $it", emptyList()) }
         compose.setContent {
             PubkyMapsTheme(darkTheme = false) {
-                SavedScreen(state().copy(places = many), onOpen = { _, _ -> }, onBack = {})
+                SavedScreen(state(many + coffee), onOpen = { _, _ -> }, onBack = {})
             }
         }
         compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Coffee in Zürich") and hasClickAction())
         compose.onNode(hasText("Coffee in Zürich") and hasClickAction()).performClick()
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNode(hasText("Coffee in Zürich") and hasClickAction()).assertIsDisplayed()
-        compose.onAllNodesWithText("Place 1").assertCountEquals(0)
+        compose.onAllNodesWithText("Collection 1").assertCountEquals(0)
     }
 }
