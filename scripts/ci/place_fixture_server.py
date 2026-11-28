@@ -4,7 +4,7 @@ place) on 127.0.0.1 for the emulator place test, so it needs no public network: 
 Schober's card, its lists, tags, posts and people, and the places in Zürich's old town. Other links
 are unknown (404), as on a real Pinakes. Valhalla's /route answers FOSSGIS' recorded route from
 Zürich HB for any request. Panoramax' /api/search answers the federation's recorded answer for a
-place in Nantes (fixtures/panoramax) for any place, its thumbnails served here as one small PNG.
+place in Nantes (fixtures/panoramax) for any place, its thumbnails and viewer copies served here as one small PNG.
 Every request is logged as one JSON line (method, path, uri or uris, Pinakes' referenced filter, a
 route's costing and locations, Panoramax' place_position, User-Agent).
 
@@ -37,6 +37,7 @@ with open(f"{fixtures}/../panoramax/search-nantes.json", encoding="utf-8") as f:
     STREET_PHOTOS = json.load(f)
 for feature in STREET_PHOTOS["features"]:
     feature["assets"]["thumb"]["href"] = f"http://127.0.0.1:{port}/panoramax/thumb/{feature['id']}.png"
+    feature["assets"]["sd"]["href"] = f"http://127.0.0.1:{port}/panoramax/sd/{feature['id']}.png"
 
 
 def png(width: int, height: int, rgb: tuple[int, int, int]) -> bytes:
@@ -78,7 +79,7 @@ class Handler(BaseHTTPRequestHandler):
         path = url.path
         if path == "/api/search":
             self.answer(200, STREET_PHOTOS)
-        elif path.startswith("/panoramax/thumb/"):
+        elif path.startswith(("/panoramax/thumb/", "/panoramax/sd/")):
             self.send_response(200)
             self.send_header("Content-Type", "image/png")
             self.send_header("Content-Length", str(len(THUMBNAIL)))

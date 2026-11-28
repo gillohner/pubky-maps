@@ -114,6 +114,8 @@ data class PlacePageActions(
     val routeStart: RouteStartChoice? = null,
     /** Street-level photos that show the place, from Panoramax; empty while none are known. */
     val streetPhotos: List<StreetPhoto> = emptyList(),
+    /** Opens one of [streetPhotos] in the app's photo viewer. */
+    val onOpenStreetPhoto: (StreetPhoto) -> Unit = {},
 )
 
 /** "Start here" on a place page: the place as the start of directions to the places opened next. */
@@ -268,17 +270,19 @@ typealias RemoteImageContent = @Composable (
     contentDescription: String?,
     modifier: Modifier,
     placeholder: Boolean,
+    contentScale: ContentScale,
     onError: () -> Unit,
 ) -> Unit
 
 /**
  * Draws a remote image: a grey placeholder while it loads when [placeholder] is set (else nothing, so
- * what is under it shows), [onError] when it cannot be loaded (the caller then leaves it out). The
- * app uses Coil; screenshot tests provide a local stand-in, since images load over the network.
+ * what is under it shows), scaled into its bounds by `contentScale` (pages crop, the photo viewer fits),
+ * [onError] when it cannot be loaded (the caller then leaves it out). The app uses Coil; screenshot
+ * tests provide a local stand-in, since images load over the network.
  */
 val LocalRemoteImage =
     staticCompositionLocalOf<RemoteImageContent> {
-        { url, contentDescription, modifier, placeholder, onError ->
+        { url, contentDescription, modifier, placeholder, contentScale, onError ->
             val grey = if (placeholder) ColorPainter(MaterialTheme.colorScheme.surfaceContainerHighest) else null
             AsyncImage(
                 model = url,
@@ -287,7 +291,7 @@ val LocalRemoteImage =
                 placeholder = grey,
                 error = grey,
                 onError = { onError() },
-                contentScale = ContentScale.Crop,
+                contentScale = contentScale,
             )
         }
     }
@@ -304,7 +308,7 @@ private fun RemoteImage(
     var failed by remember(url) { mutableStateOf(false) }
     if (failed) return
     Box(modifier) {
-        LocalRemoteImage.current(url, contentDescription, Modifier.matchParentSize(), true) {
+        LocalRemoteImage.current(url, contentDescription, Modifier.matchParentSize(), true, ContentScale.Crop) {
             failed = true
             onFailed()
         }
@@ -386,7 +390,7 @@ fun PlaceSections(
         val alsoOn = card?.let { alsoOnShown(it.alsoOn, page.place.uri, context.language, hasWebsite = osm?.website != null) }.orEmpty()
         if (alsoOn.isNotEmpty()) AlsoOnSection(alsoOn, actions)
         // From outside Pubky, as "Also on": after the Pubky sections, before the map problem button.
-        if (actions.streetPhotos.isNotEmpty()) StreetPhotosSection(actions.streetPhotos, actions.onOpenLink)
+        if (actions.streetPhotos.isNotEmpty()) StreetPhotosSection(actions.streetPhotos, actions.onOpenStreetPhoto, actions.onOpenLink)
         // After the card, as the coordinates: under a loading page it would drop down as the sections come.
         if (!page.cardLoading) actions.onReportProblem?.let { ReportProblemButton(it) }
         DataCredits(page, actions)
@@ -771,7 +775,7 @@ private fun Avatar(
         }
         person?.avatarUrl?.let { url ->
             // No placeholder: the initial or icon under it shows while it loads and when it fails.
-            LocalRemoteImage.current(url, null, Modifier.size(size.dp), false) {}
+            LocalRemoteImage.current(url, null, Modifier.size(size.dp), false, ContentScale.Crop) {}
         }
     }
 }

@@ -42,7 +42,7 @@ import to.pubky.maps.ui.PubkyMapsTheme
 
 /**
  * The place page's street-level photos: each photo one TalkBack stop that names who took it and when
- * and opens it in Panoramax' viewer, the licences under them opening their text, and no section when
+ * and opens it in the app's photo viewer, the licences under them opening their text, and no section when
  * there are no photos or none of them loads.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -90,9 +90,10 @@ class StreetPhotosSectionTest {
         StreetPhoto("00000000-0000-4000-8000-000000000001", "https://x.test/t.jpg", "https://x.test/#p", null, null, null, null)
 
     private val opened = ArrayList<String>()
+    private val openedPhotos = ArrayList<StreetPhoto>()
 
-    private val drawn: RemoteImageContent = { _, _, modifier, _, _ -> Box(modifier) }
-    private val failing: RemoteImageContent = { _, _, _, _, onError -> SideEffect { onError() } }
+    private val drawn: RemoteImageContent = { _, _, modifier, _, _, _ -> Box(modifier) }
+    private val failing: RemoteImageContent = { _, _, _, _, _, onError -> SideEffect { onError() } }
 
     private fun show(
         photos: List<StreetPhoto>,
@@ -107,6 +108,7 @@ class StreetPhotosSectionTest {
                 onOpenLink = { opened += it },
                 onLoadMorePosts = {},
                 streetPhotos = photos,
+                onOpenStreetPhoto = { openedPhotos += it },
             )
         compose.setContent {
             PubkyMapsTheme {
@@ -119,16 +121,17 @@ class StreetPhotosSectionTest {
     }
 
     @Test
-    fun aPhotoIsOneStopNamingWhoTookItAndWhenAndOpensInPanoramax() {
+    fun aPhotoIsOneStopNamingWhoTookItAndWhenAndOpensInTheViewer() {
         show(listOf(koreller, ign))
         val tile = compose.onNodeWithContentDescription("Street-level photo by Koreller taken Jul 2025")
         val node = tile.performScrollTo().fetchSemanticsNode()
         assertEquals(Role.Button, node.config.getOrNull(SemanticsProperties.Role))
-        assertEquals("Open in Panoramax", node.config.getOrNull(SemanticsActions.OnClick)?.label)
+        assertEquals("Open the photo", node.config.getOrNull(SemanticsActions.OnClick)?.label)
         // Its caption lines are part of that one stop, not stops of their own.
         compose.onAllNodesWithText("Koreller").assertCountEquals(0)
         tile.performClick()
-        assertEquals(listOf(koreller.viewerUrl), opened)
+        assertEquals(listOf(koreller), openedPhotos)
+        assertEquals(emptyList<String>(), opened)
         compose.onNodeWithContentDescription("Street-level photo by immergis taken Apr 2026").assertExists()
     }
 

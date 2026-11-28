@@ -46,6 +46,7 @@ import to.pubky.maps.osm.osmIdOfRouteText
 import to.pubky.maps.osm.routeText
 import to.pubky.maps.place.OpenInApps
 import to.pubky.maps.place.PlaceServices
+import to.pubky.maps.place.StreetPhotoRoute
 import to.pubky.maps.search.SearchServices
 import to.pubky.maps.search.searchHttpClient
 import to.pubky.maps.settings.AddServerScreen
@@ -143,6 +144,21 @@ private data class NoteDestination(
         this(target.point.lat.toString(), target.point.lon.toString(), target.name, target.osm?.routeText)
 
     val target: NoteTarget get() = NoteTarget(GeoPoint(lat.toDouble(), lon.toDouble()), name, osm?.let(::osmIdOfRouteText))
+}
+
+/**
+ * The street-level photo [photo] (its Panoramax id) of the place at [lat], [lon], in the app's photo
+ * viewer, with the place's other photos to switch to. As text, like [NoteDestination]'s point.
+ */
+@Serializable
+private data class StreetPhotoDestination(
+    val lat: String,
+    val lon: String,
+    val photo: String,
+) {
+    constructor(place: GeoPoint, photo: String) : this(place.lat.toString(), place.lon.toString(), photo)
+
+    val place: GeoPoint get() = GeoPoint(lat.toDouble(), lon.toDouble())
 }
 
 /**
@@ -344,6 +360,7 @@ private fun AppNavigation(
                 },
                 onOpenSaved = writes?.let { { navController.open(SavedDestination) } },
                 onReportProblem = places?.notes?.let { { target -> navController.open(NoteDestination(target)) } },
+                onOpenStreetPhoto = { place, photo -> navController.open(StreetPhotoDestination(place, photo)) },
                 offline = offline,
                 onDownloadStarted = { navController.open(OfflineMapsDestination) },
                 onMapDrawn = onMapDrawn,
@@ -495,6 +512,12 @@ private fun AppNavigation(
                 NoteRoute(notes, entry.toRoute<NoteDestination>().target, onClose = back)
             }
             composable<NotesWaitingDestination> { NotesWaitingRoute(notes, onBack = back) }
+        }
+        places?.streetPhotos?.let { photos ->
+            composable<StreetPhotoDestination> { entry ->
+                val route = entry.toRoute<StreetPhotoDestination>()
+                StreetPhotoRoute(photos, route.place, route.photo, onBack = back)
+            }
         }
         composable<ServersDestination> {
             ServersScreen(

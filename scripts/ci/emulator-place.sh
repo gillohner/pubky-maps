@@ -221,6 +221,31 @@ wait_for "Street-level photo by Koreller taken Jul 2025" 5 > /dev/null || fail "
 wait_for "Photos: Panoramax, CC BY-SA 4.0" 5 > /dev/null || fail "no CC BY-SA licence under the street-level photos"
 screenshot place-street-photos
 check_alive "street-level photos"
+# A photo opens in the app's viewer (the place's photos known already: Panoramax not asked again),
+# with its credits, Open in Panoramax and the place's other photos; Back returns to the place page.
+xy=$(wait_for "Street-level photo by Koreller taken Jul 2025" 5) || fail "no street-level photo to tap"
+adb shell input tap $xy
+wait_for "Open in Panoramax" 10 > /dev/null || fail "the street-level photo did not open in the viewer"
+wait_for "1 of 4" 5 > /dev/null || fail "the viewer does not count the place's photos"
+wait_for "Photo 2 of 4, street-level photo by immergis taken Apr 2026" 5 > /dev/null || fail "no other photos to switch to in the viewer"
+screenshot street-photo-viewer
+check_alive "street-level photo viewer"
+adb shell input keyevent KEYCODE_BACK
+# The map is drawn anew under the page: wait for the page (at its photos or its top) to be back.
+back=""
+for _ in 1 2 3 4 5 6; do
+    dump=$(dump_ui viewer-back)
+    if centre_of "$dump" "Street-level photo by Koreller taken Jul 2025" > /dev/null ||
+        centre_of "$dump" "Conditorei schober" > /dev/null; then
+        back=1
+        break
+    fi
+    sleep 2
+done
+[ -n "$back" ] || fail "Back from the photo viewer did not return to the place page"
+sleep 1
+dump=$(dump_ui viewer-gone)
+centre_of "$dump" "Open in Panoramax" > /dev/null && fail "the photo viewer is still open after Back"
 
 adb shell input keyevent KEYCODE_BACK
 sleep 2
@@ -393,11 +418,12 @@ pin = routes[4]["locations"][0]
 assert abs(pin["lat"] - 47.37) < 0.1 and abs(pin["lon"] - 8.54) < 0.1, pin
 # Street-level photos: Panoramax asked once for the Schober, for the card's point, with the app's
 # User-Agent (the link opened again shows the kept answer); the dropped pin's point asked of no
-# server; the thumbnails loaded.
+# server; the thumbnails and the viewer's larger copy loaded.
 photos = [l for l in lines if l["path"] == "/api/search"]
 assert len(photos) == 1 and photos[0]["ua"].startswith("PubkyMaps/"), photos
 assert photos[0]["place_position"] == "8.5418241,47.3708689", photos[0]
 assert any(l["path"].startswith("/panoramax/thumb/") for l in lines), paths
+assert any(l["path"].startswith("/panoramax/sd/") for l in lines), paths
 print("requests:", len(lines), sorted(set(paths)))
 PY
 
