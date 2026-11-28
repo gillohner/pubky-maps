@@ -100,6 +100,7 @@ class CollectionOtherLinksTest {
                 ListPage(
                     state = ListPageState(placeName = "Conditorei Schober", lists = listOf(ListChoice(full, holds = false))),
                     onToggle = {},
+                    onNewOpenChange = {},
                     onNewNameChange = {},
                     onNewDescriptionChange = {},
                     onNewKeptChange = {},
