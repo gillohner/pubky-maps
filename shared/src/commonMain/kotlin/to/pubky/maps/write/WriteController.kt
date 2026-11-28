@@ -17,6 +17,8 @@ import kotlinx.coroutines.withContext
 import to.pubky.maps.account.AccountState
 import to.pubky.maps.account.Connection
 import to.pubky.maps.account.CoreFailure
+import to.pubky.maps.account.WebPagePlaces
+import to.pubky.maps.account.notPlaces
 import to.pubky.maps.cache.CachedAccount
 import to.pubky.maps.cache.CachedBookmark
 import to.pubky.maps.cache.CachedTag
@@ -84,6 +86,11 @@ class WriteController(
     private val scope: CoroutineScope,
     private val io: CoroutineDispatcher,
     private val now: () -> Long,
+    /**
+     * Which web pages in the user's collections are places; the others count as other links, as
+     * another app's posts in a collection do (the collections folder is shared with pubky.app).
+     */
+    private val webPages: WebPagePlaces,
     /** Waits between attempts while offline; the last one repeats. */
     private val retryDelays: List<Duration> = listOf(15.seconds, 30.seconds, 60.seconds, 120.seconds, 300.seconds),
 ) {
@@ -155,6 +162,24 @@ class WriteController(
     private var sendJob: Job? = null
     private var retryJob: Job? = null
     private var listsJob: Job? = null
+
+    /**
+     * The web pages in the homeserver lists that Pinakes knows as no place ([checkListPages]); [own]
+     * shows their items as other links.
+     */
+    private var notPlacePages: Set<String> = emptySet()
+
+    /**
+     * Lists the user edited since the last scan of their root (in this process): shown even when only
+     * other links are left in them, as are lists with an edit waiting in the outbox.
+     */
+    private var editedLists: Set<String> = emptySet()
+
+    /** Asks Pinakes about the web pages the last list scan read. */
+    private var pagesJob: Job? = null
+
+    /** Counts the page checks: only the answers of the latest one are applied. */
+    private var pagesChecks = 0
 
     /** Counts sign-ins and sign-outs: a result is applied only for the account it was made for. */
     private var generation = 0
@@ -632,6 +657,11 @@ class WriteController(
             retryJob = null
             listsJob?.cancel()
             listsJob = null
+            pagesJob?.cancel()
+            pagesJob = null
+            pagesChecks++
+            notPlacePages = emptySet()
+            editedLists = emptySet()
             confirmed = emptyList()
             inFlight = null
             listsLoaded = false
@@ -647,6 +677,8 @@ class WriteController(
                 labels = io { store.labels() }
                 points = io { store.points() }
                 summaries = io { store.summaries() }
+                // The answers Pinakes gave in this process apply at once; the next scan asks about the rest.
+                checkListPages(ask = false)
                 // Photos of writes that are no longer queued (sent, or dropped by a sign-out) are not needed.
                 io { files.deleteAllBut(queue.mapNotNull { (it.op as? WriteOp.Photo)?.file }.toSet()) }
             } else {
@@ -829,6 +861,7 @@ class WriteController(
                 if (list != null) {
                     io { store.putList(list) }
                     lists = lists.filterNot { it.uri == list.uri } + list
+                    editedLists = editedLists + list.uri
                     if (listsJob?.isActive == true) listsSinceScan = listsSinceScan + (list.uri to list)
                 }
             }
@@ -897,10 +930,48 @@ class WriteController(
             }
             lists = lists.filterNot { (it.kept == Kept.Private) == isPrivate } + merged
         }
+        if (scans.any { (_, scan) -> scan != null }) {
+            // A root that could not be read keeps its edited lists shown.
+            val unread = scans.filter { (_, scan) -> scan == null }.map { (isPrivate, _) -> isPrivate }
+            editedLists = listsSinceScan.keys + editedLists.filter { listAddress(it)?.first in unread }
+            checkListPages(ask = true)
+        }
         // A root that could not be read, or posts that could not be, keep their lists as last read; the
         // page says they may be out of date.
         listsLoaded = scans.all { (_, scan) -> scan != null && scan.unreadPostIds.isEmpty() }
         publish()
+    }
+
+    /**
+     * Shows the items of the homeserver lists on web pages Pinakes already knows as no place as other
+     * links, and with [ask] asks Pinakes about the pages it holds no answer for (at most
+     * [to.pubky.maps.account.MAX_PAGE_CHECKS] per scan, the account refresh's way: a page is shown
+     * while no Pinakes server answers for it). The lists show first; each answer changes them only
+     * once the checks are done. A new check starts over; the answers given are kept by [webPages].
+     */
+    private suspend fun checkListPages(ask: Boolean) {
+        pagesJob?.cancel()
+        pagesJob = null
+        val check = ++pagesChecks
+        // Also an Error: a core library that did not load must not stop the queue. Off the main
+        // thread: the rule is a call into the core per item.
+        val current = lists
+        val known = attempt { withContext(io) { knownListPages(current, webPages) } }.getOrNull() ?: return
+        // A page shown as no place stays so while it is asked again (its answer is an hour old), so a
+        // collection does not show and go again under the user's finger.
+        val asking = if (ask) known.unchecked.toSet() else emptySet()
+        notPlacePages = known.notPlaces + notPlacePages.filter { it in asking }
+        if (asking.isEmpty()) return
+        pagesJob =
+            scope.launch {
+                val dropped = attempt { notPlaces(known.unchecked, webPages) }.getOrNull().orEmpty()
+                enqueue {
+                    if (check == pagesChecks) {
+                        notPlacePages = known.notPlaces + dropped
+                        publish()
+                    }
+                }
+            }
     }
 
     // --- State ------------------------------------------------------------------------------
@@ -915,7 +986,7 @@ class WriteController(
             ownData(
                 viewer = viewer,
                 cached = cached,
-                lists = lists,
+                lists = lists.withoutPagesOf(notPlacePages, editedLists + queue.mapNotNull { (it.op as? WriteOp.EditList)?.list }),
                 phone = phoneData,
                 queue = queue,
                 confirmed = confirmed,
