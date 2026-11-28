@@ -349,6 +349,8 @@ private fun AppNavigation(
                 onMapDrawn = onMapDrawn,
                 startView = opensAt.view,
                 onViewRested = { lastMapView?.save(it) },
+                voiceGuidance = settings.voiceGuidance,
+                onVoiceGuidanceChange = { on -> update { it.copy(voiceGuidance = on) } },
             )
         }
         composable<SettingsDestination> {

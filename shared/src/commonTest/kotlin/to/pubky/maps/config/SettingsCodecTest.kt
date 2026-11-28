@@ -18,7 +18,7 @@ class SettingsCodecTest {
             .withServerRemoved(Service.PkarrRelay, "https://pkarr.pubky.org")
             .withStorage(DataKind.CheckIns, StorageChoice.Public)
             .withOpenIn(OpenInApp.Waze, false)
-            .copy(followLocalRules = false)
+            .copy(followLocalRules = false, voiceGuidance = false)
 
     private fun assertAdded(result: AppSettings.AddServerResult) = (result as AppSettings.AddServerResult.Added).settings
 
@@ -44,6 +44,14 @@ class SettingsCodecTest {
         assertFalse("waze" in text, text)
         assertFalse("followLocalRules" in text, text)
         assertTrue("\"followLocalRules\": false" in codec.encode(AppSettings(followLocalRules = false)))
+        assertFalse("voiceGuidance" in text, text)
+        assertTrue("\"voiceGuidance\": false" in codec.encode(AppSettings(voiceGuidance = false)))
+    }
+
+    @Test
+    fun guidanceSpeaksUntilTheUserSwitchesItOff() {
+        assertTrue(codec.decode("{}").voiceGuidance)
+        assertFalse(codec.decode("""{"schemaVersion": $SETTINGS_SCHEMA_VERSION, "voiceGuidance": false}""").voiceGuidance)
     }
 
     @Test

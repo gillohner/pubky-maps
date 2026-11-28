@@ -214,8 +214,18 @@ by itself at most every 10 s and only once the user moved 50 m from where the la
 one dropped on the way back (a new route that starts on a road out of reach would come again); Find a new route in the banner asks at
 once. Within 25 m of the end it says they have arrived. While it guides, a tap or long-press on the map
 opens no place (panning works). Back or End ends the guidance: the route card is back and the map turns
-north (a new route still asked for comes to the card). Guidance does not speak, and a new route needs a
-connection.
+north (a new route still asked for comes to the card). A new route needs a connection.
+
+Guidance **speaks** through the phone's speech engine (US English, Valhalla's spoken sentences): the
+way to start, a warning before each step with its distance ("In 400 meters, turn left onto
+Rudolf-Brun-Brücke.", about 30 s ahead at the pace of the stretch, at least 500 m by car, 250 m by
+bike, 100 m on foot), the step itself just before it (about 7 s ahead, at least 120/50/25 m), how long
+a long stretch after a step is ("Continue for 2 kilometers.") and arriving, each once per route, and
+going off the route each time (again only after coming back within 35 m of the line); what was said is
+kept with the guidance, so a recreated screen does not say it again. Other sound is turned down while
+it speaks. The round speaker button over the bar
+switches the voice off and on, kept for the next route; a phone without a speech engine or an English
+voice shows no button.
 
 **Report a map problem** at the end of a place page (also of a dropped pin) opens a note to
 OpenStreetMap's mappers: what the user writes, then the place's name and OpenStreetMap link when it

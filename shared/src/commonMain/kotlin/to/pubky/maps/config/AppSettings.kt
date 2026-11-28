@@ -88,6 +88,8 @@ data class AppSettings(
     val storageChoices: Map<DataKind, StorageChoice> = emptyMap(),
     val openInChoices: Map<OpenInApp, Boolean> = emptyMap(),
     val followLocalRules: Boolean = true,
+    /** A route guiding the user says its turns aloud; switched on the guidance bar, kept for the next route. */
+    val voiceGuidance: Boolean = true,
 ) {
     companion object {
         /**

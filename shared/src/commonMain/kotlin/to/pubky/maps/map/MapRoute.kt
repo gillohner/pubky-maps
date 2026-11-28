@@ -177,6 +177,9 @@ fun MapRoute(
     startView: MapView? = null,
     /** Called with each view the camera rests at, and the view when the map leaves the screen, to open there at the next start. */
     onViewRested: (MapView) -> Unit = {},
+    /** Whether a route guiding the user speaks, as the user last switched it (kept in the settings). */
+    voiceGuidance: Boolean = true,
+    onVoiceGuidanceChange: (Boolean) -> Unit = {},
 ) {
     val dark = isSystemInDarkTheme()
     val sources = servers.mapStyles(dark)
@@ -589,6 +592,8 @@ fun MapRoute(
                 locationState,
                 mapState,
                 credits = routeCredits(servers, foundRoute?.server),
+                voice = voiceGuidance,
+                onVoiceChange = onVoiceGuidanceChange,
             )
         }
     // The area on screen goes offline in the style on screen and the other theme's of the same server.
