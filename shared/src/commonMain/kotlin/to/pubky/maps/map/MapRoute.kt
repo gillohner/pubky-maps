@@ -115,6 +115,9 @@ import to.pubky.maps.search.distanceText
 import to.pubky.maps.status.ServicePart
 import to.pubky.maps.ui.SystemBack
 import to.pubky.maps.ui.rememberSafeLinkOpener
+import to.pubky.maps.update.AvailableUpdate
+import to.pubky.maps.update.UpdatePrompt
+import to.pubky.maps.update.makeRoom
 import to.pubky.maps.write.OwnData
 import to.pubky.maps.write.WriteController
 import to.pubky.maps.write.WriteIntent
@@ -151,6 +154,10 @@ fun MapRoute(
     onOpenSettings: () -> Unit,
     /** An update is ready to install: the Settings button carries a dot. */
     updateReady: Boolean = false,
+    /** An update the map offers once in a snackbar (UpdatePrompt); null when there is none to offer. */
+    updatePrompt: AvailableUpdate? = null,
+    onInstallUpdate: () -> Unit = {},
+    onUpdatePromptShown: () -> Unit = {},
     missing: Set<ServicePart> = emptySet(),
     linkedPlace: LinkedPlaceState = LinkedPlaceState(),
     onSharePlace: ((PlaceRef) -> Unit)? = null,
@@ -614,6 +621,21 @@ fun MapRoute(
     }
     // While the area picker is open the map only frames the area: a long-press drops no pin.
     val pickingArea by rememberUpdatedState(areaPicker != null)
+    // An update found at start is offered on a map with nothing open on it.
+    UpdatePrompt(
+        prompt = updatePrompt,
+        mapFree =
+            shown == null &&
+                selected == null &&
+                !linkedPlace.opening &&
+                (place == null || place.viewOnly) &&
+                !searchOpen &&
+                guidance == null &&
+                areaPicker == null,
+        snackbars = snackbarHostState,
+        onInstall = onInstallUpdate,
+        onShown = onUpdatePromptShown,
+    )
     val haptics = LocalHapticFeedback.current
 
     MapScreen(
@@ -1215,7 +1237,7 @@ private suspend fun SnackbarHostState.showOnly(
     message: String,
     actionLabel: String? = null,
 ): SnackbarResult {
-    currentSnackbarData?.dismiss()
+    makeRoom()
     return showSnackbar(message = message, actionLabel = actionLabel, duration = SnackbarDuration.Long)
 }
 

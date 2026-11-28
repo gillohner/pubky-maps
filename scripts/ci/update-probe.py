@@ -262,7 +262,7 @@ def main():
         nodes = ui_nodes()
         if not any(is_("Settings")(n) for n in nodes):
             failures.append("tampered feed: the screen could not be read to check that nothing was offered")
-        elif any(has("Update available")(n) for n in nodes):
+        elif any(has("Update available")(n) or has("Update ready")(n) for n in nodes):
             failures.append("tampered feed: an update was offered")
         tap(find(is_("Settings"), 120, "the Settings button"), "Settings")
         scroll_to(has("not signed with the Pubky Maps key"), "the refused feed's reason in Settings")

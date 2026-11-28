@@ -56,12 +56,17 @@ sealed interface UpdateDialog {
     ) : UpdateDialog
 }
 
-/** Everything the update UI shows. */
+/**
+ * Everything the update UI shows. [prompt] is an update the automatic check found that the map offers
+ * once, in a snackbar: null once it was offered (or the user saw it otherwise), so a version is offered
+ * on the map only once.
+ */
 data class UpdatesUiState(
     val channel: UpdateChannel,
     val autoCheck: Boolean,
     val status: UpdateStatus,
     val dialog: UpdateDialog?,
+    val prompt: AvailableUpdate? = null,
 )
 
 /** The update a check found and the user can install now; null while there is none (or a check runs). */
@@ -84,6 +89,9 @@ interface UpdateController {
     fun cancelDownload()
 
     fun dismissDialog()
+
+    /** The map offered [UpdatesUiState.prompt] (whatever the user did with it): not again for that version. */
+    fun promptShown()
 }
 
 /** The words for a check's result, as shown under "Check for updates". */
