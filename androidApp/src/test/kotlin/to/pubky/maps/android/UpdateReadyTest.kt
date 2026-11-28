@@ -10,11 +10,13 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -69,6 +71,7 @@ class UpdateReadyTest {
     private fun settings(
         first: UpdateStatus,
         dialog: UpdateDialog? = null,
+        ready: AvailableUpdate? = null,
     ) {
         status = first
         compose.setContent {
@@ -82,7 +85,7 @@ class UpdateReadyTest {
                     onFollowLocalRulesChange = {},
                     onOpenLicences = {},
                     onBack = {},
-                    updates = UpdatesUiState(UpdateChannel.Edge, autoCheck = true, status = status, dialog = dialog),
+                    updates = UpdatesUiState(UpdateChannel.Edge, autoCheck = true, status = status, dialog = dialog, ready = ready),
                     onInstallUpdate = { installs++ },
                 )
             }
@@ -110,6 +113,19 @@ class UpdateReadyTest {
         compose.onNodeWithText("14.2 MB. You have 0.1.0-edge.11.").assertIsDisplayed()
         compose.onNode(hasText("Install") and hasClickAction()).assertIsEnabled().performClick()
         assertEquals(1, installs)
+    }
+
+    @Test
+    fun theUpdateFoundBeforeStaysReadyWhenNoServerAnswers() {
+        settings(UpdateStatus.Failed("The update server could not be reached. Try again later."), ready = update)
+        compose.onNodeWithText("Pubky Maps 0.1.0-edge.12 is ready").assertIsDisplayed()
+        compose.onNode(hasText("Install") and hasClickAction()).assertIsEnabled().performClick()
+        assertEquals(1, installs)
+        // The check itself says what it found, in About.
+        compose
+            .onNode(hasScrollAction())
+            .performScrollToNode(hasText("The update server could not be reached. Try again later.", substring = true))
+        compose.onNodeWithText("The update server could not be reached. Try again later.", substring = true).assertIsDisplayed()
     }
 
     @Test

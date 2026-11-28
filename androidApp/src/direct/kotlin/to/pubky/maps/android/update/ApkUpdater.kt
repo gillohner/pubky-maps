@@ -42,6 +42,7 @@ private const val KEY_AUTO_CHECK = "auto_check"
 private const val KEY_LAST_CHECK = "last_check_ms"
 private const val KEY_PENDING = "pending_version_code"
 private const val KEY_PROMPTED = "prompted_version_code"
+private const val KEY_FOUND = "found_feed"
 
 /** What Android reads from an APK file: its package and versionCode. */
 data class ArchiveFacts(
@@ -80,7 +81,9 @@ interface UpdatePlatform {
  * The in-app updater of the APK published on GitHub. It checks the signed feed of the build's channel
  * (at start at most once a day, and on request), offers a newer build (in a dialog after a check the
  * user asked for or one interrupted by "Install unknown apps"; after the daily check on the map, once
- * per version, see [UpdatesUiState.prompt]), downloads it into the app's
+ * per version, see [UpdatesUiState.prompt]), keeps the signed feed of a found update so it stays
+ * ready after a restart (read again with [UpdateChecker.reread] at start, then confirmed by a check) and
+ * while no server gives a valid answer ([UpdatesUiState.ready]), downloads it into the app's
  * cache, checks its size and SHA-256 against the signed feed and its package and versionCode, checks
  * the file again right before, and hands it to Android's installer. Android then installs it only
  * when it is signed with the same key as the installed app.
@@ -116,6 +119,9 @@ class ApkUpdater(
 
     private var offered: UpdateFeed? = null
 
+    /** The update the last check that reached a server found (or one kept from before a restart). */
+    private var found: CheckResult.Available? = null
+
     /** The versionCode the map last offered; read at app start. */
     private var prompted = 0L
     private var verified: Pair<File, UpdateFeed>? = null
@@ -130,8 +136,10 @@ class ApkUpdater(
     }
 
     /**
-     * At app start: removes old downloads, then checks when the daily check is due, or when the app was
-     * stopped while the user was allowing "Install unknown apps" for an update (offered again).
+     * At app start: removes old downloads, offers the update a check found before while its kept feed is
+     * still valid for this build, then checks when the daily check is due, when such a kept update waits
+     * (and automatic checks are on), or when the app was stopped while the user was allowing "Install
+     * unknown apps" for an update (offered again).
      */
     fun onAppStart() {
         scope.launch {
@@ -143,15 +151,20 @@ class ApkUpdater(
                         lastCheck = prefs.getLong(KEY_LAST_CHECK, 0L).takeIf { it > 0 },
                         pending = prefs.getLong(KEY_PENDING, 0L),
                         prompted = prefs.getLong(KEY_PROMPTED, 0L),
+                        kept = prefs.getString(KEY_FOUND, null)?.let { checker.reread(it, installed) },
                     )
                 }
             prompted = maxOf(prompted, stored.prompted)
             mutableState.update { it.copy(autoCheck = stored.autoCheck) }
+            offerKept(stored.kept)
             val auto = if (stored.autoCheck) "on" else "off"
             Log.i(TAG, "updates: ${installed.versionName} (${installed.versionCode}) on ${installed.channel.id}; automatic checks $auto")
             val pending = stored.pending > installed.versionCode
             if (!pending && stored.pending != 0L) setPending(null)
-            if (pending || isAutoCheckDue(stored.autoCheck, stored.lastCheck, platform.now())) {
+            // While a kept update waits, the check runs at every start, even when the daily one is not
+            // due: a newer build can have replaced it (edge removes the APKs of older builds).
+            val confirm = stored.autoCheck && found != null
+            if (pending || confirm || isAutoCheckDue(stored.autoCheck, stored.lastCheck, platform.now())) {
                 check(automatic = !pending)
             }
         }
@@ -166,31 +179,98 @@ class ApkUpdater(
 
     private fun check(automatic: Boolean) {
         if (checkJob?.isActive == true || downloadJob?.isActive == true) return
-        mutableState.update { it.copy(status = UpdateStatus.Checking) }
+        // The update found before stays ready (dot, card) while the check runs.
+        mutableState.update { it.copy(status = UpdateStatus.Checking, ready = foundUpdate()) }
         checkJob =
             scope.launch {
                 try {
                     val urls =
                         servers.config.value.updateFeeds
                             .forChannel(installed.channel)
-                    val result = withContext(io) { checker.check(urls, installed) }
-                    if (result != CheckResult.Unreachable) {
+                    val answer = withContext(io) { checker.check(urls, installed) }
+                    if (answer != CheckResult.Unreachable) {
                         withContext(io) { prefs.edit().putLong(KEY_LAST_CHECK, platform.now()).apply() }
                     }
-                    Log.i(TAG, "updates: ${if (automatic) "automatic" else "manual"} check: ${describe(result)}")
-                    offered = (result as? CheckResult.Available)?.feed
-                    val found = offered?.let { AvailableUpdate.of(it) }
-                    // A check the user asked for answers in a dialog. The automatic one at start does not
-                    // open a dialog over the map: the map offers a version once, in a snackbar.
-                    val offer = found?.takeIf { !automatic }?.let { UpdateDialog.Offer(it, installed.versionName) }
-                    val prompt = found?.takeIf { automatic && it.versionCode != prompted }
+                    // A valid feed decides: it replaces or ends the update found before. No server reached
+                    // or every answer refused is no news about it: its kept feed is still validly signed,
+                    // so it stays ready, and the status says what the check found.
+                    val decided = answer !is CheckResult.Unreachable && answer !is CheckResult.Refused
+                    if (decided) keep(answer as? CheckResult.Available)
+                    val stillReady = if (decided || found == null) "" else "; the update found before stays ready"
+                    Log.i(TAG, "updates: ${if (automatic) "automatic" else "manual"} check: ${describe(answer)}$stillReady")
+                    offered = found?.feed
+                    val update = foundUpdate()
+                    // A check the user asked for answers in a dialog when it found an update. The automatic
+                    // one at start does not open a dialog over the map: the map offers a version once, in a
+                    // snackbar.
+                    val offer =
+                        update?.takeIf { !automatic && answer is CheckResult.Available }?.let {
+                            UpdateDialog.Offer(
+                                it,
+                                installed.versionName,
+                            )
+                        }
+                    val prompt = update?.takeIf { automatic && it.versionCode != prompted }
                     if (offer != null) markSeen(offer.update)
-                    mutableState.update { it.copy(status = result.toStatus(), dialog = offer ?: it.dialog, prompt = prompt) }
+                    mutableState.update {
+                        it.copy(
+                            status = answer.toStatus(),
+                            ready = update,
+                            dialog = offer ?: it.dialog,
+                            prompt = prompt,
+                        )
+                    }
                 } finally {
                     // Cancelled or failed: never left showing "Checking…".
-                    mutableState.update { if (it.status == UpdateStatus.Checking) it.copy(status = UpdateStatus.NotChecked) else it }
+                    mutableState.update {
+                        if (it.status != UpdateStatus.Checking) {
+                            it
+                        } else {
+                            it.copy(status = foundUpdate()?.let { update -> UpdateStatus.Available(update) } ?: UpdateStatus.NotChecked)
+                        }
+                    }
                 }
             }
+    }
+
+    private fun foundUpdate(): AvailableUpdate? = found?.let { AvailableUpdate.of(it.feed) }
+
+    /**
+     * Offers the update kept from before the restart while it is still valid for this build, as its
+     * check did (in Settings, and on the map if it was never offered there); forgets one that is not
+     * (installed meanwhile, or refused now).
+     */
+    private fun offerKept(kept: CheckResult?) {
+        if (kept == null) return
+        if (kept !is CheckResult.Available) {
+            Log.i(TAG, "updates: the update found before is no longer offered: ${describe(kept)}")
+            keep(null)
+            return
+        }
+        // A check the user started meanwhile and that already answered decides instead.
+        val status = state.value.status
+        if (status != UpdateStatus.NotChecked && status != UpdateStatus.Checking) return
+        found = kept
+        offered = kept.feed
+        val update = AvailableUpdate.of(kept.feed)
+        Log.i(TAG, "updates: ${update.versionName} (${update.versionCode}), found before, is still ready")
+        mutableState.update {
+            if (it.status == UpdateStatus.Checking) {
+                it.copy(ready = update)
+            } else {
+                it.copy(status = UpdateStatus.Available(update), prompt = update.takeIf { update.versionCode != prompted })
+            }
+        }
+    }
+
+    /** Keeps the signed feed of [update] for the next start, or forgets the kept one when null. */
+    private fun keep(update: CheckResult.Available?) {
+        found = update
+        scope.launch {
+            withContext(io) {
+                prefs.edit().apply { if (update == null) remove(KEY_FOUND) else putString(KEY_FOUND, update.signedFile) }.apply()
+            }
+        }
     }
 
     override fun install() {
@@ -251,6 +331,13 @@ class ApkUpdater(
                 Log.i(TAG, "updates: ${file.name} matches the signed feed (size, SHA-256, package, versionCode)")
             }
             return problem
+        } catch (e: HttpStatusException) {
+            Log.w(TAG, "updates: download failed", e)
+            // A newer build replaced it (edge removes the APKs of older builds): only a new check helps.
+            if (e.code == 404 || e.code == 410) {
+                return "Pubky Maps ${update.versionName} is no longer on the update server. Check for updates to get the newest version."
+            }
+            return "The download of ${update.versionName} failed. Try again later."
         } catch (e: IOException) {
             Log.w(TAG, "updates: download failed", e)
             return "The download of ${update.versionName} failed. Check your connection and try again."
@@ -379,6 +466,8 @@ class ApkUpdater(
         val lastCheck: Long?,
         val pending: Long,
         val prompted: Long,
+        /** The kept feed of the update found before, read again; null when none is kept. */
+        val kept: CheckResult?,
     )
 
     private inner class ResumedActivityTracker : Application.ActivityLifecycleCallbacks {
