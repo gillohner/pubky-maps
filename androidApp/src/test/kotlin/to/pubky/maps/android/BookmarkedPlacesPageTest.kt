@@ -1,6 +1,9 @@
 package to.pubky.maps.android
 
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsDisplayed
@@ -32,7 +35,7 @@ import to.pubky.maps.write.SavedScreen
 import to.pubky.maps.write.SavedScreenState
 
 /**
- * The bookmarks are one row of the Bookmarks page, beside the collections, as pubky.app's collections
+ * The bookmarks are one row of the Bookmarks page, above the collections, as pubky.app's collections
  * page has its Bookmarks card first and Google Maps, CoMaps and OsmAnd keep starred places, bookmarks
  * and favourites as a list among the lists; the row opens them as their own page, and back returns.
  */
@@ -133,10 +136,28 @@ class BookmarkedPlacesPageTest {
     }
 
     @Test
+    fun bookmarksRemovedWhileTheirPageIsOpenLeaveItSayingHowToAddOne() {
+        var shown by mutableStateOf(places)
+        compose.setContent {
+            PubkyMapsTheme {
+                SavedScreen(SavedScreenState(places = shown, lists = listOf(coffee)), onOpen = { _, _ -> }, onBack = {})
+            }
+        }
+        compose.onNodeWithText("Bookmarked places").performClick()
+        // Removed on another device; the next read of the homeserver drops them.
+        shown = emptyList()
+        compose.waitForIdle()
+        compose.onNode(hasText("Bookmarked places") and isHeading()).assertExists()
+        compose.onNodeWithText("Places you bookmark show here. Tap Bookmark on a place's page.").assertExists()
+        compose.onAllNodesWithText("Conditorei Schober").assertCountEquals(0)
+    }
+
+    @Test
     fun withoutBookmarksTheRowSaysHowToMakeOneAndOpensNothing() {
         show(places = emptyList())
-        compose.onNodeWithText("Places you bookmark show here. Tap Bookmark on a place's page.").assertExists()
-        compose.onNodeWithText("Bookmarked places").assertHasNoClickAction()
+        compose.onNodeWithText("None yet. Tap Bookmark on a place's page.").assertExists()
+        // One TalkBack stop, the row's name and its hint together, that opens nothing.
+        compose.onNode(hasText("Bookmarked places") and hasText("None yet.", substring = true)).assertHasNoClickAction()
         compose.onAllNodesWithText("0 places").assertCountEquals(1) // Sunday walks', not the bookmarks'
     }
 

@@ -71,11 +71,11 @@ private val MaxSavedWidth = 720.dp
 
 /**
  * The user's bookmarks and collections, from this phone's copy (refreshed from the homeserver when the
- * screen opens). The bookmarks are one row at the top, beside the collections, and open as their own
- * page ([BookmarkedPlacesPage]), as pubky.app's collections page has its Bookmarks card first and
- * Google Maps, CoMaps and OsmAnd keep starred places, bookmarks and favourites in a list among the
- * others: a long run of bookmarks no longer pushes the collections off the screen. A tap on a
- * collection opens its own page ([CollectionPage]); back (the arrow or the system back) returns here.
+ * screen opens). The bookmarks are one row above the collections and open as their own page
+ * ([BookmarkedPlacesPage]), as pubky.app's collections page has its Bookmarks card first and Google
+ * Maps, CoMaps and OsmAnd keep starred places, bookmarks and favourites in a list among the others,
+ * so a long run of bookmarks never pushes the collections off the screen. A tap on a collection opens
+ * its own page ([CollectionPage]); back (the arrow or the system back) returns here.
  * A tap on a place opens it on the map, with the name its row shows.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -98,9 +98,17 @@ fun SavedScreen(
         openList = null
         bookmarksOpen = false
     }
-    // Here, not in the pages, which leave while another is open: back finds each list where it was.
+    // Here, not in the overview, which leaves while a page is open: back finds it where it was.
     val overviewScroll = rememberLazyListState()
-    val bookmarksScroll = rememberLazyListState()
+    // Opening one page drops the other, also a collection kept from a restored screen.
+    val openBookmarks = {
+        openList = null
+        bookmarksOpen = true
+    }
+    val openCollection = { uri: String ->
+        bookmarksOpen = false
+        openList = uri
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -131,8 +139,8 @@ fun SavedScreen(
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
             when {
                 open != null -> CollectionPage(open, state, padding, onOpen)
-                bookmarksOpen -> BookmarkedPlacesPage(state, padding, bookmarksScroll, onOpen)
-                else -> BookmarksOverview(state, padding, overviewScroll, { bookmarksOpen = true }, { openList = it })
+                bookmarksOpen -> BookmarkedPlacesPage(state, padding, onOpen)
+                else -> BookmarksOverview(state, padding, overviewScroll, openBookmarks, openCollection)
             }
         }
     }
@@ -142,6 +150,8 @@ fun SavedScreen(
 private const val BOOKMARKED_PLACES = "Bookmarked places"
 
 private const val NO_BOOKMARKS_HINT = "Places you bookmark show here. Tap Bookmark on a place's page."
+
+private const val NO_BOOKMARKS_ROW = "None yet. Tap Bookmark on a place's page."
 
 /**
  * The Bookmarks page: one row for the bookmarks (how many, how many still wait to be sent), then the
@@ -162,9 +172,15 @@ private fun BookmarksOverview(
             val empty = state.places.isEmpty()
             ListItem(
                 headlineContent = { Text(BOOKMARKED_PLACES, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                supportingContent = { Text(if (empty) NO_BOOKMARKS_HINT else bookmarksFacts(state.places)) },
+                supportingContent = { Text(if (empty) NO_BOOKMARKS_ROW else bookmarksFacts(state.places)) },
                 leadingContent = { Icon(WriteIcons.Bookmark, contentDescription = null) },
-                modifier = if (empty) Modifier else Modifier.clickable(onClickLabel = "Open bookmarks", onClick = onOpenBookmarks),
+                // Read as one by TalkBack either way: a clickable row merges its texts, an empty one is told to.
+                modifier =
+                    if (empty) {
+                        Modifier.semantics(mergeDescendants = true) {}
+                    } else {
+                        Modifier.clickable(onClickLabel = "Open bookmarks", onClick = onOpenBookmarks)
+                    },
             )
         }
         item(key = "lists-title") { Title("Your collections") }
@@ -210,12 +226,11 @@ internal fun bookmarksFacts(places: List<SavedRow>): String {
 private fun BookmarkedPlacesPage(
     state: SavedScreenState,
     padding: PaddingValues,
-    scroll: LazyListState,
     onOpen: (place: String, name: String?) -> Unit,
 ) {
     val placesToTellApart = rowsToTellApart(state.places.map { RowText(it.place, it.name, it.summary) })
     val points = state.places.mapNotNull { row -> row.point?.let { row.place to it } }.toMap()
-    LazyColumn(state = scroll, contentPadding = padding, modifier = Modifier.widthIn(max = MaxSavedWidth).fillMaxWidth()) {
+    LazyColumn(contentPadding = padding, modifier = Modifier.widthIn(max = MaxSavedWidth).fillMaxWidth()) {
         if (state.refreshing) item(key = "refreshing") { LinearProgressIndicator(Modifier.fillMaxWidth()) }
         // Removed on another device while the page is open: the page stays and says how to add one.
         if (state.places.isEmpty()) {
