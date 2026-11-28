@@ -20,6 +20,11 @@ A change is done when all of these pass on its head commit:
   when the app, the core or CI changed, the Synonym-blocked test (`scripts/ci/synonym-blocked.py`);
   and, when the updater or the release changed, the update probe (`scripts/ci/update-probe.py`): two signed release builds, a
   tampered feed and a tampered APK refused, the real update installed from inside the app.
+  On a branch, every job tests the branch merged with main as the run's `changes` job found it
+  (`scripts/ci/merge-main.py`; the "merge main" notice names that commit), and a branch that
+  conflicts with main fails. A run says nothing about a main that moved on after it: a branch merges
+  only on a run that tested main's current head ("Re-run all jobs" otherwise; "Re-run failed jobs"
+  keeps the old main).
   Each emulator test on the debug APK also fails when StrictMode caught our code reading disk on the
   main thread or leaking a resource (`scripts/ci/strict_mode.py`); network on the main thread crashes
   the debug app as it crashes the release app.
