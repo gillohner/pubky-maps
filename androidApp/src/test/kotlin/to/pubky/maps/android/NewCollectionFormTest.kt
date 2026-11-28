@@ -4,10 +4,13 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasProgressBarRangeInfo
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.StateRestorationTester
@@ -15,6 +18,7 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -135,10 +139,69 @@ class NewCollectionFormTest {
         state = state.copy(loading = true)
         compose.onNode(title).assertExists()
         compose.onAllNodes(hasText("New collection") and hasClickAction()).assertCountEquals(0)
-        compose.onAllNodesWithText("You have no collections yet.").assertCountEquals(0)
+        // The bar takes the line's place, and its height: the form does not move up and back down.
+        compose.onAllNodes(hasText("You have no collections yet.")).assertCountEquals(0)
+        compose.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)).assertExists()
+        assertEquals(before, compose.onNode(create).fetchSemanticsNode().boundsInRoot)
         state = state.copy(loading = false)
-        val after = compose.onNode(create).fetchSemanticsNode().boundsInRoot
-        assertEquals(before, after)
+        compose.onNodeWithText("You have no collections yet.").assertExists()
+        assertEquals(before, compose.onNode(create).fetchSemanticsNode().boundsInRoot)
+    }
+
+    @Test
+    fun whatIsTypedStaysWhenTheFirstReadFindsCollections() {
+        var state by mutableStateOf(ListPageState(placeName = "Conditorei Schober", lists = emptyList(), loading = true))
+        compose.setContent {
+            PubkyMapsTheme(darkTheme = false) {
+                ListPage(
+                    state = state,
+                    onToggle = {},
+                    onNewOpenChange = { state = state.copy(newOpen = it, newName = if (it) state.newName else "") },
+                    onNewNameChange = { state = state.copy(newName = it) },
+                    onNewDescriptionChange = {},
+                    onNewKeptChange = {},
+                    onCreate = {},
+                    onClose = {},
+                )
+            }
+        }
+        // The user starts on the form that is there because they have none yet...
+        compose.onNode(title).performClick()
+        compose.onNode(title).performTextInput("Cake")
+        // ...and the read then finds collections made on another device.
+        state = state.copy(lists = listOf(walks, coffee), loading = false)
+        compose.onNode(title).assertTextContains("Cake")
+        compose.onNode(title).assertIsFocused()
+        compose.onNode(create).assertExists()
+        compose.onAllNodes(hasText("New collection") and hasClickAction()).assertCountEquals(0)
+        compose.onNodeWithText("Sunday walks").assertExists()
+        // It is now a form among collections, so it can be closed like an opened one.
+        compose.onNode(hasText("Cancel") and hasClickAction()).performClick()
+        compose.onAllNodes(title).assertCountEquals(0)
+        compose.onNode(hasText("New collection") and hasClickAction()).assertExists()
+    }
+
+    @Test
+    fun cancelGivesFocusBackToTheNewCollectionRow() {
+        show(ListPageState(placeName = "Conditorei Schober", lists = listOf(walks), newOpen = true))
+        compose.onNode(title).assertIsFocused()
+        compose.onNode(hasText("Cancel") and hasClickAction()).performClick()
+        // TalkBack follows the focus: it stays where the form was, not at the top of the page.
+        compose.onNode(hasText("New collection") and hasClickAction()).assertIsFocused()
+    }
+
+    @Test
+    fun systemBackGivesFocusBackToTheNewCollectionRow() {
+        show(ListPageState(placeName = "Conditorei Schober", lists = listOf(walks), newOpen = true))
+        compose.onNode(title).assertIsFocused()
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.onNode(hasText("New collection") and hasClickAction()).assertIsFocused()
+    }
+
+    @Test
+    fun theRowTakesNoFocusWhenThePageOpens() {
+        show(ListPageState(placeName = "Conditorei Schober", lists = listOf(walks)))
+        compose.onNode(hasText("New collection") and hasClickAction()).assertIsNotFocused()
     }
 
     @Test
