@@ -618,4 +618,107 @@ class DirectionsControllerTest {
             c.renameStart(hotel.placeUri, "Hotel Adler")
             assertEquals(hotel, c.chosenStart.value)
         }
+
+    @Test
+    fun onlyARouteFromTheUsersPositionToThePlaceCanGuideThem() =
+        runTest {
+            val c = controller(FakeRouting { RouteAnswer.Found(route, "s") })
+            c.start("osm:node/1", kunsthaus, here)
+            assertEquals(false, c.directions.value?.canGuide)
+            advanceUntilIdle()
+            assertEquals(true, c.directions.value?.canGuide)
+            c.swap()
+            advanceUntilIdle()
+            // Back from the place to the user: nothing to guide them along.
+            assertEquals(false, c.directions.value?.canGuide)
+            c.startGuidance(here)
+            assertEquals(false, c.directions.value?.guiding)
+            c.swap()
+            c.chooseStart(hotel)
+            c.start("osm:node/1", kunsthaus, here)
+            advanceUntilIdle()
+            assertEquals(false, c.directions.value?.canGuide)
+        }
+
+    @Test
+    fun startedGuidanceTracksTheUserAlongTheRouteAndClosesTheSteps() =
+        runTest {
+            val c = controller(FakeRouting { RouteAnswer.Found(route, "s") })
+            c.start("osm:node/1", kunsthaus, here)
+            advanceUntilIdle()
+            c.showSteps(true)
+            c.showStep(0)
+            c.startGuidance(here)
+            val started = assertNotNull(c.directions.value)
+            assertTrue(started.guiding)
+            assertEquals(false, started.stepsShown)
+            assertNull(started.markedStep)
+            assertEquals(0, started.progress?.segment)
+            // Half way: half the route left.
+            val half = GeoPoint((here.lat + kunsthaus.lat) / 2, (here.lon + kunsthaus.lon) / 2)
+            c.guide(half)
+            val now = assertNotNull(c.directions.value?.progress)
+            assertEquals(metersBetween(half, kunsthaus), now.metersLeft, 1.0)
+            assertEquals(145.0, now.secondsLeft, 1.0)
+            assertEquals(half, c.directions.value?.position)
+            c.endGuidance()
+            assertEquals(false, c.directions.value?.guiding)
+            assertNull(c.directions.value?.progress)
+            assertTrue(c.directions.value?.status is RouteStatus.Found)
+        }
+
+    @Test
+    fun aNewRouteFromWhereTheUserIsKeepsGuidingThemAndIsNotFitted() =
+        runTest {
+            val routing = FakeRouting { RouteAnswer.Found(route, "s") }
+            val c = controller(routing)
+            c.start("osm:node/1", kunsthaus, here)
+            advanceUntilIdle()
+            c.startGuidance(here)
+            val off = GeoPoint(47.3800, 8.5300)
+            c.guide(off)
+            assertEquals(
+                true,
+                c.directions.value
+                    ?.progress
+                    ?.offRoute,
+            )
+            val again = Route(listOf(off, kunsthaus), seconds = 400.0, meters = 1900.0)
+            routing.answer = { RouteAnswer.Found(again, "s") }
+            c.routeAgainFrom(off)
+            assertEquals(RouteStatus.Finding, c.directions.value?.status)
+            assertNull(c.directions.value?.progress)
+            advanceUntilIdle()
+            assertEquals(Triple(off, kunsthaus, TravelMode.Car), routing.asked.last())
+            val d = assertNotNull(c.directions.value)
+            assertTrue(d.guiding)
+            assertEquals(RouteStatus.Found(again, "s"), d.status)
+            assertEquals(false, d.progress?.offRoute)
+            assertEquals(400.0, d.progress?.secondsLeft ?: 0.0, 1.0)
+            // The map follows the user: the new route is not fitted over that.
+            assertNull(d.routeToFit)
+            // Not while not guiding.
+            c.endGuidance()
+            c.routeAgainFrom(here)
+            assertEquals(2, routing.asked.size)
+        }
+
+    @Test
+    fun aNewRouteStillAskedForWhenGuidanceEndsIsFittedOnceFound() =
+        runTest {
+            val routing = FakeRouting { RouteAnswer.Found(route, "s") }
+            val c = controller(routing)
+            c.start("osm:node/1", kunsthaus, here)
+            advanceUntilIdle()
+            c.startGuidance(here)
+            val gate = CompletableDeferred<Unit>()
+            routing.gate = gate
+            c.routeAgainFrom(GeoPoint(47.3800, 8.5300))
+            runCurrent()
+            c.endGuidance()
+            gate.complete(Unit)
+            advanceUntilIdle()
+            assertEquals(false, c.directions.value?.guiding)
+            assertNotNull(c.directions.value?.routeToFit)
+        }
 }

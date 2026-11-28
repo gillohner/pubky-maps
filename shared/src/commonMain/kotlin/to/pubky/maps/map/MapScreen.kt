@@ -58,6 +58,9 @@ import androidx.compose.ui.unit.dp
 import kotlinx.datetime.LocalDateTime
 import to.pubky.maps.config.AttributionLink
 import to.pubky.maps.links.GeoPoint
+import to.pubky.maps.routing.GuidanceBanner
+import to.pubky.maps.routing.GuidanceBar
+import to.pubky.maps.routing.GuidanceUi
 import to.pubky.maps.search.RecentSearch
 import to.pubky.maps.search.SearchActions
 import to.pubky.maps.search.SearchBar
@@ -140,6 +143,8 @@ fun MapScreen(
     areaPicker: AreaPickerUi? = null,
     onUncoveredMap: (DpRect?) -> Unit = {},
     onSheetAtTop: (Boolean) -> Unit = {},
+    /** A route guiding the user: the map shows only its banner and bar, no search or place page. */
+    guidance: GuidanceUi? = null,
     map: @Composable () -> Unit,
 ) {
     BoxWithConstraints(modifier.fillMaxSize()) {
@@ -165,6 +170,11 @@ fun MapScreen(
         map()
         if (areaPicker != null) {
             AreaPickerOverlay(areaPicker, attribution)
+            return@BoxWithConstraints
+        }
+        if (guidance != null) {
+            SideEffect { report(null) }
+            GuidanceOverlay(guidance, attribution, missing, snackbarHostState)
             return@BoxWithConstraints
         }
         StatusBarScrim()
@@ -426,6 +436,43 @@ private fun BottomControls(
             modifier = Modifier.align(Alignment.End),
         )
         AttributionBar(links = attribution, modifier = Modifier.padding(top = 8.dp, start = creditsStart))
+    }
+}
+
+/**
+ * The map while a route guides the user, as Google Maps' and CoMaps' navigation: the next step's
+ * banner on top (the missing parts of the app named under it), the time left and End at the bottom
+ * over the credits; no search bar or place page. On a wide screen both keep a panel's width at the
+ * start, as the place panel, so the map ahead of the user stays in view.
+ */
+@Composable
+private fun GuidanceOverlay(
+    guidance: GuidanceUi,
+    attribution: List<AttributionLink>,
+    missing: Set<ServicePart>,
+    snackbarHostState: SnackbarHostState,
+) {
+    StatusBarScrim()
+    BoxWithConstraints(
+        Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+            .padding(MapControlMargin),
+    ) {
+        val wide = maxWidth >= SidePanelMinWidth
+        val width = if (wide) Modifier.width(SidePanelWidth) else Modifier.fillMaxWidth()
+        Column(Modifier.align(Alignment.TopStart).then(width), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            GuidanceBanner(guidance)
+            if (missing.isNotEmpty()) DegradedBanner(missing)
+        }
+        Column(Modifier.align(Alignment.BottomStart).fillMaxWidth()) {
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = MapControlMargin),
+            )
+            GuidanceBar(guidance, width)
+            AttributionBar(links = attribution, modifier = Modifier.padding(top = 8.dp))
+        }
     }
 }
 
