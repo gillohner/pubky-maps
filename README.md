@@ -265,7 +265,8 @@ phone with the bookmark (by the link as the core spells it), never sent; the Boo
 summary under the name, also for the places in collections, and tells two same-named places with the same
 summary (or none) apart by their points. To tell which bookmarked or tagged web pages are places, each
 refresh sends the addresses of up to 100 bookmarked or tagged web pages (also those other apps bookmarked
-or tagged, such as a reading list) to the user's Pinakes servers, one request per page, the next server when one fails;
+or tagged, such as a reading list) to the user's Pinakes servers, one request per page, the next server when one fails,
+at most 3 at a time for the refresh and the collection reads together, and a page both bookmarked and in a collection once;
 pages with an answer still kept on the phone (a place for as long as the app runs, no place for an
 hour) are not sent again, so later refreshes reach the pages after the first 100. A `geo:` link names its own point. A bookmarked or tagged place
 the phone knows no name, point or summary for (bookmarked on another device, before the last sign-out,
