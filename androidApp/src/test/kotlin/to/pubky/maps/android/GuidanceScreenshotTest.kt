@@ -23,6 +23,7 @@ import org.robolectric.annotation.GraphicsMode
 import to.pubky.maps.config.ServerDefaults
 import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.map.MapScreen
+import to.pubky.maps.map.routeCredits
 import to.pubky.maps.routing.Directions
 import to.pubky.maps.routing.GuidanceUi
 import to.pubky.maps.routing.Route
@@ -120,6 +121,7 @@ class GuidanceScreenshotTest {
         onRecenter = {},
         onRouteAgain = {},
         onEnd = {},
+        credits = routeCredits(ServerDefaults.lists, (status as? RouteStatus.Found)?.server),
     )
 
     @Composable

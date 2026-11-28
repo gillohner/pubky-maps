@@ -24,6 +24,7 @@ import org.maplibre.compose.map.MapState
 import org.maplibre.compose.util.DpPadding
 import org.maplibre.spatialk.geojson.Position
 import org.maplibre.spatialk.units.extensions.inMeters
+import to.pubky.maps.config.AttributionLink
 import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.routing.Directions
 import to.pubky.maps.routing.DirectionsController
@@ -59,6 +60,7 @@ internal fun rememberGuidance(
     placeName: String,
     locationState: LocationState,
     mapState: MapState,
+    credits: List<AttributionLink>,
 ): GuidanceUi? {
     val guiding = open?.guiding == true
     var following by remember { mutableStateOf(true) }
@@ -130,6 +132,7 @@ internal fun rememberGuidance(
         onRecenter = { following = true },
         onRouteAgain = { locationState.lastLocation?.let { directions.routeAgainFrom(it.point) } },
         onEnd = directions::endGuidance,
+        credits = credits,
     )
 }
 

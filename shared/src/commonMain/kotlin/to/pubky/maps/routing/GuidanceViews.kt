@@ -26,6 +26,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import to.pubky.maps.config.AttributionLink
 import to.pubky.maps.search.formatDistance
 import to.pubky.maps.ui.AppIcons
 import to.pubky.maps.ui.MapSurfaces
@@ -44,6 +45,8 @@ data class GuidanceUi(
     /** Asks for a new route from the user's position: off the route, or after a new route was not found. */
     val onRouteAgain: () -> Unit,
     val onEnd: () -> Unit,
+    /** The routing server's credits and the link to report a map error, as under the route on its card. */
+    val credits: List<AttributionLink>,
 )
 
 /**
@@ -169,7 +172,8 @@ fun GuidanceBanner(
 
 /**
  * The bar under the map while a route guides the user: the time and the way left and when they get
- * there, End, and Re-centre once they moved the map away from where they are.
+ * there, End, the routing server's credits under them while its route is on the map, and Re-centre
+ * once they moved the map away from where they are.
  */
 @Composable
 fun GuidanceBar(
@@ -191,28 +195,31 @@ fun GuidanceBar(
             border = MapSurfaces.edge,
             shadowElevation = 3.dp,
         ) {
-            Row(Modifier.padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    val left = guidanceLeftText(ui.directions)
-                    Text(
-                        left ?: ui.directions.mode.phrase
-                            .replaceFirstChar { it.uppercase() },
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Medium,
-                    )
-                    val arrival = ui.arrival?.takeIf { left != null }
-                    Text(
-                        if (arrival != null) "Arrive at $arrival · ${ui.placeName}" else ui.placeName,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+            Column(Modifier.padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        val left = guidanceLeftText(ui.directions)
+                        Text(
+                            left ?: ui.directions.mode.phrase
+                                .replaceFirstChar { it.uppercase() },
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        val arrival = ui.arrival?.takeIf { left != null }
+                        Text(
+                            if (arrival != null) "Arrive at $arrival · ${ui.placeName}" else ui.placeName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    OutlinedButton(onClick = ui.onEnd) {
+                        Icon(AppIcons.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("End")
+                    }
                 }
-                Spacer(Modifier.width(12.dp))
-                OutlinedButton(onClick = ui.onEnd) {
-                    Icon(AppIcons.Close, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("End")
-                }
+                if (ui.directions.status is RouteStatus.Found) RouteCredits(ui.credits)
             }
         }
     }

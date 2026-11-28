@@ -187,16 +187,18 @@ place, or closing the page, ends them. Without a position, a route or a
 server, the page says which is missing (with Settings when location access is off for good), and
 every server failing names routing in the map's line of missing parts.
 
-**Start** on a route from the user's position to the place (not one from a chosen start or back to
-the user) guides them along it, as Google Maps' Start: the page gives way to a banner on top with the
-next turn's icon, how far it is ("150 m", "Now" under 10 m) and Valhalla's sentence for it, and a bar
-at the bottom with the time and the way left, when they get there and End. Each position is put on
-the route's line (of two parts about as near, as on a street the route comes back along, the one
-closest to where the user was on it, so one fix that jumped ahead is undone by the next); the map follows the user at zoom 17, turned the way the route goes, with them low on
-the screen, until they move it (Re-centre follows again), and the screen stays on. More than 50 m from
-the line (or the fix's own accuracy, when worse) the banner says the user is off the route, with Find
-a new route, which asks for one from where they are and guides on along it; within 25 m of the end it
-says they have arrived. Back or End ends the guidance: the route card is back and the map turns north.
+**Start** on a route from the user's position to the place (not one from a chosen start or back to the
+user) guides them along it, as Google Maps' Start: the page gives way to a banner on top with the next
+turn's icon, how far it is ("150 m", "Now" under 10 m) and Valhalla's sentence for it, and a bar at the
+bottom with the time and the way left, when they get there and End, over the routing server's credits
+and Report a map error. Each position is put on the route's line (of two parts about as near, as on a
+street the route comes back along, the one closest to where the user was on it, so one fix that jumped
+ahead is undone by the next); the map follows the user at zoom 17, turned the way the route goes, with
+them low on the screen, until they move it (Re-centre follows again), and the screen stays on. More
+than 50 m from the line (or the fix's own accuracy, when worse) the banner says the user is off the
+route, with Find a new route, which asks for one from where they are and guides on along it; within
+25 m of the end it says they have arrived. While it guides, a tap or long-press on the map opens no place
+(panning works). Back or End ends the guidance: the route card is back and the map turns north.
 Guidance does not speak or find a new route by itself, and a new route needs a connection.
 
 **Report a map problem** at the end of a place page (also of a dropped pin) opens a note to

@@ -227,6 +227,19 @@ fun MapRoute(
     val routePoints by rememberUpdatedState(foundRoute?.route?.points)
     val markedStep by rememberUpdatedState(directionsState?.markedStep?.at)
     val routeStart by rememberUpdatedState(directionsState?.from?.point)
+    // While a route guides the user a touch on the map opens no place: another place closes the route's
+    // directions, and at zoom 17 in a town the map is all labels and pins (Pubky places, bookmarks, the
+    // other search results), easily touched by mistake.
+    // Panning still works (it stops the map following, Re-centre follows again), as in Google Maps' and
+    // CoMaps' navigation. A place a link opens is asked for, and still ends the guidance.
+    val guiding by rememberUpdatedState(directionsState?.guiding == true)
+
+    fun openTapped(place: PlaceRef) {
+        if (guiding) return
+        search?.controller?.close()
+        onClosePlace()
+        tapped = place
+    }
     // Pins while search is open; the picked result also when its card shows.
     val searchPins by rememberUpdatedState(searchState?.takeIf { it.mode != SearchMode.Idle })
     val mapState =
@@ -248,21 +261,13 @@ fun MapRoute(
                     pubkyPois,
                     poiTiles.icons,
                     dark = dark,
-                    onSelect = { place ->
-                        search?.controller?.close()
-                        onClosePlace()
-                        tapped = place.toPlaceRef()
-                    },
+                    onSelect = { place -> openTapped(place.toPlaceRef()) },
                 )
             }
             if (pubkyPois.dots.isNotEmpty()) {
                 MapPlacesPins(
                     pubkyPois.dots,
-                    onSelect = { place ->
-                        search?.controller?.close()
-                        onClosePlace()
-                        tapped = place.toPlaceRef()
-                    },
+                    onSelect = { place -> openTapped(place.toPlaceRef()) },
                     onCluster = { clusterTarget = it },
                 )
             }
@@ -270,18 +275,14 @@ fun MapRoute(
             if (savedPins.isNotEmpty()) {
                 SavedPins(
                     savedPins,
-                    onSelect = { entry ->
-                        search?.controller?.close()
-                        onClosePlace()
-                        tapped = entry.toPlaceRef()
-                    },
+                    onSelect = { entry -> openTapped(entry.toPlaceRef()) },
                 )
             }
             pinnedPoint?.let { PlacePin(it) }
             // Above the place's pin: the route's last step (its first, swapped) is at the place.
             markedStep?.let { RouteStepMark(it) }
             searchPins?.let { pins ->
-                if (search != null) SearchPins(pins.results, pins.selected, onSelect = search.controller::select)
+                if (search != null) SearchPins(pins.results, pins.selected, onSelect = { if (!guiding) search.controller.select(it) })
             }
         }
 
@@ -578,7 +579,14 @@ fun MapRoute(
             ?.title
     val guidance =
         directions?.let {
-            rememberGuidance(it, directionsState, pageTitle ?: shown?.place?.title ?: "the place", locationState, mapState)
+            rememberGuidance(
+                it,
+                directionsState,
+                pageTitle ?: shown?.place?.title ?: "the place",
+                locationState,
+                mapState,
+                credits = routeCredits(servers, foundRoute?.server),
+            )
         }
     // The area on screen goes offline in the style on screen and the other theme's of the same server.
     val areaPicker =
@@ -660,13 +668,8 @@ fun MapRoute(
                         callbacks {
                             click {
                                 onUnhandled { event ->
-                                    if (places != null) {
-                                        scope.launch {
-                                            val poi = mapState.tappedPoi(event.screenOffset) ?: return@launch
-                                            search?.controller?.close()
-                                            onClosePlace()
-                                            tapped = poi
-                                        }
+                                    if (places != null && !guiding) {
+                                        scope.launch { mapState.tappedPoi(event.screenOffset)?.let(::openTapped) }
                                     }
                                     ClickResult.Pass
                                 }
@@ -676,11 +679,9 @@ fun MapRoute(
                                 onEvent { event ->
                                     // No position while the map cannot yet convert screen points.
                                     val at = event.position
-                                    if (places == null || pickingArea || at == null) return@onEvent ClickResult.Pass
+                                    if (places == null || pickingArea || guiding || at == null) return@onEvent ClickResult.Pass
                                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    search?.controller?.close()
-                                    onClosePlace()
-                                    tapped = droppedPin(at.latitude, at.longitude)
+                                    openTapped(droppedPin(at.latitude, at.longitude))
                                     ClickResult.Consume
                                 }
                             }

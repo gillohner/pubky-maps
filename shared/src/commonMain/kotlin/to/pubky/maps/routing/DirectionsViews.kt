@@ -401,7 +401,7 @@ fun RouteStepList(
 
 /** The routing server's credits, each a link. */
 @Composable
-private fun RouteCredits(credits: List<AttributionLink>) {
+internal fun RouteCredits(credits: List<AttributionLink>) {
     if (credits.isEmpty()) return
     val openLink = rememberSafeLinkOpener()
     val styles =

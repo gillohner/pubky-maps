@@ -288,6 +288,14 @@ done
 [ -n "$followed" ] || fail "the map does not follow the user (stored view: $(cat "$out/map-view-guidance.json" 2> /dev/null))"
 screenshot guidance-bahnhofquai
 check_alive "guidance on Bahnhofquai"
+# A touch on the map while guiding opens no place, which would end the guidance: a long-press (that
+# drops a pin anywhere else) leaves the banner and End.
+adb shell input swipe 540 1400 540 1400 1500
+sleep 2
+if wait_for_start "Dropped pin" 2 > /dev/null; then fail "a long-press while guiding dropped a pin"; fi
+wait_for "End" 5 > /dev/null || fail "a long-press while guiding ended the guidance"
+wait_for "Turn left onto Rudolf-Brun-Brücke." 5 > /dev/null || fail "the guidance banner went after a long-press"
+check_alive "long-press while guiding"
 geo_loop 8.543611 47.377685
 wait_for "You're off the route" 20 > /dev/null || fail "150 m from the route the guidance does not say the user is off it"
 screenshot guidance-off-route

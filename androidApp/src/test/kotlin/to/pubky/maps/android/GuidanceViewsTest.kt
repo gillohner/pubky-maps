@@ -13,7 +13,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import to.pubky.maps.config.ServerDefaults
 import to.pubky.maps.links.GeoPoint
+import to.pubky.maps.map.routeCredits
 import to.pubky.maps.place.PlaceHeader
 import to.pubky.maps.place.PlacePageActions
 import to.pubky.maps.place.PlacePageContext
@@ -35,7 +37,7 @@ import to.pubky.maps.ui.PubkyMapsTheme
 /**
  * Start on a found route's card (only for a route from the user's position to the place), and what
  * the guidance banner and bar do: End, Find a new route off the route, Re-centre once the user moved
- * the map.
+ * the map, the routing server's credits.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w412dp-h915dp")
@@ -130,6 +132,7 @@ class GuidanceViewsTest {
                         onRecenter = { recentred++ },
                         onRouteAgain = { again++ },
                         onEnd = { ended++ },
+                        credits = routeCredits(ServerDefaults.lists, found.server),
                     )
                 androidx.compose.foundation.layout.Column {
                     GuidanceBanner(ui)
@@ -150,6 +153,12 @@ class GuidanceViewsTest {
         compose.onNodeWithText("Find a new route").assertDoesNotExist()
         compose.onNodeWithText("End").performClick()
         assertEquals(1, ended)
+    }
+
+    @Test
+    fun theBarCreditsTheRoutingServerAndNamesReportAMapError() {
+        guiding(onTheWay, following = true)
+        compose.onNodeWithText("Routing: Valhalla by FOSSGIS · © OpenStreetMap contributors · Report a map error").assertExists()
     }
 
     @Test
