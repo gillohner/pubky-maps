@@ -35,9 +35,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import to.pubky.maps.ui.AppIcons
 import to.pubky.maps.ui.SystemBack
@@ -103,8 +107,9 @@ data class ListPageState(
     /** They could not be read now: the ones shown are as last read. */
     val stale: Boolean = false,
     /**
-     * The New collection form is open. With no collections it shows anyway (there is nothing to tick),
-     * see [newFormShown].
+     * The New collection form is open: the user opened it, or typed in the one shown because they had
+     * none, until Cancel, back or Create. With no collections it shows anyway (there is nothing to
+     * tick), see [newFormShown].
      */
     val newOpen: Boolean = false,
     /** The new list's name as typed. */
@@ -149,11 +154,20 @@ fun ListPage(
     onClose: () -> Unit,
     snackbarHostState: SnackbarHostState? = null,
 ) {
+    // Cancel and back put the focus on the New collection row that takes the form's place, so TalkBack
+    // stays where the user was instead of starting again at the top of the page.
+    var focusNewRow by remember { mutableStateOf(false) }
+    val closeForm = {
+        focusNewRow = true
+        onNewOpenChange(false)
+    }
     // Back closes an opened form before it closes the page.
-    SystemBack(enabled = state.newFormClosable) { onNewOpenChange(false) }
+    SystemBack(enabled = state.newFormClosable, onBack = closeForm)
     // Each tick is sent at once, so there is nothing to confirm: Close (the X) only, and Undo in a snackbar.
     WritePage(title = "Add to collection", place = state.placeName, onClose = onClose, snackbarHostState = snackbarHostState) {
-        if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+        // With none, the bar stands in the "no collections" line's place at its height while they are
+        // read, so the form under it does not move up and back down as the read starts and ends.
+        if (state.loading && state.lists.isNotEmpty()) LinearProgressIndicator(Modifier.fillMaxWidth())
         if (state.stale) {
             Text(
                 "Your collections could not be read now; these are as they were last time.",
@@ -161,16 +175,37 @@ fun ListPage(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        if (state.lists.isEmpty() && !state.loading) {
-            Text("You have no collections yet.", style = MaterialTheme.typography.bodyMedium)
-        }
+        if (state.lists.isEmpty()) NoCollectionsLine(state.loading)
         if (state.newFormShown) {
-            NewCollectionForm(state, onNewOpenChange, onNewNameChange, onNewDescriptionChange, onNewKeptChange, onCreate)
+            // Typing opens the form: one shown because the user had none stays, Cancel and all, when the
+            // read then finds collections (made on another device), so what they typed and the keyboard do
+            // not vanish under their fingers, also when they clear the text to start again.
+            val typed = { if (!state.newOpen) onNewOpenChange(true) }
+            NewCollectionForm(
+                state,
+                onNewNameChange = {
+                    typed()
+                    onNewNameChange(it)
+                },
+                onNewDescriptionChange = {
+                    typed()
+                    onNewDescriptionChange(it)
+                },
+                onNewKeptChange = onNewKeptChange,
+                onCreate = onCreate,
+                onCancel = closeForm,
+            )
         }
-        if (state.lists.isNotEmpty() || !state.newFormShown) {
+        if (state.lists.isNotEmpty()) {
             WriteSection("Your collections") {
                 Column {
-                    if (!state.newFormShown) NewCollectionRow(onOpen = { onNewOpenChange(true) })
+                    if (!state.newFormShown) {
+                        NewCollectionRow(
+                            takeFocus = focusNewRow,
+                            onFocusTaken = { focusNewRow = false },
+                            onOpen = { onNewOpenChange(true) },
+                        )
+                    }
                     state.lists.forEach { choice -> ListRow(choice, onToggle) }
                 }
             }
@@ -183,9 +218,37 @@ fun ListPage(
     }
 }
 
-/** The row that opens the New collection form, first among the collections. */
+/** "You have no collections yet.", or the bar in its place (and at its height) while they are read. */
 @Composable
-private fun NewCollectionRow(onOpen: () -> Unit) {
+private fun NoCollectionsLine(loading: Boolean) {
+    Box(contentAlignment = Alignment.CenterStart) {
+        Text(
+            "You have no collections yet.",
+            style = MaterialTheme.typography.bodyMedium,
+            // Kept for its height only while they are read: not seen, not read out.
+            modifier = if (loading) Modifier.alpha(0f).clearAndSetSemantics {} else Modifier,
+        )
+        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+    }
+}
+
+/**
+ * The row that opens the New collection form, first among the collections. With [takeFocus] (the form
+ * was just closed) it takes the focus as it comes back; [onFocusTaken] then clears that.
+ */
+@Composable
+private fun NewCollectionRow(
+    takeFocus: Boolean,
+    onFocusTaken: () -> Unit,
+    onOpen: () -> Unit,
+) {
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        if (takeFocus) {
+            focus.requestFocus()
+            onFocusTaken()
+        }
+    }
     ListItem(
         headlineContent = { Text("New collection") },
         leadingContent = {
@@ -194,7 +257,9 @@ private fun NewCollectionRow(onOpen: () -> Unit) {
                 Icon(AppIcons.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             }
         },
-        modifier = Modifier.clickable(role = Role.Button, onClick = onOpen),
+        // A clickable takes no focus in touch mode (where Cancel was tapped), so the row says it can:
+        // still one focus target, so a keyboard stops on it once.
+        modifier = Modifier.focusRequester(focus).focusProperties { canFocus = true }.clickable(role = Role.Button, onClick = onOpen),
     )
 }
 
@@ -202,16 +267,17 @@ private fun NewCollectionRow(onOpen: () -> Unit) {
 @Composable
 private fun NewCollectionForm(
     state: ListPageState,
-    onNewOpenChange: (Boolean) -> Unit,
     onNewNameChange: (String) -> Unit,
     onNewDescriptionChange: (String) -> Unit,
     onNewKeptChange: (Kept) -> Unit,
     onCreate: () -> Unit,
+    onCancel: () -> Unit,
 ) {
     val title = remember { FocusRequester() }
     // Opened by the user: the title is what they type first. Not when the form is simply there because
-    // there are no collections, so the keyboard does not cover the page as it opens; and once only, so
-    // a turn of the phone does not pull the cursor back from the description.
+    // there are no collections, so the keyboard does not cover the page as it opens; not when it opens
+    // because they typed in a field of it; and once only, so a turn of the phone does not pull the
+    // cursor back from the description.
     var focused by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(state.newOpen) {
         if (state.newOpen && !focused) {
@@ -227,7 +293,7 @@ private fun NewCollectionForm(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f),
             )
-            if (state.newFormClosable) TextButton(onClick = { onNewOpenChange(false) }) { Text("Cancel") }
+            if (state.newFormClosable) TextButton(onClick = onCancel) { Text("Cancel") }
         }
         OutlinedTextField(
             value = state.newName,
@@ -236,7 +302,7 @@ private fun NewCollectionForm(
             singleLine = true,
             isError = state.newName.length > LIST_NAME_MAX,
             supportingText = { Text("${state.newName.length} / $LIST_NAME_MAX") },
-            modifier = Modifier.fillMaxWidth().focusRequester(title),
+            modifier = Modifier.fillMaxWidth().focusRequester(title).onFocusChanged { if (it.isFocused) focused = true },
         )
         // Title and Description, as pubky.app's New Collection asks; the description shows under the
         // collection's name on the Bookmarks page and on pubky.app's collection cards.
@@ -249,7 +315,7 @@ private fun NewCollectionForm(
             maxLines = 4,
             isError = descriptionChars > LIST_DESCRIPTION_MAX,
             supportingText = { Text("$descriptionChars / $LIST_DESCRIPTION_MAX") },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.isFocused) focused = true },
         )
         Column(Modifier.selectableGroup()) {
             state.keptChoices.forEach { kept ->
