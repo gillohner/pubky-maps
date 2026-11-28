@@ -1,5 +1,6 @@
 package to.pubky.maps.routing
 
+import kotlinx.coroutines.flow.Flow
 import kotlin.math.roundToInt
 
 /**
@@ -38,7 +39,8 @@ class VoicePrompts {
             off = true
             return "You're off the route."
         }
-        off = false
+        // Back on it only well inside the line's limit: a position wobbling around it is not said again and again.
+        if (progress.offBy <= BACK_ON_ROUTE_METERS) off = false
         if (progress.arrived) {
             if (arrived) return null
             arrived = true
@@ -74,6 +76,9 @@ class VoicePrompts {
         return null
     }
 
+    /** Guidance ended: the next one starts over. */
+    fun forget() = reset(null)
+
     private fun reset(route: Route?) {
         this.route = route
         said.clear()
@@ -83,6 +88,33 @@ class VoicePrompts {
         arrived = false
     }
 }
+
+/**
+ * Says the prompts ([prompts]) of each state of [directions] through the speaker of the moment
+ * ([speaker]; null while the speech engine starts, where the states wait for it so the start is not
+ * lost, and where the phone cannot speak) while [voice] is on. With the voice off the prompts are
+ * worked out and dropped, so switching it on again goes on from where the user is ("In 300
+ * meters..."), not from where they were when it went off. Guidance ending forgets them.
+ */
+suspend fun speakGuidance(
+    directions: Flow<Directions?>,
+    prompts: VoicePrompts,
+    speaker: () -> Speaker?,
+    voice: () -> Boolean,
+) {
+    directions.collect { d ->
+        if (d == null || !d.guiding) {
+            prompts.forget()
+            return@collect
+        }
+        val now = speaker() ?: return@collect
+        val text = prompts.next(d) ?: return@collect
+        if (voice()) now.say(text)
+    }
+}
+
+/** Off the route ends this close to the line ([OFF_ROUTE_METERS] less a GPS fix's usual wobble). */
+private const val BACK_ON_ROUTE_METERS = 35.0
 
 /**
  * How far before a step its warning and its own sentence are said, by [mode] and at the pace of the

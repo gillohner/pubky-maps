@@ -182,6 +182,9 @@ class DirectionsController(
     /** The place the user chose to start directions from; null for their position. */
     val chosenStart: StateFlow<RouteStart?> = chosen.asStateFlow()
 
+    /** What guidance has said aloud, kept with it for the process: a recreated screen does not say it again. */
+    val voicePrompts = VoicePrompts()
+
     /** The mode of the next directions: the one the user picked last, by car at first. */
     private var lastMode = TravelMode.Car
     private var request: Job? = null

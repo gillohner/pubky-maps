@@ -219,8 +219,10 @@ Guidance **speaks** through the phone's speech engine (US English, Valhalla's sp
 way to start, a warning before each step with its distance ("In 400 meters, turn left onto
 Rudolf-Brun-Brücke.", about 30 s ahead at the pace of the stretch, at least 500 m by car, 250 m by
 bike, 100 m on foot), the step itself just before it (about 7 s ahead, at least 120/50/25 m), how long
-a long stretch after a step is ("Continue for 2 kilometers."), arriving, and going off the route; each
-once per route. Other sound is turned down while it speaks. The round speaker button over the bar
+a long stretch after a step is ("Continue for 2 kilometers.") and arriving, each once per route, and
+going off the route each time (again only after coming back within 35 m of the line); what was said is
+kept with the guidance, so a recreated screen does not say it again. Other sound is turned down while
+it speaks. The round speaker button over the bar
 switches the voice off and on, kept for the next route; a phone without a speech engine or an English
 voice shows no button.
 

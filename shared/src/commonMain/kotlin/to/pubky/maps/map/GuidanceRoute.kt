@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.delay
@@ -30,8 +31,8 @@ import to.pubky.maps.routing.Directions
 import to.pubky.maps.routing.DirectionsController
 import to.pubky.maps.routing.GuidanceUi
 import to.pubky.maps.routing.KeepScreenOn
-import to.pubky.maps.routing.VoicePrompts
 import to.pubky.maps.routing.rememberSpeaker
+import to.pubky.maps.routing.speakGuidance
 import to.pubky.maps.ui.SystemBack
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
@@ -70,16 +71,12 @@ internal fun rememberGuidance(
     val guiding = open?.guiding == true
     // The speech engine only while guiding: it starts with Start and stops with End.
     val speaker = if (guiding) rememberSpeaker() else null
-    // Each guidance speaks from its start; one turned off and on again goes on from where it is.
-    val prompts = remember(guiding) { VoicePrompts() }
-    LaunchedEffect(directions, speaker, voice, prompts) {
-        if (speaker == null) return@LaunchedEffect
-        if (!voice) {
-            speaker.stop()
-            return@LaunchedEffect
-        }
-        directions.directions.collect { d -> d?.let(prompts::next)?.let(speaker::say) }
+    val currentSpeaker by rememberUpdatedState(speaker)
+    val currentVoice by rememberUpdatedState(voice)
+    LaunchedEffect(directions) {
+        speakGuidance(directions.directions, directions.voicePrompts, { currentSpeaker }, { currentVoice })
     }
+    LaunchedEffect(speaker, voice) { if (!voice) speaker?.stop() }
     var following by remember { mutableStateOf(true) }
     var guided by remember { mutableStateOf(false) }
     LaunchedEffect(guiding) {

@@ -1,6 +1,7 @@
 package to.pubky.maps.android
 
 import android.media.AudioAttributes
+import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.speech.tts.TextToSpeech
 import androidx.compose.runtime.getValue
@@ -18,7 +19,10 @@ import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -26,6 +30,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowTextToSpeech
+import org.w3c.dom.Element
 import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.routing.AndroidSpeaker
 import to.pubky.maps.routing.Directions
@@ -36,11 +41,14 @@ import to.pubky.maps.routing.RouteStatus
 import to.pubky.maps.routing.Speaker
 import to.pubky.maps.routing.TravelMode
 import to.pubky.maps.ui.PubkyMapsTheme
+import java.io.File
 import java.util.Locale
+import javax.xml.parsers.DocumentBuilderFactory
 
 /**
  * Guidance's voice: the speech engine says each prompt in turn as navigation guidance, music turned
- * down meanwhile; a phone that cannot speak English gets no voice; the bar's switch turns it off and on.
+ * down meanwhile; a phone that cannot speak English gets no voice; the app may see the engines; the
+ * bar's switch turns it off and on.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w412dp-h915dp")
@@ -76,9 +84,9 @@ class GuidanceVoiceTest {
         assertEquals(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK, focus.focusGain)
         assertEquals(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE, focus.audioAttributes.usage)
         // The other sound comes back once both are said, not between them.
-        engine.utteranceProgressListener.onDone("guidance-1")
+        engine.utteranceProgressListener.onDone("guidance-0-1")
         assertNull(audio.lastAbandonedAudioFocusRequest)
-        engine.utteranceProgressListener.onDone("guidance-2")
+        engine.utteranceProgressListener.onDone("guidance-0-2")
         assertEquals(focus, audio.lastAbandonedAudioFocusRequest)
     }
 
@@ -91,12 +99,40 @@ class GuidanceVoiceTest {
     @Test
     fun stoppingSilencesThePromptsAndGivesTheSoundBack() {
         val (speaker, engine) = speaker()
+        val manager = context.getSystemService(AudioManager::class.java)
         speaker!!.say("Turn left onto Rudolf-Brun-Brücke.")
+        val first = audio.lastAudioFocusRequest
         speaker.stop()
-        assertNotNull(audio.lastAbandonedAudioFocusRequest)
+        val focus = audio.lastAbandonedAudioFocusRequest
+        assertNotNull(focus)
         // A sentence said after it takes the sound again.
         speaker.say("Turn right onto Seilergraben.")
         assertEquals("Turn right onto Seilergraben.", engine.lastSpokenText)
+        assertNotSame(first, audio.lastAudioFocusRequest)
+        // The engine's late report of the stopped sentence does not give the sound back under the new one.
+        val other = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN).build()
+        manager.abandonAudioFocusRequest(other)
+        engine.utteranceProgressListener.onStop("guidance-0-1", true)
+        assertSame(other, audio.lastAbandonedAudioFocusRequest)
+        engine.utteranceProgressListener.onDone("guidance-1-2")
+        assertSame(focus, audio.lastAbandonedAudioFocusRequest)
+    }
+
+    @Test
+    fun theAppMaySeeTheSpeechEngines() {
+        // From Android 11 TextToSpeech finds no engine unless the manifest asks to see them.
+        val queries = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(File("src/main/AndroidManifest.xml"))
+        val actions = queries.getElementsByTagName("queries").item(0).childNodes
+        val names =
+            (0 until actions.length)
+                .map { actions.item(it) }
+                .filterIsInstance<Element>()
+                .filter { it.tagName == "intent" }
+                .flatMap { intent ->
+                    val children = intent.getElementsByTagName("action")
+                    (0 until children.length).map { (children.item(it) as Element).getAttribute("android:name") }
+                }
+        assertTrue(TextToSpeech.Engine.INTENT_ACTION_TTS_SERVICE in names)
     }
 
     private val hb = GeoPoint(47.3779, 8.5403)

@@ -1,5 +1,8 @@
 package to.pubky.maps.routing
 
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.test.runTest
 import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.search.Fixtures
 import kotlin.test.Test
@@ -18,6 +21,7 @@ class VoicePromptsTest {
         on: Route = route,
         offRoute: Boolean = false,
         arrived: Boolean = false,
+        offBy: Double = if (offRoute) 80.0 else 3.0,
     ) = Directions(
         placeUri = "osm:relation/3768127",
         place = kunsthaus,
@@ -29,7 +33,7 @@ class VoicePromptsTest {
             RouteProgress(
                 segment = 0,
                 along = 0.0,
-                offBy = if (offRoute) 80.0 else 3.0,
+                offBy = offBy,
                 offRoute = offRoute,
                 arrived = arrived,
                 nextStep = next,
@@ -116,6 +120,9 @@ class VoicePromptsTest {
         // Back on it: the bridge's warning was said, nothing again.
         assertNull(prompts.next(guiding(4, 380.0)))
         assertEquals("You're off the route.", prompts.next(guiding(4, 380.0, offRoute = true)))
+        // Wobbling just inside the line's limit is not back on it.
+        assertNull(prompts.next(guiding(4, 370.0, offBy = 45.0)))
+        assertNull(prompts.next(guiding(4, 370.0, offRoute = true)))
     }
 
     @Test
@@ -189,4 +196,63 @@ class VoicePromptsTest {
         assertEquals("2 kilometers", spokenDistance(2_010.0))
         assertEquals("12 kilometers", spokenDistance(12_400.0))
     }
+
+    private class FakeSpeaker : Speaker {
+        val said = mutableListOf<String>()
+
+        override fun say(text: String) {
+            said += text
+        }
+
+        override fun stop() = Unit
+    }
+
+    @Test
+    fun theStartWaitsForTheSpeechEngine() =
+        runTest {
+            val speaker = FakeSpeaker()
+            var ready: Speaker? = null
+            val states =
+                flowOf(guiding(1, 300.0), guiding(1, 298.0), guiding(1, 296.0)).onEach {
+                    if (it.progress!!.toNextStep <
+                        299
+                    ) {
+                        ready = speaker
+                    }
+                }
+            speakGuidance(states, VoicePrompts(), { ready }, { true })
+            assertEquals(
+                listOf("Drive north. Then, in 40 meters, Turn right onto Museumstrasse.", "In 300 meters, turn right onto Museumstrasse."),
+                speaker.said,
+            )
+        }
+
+    @Test
+    fun switchedOffNothingIsSaidAndOnAgainItGoesOnFromWhereTheUserIs() =
+        runTest {
+            val speaker = FakeSpeaker()
+            var voice = false
+            val states =
+                flowOf(guiding(1, 600.0), guiding(1, 450.0), guiding(1, 440.0), guiding(1, 110.0))
+                    .onEach { if (it.progress!!.toNextStep < 445) voice = true }
+            speakGuidance(states, VoicePrompts(), { speaker }, { voice })
+            // The start and the warning went by while it was off.
+            assertEquals(listOf("Turn right onto Museumstrasse. Then Bear right onto Bahnhofquai."), speaker.said)
+        }
+
+    @Test
+    fun endingForgetsWhatWasSaidAndARecreatedScreenDoesNotSayItAgain() =
+        runTest {
+            val speaker = FakeSpeaker()
+            val prompts = VoicePrompts()
+            val start = "Drive north. Then, in 40 meters, Turn right onto Museumstrasse."
+            speakGuidance(flowOf(guiding(1, 600.0)), prompts, { speaker }, { true })
+            // The screen recreated: the same prompts carry on.
+            speakGuidance(flowOf(guiding(1, 590.0)), prompts, { speaker }, { true })
+            assertEquals(listOf(start), speaker.said)
+            // Ended and started again on the same route: from its start.
+            speakGuidance(flowOf(guiding(1, 590.0).copy(guiding = false), guiding(1, 590.0)), prompts, { speaker }, { true })
+            speakGuidance(flowOf(null, guiding(1, 590.0)), prompts, { speaker }, { true })
+            assertEquals(listOf(start, start, start), speaker.said)
+        }
 }
