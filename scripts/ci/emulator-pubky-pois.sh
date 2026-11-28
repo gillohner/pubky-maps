@@ -14,7 +14,7 @@
 # request for Pinakes' referenced filter. Zoomed out to 13, where the tiles hold only stations, halts
 # and ferry terminals as points of interest, Zürich Hauptbahnhof (node 1236383343, a recorded Pinakes
 # place) is highlighted too: the style's own train icon in the teal ring, where it was a dot before.
-# Screenshots at zoom 16, 14 and 12 are kept for a look.
+# Screenshots at zoom 16, 14, 13 and 12 are kept for a look.
 # Usage: emulator-pubky-pois.sh <apk> <out dir>
 set -euo pipefail
 
@@ -115,9 +115,12 @@ expect_ring() {
 }
 
 # expect_station NAME: Zürich Hauptbahnhof at the screen's centre is highlighted with the style's own
-# train icon (OpenFreeMap's railway image, blue #4898FF) in the teal ring: the ring's teal as in
-# expect_ring, and the train's blue in the ~10 x 10 dp box at the centre (~33 % on the CI emulator;
-# a dot there has none of it, the map's own water is a paler blue); its bar is 8 %.
+# train icon (OpenFreeMap's railway image, blue #4898FF) in the teal ring. The ring's teal as in
+# expect_ring tells the highlight apart: unhighlighted, the station is a dot or in a cluster with the
+# place 34 dp away (the cluster's 85 % teal is ~36 off in red, outside png_stats' 12), and Liberty
+# draws its own train icon there either way. The train's blue in the ~10 x 10 dp box at the centre
+# (~33 % on the CI emulator; the map's water is a paler blue) checks the icon is the style's; its bar
+# is 8 %.
 expect_station() {
     local stats ring train
     stats=$(python3 -I "$here/png_stats.py" "$out/$1.png" 0.455 0.478 0.545 0.522 '#00897b') ||

@@ -24,8 +24,11 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.serialization.json.JsonArray
@@ -85,7 +88,7 @@ internal data class PoiBase(
     val sources: List<PoiSource>,
     val font: List<String>?,
     val styleUrl: String?,
-    val placeNames: String? = null,
+    val placeNames: String?,
 )
 
 /**
@@ -108,8 +111,8 @@ internal class PoiTiles {
 /**
  * Keeps [tiles] up to date for [places]: the style's sources each time a style from the list is in
  * place, and from [POI_HIGHLIGHT_MIN_ZOOM], each time the map is idle (its tiles drawn) or the places
- * change, which of the places the tiles hold as a point of interest. Below that zoom, or before a
- * style is in place, none (every place is a dot). Once a place is highlighted, the style's own icons
+ * change, which of the places the tiles hold as a point of interest ([poisFoundOf]). Below that
+ * zoom, or before a style is in place, none (every place is a dot). Once a place is highlighted, the style's own icons
  * of its points of interest are read through [styleIcons] (none without it).
  */
 @Composable
@@ -149,16 +152,48 @@ internal fun TrackPubkyPois(
             tiles.found = emptyMap()
             return@LaunchedEffect
         }
-        val idle = mapState.events.filter { it == MapEvent.Idle }.onStart { emit(MapEvent.Idle) }
-        // Crossing the zoom also asks at once: zoomed out under it mid-gesture, the highlights hide and
-        // their places are dots again before the map is next idle.
-        val near = snapshotFlow { mapState.cameraPosition.zoom >= POI_HIGHLIGHT_MIN_ZOOM }.distinctUntilChanged()
-        combine(idle, near, snapshotFlow { shown }) { _, isNear, now -> isNear to now }
-            .collectLatest { (isNear, now) ->
-                tiles.found = if (isNear) mapState.poisAmong(base.sources, now) else emptyMap()
-            }
+        poisFoundOf(
+            zooms = snapshotFlow { poiZoomOf(mapState.cameraPosition.zoom) },
+            places = snapshotFlow { shown },
+            idle = mapState.events.filter { it == MapEvent.Idle }.map { },
+        ) { mapState.poisAmong(base.sources, it) }
+            .collect { tiles.found = it }
     }
 }
+
+/**
+ * Which of the places the tiles hold as a point of interest ([read]), asked at once, again each time
+ * the map is [idle] (its tiles drawn), and each time the places or the zoom band change; none
+ * below [POI_HIGHLIGHT_MIN_ZOOM]. Zoomed out under [POI_HIGHLIGHT_OVER_PLACE_NAMES_ZOOM], none until
+ * the map is next idle: the tiles of 14 still loaded mid-gesture hold the cafés and museums the
+ * tiles of 13 do not, which the highlights there could not draw, so their places are dots again at
+ * once, and the stations highlighted again once the map rests.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+internal fun poisFoundOf(
+    zooms: Flow<PoiZoom>,
+    places: Flow<List<MapPlace>>,
+    idle: Flow<Unit>,
+    read: suspend (List<MapPlace>) -> Map<Long, Map<String, String>>,
+): Flow<Map<Long, Map<String, String>>> =
+    flow {
+        var last: PoiZoom? = null
+        // Zoomed out under 14 and the map not idle since.
+        var settling = false
+        emitAll(
+            combine(zooms.distinctUntilChanged(), places, ::Pair).transformLatest { (zoom, now) ->
+                if (last == PoiZoom.OverPlaceNames && zoom == PoiZoom.UnderPlaceNames) settling = true
+                if (zoom != PoiZoom.UnderPlaceNames) settling = false
+                last = zoom
+                if (zoom == PoiZoom.None || settling) emit(emptyMap())
+                if (zoom == PoiZoom.None) return@transformLatest
+                (if (settling) idle else idle.onStart { emit(Unit) }).collect {
+                    settling = false
+                    emit(read(now))
+                }
+            },
+        )
+    }
 
 /** Whose icons to read: the style at [styleUrl], for its sources of points of interest. */
 internal data class IconsAsk(
@@ -277,7 +312,7 @@ internal fun PubkyPoiHighlights(
     HighlightLayers(base, pois, icons, dark, onSelect, near)
 }
 
-/** The highest zoom MapLibre draws. */
+/** The style spec's default maxzoom of a layer (maplibre-compose's too). */
 private const val MAX_ZOOM = 24.0
 
 /** The zooms one set of highlight layers is drawn at, from [minZoom] up to (without) [maxZoom]; [name] is in their ids. */

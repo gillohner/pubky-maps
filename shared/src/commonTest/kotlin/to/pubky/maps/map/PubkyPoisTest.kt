@@ -1,5 +1,11 @@
 package to.pubky.maps.map
 
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -230,11 +236,82 @@ class PubkyPoisTest {
     }
 
     @Test
-    fun placesAreHighlightedFromTheZoomThePubkyPlacesShowAtAndOverPlaceNamesFrom14() {
+    fun theHighlightsStartAtTheZoomOfThePubkyPlacesAndGoOverPlaceNamesFrom14() {
         // OpenMapTiles' tiles hold railway stations, halts and ferry terminals from zoom 12, the
-        // zoom the Pubky places layer starts at: they are highlighted from there.
-        assertEquals(MapPlacesLayer.MIN_ZOOM, POI_HIGHLIGHT_MIN_ZOOM)
-        assertEquals(12.0, POI_HIGHLIGHT_MIN_ZOOM)
-        assertEquals(14.0, POI_HIGHLIGHT_OVER_PLACE_NAMES_ZOOM)
+        // zoom the Pubky places layer starts at.
+        assertEquals(PoiZoom.None, poiZoomOf(11.99))
+        assertEquals(PoiZoom.UnderPlaceNames, poiZoomOf(MapPlacesLayer.MIN_ZOOM))
+        assertEquals(PoiZoom.UnderPlaceNames, poiZoomOf(13.99))
+        assertEquals(PoiZoom.OverPlaceNames, poiZoomOf(14.0))
     }
+
+    private val station = mapOf(12363833431 to mapOf("class" to "railway", "subclass" to "station"))
+    private val cafe = mapOf(2708030951 to mapOf("class" to "cafe", "subclass" to "cafe"))
+
+    /** [poisFoundOf] on a map at [zoom] that reads [tiles] each time it is asked; its answers and asks. */
+    private class FoundPois(
+        scope: TestScope,
+        zoom: PoiZoom,
+        var tiles: Map<Long, Map<String, String>>,
+    ) {
+        val zooms = MutableStateFlow(zoom)
+        val places = MutableStateFlow(listOf<MapPlace>())
+        val idle = MutableSharedFlow<Unit>()
+        val answers = mutableListOf<Map<Long, Map<String, String>>>()
+        var asks = 0
+
+        init {
+            scope.backgroundScope.launch(UnconfinedTestDispatcher(scope.testScheduler)) {
+                poisFoundOf(zooms, places, idle) {
+                    asks++
+                    tiles
+                }.collect { answers += it }
+            }
+        }
+    }
+
+    @Test
+    fun zoomedOutUnder14ThePlacesAreDotsUntilTheMapRestsThenItsStationsAreHighlighted() =
+        runTest {
+            val map = FoundPois(this, PoiZoom.OverPlaceNames, tiles = station + cafe)
+            // Asked at once, then each time the map is idle.
+            assertEquals(listOf(station + cafe), map.answers)
+            map.idle.emit(Unit)
+            assertEquals(2, map.asks)
+            // Zoomed out under 14 mid-gesture: the tiles of 14 still loaded hold the café, which the
+            // highlights under 14 cannot draw; every place is a dot until the map rests.
+            map.zooms.value = PoiZoom.UnderPlaceNames
+            assertEquals(emptyMap(), map.answers.last())
+            assertEquals(2, map.asks)
+            // New places meanwhile are not asked of those tiles either.
+            map.places.value = listOf(schober)
+            assertEquals(emptyMap(), map.answers.last())
+            assertEquals(2, map.asks)
+            // Rested on the tiles of 13: only the station.
+            map.tiles = station
+            map.idle.emit(Unit)
+            assertEquals(station, map.answers.last())
+            // From then on new places are asked at once.
+            map.places.value = listOf(schober, kunsthaus)
+            assertEquals(4, map.asks)
+        }
+
+    @Test
+    fun underTheZoomOfThePubkyPlacesNoneIsAskedAndZoomingInAsksAtOnce() =
+        runTest {
+            val map = FoundPois(this, PoiZoom.None, tiles = station)
+            map.idle.emit(Unit)
+            assertEquals(listOf(emptyMap<Long, Map<String, String>>()), map.answers)
+            assertEquals(0, map.asks)
+            // Zoomed in to 12: the stations are asked at once (a start at zoom 13 too).
+            map.zooms.value = PoiZoom.UnderPlaceNames
+            assertEquals(station, map.answers.last())
+            // Zoomed in over 14, asked at once; zoomed out under 12, none.
+            map.tiles = station + cafe
+            map.zooms.value = PoiZoom.OverPlaceNames
+            assertEquals(station + cafe, map.answers.last())
+            map.zooms.value = PoiZoom.None
+            assertEquals(emptyMap(), map.answers.last())
+            assertEquals(2, map.asks)
+        }
 }

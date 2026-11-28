@@ -27,6 +27,17 @@ const val POI_HIGHLIGHT_MIN_ZOOM = MapPlacesLayer.MIN_ZOOM
  */
 const val POI_HIGHLIGHT_OVER_PLACE_NAMES_ZOOM = 14.0
 
+/** Where a zoom is for the highlights: under [POI_HIGHLIGHT_MIN_ZOOM], under the place names, over them. */
+enum class PoiZoom { None, UnderPlaceNames, OverPlaceNames }
+
+/** The [PoiZoom] of [zoom]. */
+fun poiZoomOf(zoom: Double): PoiZoom =
+    when {
+        zoom < POI_HIGHLIGHT_MIN_ZOOM -> PoiZoom.None
+        zoom < POI_HIGHLIGHT_OVER_PLACE_NAMES_ZOOM -> PoiZoom.UnderPlaceNames
+        else -> PoiZoom.OverPlaceNames
+    }
+
 /** A vector source of the base map and its source layer of points of interest. */
 data class PoiSource(
     val source: String,
