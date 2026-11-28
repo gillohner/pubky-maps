@@ -43,7 +43,6 @@ import to.pubky.maps.search.SearchResult
 import to.pubky.maps.search.SearchState
 import to.pubky.maps.search.SourceState
 import to.pubky.maps.search.distanceText
-import to.pubky.maps.ui.PubkyMapsTheme
 
 /**
  * Screenshots of search (phone 412x915 dp, tablet 1280x800 dp, light and dark): the empty bar with
@@ -81,7 +80,7 @@ class SearchScreenshotTest {
                     if (largeFont) fontScale(2f)
                 },
         ) {
-            PubkyMapsTheme { content() }
+            ScreenshotTheme { content() }
         }
     }
 

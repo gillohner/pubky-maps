@@ -27,7 +27,6 @@ import to.pubky.maps.map.MapScreen
 import to.pubky.maps.place.PlaceCard
 import to.pubky.maps.place.PlaceRef
 import to.pubky.maps.place.PlaceSource
-import to.pubky.maps.ui.PubkyMapsTheme
 
 /**
  * Screenshots of the map with a place opened from a link (phone 412x915 dp, tablet 1280x800 dp, light
@@ -63,7 +62,7 @@ class LinkedPlaceScreenshotTest {
                     if (largeFont) fontScale(2f)
                 },
         ) {
-            PubkyMapsTheme { content() }
+            ScreenshotTheme { content() }
         }
     }
 

@@ -46,6 +46,8 @@ the core for this machine), screens in Roborazzi screenshot tests (`androidApp/s
   with a placeholder map) and a route that wires the live map (checked by the emulator test).
 - A screen with a running progress indicator never goes idle in `ScreenshotTest`'s capture; take it
   with the Compose clock stopped, as `SignInScreenshotTest` does.
+- A capture through `captureRoboImage { }` (no Compose test rule) draws in `ScreenshotTheme`, which keeps
+  a focused text field's cursor shown: its blink runs on the real clock, so a slow capture would lose it.
 
 ## Server-list rule
 
