@@ -144,8 +144,11 @@ class PubkyWordsTest {
                 )
             }
         }
+        assertNoOldWords()
+        // The collection's own page.
         compose.onNodeWithText("Coffee in Zürich").performClick()
-        compose.onAllNodesWithText("Conditorei Schober").assertCountEquals(2)
+        compose.onNodeWithText("Conditorei Schober").assertExists()
+        compose.onAllNodesWithText("Not sent yet", substring = true).assertCountEquals(0)
         assertNoOldWords()
     }
 

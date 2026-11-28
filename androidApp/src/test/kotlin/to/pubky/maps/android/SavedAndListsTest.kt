@@ -87,9 +87,9 @@ class SavedAndListsTest {
         // One not sent yet still says so.
         compose.onNodeWithText("Not sent yet", substring = true).assertExists()
         compose.onNodeWithText("Coffee in Zürich").performClick()
-        // The saved row and the list entry both have the name; neither shows the OpenStreetMap id or the link.
-        compose.onAllNodesWithText("Conditorei Schober").assertCountEquals(2)
-        compose.onAllNodesWithText("Lindenhof").assertCountEquals(2)
+        // The collection's page names its places too; it shows neither the OpenStreetMap id nor the link.
+        compose.onNodeWithText("Conditorei Schober").assertExists()
+        compose.onNodeWithText("Lindenhof").assertExists()
         compose.onAllNodesWithText("OpenStreetMap node 270803095").assertCountEquals(0)
         compose.onAllNodesWithText("maps.app.goo.gl/x1").assertCountEquals(0)
     }
@@ -139,8 +139,8 @@ class SavedAndListsTest {
         compose.onNodeWithText("Supermarket · Theaterstrasse 2").assertExists()
         compose.onAllNodesWithText("47.37586, 8.54253", substring = true).assertCountEquals(0)
         compose.onNodeWithText("Coffee in Zürich").performClick()
-        // The list entry says it too.
-        compose.onAllNodesWithText("Café · Napfgasse 4, 8001 Zürich").assertCountEquals(2)
+        // The collection's page says it too.
+        compose.onNodeWithText("Café · Napfgasse 4, 8001 Zürich").assertExists()
     }
 
     @Test
@@ -185,9 +185,9 @@ class SavedAndListsTest {
         // A name no other place has shows the name alone.
         compose.onAllNodesWithText("47.3722, 8.5446").assertCountEquals(0)
         compose.onNodeWithText("Groceries").performClick()
-        // In the list too, from the saved place's point; Migros, alone, has no line under it.
-        compose.onAllNodesWithText("47.37586, 8.54253").assertCountEquals(2)
-        compose.onAllNodesWithText("47.36722, 8.54493").assertCountEquals(2)
+        // On the collection's page too, from the bookmark's point; Migros, alone, has no line under it.
+        compose.onNodeWithText("47.37586, 8.54253").assertExists()
+        compose.onNodeWithText("47.36722, 8.54493").assertExists()
         compose.onAllNodesWithText("OpenStreetMap node 3").assertCountEquals(0)
     }
 
@@ -235,9 +235,9 @@ class SavedAndListsTest {
         compose.onNodeWithText("Supermarket · Bahnhofbrücke 1").assertExists()
         compose.onAllNodesWithText("47.37586, 8.54253", substring = true).assertCountEquals(0)
         compose.onNodeWithText("Groceries").performClick()
-        // In the list too.
-        compose.onAllNodesWithText("47.36722, 8.54493").assertCountEquals(2)
-        compose.onAllNodesWithText("Supermarket · Bahnhofbrücke 1").assertCountEquals(2)
+        // On the collection's page too.
+        compose.onNodeWithText("47.36722, 8.54493").assertExists()
+        compose.onNodeWithText("Supermarket · Bahnhofbrücke 1").assertExists()
         compose.onAllNodesWithText("47.37586, 8.54253", substring = true).assertCountEquals(0)
     }
 
