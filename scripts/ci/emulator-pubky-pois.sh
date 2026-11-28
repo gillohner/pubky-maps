@@ -11,7 +11,10 @@
 # kind's glyph: checked by the badge's teal at the centre. A tap at the badge opens the
 # place's page (a dot or the map's own icon there would open it too: this checks that the badge
 # leaves the page reachable). The name under the badge is checked for its teal, and every places
-# request for Pinakes' referenced filter. Screenshots at zoom 16 and 14 are kept for a look.
+# request for Pinakes' referenced filter. Zoomed out to 13, where the tiles hold only stations, halts
+# and ferry terminals as points of interest, Zürich Hauptbahnhof (node 1236383343, a recorded Pinakes
+# place) is highlighted too: the style's own train icon in the teal ring, where it was a dot before.
+# Screenshots at zoom 16, 14 and 12 are kept for a look.
 # Usage: emulator-pubky-pois.sh <apk> <out dir>
 set -euo pipefail
 
@@ -47,15 +50,16 @@ adb logcat -G 16M || true
 adb logcat -c || true
 adb logcat -b crash -c || true
 
-# open_at NAME ZOOM: starts the app afresh at the Conditorei Schober at ZOOM (the view a start opens
-# at, no_backup/map-view.json) and takes a screenshot NAME once the places are on the map.
+# open_at NAME ZOOM [LAT LON]: starts the app afresh at the Conditorei Schober (or at LAT LON) at ZOOM
+# (the view a start opens at, no_backup/map-view.json) and takes a screenshot NAME once the places
+# are on the map.
 open_at() {
     adb shell am force-stop "$pkg"
     adb push "$out/settings.json" /data/local/tmp/pubky-maps-settings.json > /dev/null
     adb shell chmod 644 /data/local/tmp/pubky-maps-settings.json
     adb shell run-as "$pkg" mkdir -p files/datastore no_backup
     adb shell run-as "$pkg" cp /data/local/tmp/pubky-maps-settings.json files/datastore/settings.json
-    printf '{"view":{"lat":47.3708689,"lon":8.5418241,"zoom":%s}}' "$2" > "$out/map-view.json"
+    printf '{"view":{"lat":%s,"lon":%s,"zoom":%s}}' "${3:-47.3708689}" "${4:-8.5418241}" "$2" > "$out/map-view.json"
     adb push "$out/map-view.json" /data/local/tmp/pubky-maps-view.json > /dev/null
     adb shell chmod 644 /data/local/tmp/pubky-maps-view.json
     adb shell run-as "$pkg" cp /data/local/tmp/pubky-maps-view.json no_backup/map-view.json
@@ -110,6 +114,25 @@ expect_ring() {
         fail "the Conditorei Schober's highlight does not show the map's own café icon ($1; share of its orange: $cup)"
 }
 
+# expect_station NAME: Zürich Hauptbahnhof at the screen's centre is highlighted with the style's own
+# train icon (OpenFreeMap's railway image, blue #4898FF) in the teal ring: the ring's teal as in
+# expect_ring, and the train's blue in the ~10 x 10 dp box at the centre (~33 % on the CI emulator;
+# a dot there has none of it, the map's own water is a paler blue); its bar is 8 %.
+expect_station() {
+    local stats ring train
+    stats=$(python3 -I "$here/png_stats.py" "$out/$1.png" 0.455 0.478 0.545 0.522 '#00897b') ||
+        fail "png_stats could not read $1.png"
+    ring=$(awk '{print $3}' <<< "$stats")
+    stats=$(python3 -I "$here/png_stats.py" "$out/$1.png" 0.488 0.4945 0.512 0.5055 '#4898ff') ||
+        fail "png_stats could not read $1.png"
+    train=$(awk '{print $3}' <<< "$stats")
+    echo "$1: ring teal share $ring, train blue share at the centre $train"
+    python3 -I -c "import sys; sys.exit(0 if float(sys.argv[1]) >= 0.03 else 1)" "$ring" ||
+        fail "Zürich Hauptbahnhof is not highlighted when zoomed out ($1; share of the ring's teal: $ring)"
+    python3 -I -c "import sys; sys.exit(0 if float(sys.argv[1]) >= 0.08 else 1)" "$train" ||
+        fail "Zürich Hauptbahnhof's highlight does not show the map's own train icon when zoomed out ($1; share of its blue: $train)"
+}
+
 # expect_name NAME SHADE: the name under the highlight is drawn in the name's teal SHADE (#00695C
 # light, #4DB6AC dark), not in the map's own label colour. The CI emulator's renderer draws every map
 # text with the green channel of its layer's icon colour, the base style's own too (Liberty's water
@@ -137,6 +160,9 @@ open_at pois-z16-light 16
 expect_ring pois-z16-light
 expect_name '#00695c' pois-z16-light
 open_at pois-z14-light 14
+open_at pois-z13-station 13 47.3781008 8.5393635
+expect_station pois-z13-station
+open_at pois-z12-light 12 47.3781008 8.5393635
 
 adb shell cmd uimode night yes
 open_at pois-z16-dark 16

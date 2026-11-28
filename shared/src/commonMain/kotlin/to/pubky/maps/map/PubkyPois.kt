@@ -12,12 +12,20 @@ import to.pubky.maps.search.osmIdFromUrl
 import to.pubky.maps.search.placeKindOf
 
 /**
- * From this zoom the base map's points of interest are highlighted when they are Pubky places.
- * OpenMapTiles' tiles hold every point of interest from zoom 14 (fewer before), Shortbread's only
- * from 14; below it the Pubky places stay dots and clusters, as no tile can say which of them is a
- * point of interest.
+ * From this zoom (the one the Pubky places are shown from) the base map's points of interest are
+ * highlighted when they are Pubky places. The tiles hold only some points of interest before zoom
+ * 14: OpenMapTiles' railway stations, halts and ferry terminals from 12, Shortbread's stops and
+ * stations of its `public_transport` layer; those are highlighted, the other Pubky places stay dots
+ * and clusters until the tiles hold them.
  */
-const val POI_HIGHLIGHT_MIN_ZOOM = 14.0
+const val POI_HIGHLIGHT_MIN_ZOOM = MapPlacesLayer.MIN_ZOOM
+
+/**
+ * From this zoom the highlights are placed before the base map's names of towns and suburbs as
+ * before its other labels; zoomed out further, those names come first ([placeNamesLayerOf]), so a
+ * highlighted station never hides the name of its town.
+ */
+const val POI_HIGHLIGHT_OVER_PLACE_NAMES_ZOOM = 14.0
 
 /** A vector source of the base map and its source layer of points of interest. */
 data class PoiSource(
@@ -25,11 +33,27 @@ data class PoiSource(
     val sourceLayer: String,
 )
 
-/** A layer of the base style: its vector source and source layer (null for a background, raster or GeoJSON layer). */
+/**
+ * A layer of the base style: its vector source and source layer (null for a background, raster or
+ * GeoJSON layer), its id and its type (`symbol`, `fill`, ...).
+ */
 data class StyleLayerRef(
     val source: String?,
     val sourceLayer: String?,
+    val id: String = "",
+    val type: String = "",
 )
+
+/** The source layers of names of places (countries to neighbourhoods): OpenMapTiles' and Shortbread's. */
+private val PlaceNameLayers = setOf("place", "place_labels")
+
+/**
+ * The id of the base style's lowest layer of place names ([layers] from the bottom up, as the style
+ * lists them), the one the highlights go under below [POI_HIGHLIGHT_OVER_PLACE_NAMES_ZOOM]: every
+ * place name is then placed before them. Null when the style draws no place names.
+ */
+fun placeNamesLayerOf(layers: List<StyleLayerRef>): String? =
+    layers.firstOrNull { it.type == "symbol" && it.sourceLayer in PlaceNameLayers && it.id.isNotEmpty() }?.id
 
 /**
  * The base map's sources of points of interest. A source whose style draws its points of interest

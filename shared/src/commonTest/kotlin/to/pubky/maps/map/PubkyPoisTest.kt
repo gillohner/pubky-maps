@@ -2,6 +2,12 @@ package to.pubky.maps.map
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import okio.FileSystem
+import okio.Path.Companion.toPath
 import to.pubky.maps.links.OsmId
 import to.pubky.maps.links.OsmType
 import to.pubky.maps.place.MapPlace
@@ -178,5 +184,57 @@ class PubkyPoisTest {
         assertNull(tileIdOf(JsonPrimitive(1.5)))
         assertNull(tileIdOf(JsonPrimitive("x")))
         assertNull(tileIdOf(null))
+    }
+
+    /**
+     * The layers of the default style [name], bottom up, as its server lists them (id, type, source,
+     * source layer; recorded 2026-11-28 in src/commonTest/fixtures/style/layers.json).
+     */
+    private fun layersOf(name: String): List<StyleLayerRef> =
+        Json
+            .parseToJsonElement(FileSystem.SYSTEM.read("src/commonTest/fixtures/style/layers.json".toPath()) { readUtf8() })
+            .jsonObject
+            .getValue(name)
+            .jsonObject
+            .getValue("layers")
+            .jsonArray
+            .map { layer ->
+                val (id, type, source, sourceLayer) = layer.jsonArray.map { it.jsonPrimitive.contentOrNull }
+                StyleLayerRef(source, sourceLayer, id.orEmpty(), type.orEmpty())
+            }
+
+    @Test
+    fun zoomedOutTheHighlightsGoUnderTheLowestLayerOfPlaceNames() {
+        // The place names are the top layers of each default style, over its points of interest and
+        // road names: OpenFreeMap's (OpenMapTiles' `place`) and VersaTiles' (Shortbread's `place_labels`).
+        assertEquals("label_other", placeNamesLayerOf(layersOf("liberty")))
+        assertEquals("place_other", placeNamesLayerOf(layersOf("dark")))
+        assertEquals("label-place-neighbourhood", placeNamesLayerOf(layersOf("colorful")))
+        assertEquals("label-place-neighbourhood", placeNamesLayerOf(layersOf("colorful-dark")))
+        // Only a symbol layer of names of places counts, the lowest of them.
+        assertEquals(
+            "place_other",
+            placeNamesLayerOf(
+                listOf(
+                    StyleLayerRef("openmaptiles", "place", "place-dots", "circle"),
+                    StyleLayerRef("openmaptiles", "poi", "poi", "symbol"),
+                    StyleLayerRef("openmaptiles", "place", "place_other", "symbol"),
+                    StyleLayerRef("openmaptiles", "place", "place_city", "symbol"),
+                ),
+            ),
+        )
+        // A style without place names: the highlights stay on top at every zoom.
+        assertNull(
+            placeNamesLayerOf(listOf(StyleLayerRef("openmaptiles", "poi", "poi", "symbol"), StyleLayerRef(null, null, "bg", "background"))),
+        )
+    }
+
+    @Test
+    fun placesAreHighlightedFromTheZoomThePubkyPlacesShowAtAndOverPlaceNamesFrom14() {
+        // OpenMapTiles' tiles hold railway stations, halts and ferry terminals from zoom 12, the
+        // zoom the Pubky places layer starts at: they are highlighted from there.
+        assertEquals(MapPlacesLayer.MIN_ZOOM, POI_HIGHLIGHT_MIN_ZOOM)
+        assertEquals(12.0, POI_HIGHLIGHT_MIN_ZOOM)
+        assertEquals(14.0, POI_HIGHLIGHT_OVER_PLACE_NAMES_ZOOM)
     }
 }

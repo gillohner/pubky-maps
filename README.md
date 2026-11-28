@@ -253,12 +253,14 @@ The map also shows the places people referenced on Pubky (from zoom 12, from Pin
 places someone tagged, posted about or put in a collection. Places only in Pinakes' catalogues (every
 point of interest of OpenStreetMap) are left out (`referenced=true`), and where an area holds more
 than the map takes, the most active are kept.
-From zoom 14, one that the map itself has as a point of interest (a café, a museum, a station) is
-drawn highlighted instead: the map's own icon for it in a teal ring (read from the map style's
+One that the map itself has as a point of interest (a café, a museum, a station) is drawn
+highlighted instead (from zoom 12 for stations, halts and ferry terminals, the only points of
+interest the map's tiles hold before zoom 14): the map's own icon for it in a teal ring (read from the map style's
 files, the icon tinted teal where the style colours its icons itself), or a teal badge with an icon
 of its kind where the style has no icon for it, with its name in teal under it, before the map's own
-labels and whatever zoom the map would show that point at, each drawn even where two of them meet (a
-name with no room is left out); tapping it opens its page. The others stay teal dots.
+labels (zoomed out below 14, after the names of towns and districts, which stay) and whatever zoom
+the map would show that point at, each drawn even where two of them meet (a name with no room is left
+out); tapping it opens its page. The others stay teal dots.
 When no Pinakes server answers, the map's status line says so.
 
 **Map links.** Links from other map apps open in Pubky Maps: tapped (`geo:`, `om://`, `cm://`,
@@ -297,7 +299,8 @@ the link text. The link the user had stays the place's URI.
   most 1,000 places, and MapLibre clusters them. `map/MapPubkyPois.kt` asks the base map's loaded tiles (MapLibre's
   `querySourceFeatures` on the style's point-of-interest layer, or its schema's when the style draws
   none) which of those places they hold, by the tile feature id `osm id × 10 + kind`, each time the
-  map is idle from zoom 14, and draws those from the base map's own source, filtered by those ids.
+  map is idle from zoom 12, and draws those from the base map's own source, filtered by those ids
+  (below zoom 14 under the style's lowest layer of place names, above it over every layer).
   `offline/OfflinePubkyPlaces.kt` keeps the layer's places of each offline
   area (the area widened to the same grid) and Nexus' tags of them in `offline-pubky-places.db`
   (never in a backup), which the layer reads when every Pinakes server fails, and a place page when
