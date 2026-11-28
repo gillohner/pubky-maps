@@ -1,5 +1,6 @@
 package to.pubky.maps.android
 
+import android.view.View
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
@@ -9,12 +10,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDisplayed
+import androidx.compose.ui.test.isPopup
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithText
@@ -136,8 +142,12 @@ class PlaceIconActionsTest {
             routeStart = RouteStartChoice(chosen = false, onToggle = { tapped += "Start here" }),
         )
 
+    /** The view the screen is in, for what TalkBack is given. */
+    private var hostView: View? = null
+
     private fun show() {
         compose.setContent {
+            hostView = LocalView.current
             PubkyMapsTheme {
                 val actions = actions()
                 MapScreen(
@@ -282,12 +292,45 @@ class PlaceIconActionsTest {
     @Config(qualifiers = "w360dp-h780dp-night-mdpi")
     fun theMoreMenuSmallPhoneDark() = openMore("place-actions-more-smallphone-dark")
 
+    /** How many of the labelled buttons with [label] show on the screen (the Collections section has its own "Add to collection"). */
+    private fun labelledShown(label: String): Int {
+        val nodes = compose.onAllNodes(hasText(label) and hasClickAction())
+        return nodes.fetchSemanticsNodes().indices.count { nodes[it].isDisplayed() }
+    }
+
+    /** Whether TalkBack would read each clickable node with [label]'s text. */
+    private fun visibleToTalkBack(label: String): List<Boolean> {
+        val provider = checkNotNull(hostView?.accessibilityNodeProvider)
+        return compose.onAllNodes(hasText(label) and hasClickAction()).fetchSemanticsNodes().map {
+            provider.createAccessibilityNodeInfo(it.id)?.isVisibleToUser == true
+        }
+    }
+
+    private val inTheRow = listOf("Directions", "Start here", "Bookmark", "Tag")
+    private val underMore = listOf("Post", "Share", "Open in")
+
+    /**
+     * The panel beside the map keeps the words: the actions that fit in two lines, each whole inside the
+     * 400 dp panel (12 dp from the screen's edge), the rest under a labelled More.
+     */
     private fun panelKeepsTheWords(screenshot: String) {
         show()
-        // "Add to collection" twice: in the row and beside the Collections section's title.
-        allEight.forEach { label ->
-            compose.onAllNodes(hasText(label) and hasClickAction()).assertCountEquals(if (label == "Add to collection") 2 else 1)
+        inTheRow.forEach { label ->
+            assertEquals(label, 1, labelledShown(label))
+            val right =
+                compose
+                    .onNode(hasText(label) and hasClickAction())
+                    .getUnclippedBoundsInRoot()
+                    .right.value
+            assertTrue("$label ends at $right dp, outside the panel", right <= 412f - 8f)
         }
+        underMore.forEach { label -> assertEquals(label, 0, labelledShown(label)) }
+        // The buttons under More are measured but not placed: TalkBack does not see them either.
+        inTheRow.forEach { label -> assertEquals(label, listOf(true), visibleToTalkBack(label)) }
+        underMore.forEach { label -> assertEquals(label, listOf(false), visibleToTalkBack(label)) }
+        // The Collections section's own button, not one in the row.
+        assertEquals(1, labelledShown("Add to collection"))
+        compose.onNode(hasText("More") and hasClickAction()).assertIsDisplayed().assertTouchTargetAtLeast48Dp()
         compose.onNode(hasContentDescription("More")).assertDoesNotExist()
         captureScreenRoboImage("screenshots/$screenshot.png")
     }
@@ -299,4 +342,42 @@ class PlaceIconActionsTest {
     @Test
     @Config(qualifiers = "w1280dp-h800dp-night-mdpi")
     fun theTabletPanelKeepsTheLabelledButtonsDark() = panelKeepsTheWords("place-actions-tablet-dark")
+
+    @Test
+    @Config(qualifiers = "w1280dp-h800dp-notnight-mdpi")
+    fun thePanelsMoreHasTheRestByTheirWords() {
+        show()
+        inTheRow.forEach { compose.onNode(hasText(it) and hasClickAction()).performClick() }
+        assertEquals(inTheRow, tapped)
+        compose.onNode(hasText("More") and hasClickAction()).performClick()
+        listOf("Post", "Add to collection", "Share", "Open in Organic Maps", "Open in Google Maps (web)").forEach { label ->
+            compose.onNode(hasText(label) and hasClickAction() and hasAnyAncestor(isPopup())).assertIsDisplayed()
+        }
+        inTheRow.forEach { compose.onNode(hasText(it) and hasAnyAncestor(isPopup())).assertDoesNotExist() }
+        captureScreenRoboImage("screenshots/place-actions-more-tablet-light.png")
+        compose.onNode(hasText("Share") and hasAnyAncestor(isPopup())).performClick()
+        compose.onNode(hasText("Share") and hasAnyAncestor(isPopup())).assertDoesNotExist()
+        compose.onNode(hasText("More") and hasClickAction()).performClick()
+        compose.onNode(hasText("Open in Google Maps (web)") and hasAnyAncestor(isPopup())).performClick()
+        assertEquals(inTheRow + "Share", tapped)
+        assertEquals(listOf(google), opened)
+    }
+
+    /** At the largest font the panel's buttons grow with their words and fewer fit before More. */
+    @Test
+    @Config(qualifiers = "w1280dp-h800dp-notnight-mdpi")
+    fun theTabletPanelAtTheLargestFont() {
+        RuntimeEnvironment.setFontScale(2f)
+        show()
+        compose.onNode(hasText("Directions") and hasClickAction()).assertIsDisplayed()
+        compose.onNode(hasText("More") and hasClickAction()).assertIsDisplayed()
+        (inTheRow + "More").forEach { label ->
+            val nodes = compose.onAllNodes(hasText(label) and hasClickAction())
+            nodes.fetchSemanticsNodes().indices.filter { nodes[it].isDisplayed() }.forEach {
+                val right = nodes[it].getUnclippedBoundsInRoot().right.value
+                assertTrue("$label ends at $right dp, outside the panel", right <= 412f - 8f)
+            }
+        }
+        captureScreenRoboImage("screenshots/place-actions-large-font-tablet-light.png")
+    }
 }

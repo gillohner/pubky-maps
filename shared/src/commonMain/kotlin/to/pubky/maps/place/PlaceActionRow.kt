@@ -1,7 +1,5 @@
 package to.pubky.maps.place
 
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
@@ -11,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -32,12 +29,14 @@ import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -138,20 +137,126 @@ internal fun placeActions(actions: PlacePageActions): List<PlaceAction> =
     }
 
 /**
- * The place page's actions as labelled buttons in one row that scrolls sideways when it is wider than
- * the page: on a wide screen (the panel beside the map on a tablet or a phone in landscape), as the
- * owner asked; the 400 dp panel shows the first two or three and scrolls to the rest.
+ * The lines of a flow of buttons [widths] wide with [gap] between them, in [maxWidth]: each line the
+ * indices that fit beside each other, a button wider than [maxWidth] alone on its line.
+ */
+internal fun flowLines(
+    widths: List<Int>,
+    maxWidth: Int,
+    gap: Int,
+): List<IntRange> {
+    val lines = mutableListOf<IntRange>()
+    var first = 0
+    var used = 0
+    widths.forEachIndexed { index, width ->
+        if (index > first && used + gap + width > maxWidth) {
+            lines += first until index
+            first = index
+            used = width
+        } else {
+            used += if (index > first) gap + width else width
+        }
+    }
+    if (widths.isNotEmpty()) lines += first until widths.size
+    return lines
+}
+
+/**
+ * How many of the labelled actions [widths] wide show in at most [lines] lines of [maxWidth]: all when
+ * they fit, else as many as fit with a More button [more] wide after them.
+ */
+internal fun labelledActionsShown(
+    widths: List<Int>,
+    more: Int,
+    maxWidth: Int,
+    gap: Int,
+    lines: Int = LABELLED_ACTION_LINES,
+): Int {
+    if (flowLines(widths, maxWidth, gap).size <= lines) return widths.size
+    return (widths.size - 1 downTo 1).firstOrNull { shown ->
+        flowLines(widths.take(shown) + more, maxWidth, gap).size <= lines
+    } ?: 0
+}
+
+/**
+ * Lines of labelled actions in the panel. Two hold Directions, Start here, Bookmark and Tag at the
+ * 400 dp panel's normal font, the page's own sections (Tags, Posts, Collections) start one line lower,
+ * and the rest is one tap away under More; all eight wrap to four lines.
+ */
+private const val LABELLED_ACTION_LINES = 2
+
+/** The space between labelled actions, and between their lines where the touch targets do not leave it. */
+private val LabelledActionGap: Dp = 8.dp
+
+/**
+ * The place page's actions as labelled buttons on a wide screen (the panel beside the map on a tablet
+ * or a phone in landscape), as the owner asked: the ones that fit in [LABELLED_ACTION_LINES] lines, the
+ * rest under a labelled More with the phone's menu, so none hides off the side of the 400 dp panel.
+ * The ones under More are measured but not placed, so TalkBack does not reach them in the row either.
  */
 @Composable
 internal fun LabelledActionRow(
     actions: List<PlaceAction>,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier = modifier.horizontalScroll(rememberScrollState()).padding(end = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        actions.forEach { action -> LabelledAction(action) }
+    // How many show, decided by the layout; the More menu, open or not, follows it a frame later.
+    var shownCount by remember { mutableIntStateOf(actions.size) }
+    Layout(
+        content = {
+            actions.forEach { action -> LabelledAction(action) }
+            LabelledMore(actions.drop(shownCount))
+        },
+        modifier = modifier.fillMaxWidth().padding(end = 8.dp),
+    ) { measurables, constraints ->
+        // Only ever in the page's bounded column; an unbounded one would not wrap at all.
+        val width = if (constraints.hasBoundedWidth) constraints.maxWidth else Int.MAX_VALUE / 2
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val placeables = measurables.map { it.measure(loose) }
+        val buttons = placeables.dropLast(1)
+        val more = placeables.last()
+        val gap = LabelledActionGap.roundToPx()
+        val shown = labelledActionsShown(buttons.map { it.width }, more.width, width, gap)
+        shownCount = shown
+        val placed = buttons.take(shown) + listOfNotNull(more.takeIf { shown < buttons.size })
+        val lines = flowLines(placed.map { it.width }, width, gap)
+        val heights = lines.map { line -> line.maxOf { placed[it].height } }
+        // A 40 dp button sits in its 48 dp target, 8 dp from the next line (a little less from
+        // a slightly larger font); one taller than its target (a large font) fills it, so the lines
+        // get the 8 dp between them.
+        val target = IconActionSize.roundToPx()
+        val spaces = heights.dropLast(1).map { if (it > target) gap else 0 }
+        val rowWidth =
+            if (constraints.hasBoundedWidth) {
+                constraints.maxWidth
+            } else {
+                lines.maxOfOrNull { line -> line.sumOf { placed[it].width } + gap * (line.count() - 1) } ?: 0
+            }
+        layout(rowWidth, heights.sum() + spaces.sum()) {
+            var y = 0
+            lines.forEachIndexed { index, line ->
+                var x = 0
+                line.forEach { i ->
+                    val button = placed[i]
+                    button.placeRelative(x, y + (heights[index] - button.height) / 2)
+                    x += button.width + gap
+                }
+                y += heights[index] + spaces.getOrElse(index) { 0 }
+            }
+        }
+    }
+}
+
+/** "More" as a labelled button, with the actions that did not fit in the menu the phone's More has. */
+@Composable
+private fun LabelledMore(rest: List<PlaceAction>) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(onClick = { open = true }) {
+            Icon(AppIcons.MoreVert, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("More")
+        }
+        OverflowMenu(rest, open) { open = false }
     }
 }
 
@@ -240,21 +345,31 @@ private fun MoreAction(rest: List<PlaceAction>) {
     ActionTooltip("More") {
         Box(Modifier.size(IconActionSize), contentAlignment = Alignment.Center) {
             IconButton(onClick = { open = true }) { Icon(AppIcons.MoreVert, contentDescription = "More") }
-            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                rest.forEach { action ->
-                    val icon: @Composable () -> Unit = { Icon(action.icon, contentDescription = null) }
-                    if (action.choices.isEmpty()) {
-                        MenuItem(action.label, icon) {
-                            open = false
-                            action.onClick()
-                        }
-                    } else {
-                        action.choices.forEach { choice ->
-                            MenuItem(choice.overflowLabel, icon) {
-                                open = false
-                                choice.onClick()
-                            }
-                        }
+            OverflowMenu(rest, open) { open = false }
+        }
+    }
+}
+
+/** The menu of the actions under More, each by its words; a menu action's choices each by name. */
+@Composable
+private fun OverflowMenu(
+    rest: List<PlaceAction>,
+    open: Boolean,
+    onDismiss: () -> Unit,
+) {
+    DropdownMenu(expanded = open, onDismissRequest = onDismiss) {
+        rest.forEach { action ->
+            val icon: @Composable () -> Unit = { Icon(action.icon, contentDescription = null) }
+            if (action.choices.isEmpty()) {
+                MenuItem(action.label, icon) {
+                    onDismiss()
+                    action.onClick()
+                }
+            } else {
+                action.choices.forEach { choice ->
+                    MenuItem(choice.overflowLabel, icon) {
+                        onDismiss()
+                        choice.onClick()
                     }
                 }
             }
