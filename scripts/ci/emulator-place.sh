@@ -10,7 +10,8 @@
 # holding the place show at the top; back closes it. A long-press on the map then drops a pin: its
 # page is named by its coordinates and asks no server; its Start here makes it the start of the
 # next directions: the link opened again, Directions route from the pin to the place, and From your
-# location from the fix again; back closes it.
+# location from the fix again; Start then guides the user along the route as the GPS moves (the next
+# turn, the map following, off the route and a new route), Back ends it; back closes the page.
 # Checks that Pinakes, Nexus and Valhalla were asked with the app's User-Agent, Nexus for every
 # spelling people used for the place.
 # Usage: emulator-place.sh <apk> <out dir>
@@ -250,6 +251,55 @@ xy=$(wait_for "From your location" 5) || fail "no From your location in the rout
 adb shell input tap $xy
 wait_for "On foot from your location" 20 > /dev/null || fail "From your location did not route from the user's location"
 check_alive "directions from the user's location again"
+# Start: the route from the GPS fix guides the user (MapScreen's guidance banner and bar instead of
+# the page): the next step is the first turn, the map follows the fix at zoom 17 (the stored view);
+# on Bahnhofquai (the fixture's point 22) the next step is the bridge; 150 m east of the line the
+# user is off the route, and Find a new route asks for one from there; Back ends the guidance and
+# the route card is back.
+xy=$(wait_for "Start" 5) || fail "no Start on the route from the user's location"
+adb shell input tap $xy
+wait_for "Turn right onto Museumstrasse." 15 > /dev/null || fail "the guidance does not show the first turn"
+wait_for "End" 5 > /dev/null || fail "no End while the route guides the user"
+if wait_for "Directions" 1 > /dev/null; then fail "the place page stayed open while the route guides the user"; fi
+sleep 3
+screenshot guidance-start
+check_alive "guidance"
+# geo_loop LON LAT: the emulator's GPS there, every 2 s, in the background (replacing the last loop).
+geo_loop() {
+    kill $gps 2> /dev/null || true
+    ( for _ in $(seq 1 20); do adb emu geo fix "$1" "$2" > /dev/null 2>&1 || true; sleep 2; done ) &
+    gps=$!
+}
+geo_loop 8.541531 47.377335
+wait_for "Turn left onto Rudolf-Brun-Brücke." 20 > /dev/null || fail "the guidance did not move on to the bridge on Bahnhofquai"
+followed=""
+for _ in $(seq 1 8); do
+    sleep 1
+    adb shell run-as "$pkg" cat no_backup/map-view.json > "$out/map-view-guidance.json" 2> /dev/null || true
+    if python3 -I -c "
+import json, sys
+try:
+    view = json.load(open(sys.argv[1], encoding='utf-8')).get('view') or {}
+except ValueError:
+    view = {}
+ok = abs(view.get('zoom', 0) - 17) < 0.1 and abs(view.get('lat', 0) - 47.377335) < 0.0005 and abs(view.get('lon', 0) - 8.541531) < 0.0005
+sys.exit(0 if ok else 1)" "$out/map-view-guidance.json"; then followed=1; break; fi
+done
+[ -n "$followed" ] || fail "the map does not follow the user (stored view: $(cat "$out/map-view-guidance.json" 2> /dev/null))"
+screenshot guidance-bahnhofquai
+check_alive "guidance on Bahnhofquai"
+geo_loop 8.543611 47.377685
+wait_for "You're off the route" 20 > /dev/null || fail "150 m from the route the guidance does not say the user is off it"
+screenshot guidance-off-route
+xy=$(wait_for "Find a new route" 5) || fail "no Find a new route off the route"
+adb shell input tap $xy
+sleep 4
+check_alive "a new route"
+adb shell input keyevent KEYCODE_BACK
+wait_for "Steps" 10 > /dev/null || fail "Back did not end the guidance and show the route card again"
+if wait_for "End" 1 > /dev/null; then fail "the guidance bar stayed after Back"; fi
+kill $gps 2> /dev/null || true
+check_alive "guidance ended"
 adb shell input keyevent KEYCODE_BACK
 sleep 2
 wait_for "Show my location" 10 > /dev/null || fail "back did not return to the map from the place opened again"
@@ -272,15 +322,18 @@ assert all(a.startswith(("PubkyMaps/", "pubky-maps-core/")) for a in agents), ag
 assert all(l["ua"].startswith("PubkyMaps/") for l in lines if l["path"].startswith("/v1/stream/")), agents
 # Directions: by car from the GPS fix to the card's point, then on foot from the same start, swapped
 # (from the card's point back to the fix) and swapped again; later on foot from the dropped pin
-# (somewhere else on the map), then from the fix again.
+# (somewhere else on the map), then from the fix again, and last from where the guided user went
+# off the route (150 m east of Bahnhofquai).
 routes = [l for l in lines if l["path"] == "/route"]
-assert [r["costing"] for r in routes] == ["pedestrian" if i else "auto" for i in range(6)], routes
+assert [r["costing"] for r in routes] == ["pedestrian" if i else "auto" for i in range(7)], routes
 for i, r in enumerate(routes):
     start, end = r["locations"]
     if i == 2:
         start, end = end, start
     fix = abs(start["lat"] - 47.3779) < 1e-3 and abs(start["lon"] - 8.5403) < 1e-3
-    assert fix == (i != 4), r
+    assert fix == (i not in (4, 6)), r
+    if i == 6:
+        assert abs(start["lat"] - 47.377685) < 1e-4 and abs(start["lon"] - 8.543611) < 1e-4, r
     assert abs(end["lat"] - 47.3708689) < 1e-6 and abs(end["lon"] - 8.5418241) < 1e-6, r
     assert r["ua"].startswith("PubkyMaps/"), r
 pin = routes[4]["locations"][0]

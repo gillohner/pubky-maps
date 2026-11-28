@@ -97,7 +97,17 @@ data class Directions(
     val stepTaps: Int = 0,
     /** The tap the map has moved for ([DirectionsController.mapMovedToStep]). */
     val mapMovedForTap: Int = 0,
+    /** The route guides the user from their position ([DirectionsController.startGuidance]) until they end it. */
+    val guiding: Boolean = false,
+    /** Where the user is on the route while it guides them, from their last position; null before one is known on this route. */
+    val progress: RouteProgress? = null,
 ) {
+    /**
+     * Whether the route can guide the user ([DirectionsController.startGuidance]): a found route
+     * from their own position to the place, not one from a chosen start or back to them.
+     */
+    val canGuide: Boolean get() = status is RouteStatus.Found && from == null && !reversed && position != null
+
     /** The route's other end than the place: [from], else the user's position once known. */
     val origin: GeoPoint? get() = from?.point ?: position
 
@@ -125,7 +135,9 @@ data class Directions(
  * directions instead of the user's position until the user clears it: kept for the process, as the
  * mode, so the start of a day out (a hotel, a station) serves the places looked at from there. The list of steps the user opened stays open for the routes by other modes or the
  * other way to the same place; a step tapped in it is marked on the map until the list closes or another route
- * comes. Every routing server failing names routing in [health] until one answers.
+ * comes. A route from the user's position can guide them ([startGuidance]): their place on it from
+ * each position ([guide]), a new route from where they are on request ([routeAgainFrom]) until they
+ * end it. Every routing server failing names routing in [health] until one answers.
  * A position that has not come within [locatingTimeout] (a permission dialog dismissed, no fix
  * indoors) is missing; one that comes later still starts the route.
  */
@@ -149,6 +161,9 @@ class DirectionsController(
 
     /** Every tap on a step so far, for [Directions.stepTaps]; never goes back, so a tap is never taken for one before it. */
     private var stepTaps = 0
+
+    /** The accuracy of the last position the guidance had, for the progress on a new route from there. */
+    private var accuracy: Double? = null
 
     /** Every [start] so far, for [Directions.opening]. */
     private var openings = 0
@@ -300,6 +315,60 @@ class DirectionsController(
         if (tap > current.mapMovedForTap) state.value = current.copy(mapMovedForTap = tap)
     }
 
+    /**
+     * The route guides the user from here on: where they are on it ([Directions.progress]) from their
+     * [position] now and each one [guide] gets, as Google Maps' Start. Only a route that [Directions.canGuide];
+     * the list of steps closes, the map follows the user instead.
+     */
+    fun startGuidance(
+        position: GeoPoint?,
+        accuracyMeters: Double? = null,
+    ) {
+        val current = state.value ?: return
+        if (!current.canGuide || current.guiding) return
+        val started = current.copy(guiding = true, stepsShown = false, shownStep = null, routeFitted = true, progress = null)
+        state.value = started
+        if (position != null) guide(position, accuracyMeters)
+    }
+
+    /**
+     * The user's [position] while the route guides them (within [accuracyMeters], when known): where
+     * they are on it now, looked for from where they were ([routeProgress]). None while a new route
+     * is asked for.
+     */
+    fun guide(
+        position: GeoPoint,
+        accuracyMeters: Double? = null,
+    ) {
+        val current = state.value ?: return
+        val route = (current.status as? RouteStatus.Found)?.route ?: return
+        if (!current.guiding) return
+        accuracy = accuracyMeters
+        val progress = routeProgress(route, position, current.progress?.onRouteAlong ?: 0.0, accuracyMeters)
+        state.value = current.copy(progress = progress, position = position)
+    }
+
+    /**
+     * The user, off the route, asked for a new one from their [position] to the same place: it keeps
+     * guiding them once found, from where they are then.
+     */
+    fun routeAgainFrom(position: GeoPoint) {
+        val current = state.value ?: return
+        if (!current.guiding) return
+        ask(current.copy(position = position))
+    }
+
+    /**
+     * The route stops guiding the user: the place page shows the directions again, the route left
+     * where the map is; a new route still asked for is fitted once found, as any other.
+     */
+    fun endGuidance() {
+        val current = state.value ?: return
+        if (!current.guiding) return
+        val finding = current.status == RouteStatus.Finding
+        state.value = current.copy(guiding = false, progress = null, routeFitted = current.routeFitted && !finding)
+    }
+
     /** Asks again after a failure, between the same points. */
     fun retry() {
         val current = state.value ?: return
@@ -337,8 +406,10 @@ class DirectionsController(
         request?.cancel()
         locating?.cancel()
         locating = null
-        // A step tapped on the route before is not one of the next route's.
-        val asked = directions.copy(status = RouteStatus.Finding, routeFitted = false, shownStep = null)
+        // A step tapped on the route before is not one of the next route's. While it guides the user
+        // the map follows them: a new route is not fitted.
+        val asked =
+            directions.copy(status = RouteStatus.Finding, routeFitted = directions.guiding, shownStep = null, progress = null)
         state.value = asked
         asking = asked
         request =
@@ -359,7 +430,19 @@ class DirectionsController(
                 // A newer request or a close replaced this one meanwhile (a cancel that came too late);
                 // the steps opened or closed while it ran are kept.
                 val now = state.value
-                if (asking === asked && now != null) state.value = now.copy(status = status)
+                if (asking === asked && now != null) {
+                    // Guidance goes on along the new route from where the user is (none found: it says why).
+                    val route = (status as? RouteStatus.Found)?.route
+                    val progress =
+                        if (now.guiding &&
+                            route != null
+                        ) {
+                            now.position?.let { routeProgress(route, it, accuracyMeters = accuracy) }
+                        } else {
+                            null
+                        }
+                    state.value = now.copy(status = status, progress = progress)
+                }
             }
     }
 }

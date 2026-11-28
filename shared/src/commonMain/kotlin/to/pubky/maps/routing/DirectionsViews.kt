@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -64,6 +65,8 @@ data class DirectionsUi(
     val credits: List<AttributionLink>,
     /** Starts the directions from the user's position again, instead of the chosen start ([Directions.from]). */
     val onFromYourLocation: () -> Unit,
+    /** The found route guides the user ([DirectionsController.startGuidance]); null: the card has no Start. */
+    val onStart: (() -> Unit)? = null,
 )
 
 /** "18 min", "1 h 5 min", "2 h": a route's time, at least a minute. */
@@ -258,7 +261,16 @@ fun DirectionsCard(
                         StepPreview(step, directions.stepIcon(step.turn), marked, found.route.steps.size, ui.onStep)
                     }
                     // The buttons' labels start under the route's time; they wrap at a large font.
-                    FlowRow(Modifier.offset(x = (-12).dp)) {
+                    FlowRow(Modifier.offset(x = (-12).dp), itemVerticalAlignment = Alignment.CenterVertically) {
+                        // First, as Google Maps' Start: the route from the user's position guides them there.
+                        val start = ui.onStart
+                        if (found != null && start != null && directions.canGuide) {
+                            Button(onClick = start, modifier = Modifier.padding(start = 12.dp, end = 4.dp)) {
+                                Icon(RoutingIcons.Navigation, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Start")
+                            }
+                        }
                         if (found != null) StepsButton(found.route.steps, directions.stepsShown, ui.onSteps)
                         // As Google Maps' "Your location" field: back from a chosen start without
                         // opening the start's page to clear it.

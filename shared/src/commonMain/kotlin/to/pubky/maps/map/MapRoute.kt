@@ -73,6 +73,7 @@ import org.maplibre.compose.util.DpPadding
 import org.maplibre.spatialk.geojson.BoundingBox
 import org.maplibre.spatialk.geojson.Point
 import org.maplibre.spatialk.geojson.Position
+import org.maplibre.spatialk.units.extensions.inMeters
 import to.pubky.maps.config.ServerLists
 import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.links.LinkProvider
@@ -99,6 +100,7 @@ import to.pubky.maps.place.PlaceWriteActions
 import to.pubky.maps.place.SheetStop
 import to.pubky.maps.place.summary
 import to.pubky.maps.place.summaryPartial
+import to.pubky.maps.place.title
 import to.pubky.maps.routing.DirectionsUi
 import to.pubky.maps.routing.RouteStatus
 import to.pubky.maps.search.RecentSearch
@@ -483,6 +485,13 @@ fun MapRoute(
                     directions.leaveStart()
                     startDirections(directionsState.placeUri, directionsState.place, directionsState.reversed)
                 },
+                onStart = {
+                    val fix = locationState.lastLocation
+                    directions.startGuidance(
+                        fix?.position?.let { GeoPoint(it.latitude, it.longitude) },
+                        fix?.horizontalAccuracy?.inMeters,
+                    )
+                },
             )
         } else {
             null
@@ -556,6 +565,21 @@ fun MapRoute(
                 sheetMoved = true
             }
         }
+    // After the place page: its Back (close the place) is composed first, so guidance's Back (end the
+    // guidance) is the one composed last and gets the system back also when both come in one pass
+    // (the activity recreated while guiding).
+    val pageTitle =
+        places
+            ?.pages
+            ?.state
+            ?.collectAsStateWithLifecycle()
+            ?.value
+            ?.takeIf { it.place.uri == directionsState?.placeUri }
+            ?.title
+    val guidance =
+        directions?.let {
+            rememberGuidance(it, directionsState, pageTitle ?: shown?.place?.title ?: "the place", locationState, mapState)
+        }
     // The area on screen goes offline in the style on screen and the other theme's of the same server.
     val areaPicker =
         offline?.let {
@@ -589,6 +613,7 @@ fun MapRoute(
         areaPicker = areaPicker,
         onUncoveredMap = { room -> uncoveredMap = room?.let { r -> shown?.place?.uri?.let { it to r } } },
         onSheetAtTop = { sheetAtTop = it },
+        guidance = guidance,
         placeCard =
             when {
                 placePage != null -> {

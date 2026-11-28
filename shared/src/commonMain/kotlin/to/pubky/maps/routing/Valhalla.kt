@@ -30,13 +30,15 @@ data class Route(
  * One step of a route: what to do there ([instruction], the routing server's sentence, "Turn right
  * onto Museumstrasse."), which way it goes ([turn], for its icon), how far the route then goes
  * until the next step ([meters], 0 at the end) and where on the route's line it is ([at], the map
- * shows it there when the step is tapped).
+ * shows it there when the step is tapped; [shapeIndex], the index of that point in [Route.points],
+ * where guidance takes it as the next step to do until the user is past it).
  */
 data class RouteStep(
     val instruction: String,
     val turn: Turn,
     val meters: Double,
     val at: GeoPoint,
+    val shapeIndex: Int = 0,
 )
 
 /** Which way a route step goes. */
@@ -146,12 +148,16 @@ fun parseValhallaRoute(json: String): Route {
     val steps = ArrayList<RouteStep>()
     for (leg in trip.legs) {
         val line = decodePolyline6(leg.shape)
+        if (line.isEmpty()) continue
         // A leg starts where the one before it ended.
-        points += if (points.isNotEmpty() && line.firstOrNull() == points.last()) line.drop(1) else line
+        val joined = points.isNotEmpty() && line.first() == points.last()
+        val offset = if (joined) points.size - 1 else points.size
+        points += if (joined) line.drop(1) else line
         for (maneuver in leg.maneuvers) {
             if (maneuver.instruction.isBlank()) continue
-            val at = line.getOrNull(maneuver.beginShapeIndex) ?: line.lastOrNull() ?: continue
-            steps += RouteStep(maneuver.instruction.trim(), valhallaTurn(maneuver.type), maneuver.length * 1_000, at)
+            val index = maneuver.beginShapeIndex.coerceIn(0, line.size - 1)
+            steps +=
+                RouteStep(maneuver.instruction.trim(), valhallaTurn(maneuver.type), maneuver.length * 1_000, line[index], offset + index)
         }
     }
     require(points.size >= 2) { "A route needs two points" }

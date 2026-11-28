@@ -373,6 +373,7 @@ class PlaceScreenshotTest {
                 onOpenSettings = {},
                 credits = routeCredits(ServerDefaults.lists, null),
                 onFromYourLocation = {},
+                onStart = {},
             ),
     )
 

@@ -30,18 +30,19 @@ class ValhallaTest {
         // The same answer, asked with turn instructions in English.
         val route = parseValhallaRoute(Fixtures.read("hauptbahnhof-kunsthaus.valhalla.json"))
         // Each where its maneuver begins on the line (its begin_shape_index).
-        val at = listOf(0, 7, 12, 13, 36, 56, 65, 85, 93).map { route.points[it] }
+        val index = listOf(0, 7, 12, 13, 36, 56, 65, 85, 93)
+        val at = index.map { route.points[it] }
         assertEquals(
             listOf(
-                RouteStep("Drive north.", Turn.Depart, 35.0, at[0]),
-                RouteStep("Turn right onto Museumstrasse.", Turn.Right, 52.0, at[1]),
-                RouteStep("Bear right onto Bahnhofquai.", Turn.SlightRight, 30.0, at[2]),
-                RouteStep("Keep left to stay on Bahnhofquai.", Turn.KeepLeft, 406.0, at[3]),
-                RouteStep("Turn left onto Rudolf-Brun-Brücke.", Turn.Left, 329.0, at[4]),
-                RouteStep("Turn right onto Seilergraben.", Turn.Right, 205.0, at[5]),
-                RouteStep("Bear right onto Hirschengraben.", Turn.SlightRight, 262.0, at[6]),
-                RouteStep("Bear right onto Heimplatz.", Turn.SlightRight, 81.0, at[7]),
-                RouteStep("Your destination is on the right.", Turn.Arrive, 0.0, at[8]),
+                RouteStep("Drive north.", Turn.Depart, 35.0, at[0], index[0]),
+                RouteStep("Turn right onto Museumstrasse.", Turn.Right, 52.0, at[1], index[1]),
+                RouteStep("Bear right onto Bahnhofquai.", Turn.SlightRight, 30.0, at[2], index[2]),
+                RouteStep("Keep left to stay on Bahnhofquai.", Turn.KeepLeft, 406.0, at[3], index[3]),
+                RouteStep("Turn left onto Rudolf-Brun-Brücke.", Turn.Left, 329.0, at[4], index[4]),
+                RouteStep("Turn right onto Seilergraben.", Turn.Right, 205.0, at[5], index[5]),
+                RouteStep("Bear right onto Hirschengraben.", Turn.SlightRight, 262.0, at[6], index[6]),
+                RouteStep("Bear right onto Heimplatz.", Turn.SlightRight, 81.0, at[7], index[7]),
+                RouteStep("Your destination is on the right.", Turn.Arrive, 0.0, at[8], index[8]),
             ),
             route.steps.map { it.copy(meters = round(it.meters)) },
         )
@@ -60,12 +61,12 @@ class ValhallaTest {
                     GeoPoint(2.0, 3.0),
                 )}","maneuvers":[{"type":6,"instruction":"You have arrived.","begin_shape_index":1}]}],""" +
                 """"summary":{"time":60,"length":2.5}}}"""
-        // A step's index is into its own leg's line.
+        // A step's index is into its own leg's line; its place in the route's line counts the legs before.
         assertEquals(
             listOf(
-                RouteStep("Walk east.", Turn.Depart, 500.0, GeoPoint(1.0, 2.0)),
-                RouteStep("Take the gondola.", Turn.Straight, 1200.0, GeoPoint(1.5, 2.5)),
-                RouteStep("You have arrived.", Turn.Arrive, 0.0, GeoPoint(2.0, 3.0)),
+                RouteStep("Walk east.", Turn.Depart, 500.0, GeoPoint(1.0, 2.0), 0),
+                RouteStep("Take the gondola.", Turn.Straight, 1200.0, GeoPoint(1.5, 2.5), 1),
+                RouteStep("You have arrived.", Turn.Arrive, 0.0, GeoPoint(2.0, 3.0), 2),
             ),
             parseValhallaRoute(json).steps,
         )
@@ -76,7 +77,9 @@ class ValhallaTest {
         val json =
             """{"trip":{"legs":[{"shape":"${encode(GeoPoint(1.0, 2.0), GeoPoint(1.5, 2.5))}","maneuvers":[""" +
                 """{"type":4,"instruction":"You have arrived.","begin_shape_index":7}]}],"summary":{"time":60,"length":2.5}}}"""
-        assertEquals(GeoPoint(1.5, 2.5), parseValhallaRoute(json).steps.single().at)
+        val step = parseValhallaRoute(json).steps.single()
+        assertEquals(GeoPoint(1.5, 2.5), step.at)
+        assertEquals(1, step.shapeIndex)
     }
 
     @Test
