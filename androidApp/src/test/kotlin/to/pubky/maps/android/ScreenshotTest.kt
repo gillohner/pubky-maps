@@ -109,6 +109,7 @@ class ScreenshotTest {
     private fun Map(
         mapUnavailable: Boolean = false,
         missing: Set<ServicePart> = emptySet(),
+        updateReady: Boolean = false,
     ) {
         MapScreen(
             attribution =
@@ -120,6 +121,7 @@ class ScreenshotTest {
             onRetryMap = {},
             onMyLocation = {},
             onOpenSettings = {},
+            updateReady = updateReady,
             missing = missing,
             search = MapSearch(SearchState(), recents = emptyList(), userLocation = null, actions = SearchActions()),
         ) { MapPlaceholder() }
@@ -136,7 +138,10 @@ class ScreenshotTest {
             .withStorage(DataKind.Lists, StorageChoice.Public)
 
     @Composable
-    private fun Settings(account: AccountState = AccountState.SignedOut()) {
+    private fun Settings(
+        account: AccountState = AccountState.SignedOut(),
+        status: UpdateStatus = UpdateStatus.UpToDate("0.1.0-edge.11"),
+    ) {
         SettingsScreen(
             appInfo = AppInfo(versionName = "0.1.0-edge.11", versionCode = 1_000_011),
             settings = AppSettings(),
@@ -150,7 +155,7 @@ class ScreenshotTest {
                 UpdatesUiState(
                     channel = UpdateChannel.Edge,
                     autoCheck = true,
-                    status = UpdateStatus.UpToDate("0.1.0-edge.11"),
+                    status = status,
                     dialog = null,
                 ),
             account = account,
@@ -329,6 +334,36 @@ class ScreenshotTest {
 
     @Test
     fun licencesTabletDark() = capture("licences", Device.Tablet, dark = true) { Licences() }
+
+    private val updateReady get() = UpdateStatus.Available(update)
+
+    @Test
+    fun settingsUpdateReadyPhoneLight() = capture("settings-update-ready", Device.Phone, dark = false) { Settings(status = updateReady) }
+
+    @Test
+    fun settingsUpdateReadyPhoneDark() = capture("settings-update-ready", Device.Phone, dark = true) { Settings(status = updateReady) }
+
+    @Test
+    fun settingsUpdateReadyTabletLight() = capture("settings-update-ready", Device.Tablet, dark = false) { Settings(status = updateReady) }
+
+    @Test
+    fun settingsUpdateReadyTabletDark() = capture("settings-update-ready", Device.Tablet, dark = true) { Settings(status = updateReady) }
+
+    @Test
+    fun settingsUpdateReadyLargeFontPhoneLight() =
+        capture("settings-update-ready", Device.Phone, dark = false, largeFont = true) { Settings(status = updateReady) }
+
+    @Test
+    fun mapUpdateReadyPhoneLight() = capture("map-update-ready", Device.Phone, dark = false) { Map(updateReady = true) }
+
+    @Test
+    fun mapUpdateReadyPhoneDark() = capture("map-update-ready", Device.Phone, dark = true) { Map(updateReady = true) }
+
+    @Test
+    fun mapUpdateReadyTabletLight() = capture("map-update-ready", Device.Tablet, dark = false) { Map(updateReady = true) }
+
+    @Test
+    fun mapUpdateReadyTabletDark() = capture("map-update-ready", Device.Tablet, dark = true) { Map(updateReady = true) }
 
     @Test
     fun settingsLargeFontPhoneLight() = capture("settings", Device.Phone, dark = false, largeFont = true) { Settings() }

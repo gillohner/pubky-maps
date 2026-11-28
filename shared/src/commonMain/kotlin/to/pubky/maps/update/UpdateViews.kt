@@ -3,22 +3,76 @@ package to.pubky.maps.update
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
+import to.pubky.maps.ui.AppIcons
+
+/**
+ * The card at the top of Settings while an update is ready: its version, size and the installed
+ * version, and Install, which starts the same download and checks as the "Update available" dialog.
+ * Install waits while that download runs ([downloading]); the dialog shows its progress.
+ */
+@Composable
+fun UpdateReadyCard(
+    update: AvailableUpdate,
+    installedVersionName: String,
+    downloading: Boolean,
+    onInstall: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.primaryContainer,
+    ) {
+        Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)) {
+            Row {
+                Icon(AppIcons.SystemUpdate, contentDescription = null)
+                Spacer(Modifier.width(16.dp))
+                // One TalkBack stop for the words, then Install.
+                Column(Modifier.semantics(mergeDescendants = true) {}) {
+                    Text(
+                        "Pubky Maps ${update.versionName} is ready",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        "${formatMegabytes(update.sizeBytes)}. You have $installedVersionName.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+            Button(
+                onClick = onInstall,
+                enabled = !downloading,
+                modifier = Modifier.align(Alignment.End).padding(top = 8.dp),
+            ) { Text("Install") }
+        }
+    }
+}
 
 /** "Check for updates" and "Check automatically", the update rows in Settings > About. */
 @Composable

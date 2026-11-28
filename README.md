@@ -434,7 +434,10 @@ accepts it only with a valid signature from the key in `release/update-feed-key.
 package and channel, and only for a newer versionCode. It then downloads the APK, checks its size and
 SHA-256 against the feed and its package and versionCode, checks it again, and hands it to Android's
 installer, which installs it only when it is signed with the same release key. A feed or file that
-fails a check is never installed, and the app says why. The feed addresses are a server list like
+fails a check is never installed, and the app says why. While a found update waits to be
+installed, the map's Settings button carries a dot ("Settings, update ready" for TalkBack) and
+Settings opens with a card at the top: the version, its size and the installed version, and
+Install. The feed addresses are a server list like
 every other server (`ServerDefaults.updateFeeds`): any mirror can serve the same signed files.
 
 ## Screenshots

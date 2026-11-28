@@ -1,6 +1,7 @@
 package to.pubky.maps.settings
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ListItem
@@ -12,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import to.pubky.maps.AppInfo
 import to.pubky.maps.account.AccountSettingsRow
 import to.pubky.maps.account.AccountState
@@ -20,8 +22,11 @@ import to.pubky.maps.config.OpenInApp
 import to.pubky.maps.config.Service
 import to.pubky.maps.config.SynonymHosts
 import to.pubky.maps.ui.rememberSafeLinkOpener
+import to.pubky.maps.update.UpdateDialog
+import to.pubky.maps.update.UpdateReadyCard
 import to.pubky.maps.update.UpdateSettingsRows
 import to.pubky.maps.update.UpdatesUiState
+import to.pubky.maps.update.readyToInstall
 
 private const val SOURCE_URL = "https://github.com/gillohner/pubky-maps"
 private const val LICENCE_URL = "$SOURCE_URL/blob/main/LICENSE"
@@ -31,7 +36,8 @@ private const val LICENCE_URL = "$SOURCE_URL/blob/main/LICENSE"
  * where there are ([offlineMaps], their summary, not null) and the notes to OpenStreetMap waiting on
  * the phone while some do ([notesWaiting], their summary, not null), servers, privacy, other apps, local
  * rules, about, map data). Groups with more to set open their own page. About shows
- * the update rows in builds that update themselves ([updates] not null). Privacy has "Clear search
+ * the update rows in builds that update themselves ([updates] not null); an update ready to install
+ * also shows as a card above every group, with Install ([onInstallUpdate]). Privacy has "Clear search
  * history" where search keeps one ([recentSearchCount] not null).
  */
 @Composable
@@ -47,6 +53,7 @@ fun SettingsScreen(
     updates: UpdatesUiState? = null,
     onCheckForUpdates: () -> Unit = {},
     onAutoCheckUpdatesChange: (Boolean) -> Unit = {},
+    onInstallUpdate: () -> Unit = {},
     account: AccountState? = null,
     onOpenAccount: () -> Unit = {},
     recentSearchCount: Int? = null,
@@ -61,6 +68,18 @@ fun SettingsScreen(
     val withSynonym = Service.entries.count { service -> settings.servers[service].any { SynonymHosts.isSynonymServer(it.url) } }
     val appsOn = OpenInApp.entries.count { settings.isOpenInEnabled(it) }
     SettingsPage(title = "Settings", onBack = onBack) {
+        // First, as Android's own Settings shows a waiting system update: one tap installs it.
+        updates?.readyToInstall?.let { update ->
+            item {
+                UpdateReadyCard(
+                    update = update,
+                    installedVersionName = appInfo.versionName,
+                    downloading = updates.dialog is UpdateDialog.Downloading,
+                    onInstall = onInstallUpdate,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                )
+            }
+        }
         if (account != null) {
             item { SectionHeader("Account") }
             item { AccountSettingsRow(state = account, onOpen = onOpenAccount) }

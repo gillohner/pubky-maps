@@ -1,6 +1,7 @@
 package to.pubky.maps.map
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -115,7 +116,7 @@ data class MapSearch(
 
 /**
  * The map screen: [map] fills the screen, the controls sit on top of it inside the safe area.
- * The search bar top start with Settings beside it, my location bottom end with the data credits
+ * The search bar top start with Settings beside it (with a dot while [updateReady]), my location bottom end with the data credits
  * under it in the bottom start corner, and [placeCard] (a place opened from a link or picked in
  * search) under them at the bottom. A soft scrim under the status bar keeps its icons readable.
  * [missing] parts of the app (a service whose every server failed) show in one line under the bar.
@@ -135,6 +136,7 @@ fun MapScreen(
     onMyLocation: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
+    updateReady: Boolean = false,
     missing: Set<ServicePart> = emptySet(),
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
     placeCard: (@Composable () -> Unit)? = null,
@@ -200,9 +202,10 @@ fun MapScreen(
                 }
                 MapButton(
                     icon = AppIcons.Settings,
-                    contentDescription = "Settings",
+                    contentDescription = if (updateReady) "Settings, update ready" else "Settings",
                     onClick = onOpenSettings,
                     size = TopControlSize,
+                    badge = updateReady,
                 )
             }
             val searchPanel = search != null && wide && (mode == SearchMode.Editing || mode == SearchMode.Results)
@@ -522,18 +525,33 @@ private fun MapButton(
     size: Dp,
     modifier: Modifier = Modifier,
     tinted: Boolean = false,
+    badge: Boolean = false,
 ) {
-    Surface(
-        onClick = onClick,
-        modifier = modifier.size(size),
-        shape = CircleShape,
-        color = MapSurfaces.control,
-        border = MapSurfaces.edge,
-        contentColor = if (tinted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-        shadowElevation = 3.dp,
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(icon, contentDescription = contentDescription)
+    Box(modifier.size(size)) {
+        Surface(
+            onClick = onClick,
+            modifier = Modifier.fillMaxSize(),
+            shape = CircleShape,
+            color = MapSurfaces.control,
+            border = MapSurfaces.edge,
+            contentColor = if (tinted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            shadowElevation = 3.dp,
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(icon, contentDescription = contentDescription)
+            }
+        }
+        if (badge) {
+            // A 10 dp dot on the button's corner, ringed in the button's colour so it stands out on any map;
+            // Material's 6 dp badge dot was hard to see on the 48 dp button. The words say it to TalkBack.
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .size(14.dp)
+                    .border(2.dp, MapSurfaces.control, CircleShape)
+                    .padding(2.dp)
+                    .background(MaterialTheme.colorScheme.error, CircleShape),
+            )
         }
     }
 }
