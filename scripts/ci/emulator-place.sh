@@ -11,7 +11,8 @@
 # page is named by its coordinates and asks no server; its Start here makes it the start of the
 # next directions: the link opened again, Directions route from the pin to the place, and From your
 # location from the fix again; Start then guides the user along the route as the GPS moves (the next
-# turn, the map following, off the route and a new route), Back ends it; back closes the page.
+# turn, the map following, off the route and a new route by itself, then on request), Back ends it;
+# back closes the page.
 # Checks that Pinakes, Nexus and Valhalla were asked with the app's User-Agent, Nexus for every
 # spelling people used for the place.
 # Usage: emulator-place.sh <apk> <out dir>
@@ -254,8 +255,9 @@ check_alive "directions from the user's location again"
 # Start: the route from the GPS fix guides the user (MapScreen's guidance banner and bar instead of
 # the page): the next step is the first turn, the map follows the fix at zoom 17 (the stored view);
 # on Bahnhofquai (the fixture's point 22) the next step is the bridge; 150 m east of the line the
-# user is off the route, and Find a new route asks for one from there; Back ends the guidance and
-# the route card is back.
+# user is off the route and a new route is asked for by itself from there (the fixture's route still
+# leaves them off it, and standing there asks no other), Find a new route asks again; Back ends the
+# guidance and the route card is back.
 xy=$(wait_for "Start" 5) || fail "no Start on the route from the user's location"
 adb shell input tap $xy
 wait_for "Turn right onto Museumstrasse." 15 > /dev/null || fail "the guidance does not show the first turn"
@@ -296,12 +298,37 @@ if wait_for_start "Dropped pin" 2 > /dev/null; then fail "a long-press while gui
 wait_for "End" 5 > /dev/null || fail "a long-press while guiding ended the guidance"
 wait_for "Turn left onto Rudolf-Brun-Brücke." 5 > /dev/null || fail "the guidance banner went after a long-press"
 check_alive "long-press while guiding"
+# routes_asked: how many routes the fixture server was asked for so far (a line still being
+# written is not counted).
+routes_asked() {
+    python3 -I -c "
+import json, sys
+n = 0
+for line in open(sys.argv[1], encoding='utf-8'):
+    try:
+        n += json.loads(line).get('path') == '/route'
+    except ValueError:
+        pass
+print(n)" "$log"
+}
+# wait_routes N: until the fixture server was asked for N routes, at most 20 s.
+wait_routes() {
+    local deadline=$((SECONDS + 20))
+    while ((SECONDS < deadline)); do
+        [ "$(routes_asked)" -ge "$1" ] && return 0
+        sleep 1
+    done
+    return 1
+}
 geo_loop 8.543611 47.377685
+wait_routes 7 || fail "150 m off the route no new route was asked for by itself ($(routes_asked) routes)"
 wait_for "You're off the route" 20 > /dev/null || fail "150 m from the route the guidance does not say the user is off it"
 screenshot guidance-off-route
+sleep 6
+[ "$(routes_asked)" -eq 7 ] || fail "standing off the route asked for a new route again ($(routes_asked) routes)"
 xy=$(wait_for "Find a new route" 5) || fail "no Find a new route off the route"
 adb shell input tap $xy
-sleep 4
+wait_routes 8 || fail "Find a new route asked for none"
 check_alive "a new route"
 adb shell input keyevent KEYCODE_BACK
 wait_for "Steps" 10 > /dev/null || fail "Back did not end the guidance and show the route card again"
@@ -330,17 +357,17 @@ assert all(a.startswith(("PubkyMaps/", "pubky-maps-core/")) for a in agents), ag
 assert all(l["ua"].startswith("PubkyMaps/") for l in lines if l["path"].startswith("/v1/stream/")), agents
 # Directions: by car from the GPS fix to the card's point, then on foot from the same start, swapped
 # (from the card's point back to the fix) and swapped again; later on foot from the dropped pin
-# (somewhere else on the map), then from the fix again, and last from where the guided user went
-# off the route (150 m east of Bahnhofquai).
+# (somewhere else on the map), then from the fix again, and last twice from where the guided user went
+# off the route (150 m east of Bahnhofquai): by itself, then on Find a new route.
 routes = [l for l in lines if l["path"] == "/route"]
-assert [r["costing"] for r in routes] == ["pedestrian" if i else "auto" for i in range(7)], routes
+assert [r["costing"] for r in routes] == ["pedestrian" if i else "auto" for i in range(8)], routes
 for i, r in enumerate(routes):
     start, end = r["locations"]
     if i == 2:
         start, end = end, start
     fix = abs(start["lat"] - 47.3779) < 1e-3 and abs(start["lon"] - 8.5403) < 1e-3
-    assert fix == (i not in (4, 6)), r
-    if i == 6:
+    assert fix == (i not in (4, 6, 7)), r
+    if i in (6, 7):
         assert abs(start["lat"] - 47.377685) < 1e-4 and abs(start["lon"] - 8.543611) < 1e-4, r
     assert abs(end["lat"] - 47.3708689) < 1e-6 and abs(end["lon"] - 8.5418241) < 1e-6, r
     assert r["ua"].startswith("PubkyMaps/"), r

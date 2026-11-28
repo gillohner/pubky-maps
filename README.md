@@ -196,11 +196,17 @@ and Report a map error. Each position is put on the route's line (of two parts a
 street the route comes back along, the one closest to where the user was on it, so one fix that jumped
 ahead is undone by the next); the map follows the user at zoom 17, turned the way the route goes, with
 them low on the screen, until they move it (Re-centre follows again), and the screen stays on. More
-than 50 m from the line (or the fix's own accuracy, when worse) the banner says the user is off the
-route, with Find a new route, which asks for one from where they are and guides on along it; within
-25 m of the end it says they have arrived. While it guides, a tap or long-press on the map opens no place
-(panning works). Back or End ends the guidance: the route card is back and the map turns north.
-Guidance does not speak or find a new route by itself, and a new route needs a connection.
+than 50 m from the line (or the fix's own accuracy, when worse) the user is off the route: on two
+positions in a row (one fix that jumped is not a wrong turn) a new route from where they are is asked
+for by itself, the old one staying on the map and guiding them until it comes ("Finding a new route…"),
+then it guides on along the new one; back on the old route first, it is no longer asked for. None came
+(no route, no server reached): the banner says why and the old route still guides. Another one is asked
+by itself at most every 10 s and only once the user moved 50 m from where the last was asked (a new
+route that starts on a road out of reach would come again); Find a new route in the banner asks at
+once. Within 25 m of the end it says they have arrived. While it guides, a tap or long-press on the map
+opens no place (panning works). Back or End ends the guidance: the route card is back and the map turns
+north (a new route still asked for comes to the card). Guidance does not speak, and a new route needs a
+connection.
 
 **Report a map problem** at the end of a place page (also of a dropped pin) opens a note to
 OpenStreetMap's mappers: what the user writes, then the place's name and OpenStreetMap link when it
