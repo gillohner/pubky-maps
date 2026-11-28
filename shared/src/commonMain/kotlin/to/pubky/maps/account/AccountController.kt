@@ -630,7 +630,9 @@ class AccountController(
         refreshJob =
             scope.launch(guard) {
                 try {
-                    val known = call { withKnownPlaces(AccountLoader(core, now).load(publicKey), webPages) }
+                    // The tag files the last refresh read are not read again.
+                    val loaded = call { AccountLoader(core, now).load(publicKey, known = signedIn.cached) }
+                    val known = call { withKnownPlaces(loaded, webPages) }
                     enqueue {
                         if (session == current) {
                             refreshed(known.account)

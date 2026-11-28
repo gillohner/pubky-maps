@@ -4,7 +4,7 @@
 CREATE TABLE account (
     public_key TEXT NOT NULL PRIMARY KEY,
     name TEXT,
-    -- When tags and saved places were last read in full (epoch milliseconds), null before that.
+    -- When tags and saved places were last read (epoch milliseconds), null before that.
     refreshed_at INTEGER
 );
 
@@ -13,6 +13,14 @@ CREATE TABLE tag (
     place TEXT NOT NULL,
     label TEXT NOT NULL,
     created_at INTEGER NOT NULL
+);
+
+-- The tags of the tags folder that are on no place (another app's tag on its own post or profile), with
+-- their target, so a refresh does not read them again: a tag file's name is made from its target and
+-- label, so its target never changes.
+CREATE TABLE other_tag (
+    path TEXT NOT NULL PRIMARY KEY,
+    place TEXT NOT NULL
 );
 
 CREATE TABLE bookmark (
@@ -58,6 +66,12 @@ SELECT * FROM tag ORDER BY created_at DESC, path;
 putTag:
 INSERT OR REPLACE INTO tag(path, place, label, created_at) VALUES (?, ?, ?, ?);
 
+otherTags:
+SELECT * FROM other_tag;
+
+putOtherTag:
+INSERT OR REPLACE INTO other_tag(path, place) VALUES (?, ?);
+
 bookmarks:
 SELECT * FROM bookmark ORDER BY place;
 
@@ -69,6 +83,9 @@ DELETE FROM account;
 
 deleteTags:
 DELETE FROM tag;
+
+deleteOtherTags:
+DELETE FROM other_tag;
 
 deleteBookmarks:
 DELETE FROM bookmark;

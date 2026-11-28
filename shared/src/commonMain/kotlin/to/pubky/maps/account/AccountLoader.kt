@@ -20,8 +20,15 @@ internal val PROFILE_PATHS = listOf("/pub/social/v1/profile.json", "/pub/pubky.a
 
 internal const val TAGS_DIR = "/pub/social/v1/tags/"
 
-/** At most this many tags and saved places are read (a page holds 100). */
+/** At most this many saved places are read (a page holds 100). */
 internal const val MAX_ITEMS = 2000
+
+/**
+ * At most this many tag files are read in one refresh. A refresh reads only the files it does not know
+ * from the last one, so the next refresh goes on with the files this one left; the tags folder is listed
+ * up to [MAX_PAGE_READS] pages (10 000 files), the files after that are not seen.
+ */
+internal const val MAX_TAG_READS = 2000
 
 /**
  * At most this many pages are asked for in one listing. A page of saved places can be empty and not be
@@ -40,19 +47,30 @@ internal class AccountLoader(
     private val core: PubkyCore,
     private val now: () -> Long,
 ) {
-    /** The user's data; its `refreshedAt` is when reading began, so a write made after that is known to be newer. */
-    suspend fun load(publicKey: String): CachedAccount =
+    /**
+     * The user's data; its `refreshedAt` is when reading began, so a write made after that is known to be
+     * newer. The tag files [known] (the data of the last refresh) holds are not read again. A refresh that
+     * left listed tag files unread keeps [known]'s `refreshedAt`: a tag written since may be one of them,
+     * so the writes since the last refresh still show over the data read.
+     */
+    suspend fun load(
+        publicKey: String,
+        known: CachedAccount? = null,
+    ): CachedAccount =
         coroutineScope {
             val startedAt = now()
+            val last = known?.takeIf { it.publicKey == publicKey }
             val name = async { profileName(publicKey) }
-            val tags = async { tags() }
+            val tags = async { tags(last) }
             val bookmarks = async { bookmarks() }
+            val read = tags.await()
             CachedAccount(
                 publicKey = publicKey,
                 name = name.await(),
-                refreshedAt = startedAt,
-                tags = tags.await(),
+                refreshedAt = if (read.complete) startedAt else last?.refreshedAt ?: startedAt,
+                tags = read.tags,
                 bookmarks = bookmarks.await(),
+                otherTags = read.others,
             )
         }
 
@@ -76,39 +94,88 @@ internal class AccountLoader(
     }
 
     /**
-     * The user's tags on places. The tags folder is shared with other apps: tags on a pubky.app post or
-     * profile are left out by the core's rule ([PubkyCore.mayBeMapPlace]), as the core leaves out
-     * such bookmarks. A tag file names its target only inside, so every listed file is read.
+     * The user's tags on places, and the other files of the tags folder (see [CachedAccount.otherTags]).
+     * The tags folder is shared with other apps: tags on a pubky.app post or profile are left out by the
+     * core's rule ([PubkyCore.mayBeMapPlace]), as the core leaves out such bookmarks. A tag file names
+     * its target only inside, so every listed file [known] does not hold is read, at most
+     * [MAX_TAG_READS] of them. A known file whose target the rule now judges otherwise is read again.
+     * Files that hold no tag, and tags on web pages Pinakes answered no place (left out of the cached
+     * tags by [withoutPagesOf], not other files: the answer can change), are read on each refresh.
      */
-    private suspend fun tags(): List<CachedTag> {
-        val paths = pages { core.list(TAGS_DIR, it) }.filter { it.endsWith(".json") }
-        val permits = Semaphore(PARALLEL_READS)
-        return coroutineScope {
-            paths
-                .map { path ->
-                    async {
-                        permits.withPermit {
-                            val bytes =
-                                try {
-                                    core.get(path)
-                                } catch (_: CoreFailure.NotFound) {
-                                    return@withPermit null
-                                }
-                            parseTag(path, bytes)?.takeIf { core.mayBeMapPlace(it.place) }
-                        }
-                    }
-                }.awaitAll()
-                .filterNotNull()
-                .sortedWith(compareByDescending<CachedTag> { it.createdAt }.thenBy { it.path })
+    private suspend fun tags(known: CachedAccount?): TagFiles {
+        // Every listed file, up to MAX_PAGE_READS pages: a known file costs no read.
+        val paths = pages(Int.MAX_VALUE) { core.list(TAGS_DIR, it) }.filter { it.endsWith(".json") }
+        val knownTags = known?.tags?.associateBy { it.path }.orEmpty()
+        val knownOthers = known?.otherTags.orEmpty()
+        val tags = ArrayList<CachedTag>()
+        val others = LinkedHashMap<String, String>()
+        val unread = ArrayList<String>()
+        for (path in paths) {
+            val tag = knownTags[path]
+            when {
+                tag != null && core.mayBeMapPlace(tag.place) -> tags += tag
+                path in knownOthers && !core.mayBeMapPlace(knownOthers.getValue(path)) -> others[path] = knownOthers.getValue(path)
+                else -> unread += path
+            }
         }
+        val permits = Semaphore(PARALLEL_READS)
+        val read =
+            coroutineScope {
+                unread
+                    .take(MAX_TAG_READS)
+                    .map { path ->
+                        async {
+                            permits.withPermit {
+                                val bytes =
+                                    try {
+                                        core.get(path)
+                                    } catch (_: CoreFailure.NotFound) {
+                                        // Listed but deleted since: nothing to keep.
+                                        return@withPermit null
+                                    }
+                                path to parseTag(path, bytes)
+                            }
+                        }
+                    }.awaitAll()
+                    .filterNotNull()
+            }
+        for ((path, tag) in read) {
+            when {
+                tag == null -> {}
+
+                core.mayBeMapPlace(tag.place) -> {
+                    tags += tag
+                }
+
+                else -> {
+                    others[path] = tag.place
+                }
+            }
+        }
+        return TagFiles(
+            tags = tags.sortedWith(compareByDescending<CachedTag> { it.createdAt }.thenBy { it.path }),
+            others = others,
+            complete = unread.size <= MAX_TAG_READS,
+        )
     }
 
+    /** The place tags and the other tag files read, and whether every listed file was. */
+    private class TagFiles(
+        val tags: List<CachedTag>,
+        val others: Map<String, String>,
+        val complete: Boolean,
+    )
+
     private suspend fun bookmarks(): List<CachedBookmark> =
-        pages { core.listBookmarks(it) }
+        pages(MAX_ITEMS) { core.listBookmarks(it) }
             .map { CachedBookmark(path = it.path, place = it.place) }
             .sortedBy { it.place }
 
-    private suspend fun <T> pages(read: suspend (cursor: String?) -> Page<T>): List<T> {
+    /** The items of a listing, at most [max] of them. */
+    private suspend fun <T> pages(
+        max: Int,
+        read: suspend (cursor: String?) -> Page<T>,
+    ): List<T> {
         val items = mutableListOf<T>()
         var cursor: String? = null
         var reads = 0
@@ -123,8 +190,8 @@ internal class AccountLoader(
             items += page.items
             cursor = page.nextCursor
             reads++
-        } while (cursor != null && items.size < MAX_ITEMS && reads < MAX_PAGE_READS)
-        return items.take(MAX_ITEMS)
+        } while (cursor != null && items.size < max && reads < MAX_PAGE_READS)
+        return items.take(max)
     }
 }
 

@@ -27,6 +27,12 @@ class FakePubkyCore : PubkyCore {
     var forgotten = 0
     val files = mutableMapOf<String, ByteArray>()
     var tagPaths = listOf<String>()
+
+    /** How many paths a page of [list] holds. */
+    var listPageSize = 2
+
+    /** The files [get] was asked for, in order. */
+    val gets = mutableListOf<String>()
     var bookmarks = listOf<SavedPlace>()
 
     /** When set, saved places are listed in these pages instead of [bookmarks] in one. */
@@ -95,6 +101,7 @@ class FakePubkyCore : PubkyCore {
     }
 
     override suspend fun get(path: String): ByteArray {
+        gets += path
         failReads?.let { throw it }
         return files[path] ?: throw CoreFailure.NotFound(path)
     }
@@ -105,12 +112,12 @@ class FakePubkyCore : PubkyCore {
     ): Page<String> {
         listGate?.await()
         failReads?.let { throw it }
-        // Pages of two, the cursor being the index of the next item. Like the homeserver, a folder
+        // Pages of [listPageSize], the cursor being the index of the next item. Like the homeserver, a folder
         // with nothing in it does not exist.
         val inDir = tagPaths.filter { it.startsWith(dir) }
         if (inDir.isEmpty()) throw CoreFailure.NotFound(dir)
         val from = cursor?.toInt() ?: 0
-        val page = inDir.drop(from).take(2)
+        val page = inDir.drop(from).take(listPageSize)
         return Page(page, if (page.isEmpty()) null else (from + page.size).toString())
     }
 

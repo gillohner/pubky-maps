@@ -120,7 +120,11 @@ Settings:
   Its tags and bookmarks are those on places (map links and web pages, the core's `mayBeMapPlace`):
   tags and bookmarks other apps put on their own Pubky objects, such as pubky.app posts and
   profiles, are not listed or counted, nor are bookmarks and tags of web pages Pinakes does not know or knows
-  as no place (the same check as on the Bookmarks screen).
+  as no place (the same check as on the Bookmarks screen). The tags folder is shared with other apps, and a
+  tag file names its target only inside: a refresh lists up to 10 000 files, reads the ones it does not know
+  from the last refresh, at most 2000 (the next refresh goes on with the rest), and keeps which ones are tags
+  on no place, so a user with many pubky.app tags gets their place tags without the same files being read
+  each time.
 - **Server lists:** an ordered list of servers per service (map styles, Photon, Pinakes, Nexus,
   Overpass, Valhalla, OpenStreetMap API, Panoramax, Pkarr relays, sign-in relay). Users add, remove, reorder and reset them; servers run by Synonym are
   marked. The map uses its style list in order, the next style taking over when one fails to load;
