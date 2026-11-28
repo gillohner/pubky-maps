@@ -11,6 +11,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -50,6 +51,11 @@ class SavedAndListsTest {
     private val osm = "https://www.openstreetmap.org/node/270803095"
     private val lindenhof = "https://maps.app.goo.gl/x1"
 
+    /** Bookmarks are one row of the Bookmarks page; their rows are on its own page. */
+    private fun openBookmarks() = compose.onNodeWithText("Bookmarked places").performClick()
+
+    private fun back() = compose.onNodeWithContentDescription("Back").performClick()
+
     @Test
     fun aNamedPlaceShowsItsNameWithoutItsLink() {
         compose.setContent {
@@ -81,11 +87,13 @@ class SavedAndListsTest {
                 )
             }
         }
+        openBookmarks()
         compose.onNodeWithText("Conditorei Schober").assertExists()
         // A place without a name is still told by its link.
         compose.onNodeWithText("47.36667, 8.55").assertExists()
         // One not sent yet still says so.
         compose.onNodeWithText("Not sent yet", substring = true).assertExists()
+        back()
         compose.onNodeWithText("Coffee in Zürich").performClick()
         // The collection's page names its places too; it shows neither the OpenStreetMap id nor the link.
         compose.onNodeWithText("Conditorei Schober").assertExists()
@@ -133,11 +141,13 @@ class SavedAndListsTest {
                 )
             }
         }
+        openBookmarks()
         compose.onNodeWithText("Café · Napfgasse 4, 8001 Zürich").assertExists()
         // Two Coops on different streets are told apart by their summaries: no point needed.
         compose.onNodeWithText("Supermarket · Bahnhofbrücke 1").assertExists()
         compose.onNodeWithText("Supermarket · Theaterstrasse 2").assertExists()
         compose.onAllNodesWithText("47.37586, 8.54253", substring = true).assertCountEquals(0)
+        back()
         compose.onNodeWithText("Coffee in Zürich").performClick()
         // The collection's page says it too.
         compose.onNodeWithText("Café · Napfgasse 4, 8001 Zürich").assertExists()
@@ -180,10 +190,12 @@ class SavedAndListsTest {
                 )
             }
         }
+        openBookmarks()
         compose.onNodeWithText("47.37586, 8.54253").assertExists()
         compose.onNodeWithText("47.36722, 8.54493").assertExists()
         // A name no other place has shows the name alone.
         compose.onAllNodesWithText("47.3722, 8.5446").assertCountEquals(0)
+        back()
         compose.onNodeWithText("Groceries").performClick()
         // On the collection's page too, from the bookmark's point; Migros, alone, has no line under it.
         compose.onNodeWithText("47.37586, 8.54253").assertExists()
@@ -231,9 +243,11 @@ class SavedAndListsTest {
             }
         }
         // The bare Coop shows where it is; the other is told by its summary alone.
+        openBookmarks()
         compose.onNodeWithText("47.36722, 8.54493").assertExists()
         compose.onNodeWithText("Supermarket · Bahnhofbrücke 1").assertExists()
         compose.onAllNodesWithText("47.37586, 8.54253", substring = true).assertCountEquals(0)
+        back()
         compose.onNodeWithText("Groceries").performClick()
         // On the collection's page too.
         compose.onNodeWithText("47.36722, 8.54493").assertExists()
@@ -269,7 +283,9 @@ class SavedAndListsTest {
                 )
             }
         }
+        openBookmarks()
         compose.onNodeWithText("47.36667, 8.55").performClick()
+        back()
         compose.onNodeWithText("Walks").performClick()
         compose.onNodeWithText("Bench").performClick()
         assertEquals(listOf("geo:47.36667,8.55" to null, "geo:47.37,8.55" to "Bench"), opened)

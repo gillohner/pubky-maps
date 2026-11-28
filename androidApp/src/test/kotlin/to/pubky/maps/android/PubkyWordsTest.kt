@@ -12,6 +12,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -147,6 +148,11 @@ class PubkyWordsTest {
             }
         }
         assertNoOldWords()
+        // The bookmarks' own page.
+        compose.onNodeWithText("Bookmarked places").performClick()
+        compose.onNodeWithText("Not sent yet").assertExists()
+        assertNoOldWords()
+        compose.onNodeWithContentDescription("Back").performClick()
         // The collection's own page.
         compose.onNodeWithText("Coffee in Zürich").performClick()
         compose.onNodeWithText("Conditorei Schober").assertExists()
