@@ -1,0 +1,6 @@
+-- Version 5: the tags of the tags folder that are on no place, so a refresh does not read them again.
+
+CREATE TABLE other_tag (
+    path TEXT NOT NULL PRIMARY KEY,
+    place TEXT NOT NULL
+);

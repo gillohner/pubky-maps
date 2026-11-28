@@ -162,7 +162,7 @@ class SqlWriteStoreTest {
             "CREATE TABLE bookmark (path TEXT NOT NULL PRIMARY KEY, place TEXT NOT NULL)",
             "INSERT INTO account VALUES ('$USER', 'Ada', 7)",
         ).forEach { driver.execute(null, it, 0) }
-        assertEquals(4L, CacheDatabase.Schema.version)
+        assertEquals(5L, CacheDatabase.Schema.version)
 
         CacheDatabase.Schema.migrate(driver, 1, CacheDatabase.Schema.version)
 

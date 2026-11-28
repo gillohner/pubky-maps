@@ -435,6 +435,34 @@ class AccountControllerTest {
         }
 
     @Test
+    fun aRefreshReadsOnlyTheTagFilesTheStoredDataDoesNotKnow() =
+        runTest {
+            secrets.values[SecretStore.SESSION] = "grant-secret"
+            val tag = CachedTag("/pub/social/v1/tags/a.json", "geo:47.1,8.5", "bench", 1)
+            val post = "pubky://$USER/pub/pubky.app/posts/0034A0000001"
+            cache.stored = CachedAccount(USER, "Ada", 500, listOf(tag), emptyList(), mapOf("/pub/social/v1/tags/b.json" to post))
+            core.tagPaths = listOf("a", "b", "c").map { "/pub/social/v1/tags/$it.json" }
+            core.files["/pub/social/v1/tags/c.json"] =
+                """{"uri":"https://www.openstreetmap.org/node/1","label":"coffee","created_at":5}""".encodeToByteArray()
+            core.restore = { AccountSession(USER, "homeserver") }
+            val account = controller()
+
+            account.start()
+            runCurrent()
+
+            val state = assertIs<AccountState.SignedIn>(account.state.value)
+            assertEquals(Connection.Online, state.connection)
+            assertEquals(listOf("/pub/social/v1/tags/c.json"), core.gets)
+            assertEquals(listOf("coffee", "bench"), state.cached.tags.map { it.label })
+            assertEquals(mapOf("/pub/social/v1/tags/b.json" to post), cache.stored?.otherTags)
+
+            // A tag the user writes keeps them for the next refresh.
+            account.updateCached { it.copy(tags = it.tags + CachedTag("/pub/social/v1/tags/d.json", "geo:1,2", "view", 9)) }
+            runCurrent()
+            assertEquals(mapOf("/pub/social/v1/tags/b.json" to post), cache.stored?.otherTags)
+        }
+
+    @Test
     fun theRestoreIsRetriedInTheForegroundUntilTheHomeserverAnswers() =
         runTest {
             secrets.values[SecretStore.SESSION] = "grant-secret"
