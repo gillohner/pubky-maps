@@ -282,8 +282,9 @@ check_alive "directions from the user's location again"
 # the page): the next step is the first turn, the map follows the fix at zoom 17 (the stored view);
 # on Bahnhofquai (the fixture's point 22) the next step is the bridge; 150 m east of the line the
 # user is off the route and a new route is asked for by itself from there (the fixture's route still
-# leaves them off it, and standing there asks no other), Find a new route asks again; Back ends the
-# guidance and the route card is back.
+# leaves them off it; standing there asks no other, but a first one from a fix on the way more than
+# 50 m short of the spot is followed by one more at the spot), Find a new route asks again; Back ends
+# the guidance and the route card is back. place_routes.py checks where each was asked from.
 xy=$(wait_for "Start" 5) || fail "no Start on the route from the user's location"
 adb shell input tap $xy
 wait_for "Turn right onto Museumstrasse." 15 > /dev/null || fail "the guidance does not show the first turn"
@@ -350,12 +351,14 @@ geo_loop 8.543611 47.377685
 wait_routes 7 || fail "150 m off the route no new route was asked for by itself ($(routes_asked) routes)"
 wait_for "You're off the route" 20 > /dev/null || fail "150 m from the route the guidance does not say the user is off it"
 screenshot guidance-off-route
-# Past the 10 s spacing, so only the 50 m the user has not moved holds the next one back.
+# Past the 10 s spacing, so only the 50 m the user has not moved holds the next one back (8 routes:
+# the first came from a fix on the way, place_routes.py checks the user moved 50 m since).
 sleep 12
-[ "$(routes_asked)" -eq 7 ] || fail "standing off the route asked for a new route again ($(routes_asked) routes)"
+asked=$(routes_asked)
+[ "$asked" -le 8 ] || fail "standing off the route asked for a new route again ($asked routes)"
 xy=$(wait_for "Find a new route" 5) || fail "no Find a new route off the route"
 adb shell input tap $xy
-wait_routes 8 || fail "Find a new route asked for none"
+wait_routes $((asked + 1)) || fail "Find a new route asked for none"
 check_alive "a new route"
 adb shell input keyevent KEYCODE_BACK
 wait_for "Steps" 10 > /dev/null || fail "Back did not end the guidance and show the route card again"
@@ -382,24 +385,6 @@ assert any(p.endswith("/collections") for p in paths), paths
 agents = {l["ua"] for l in lines}
 assert all(a.startswith(("PubkyMaps/", "pubky-maps-core/")) for a in agents), agents
 assert all(l["ua"].startswith("PubkyMaps/") for l in lines if l["path"].startswith("/v1/stream/")), agents
-# Directions: by car from the GPS fix to the card's point, then on foot from the same start, swapped
-# (from the card's point back to the fix) and swapped again; later on foot from the dropped pin
-# (somewhere else on the map), then from the fix again, and last twice from where the guided user went
-# off the route (150 m east of Bahnhofquai): by itself, then on Find a new route.
-routes = [l for l in lines if l["path"] == "/route"]
-assert [r["costing"] for r in routes] == ["pedestrian" if i else "auto" for i in range(8)], routes
-for i, r in enumerate(routes):
-    start, end = r["locations"]
-    if i == 2:
-        start, end = end, start
-    fix = abs(start["lat"] - 47.3779) < 1e-3 and abs(start["lon"] - 8.5403) < 1e-3
-    assert fix == (i not in (4, 6, 7)), r
-    if i in (6, 7):
-        assert abs(start["lat"] - 47.377685) < 1e-4 and abs(start["lon"] - 8.543611) < 1e-4, r
-    assert abs(end["lat"] - 47.3708689) < 1e-6 and abs(end["lon"] - 8.5418241) < 1e-6, r
-    assert r["ua"].startswith("PubkyMaps/"), r
-pin = routes[4]["locations"][0]
-assert abs(pin["lat"] - 47.37) < 0.1 and abs(pin["lon"] - 8.54) < 0.1, pin
 # Street-level photos: Panoramax asked once for the Schober, for the card's point, with the app's
 # User-Agent (the link opened again shows the kept answer); the dropped pin's point asked of no
 # server; the thumbnails loaded.
@@ -409,6 +394,8 @@ assert photos[0]["place_position"] == "8.5418241,47.3708689", photos[0]
 assert any(l["path"].startswith("/panoramax/thumb/") for l in lines), paths
 print("requests:", len(lines), sorted(set(paths)))
 PY
+# The directions asked for, in order, from where (scripts/ci/place_routes.py).
+python3 -I "$here/place_routes.py" "$log" || fail "the place page did not ask for the routes as expected"
 
 check_strict_mode "place page"
 echo "place page test passed"
