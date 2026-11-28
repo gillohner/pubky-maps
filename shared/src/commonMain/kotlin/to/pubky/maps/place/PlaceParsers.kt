@@ -52,6 +52,7 @@ fun parsePinakesCard(json: String): PlaceCardInfo {
         refs = card.refs,
         collections = card.collections,
         facts = card.facts?.textValues().orEmpty(),
+        typePath = card.typePath,
     )
 }
 
@@ -257,6 +258,7 @@ private data class PinakesCardRead(
     val id: String,
     val uri: String,
     val type: String? = null,
+    @SerialName("type_path") val typePath: List<String> = emptyList(),
     val name: String? = null,
     val description: String? = null,
     val image: String? = null,

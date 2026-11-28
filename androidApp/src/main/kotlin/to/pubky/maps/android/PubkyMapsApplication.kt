@@ -17,6 +17,7 @@ import to.pubky.maps.account.AccountState
 import to.pubky.maps.account.AccountUi
 import to.pubky.maps.account.CoreServers
 import to.pubky.maps.account.SharedCore
+import to.pubky.maps.account.androidWebPagePlaces
 import to.pubky.maps.account.createPubkyMapsCore
 import to.pubky.maps.android.update.startUpdater
 import to.pubky.maps.config.InMemoryServerConfigRepository
@@ -208,7 +209,8 @@ class PubkyMapsApplication : Application() {
         )
         updates = startUpdater(this, serverConfigRepository)
         // Restores a stored session in the background; the map never waits for it.
-        val (started, cacheDriver) = startAccount(this, scope, serviceHealth, core)
+        // Bookmarked web pages are checked on Pinakes through the place services' client and server list.
+        val (started, cacheDriver) = startAccount(this, scope, serviceHealth, core, androidWebPagePlaces { places.data })
         account = started
         writes =
             androidWriteController(

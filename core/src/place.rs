@@ -111,6 +111,18 @@ pub fn may_be_map_place(target: &str) -> bool {
         || has_scheme(target, "http://")
 }
 
+/// Whether a stored target is a web page that is a place only when Pinakes has a place card for
+/// it: [`may_be_map_place`] takes it, but it is no link the map-link reader reads. A bookmark of
+/// one is kept when Pinakes' card for the page is a place (or no Pinakes server answers); a web
+/// page Pinakes does not know as a place (an article another app bookmarked) is not one. Map
+/// links name a place by themselves and need no card.
+#[uniffi::export]
+pub fn needs_place_card(target: &str) -> bool {
+    let target = frozen_trim(target);
+    map_links::parse(target).is_none()
+        && (has_scheme(target, "https://") || has_scheme(target, "http://"))
+}
+
 fn has_scheme(s: &str, scheme: &str) -> bool {
     s.get(..scheme.len())
         .is_some_and(|head| head.eq_ignore_ascii_case(scheme))
@@ -306,6 +318,30 @@ mod tests {
             "",
         ] {
             assert!(!may_be_map_place(target), "{target}");
+        }
+    }
+
+    #[test]
+    fn only_web_pages_that_are_no_map_link_need_a_place_card() {
+        for target in [
+            "https://www.kunsthaus.ch/",
+            " https://www.kunsthaus.ch/de/besuch ",
+            "HTTP://example.com/an-article",
+        ] {
+            assert!(needs_place_card(target), "{target}");
+        }
+        for target in [
+            "https://www.openstreetmap.org/node/270803095",
+            "geo:47.37687,8.54169",
+            "https://www.google.com/maps/place/Kunsthaus+Z%C3%BCrich/@47.3703,8.548,17z",
+            "https://maps.app.goo.gl/3bTBxL9Sg2cXE6sq9",
+            "https://maps.apple.com/?ll=47.3703,8.548&q=Kunsthaus",
+            "om://map?ll=47.3703,8.548&n=Kunsthaus",
+            "pubky://8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo/pub/pubky.app/posts/0034A0000001",
+            "mailto:someone@example.com",
+            "",
+        ] {
+            assert!(!needs_place_card(target), "{target}");
         }
     }
 

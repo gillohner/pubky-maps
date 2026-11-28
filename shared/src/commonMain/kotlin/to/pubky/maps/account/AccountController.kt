@@ -95,6 +95,8 @@ class AccountController(
     private val scope: CoroutineScope,
     private val io: CoroutineDispatcher,
     private val now: () -> Long,
+    /** Which bookmarked web pages are places; the others are left out of the cached bookmarks. */
+    private val webPages: WebPagePlaces,
     /** Waits between restore attempts while the homeserver is unreachable; the last one repeats. */
     private val retryDelays: List<Duration> = listOf(15.seconds, 30.seconds, 60.seconds, 120.seconds, 300.seconds),
 ) {
@@ -109,6 +111,9 @@ class AccountController(
     private var waitJob: Job? = null
     private var restoreJob: Job? = null
     private var refreshJob: Job? = null
+
+    /** Asks Pinakes about the bookmarked web pages the last refresh read (see [checkPages]). */
+    private var pagesJob: Job? = null
     private var retryJob: Job? = null
     private var revokeJob: Job? = null
     private var retries = 0
@@ -288,15 +293,16 @@ class AccountController(
      * Applies [change] to the signed-in user's cached data and stores it: a write the homeserver took
      * shows at once, before the next refresh reads it back. Nothing happens while signed out.
      */
-    fun updateCached(change: (CachedAccount) -> CachedAccount) =
-        enqueue {
-            val signedIn = state.value as? AccountState.SignedIn ?: return@enqueue
-            if (signedIn.signingOut) return@enqueue
-            val updated = change(signedIn.cached)
-            if (updated == signedIn.cached) return@enqueue
-            io { cache.replace(updated) }
-            mutableState.value = signedIn.copy(cached = updated)
-        }
+    fun updateCached(change: (CachedAccount) -> CachedAccount) = enqueue { changeCached(change) }
+
+    private suspend fun changeCached(change: (CachedAccount) -> CachedAccount) {
+        val signedIn = state.value as? AccountState.SignedIn ?: return
+        if (signedIn.signingOut) return
+        val updated = change(signedIn.cached)
+        if (updated == signedIn.cached) return
+        io { cache.replace(updated) }
+        mutableState.value = signedIn.copy(cached = updated)
+    }
 
     /** Revokes the session (when the homeserver answers) and deletes the account's data from this phone. */
     fun signOut() =
@@ -325,6 +331,8 @@ class AccountController(
         retryJob = null
         refreshJob?.cancelAndJoin()
         refreshJob = null
+        pagesJob?.cancelAndJoin()
+        pagesJob = null
         // Joined, so a restore that was just finishing cannot install its session after this.
         restoreJob?.cancelAndJoin()
         restoreJob = null
@@ -622,8 +630,13 @@ class AccountController(
         refreshJob =
             scope.launch(guard) {
                 try {
-                    val loaded = call { AccountLoader(core, now).load(publicKey) }
-                    enqueue { if (session == current) refreshed(loaded) }
+                    val known = call { withKnownPlaces(AccountLoader(core, now).load(publicKey), webPages) }
+                    enqueue {
+                        if (session == current) {
+                            refreshed(known.account)
+                            checkPages(known.unchecked)
+                        }
+                    }
                 } catch (_: CoreFailure.Auth) {
                     enqueue { if (session == current) signedOut(notice = SESSION_ENDED) }
                 } catch (_: CoreFailure.Network) {
@@ -649,6 +662,26 @@ class AccountController(
                 connection = Connection.Online,
                 refreshing = false,
             )
+    }
+
+    /**
+     * Asks Pinakes about the bookmarked web pages [pages] (none had a kept answer) and leaves out the
+     * ones that are no place, as a change on the cached data then: the refresh shows the homeserver's
+     * data first, so a slow Pinakes neither holds it back nor widens the time in which a refresh
+     * result overwrites a bookmark or tag the user changed meanwhile. A page answered no place shows
+     * until then, on the first refresh after a start or once its answer is an hour old. A new refresh
+     * starts the checks over; the answers already given are kept by [webPages].
+     */
+    private fun checkPages(pages: List<String>) {
+        pagesJob?.cancel()
+        pagesJob = null
+        if (pages.isEmpty()) return
+        val current = session
+        pagesJob =
+            scope.launch(guard) {
+                val dropped = notPlaces(pages, webPages)
+                if (dropped.isNotEmpty()) enqueue { if (session == current) changeCached { it.withoutBookmarksOf(dropped) } }
+            }
     }
 
     private fun refreshDone() {

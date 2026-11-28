@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import to.pubky.maps.cache.CachedAccount
+import to.pubky.maps.cache.CachedBookmark
 import to.pubky.maps.cache.CachedTag
 import to.pubky.maps.status.ServiceHealth
 import to.pubky.maps.status.ServicePart
@@ -26,7 +27,10 @@ class AccountControllerTest {
     private val cache = MemoryAccountCache()
     private val health = ServiceHealth()
 
-    private fun TestScope.controller(createCore: suspend () -> PubkyCore = { core }): AccountController =
+    private fun TestScope.controller(
+        webPages: WebPagePlaces = FakeWebPagePlaces(),
+        createCore: suspend () -> PubkyCore = { core },
+    ): AccountController =
         AccountController(
             createCore = createCore,
             secrets = secrets,
@@ -35,6 +39,7 @@ class AccountControllerTest {
             scope = backgroundScope,
             io = StandardTestDispatcher(testScheduler),
             now = { 1_000L },
+            webPages = webPages,
         )
 
     private fun profile(
@@ -110,6 +115,113 @@ class AccountControllerTest {
             assertEquals("grant-secret", secrets.values[SecretStore.SESSION])
             assertNull(secrets.values[SecretStore.PENDING_SIGN_IN], "the flow's state is deleted after it")
             assertEquals("Ada", cache.stored?.name)
+        }
+
+    @Test
+    fun aBookmarkedWebPageThatIsNoPlaceIsLeftOutOfTheCachedBookmarks() =
+        runTest {
+            core.bookmarks =
+                listOf(
+                    SavedPlace(ARTICLE, "/priv/social/v1/bookmarks/a.json"),
+                    SavedPlace(MUSEUM, "/priv/social/v1/bookmarks/b.json"),
+                    SavedPlace(UNANSWERED, "/priv/social/v1/bookmarks/c.json"),
+                    SavedPlace("geo:47.1,8.5", "/priv/social/v1/bookmarks/d.json"),
+                )
+            val account = controller()
+            account.start()
+            account.onForeground()
+            signIn(account)
+
+            approve()
+            runCurrent()
+
+            val state = assertIs<AccountState.SignedIn>(account.state.value)
+            assertEquals(listOf("geo:47.1,8.5", UNANSWERED, MUSEUM), state.cached.bookmarks.map { it.place })
+            assertEquals(listOf("geo:47.1,8.5", UNANSWERED, MUSEUM), cache.stored?.bookmarks?.map { it.place })
+        }
+
+    @Test
+    fun theHomeserversDataShowsBeforePinakesAnswersAndAWriteMeanwhileStays() =
+        runTest {
+            core.bookmarks =
+                listOf(
+                    SavedPlace(ARTICLE, "/priv/social/v1/bookmarks/a.json"),
+                    SavedPlace("geo:47.1,8.5", "/priv/social/v1/bookmarks/d.json"),
+                )
+            val account = controller(webPages = FakeWebPagePlaces(answerTime = 5.seconds))
+            account.start()
+            account.onForeground()
+            signIn(account)
+            approve()
+            runCurrent()
+
+            val shown = assertIs<AccountState.SignedIn>(account.state.value)
+            assertEquals(listOf("geo:47.1,8.5", ARTICLE), shown.cached.bookmarks.map { it.place })
+            assertEquals(false, shown.refreshing)
+            val written = CachedBookmark("/priv/social/v1/bookmarks/e.json", "geo:1,2")
+            account.updateCached { it.copy(bookmarks = it.bookmarks + written) }
+            runCurrent()
+            advanceTimeBy(6.seconds)
+            runCurrent()
+
+            val state = assertIs<AccountState.SignedIn>(account.state.value)
+            assertEquals(listOf("geo:47.1,8.5", "geo:1,2"), state.cached.bookmarks.map { it.place })
+            assertEquals(listOf("geo:47.1,8.5", "geo:1,2"), cache.stored?.bookmarks?.map { it.place })
+        }
+
+    @Test
+    fun aNewRefreshStartsTheChecksOverAndASignOutStopsThem() =
+        runTest {
+            core.bookmarks = listOf(SavedPlace(ARTICLE, "/priv/social/v1/bookmarks/a.json"))
+            val places = FakeWebPagePlaces(answerTime = 5.seconds)
+            val account = controller(webPages = places)
+            account.start()
+            account.onForeground()
+            signIn(account)
+            approve()
+            runCurrent()
+            advanceTimeBy(1.seconds)
+
+            account.refresh()
+            runCurrent()
+            advanceTimeBy(4.5.seconds)
+            runCurrent()
+            assertEquals(listOf(ARTICLE, ARTICLE), places.asked)
+            assertEquals(emptyList(), places.answered, "the first refresh's check was stopped")
+            assertEquals(listOf(ARTICLE), assertIs<AccountState.SignedIn>(account.state.value).cached.bookmarks.map { it.place })
+
+            account.signOut()
+            runCurrent()
+            advanceTimeBy(10.seconds)
+            runCurrent()
+            assertEquals(emptyList(), places.answered, "the sign-out stopped the second one")
+            assertIs<AccountState.SignedOut>(account.state.value)
+            assertNull(cache.stored)
+        }
+
+    @Test
+    fun aRefreshWhilePinakesHangsIsNotHeldBack() =
+        runTest {
+            core.bookmarks = listOf(SavedPlace(UNANSWERED, "/priv/social/v1/bookmarks/a.json"))
+            val account = controller(webPages = FakeWebPagePlaces(hanging = setOf(UNANSWERED)))
+            account.start()
+            account.onForeground()
+            signIn(account)
+            approve()
+            runCurrent()
+            core.bookmarks = core.bookmarks + SavedPlace("geo:1,2", "/priv/social/v1/bookmarks/b.json")
+
+            account.refresh()
+            runCurrent()
+
+            val state = assertIs<AccountState.SignedIn>(account.state.value)
+            assertEquals(listOf("geo:1,2", UNANSWERED), state.cached.bookmarks.map { it.place })
+            advanceTimeBy(CHECKS_BUDGET * 2)
+            runCurrent()
+            assertEquals(
+                listOf("geo:1,2", UNANSWERED),
+                assertIs<AccountState.SignedIn>(account.state.value).cached.bookmarks.map { it.place },
+            )
         }
 
     @Test
