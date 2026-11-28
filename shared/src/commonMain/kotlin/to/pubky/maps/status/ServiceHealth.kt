@@ -21,7 +21,7 @@ enum class ServicePart(
     /** No routing server answered the last route. */
     Routing("Can't reach routing"),
 
-    /** No Panoramax server answered for the last place opened. */
+    /** No Panoramax server answered for the last place opened, or for the map's street-level photo layer. */
     StreetPhotos("Can't reach street-level photos"),
 }
 

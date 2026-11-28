@@ -67,6 +67,13 @@ fun placeNamesLayerOf(layers: List<StyleLayerRef>): String? =
     layers.firstOrNull { it.type == "symbol" && it.sourceLayer in PlaceNameLayers && it.id.isNotEmpty() }?.id
 
 /**
+ * The id of the base style's lowest label layer ([layers] from the bottom up): what the map draws
+ * over the base map (the street-level photo lines) goes under it, so street and place names stay
+ * readable. Null when the style has no labels.
+ */
+fun lowestLabelLayerOf(layers: List<StyleLayerRef>): String? = layers.firstOrNull { it.type == "symbol" && it.id.isNotEmpty() }?.id
+
+/**
  * The base map's sources of points of interest. A source whose style draws its points of interest
  * ([PoiSourceLayers]) gives those layers; one that draws none (OpenFreeMap's dark style) gives its
  * schema's: `poi` for OpenMapTiles (it has `transportation`), `pois` for Shortbread (`streets`).

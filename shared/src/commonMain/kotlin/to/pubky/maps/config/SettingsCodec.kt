@@ -97,6 +97,8 @@ private data class StoredSettings(
     val followLocalRules: Boolean? = null,
     /** Written only when off, as [followLocalRules]. */
     val voiceGuidance: Boolean? = null,
+    /** Written only when on (its default is off), as [followLocalRules]. */
+    val streetPhotosLayer: Boolean? = null,
 )
 
 private fun AppSettings.toStored(schemaVersion: Int) =
@@ -114,6 +116,7 @@ private fun AppSettings.toStored(schemaVersion: Int) =
         openIn = openInChoices.mapKeys { it.key.key },
         followLocalRules = if (followLocalRules) null else false,
         voiceGuidance = if (voiceGuidance) null else false,
+        streetPhotosLayer = if (streetPhotosLayer) true else null,
     )
 
 private fun StoredSettings.toSettings(): AppSettings {
@@ -144,5 +147,12 @@ private fun StoredSettings.toSettings(): AppSettings {
                 kind to choice
             }.toMap()
     val openInChoices = openIn.entries.mapNotNull { (key, on) -> OpenInApp.fromKey(key)?.let { it to on } }.toMap()
-    return AppSettings(serverOverrides, storageChoices, openInChoices, followLocalRules ?: true, voiceGuidance ?: true)
+    return AppSettings(
+        serverOverrides,
+        storageChoices,
+        openInChoices,
+        followLocalRules ?: true,
+        voiceGuidance ?: true,
+        streetPhotosLayer ?: false,
+    )
 }

@@ -90,6 +90,8 @@ data class AppSettings(
     val followLocalRules: Boolean = true,
     /** A route guiding the user says its turns aloud; switched on the guidance bar, kept for the next route. */
     val voiceGuidance: Boolean = true,
+    /** The map draws where Panoramax has street-level photos; switched in the map's layers, off until the user turns it on. */
+    val streetPhotosLayer: Boolean = false,
 ) {
     companion object {
         /**

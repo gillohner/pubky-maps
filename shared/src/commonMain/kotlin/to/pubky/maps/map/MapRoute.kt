@@ -75,6 +75,7 @@ import org.maplibre.spatialk.geojson.Point
 import org.maplibre.spatialk.geojson.Position
 import org.maplibre.spatialk.units.extensions.inMeters
 import to.pubky.maps.config.ServerLists
+import to.pubky.maps.config.Service
 import to.pubky.maps.links.GeoPoint
 import to.pubky.maps.links.LinkProvider
 import to.pubky.maps.links.LinkedPlaceState
@@ -98,6 +99,7 @@ import to.pubky.maps.place.PlaceSheet
 import to.pubky.maps.place.PlaceSource
 import to.pubky.maps.place.PlaceWriteActions
 import to.pubky.maps.place.SheetStop
+import to.pubky.maps.place.StreetPhotoLayerState
 import to.pubky.maps.place.summary
 import to.pubky.maps.place.summaryPartial
 import to.pubky.maps.place.title
@@ -187,6 +189,9 @@ fun MapRoute(
     /** Whether a route guiding the user speaks, as the user last switched it (kept in the settings). */
     voiceGuidance: Boolean = true,
     onVoiceGuidanceChange: (Boolean) -> Unit = {},
+    /** Whether the map draws where Panoramax has street-level photos, as the user last switched it (kept in the settings). */
+    streetPhotosLayer: Boolean = false,
+    onStreetPhotosLayerChange: (Boolean) -> Unit = {},
 ) {
     val dark = isSystemInDarkTheme()
     val sources = servers.mapStyles(dark)
@@ -252,6 +257,18 @@ fun MapRoute(
         onClosePlace()
         tapped = place
     }
+    // Where Panoramax has photos, while the user has the layer on and a server of the list answered.
+    val photoLayer = places?.streetPhotoLayer
+    val photoLayerState =
+        photoLayer
+            ?.state
+            ?.collectAsStateWithLifecycle()
+            ?.value
+    val panoramaxServers = remember(servers) { servers[Service.Panoramax].map { it.url } }
+    LaunchedEffect(photoLayer, streetPhotosLayer, panoramaxServers) {
+        if (streetPhotosLayer) photoLayer?.show(panoramaxServers) else photoLayer?.hide()
+    }
+    val photoTiles by rememberUpdatedState((photoLayerState as? StreetPhotoLayerState.Shown)?.tiles)
     // Pins while search is open; the picked result also when its card shows.
     val searchPins by rememberUpdatedState(searchState?.takeIf { it.mode != SearchMode.Idle })
     val mapState =
@@ -260,6 +277,8 @@ fun MapRoute(
             // Read once: later views are kept by the map's own saved state (rotation, Settings).
             initialCameraPosition = remember { startView?.toCameraPosition() ?: WorldCamera },
         ) {
+            // Over the base map's roads and areas, under its labels, the route and every pin.
+            photoTiles?.let { StreetPhotoCoverage(it, labels = poiTiles.base?.labels) }
             // Under the location dot and every pin.
             routePoints?.let { RouteLine(it) }
             routeStart?.let { RouteStartMark(it) }
@@ -639,7 +658,7 @@ fun MapRoute(
     val haptics = LocalHapticFeedback.current
 
     MapScreen(
-        attribution = (fallback.current ?: sources.first()).attribution,
+        attribution = (fallback.current ?: sources.first()).attribution + listOfNotNull(photoTiles?.let { streetPhotoCredit(it) }),
         mapUnavailable = fallback.allFailed,
         onRetryMap = { fallbackIndex = fallback.retry().index },
         onMyLocation = myLocation,
@@ -653,6 +672,15 @@ fun MapRoute(
         onUncoveredMap = { room -> uncoveredMap = room?.let { r -> shown?.place?.uri?.let { it to r } } },
         onSheetAtTop = { sheetAtTop = it },
         guidance = guidance,
+        layers =
+            photoLayer?.let { layer ->
+                MapLayersUi(
+                    streetPhotos = streetPhotosLayer,
+                    streetPhotosUnreachable = photoLayerState == StreetPhotoLayerState.Unreachable,
+                    onStreetPhotosChange = onStreetPhotosLayerChange,
+                    onRetryStreetPhotos = { layer.show(panoramaxServers) },
+                )
+            },
         placeCard =
             when {
                 placePage != null -> {

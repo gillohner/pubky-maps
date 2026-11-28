@@ -16,7 +16,8 @@ import to.pubky.maps.routing.DirectionsController
  * of the process (rotation keeps an open page), and Pinakes and Nexus through the user's server lists
  * ([data]) for keeping the offline areas' Pubky places, [directions] to the open place (null
  * where routing is not available), and [notes] to OpenStreetMap about a place's map problems (null
- * where there are none), and [streetPhotos] of the open place from Panoramax (null where there are none).
+ * where there are none), and [streetPhotos] of the open place from Panoramax and the map's
+ * [streetPhotoLayer] of where Panoramax has photos (null where there are none).
  */
 class PlaceServices(
     val pages: PlacePageController,
@@ -27,6 +28,7 @@ class PlaceServices(
     /** The base map's own icons for the Pubky places it has as points of interest; without it they keep the kind's badge. */
     val styleIcons: StyleIcons? = null,
     val streetPhotos: StreetPhotosController? = null,
+    val streetPhotoLayer: StreetPhotoLayer? = null,
 )
 
 /** What "Open in" offers for a place, and how an entry is opened; none where map links are missing. */

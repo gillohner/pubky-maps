@@ -266,6 +266,18 @@ coordinates, a dropped pin, such a point bookmarked) ask nothing. A photo whose 
 not load is left out, and so is the section without photos; every server failing names street-level
 photos in the map's line of missing parts.
 
+**Map layers**: the Layers button above my location (wherever my location does not ride on a
+results or place sheet: the map alone, with a place card, beside a tablet's panel) opens a panel at the bottom with one switch, **Street-level photos** (off until the user turns it on;
+kept in the settings). On, the map draws where Panoramax has photos as Panoramax' viewer does: an
+orange line along each sequence from zoom 7 and each photo's point from zoom 16, over the base map's
+roads and areas but under its labels, the route and pins, and the credits name Panoramax. While the
+panel is open the controls behind it are out of TalkBack's reach; the Layers button says
+"Street-level photos on" while the layer is on. The tiles come from the first server of
+the Panoramax list whose map style (`/api/map/style.json`) names them, asked once per list while the
+app runs (MapLibre does not tell when tiles fail, so a server whose style answered keeps the layer);
+the server learns the tiles the map shows, as the map style's server does. When no server answers, the map's line names street-level photos and the panel says so with Try again; switched off,
+nothing is asked and the line goes. Taps on the lines go through to the map.
+
 **Writing about a place** (signed in; a write that needs the homeserver opens the sign-in first and
 continues after it). The page's action row has Bookmark, Tag, Post and Add to collection; its sections have
 "Add tag", "Add photo", "Write a post" and "Add to collection". Every object is built by the core's spec

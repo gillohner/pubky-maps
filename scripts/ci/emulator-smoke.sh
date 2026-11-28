@@ -4,8 +4,8 @@
 # rules" off and check it stays off after a restart (a second start held to a budget), open the
 # open-source licences and swipe to their end, then go back with the system back button; move the
 # map with a link and check that the next start opens it there, then switch the theme during a pan
-# or press Back right after one and check that the panned view is stored. Fails on a crash or when
-# the app is not in front.
+# or press Back right after one and check that the panned view is stored. Before that, turn the
+# street-level photo layer on over Paris and off again. Fails on a crash or when the app is not in front.
 # Screenshots, the UI dumps, the start times and the log go to <out dir>.
 # Usage: emulator-smoke.sh <apk> <out dir>
 set -euo pipefail
@@ -279,6 +279,66 @@ wait_for "Show my location" 15 > /dev/null || fail "back from Settings did not r
 sleep 3
 screenshot map-after-back
 check_alive "back to the map"
+
+# "photos" when the credits under the map name Panoramax (a server named its tiles and the map draws
+# them), "outage" when the map's line says no Panoramax server answered, in dump $1; else fails.
+street_photos_shown() {
+    python3 -I - "$1" <<'PY'
+import sys, xml.etree.ElementTree as ET
+try:
+    texts = [node.get("text") or "" for node in ET.parse(sys.argv[1]).getroot().iter("node")]
+except ET.ParseError:
+    sys.exit(1)
+if any("Can't reach street-level photos" in text for text in texts):
+    print("outage")
+elif any("OpenStreetMap" in text and "Panoramax" in text for text in texts):
+    print("photos")
+else:
+    sys.exit(1)
+PY
+}
+# Taps Map layers, then the street-level photos switch, expects it at $1 afterwards, and closes the
+# panel with Back.
+switch_street_photos() {
+    local xy state
+    xy=$(wait_for "Map layers" 15) || fail "no Map layers button"
+    adb shell input tap $xy
+    xy=$(wait_for "Street-level photos" 10) || fail "the layers panel did not open"
+    adb shell input tap $xy
+    sleep 1
+    state=$(checked_of "$(dump_ui "layers-$1")" "Street-level photos") || true
+    [ "$state" = "$1" ] || fail "the switch did not turn street-level photos to $1 (it is ${state:-not found})"
+    screenshot "layers-$1"
+    adb shell input keyevent KEYCODE_BACK
+    # Back closes the panel and leaves the map (my location is out of TalkBack's and uiautomator's
+    # reach while the panel is open); a Back that left the app would show neither.
+    wait_for "Show my location" 10 > /dev/null || fail "Back did not close the layers panel back to the map"
+    if centre_of "$(dump_ui "layers-closed-$1")" "Street-level photos" > /dev/null; then fail "Back did not close the layers panel"; fi
+    check_alive "layers panel closed"
+}
+# The street-level photo layer on the live map, over Paris, where Panoramax has many photos: once a
+# server of the list named its tiles the credits name Panoramax and the map has its layers (whether
+# MapLibre drew the tiles shows only on the screenshot, street-photos.png, and as no crash). A
+# Panoramax outage is only a warning: the app named it in its line as it should. The switch is kept
+# in the settings, so it goes off again for the steps after.
+started=$(adb shell am start -W -a android.intent.action.VIEW -d "'geo:48.8606,2.3376?z=16'" -p "$pkg" 2>&1) || true
+if grep -q "Error" <<< "$started"; then fail "the map link to Paris did not reach the app: $started"; fi
+switch_street_photos true
+shown=""
+for _ in $(seq 1 15); do
+    shown=$(street_photos_shown "$(dump_ui street-photos)") && break
+    sleep 2
+done
+case "$shown" in
+    photos) echo "street-level photos: Panoramax credited" ;;
+    outage) echo "::warning::no Panoramax server answered; the map named it in its line" ;;
+    *) fail "neither the Panoramax credit nor the outage line after turning street-level photos on" ;;
+esac
+# Time for the tiles to arrive and draw.
+sleep 6
+screenshot street-photos
+check_alive "street-level photos"
+switch_street_photos false
 
 # The map opens where the user left it: a map link moves it to Zürich, the camera rests there and
 # the app stores the view; after a restart the stored view is still Zürich (a map that opened at

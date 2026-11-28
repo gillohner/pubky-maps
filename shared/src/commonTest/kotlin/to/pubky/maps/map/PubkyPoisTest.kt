@@ -20,6 +20,7 @@ import to.pubky.maps.place.MapPlace
 import to.pubky.maps.search.PlaceKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 class PubkyPoisTest {
@@ -233,6 +234,27 @@ class PubkyPoisTest {
         assertNull(
             placeNamesLayerOf(listOf(StyleLayerRef("openmaptiles", "poi", "poi", "symbol"), StyleLayerRef(null, null, "bg", "background"))),
         )
+    }
+
+    @Test
+    fun streetPhotoLinesGoUnderTheLowestLabelLayer() {
+        val labels = lowestLabelLayerOf(layersOf("liberty"))
+        assertNotNull(labels)
+        val ids = layersOf("liberty").map { it.id }
+        // Every label of the style is drawn over the lines, and every other layer under them.
+        assertEquals(layersOf("liberty").filter { it.type == "symbol" }.minOf { ids.indexOf(it.id) }, ids.indexOf(labels))
+        assertEquals(
+            "road-name",
+            lowestLabelLayerOf(
+                listOf(
+                    StyleLayerRef(null, null, "bg", "background"),
+                    StyleLayerRef("openmaptiles", "transportation", "road", "line"),
+                    StyleLayerRef("openmaptiles", "transportation_name", "road-name", "symbol"),
+                    StyleLayerRef("openmaptiles", "place", "place_city", "symbol"),
+                ),
+            ),
+        )
+        assertNull(lowestLabelLayerOf(listOf(StyleLayerRef(null, null, "bg", "background"))))
     }
 
     @Test

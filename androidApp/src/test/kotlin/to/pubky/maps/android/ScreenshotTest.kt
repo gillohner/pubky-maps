@@ -35,6 +35,7 @@ import to.pubky.maps.config.OpenInApp
 import to.pubky.maps.config.ServerDefaults
 import to.pubky.maps.config.Service
 import to.pubky.maps.config.StorageChoice
+import to.pubky.maps.map.MapLayersUi
 import to.pubky.maps.map.MapScreen
 import to.pubky.maps.map.MapSearch
 import to.pubky.maps.search.SearchActions
@@ -124,6 +125,7 @@ class ScreenshotTest {
             updateReady = updateReady,
             missing = missing,
             search = MapSearch(SearchState(), recents = emptyList(), userLocation = null, actions = SearchActions()),
+            layers = MapLayersUi(streetPhotos = false, onStreetPhotosChange = {}),
         ) { MapPlaceholder() }
     }
 

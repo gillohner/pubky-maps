@@ -354,6 +354,8 @@ private fun AppNavigation(
                 onViewRested = { lastMapView?.save(it) },
                 voiceGuidance = settings.voiceGuidance,
                 onVoiceGuidanceChange = { on -> update { it.copy(voiceGuidance = on) } },
+                streetPhotosLayer = settings.streetPhotosLayer,
+                onStreetPhotosLayerChange = { on -> update { it.copy(streetPhotosLayer = on) } },
             )
         }
         composable<SettingsDestination> {
