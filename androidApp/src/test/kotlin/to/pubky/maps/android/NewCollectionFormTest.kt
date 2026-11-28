@@ -1,9 +1,13 @@
 package to.pubky.maps.android
 
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.input.InputModeManager
+import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
@@ -18,6 +22,7 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -51,23 +56,36 @@ class NewCollectionFormTest {
     private val title = hasText("Title") and hasSetTextAction()
     private val create = hasText("Create collection with this place") and hasClickAction()
 
+    /**
+     * The phone in touch mode, as after a tap with a finger: there a clickable takes no focus of its own
+     * (Robolectric itself stays in keyboard mode, where every clickable does).
+     */
+    private val touchMode =
+        object : InputModeManager {
+            override val inputMode = InputMode.Touch
+
+            override fun requestInputMode(inputMode: InputMode) = inputMode == InputMode.Touch
+        }
+
     private fun show(
         initial: ListPageState,
         onClose: () -> Unit = {},
     ): () -> ListPageState {
         var state by mutableStateOf(initial)
         compose.setContent {
-            PubkyMapsTheme(darkTheme = false) {
-                ListPage(
-                    state = state,
-                    onToggle = {},
-                    onNewOpenChange = { state = state.copy(newOpen = it) },
-                    onNewNameChange = { state = state.copy(newName = it) },
-                    onNewDescriptionChange = {},
-                    onNewKeptChange = {},
-                    onCreate = {},
-                    onClose = onClose,
-                )
+            CompositionLocalProvider(LocalInputModeManager provides touchMode) {
+                PubkyMapsTheme(darkTheme = false) {
+                    ListPage(
+                        state = state,
+                        onToggle = {},
+                        onNewOpenChange = { state = state.copy(newOpen = it) },
+                        onNewNameChange = { state = state.copy(newName = it) },
+                        onNewDescriptionChange = { state = state.copy(newDescription = it) },
+                        onNewKeptChange = {},
+                        onCreate = {},
+                        onClose = onClose,
+                    )
+                }
             }
         }
         return { state }
@@ -175,6 +193,10 @@ class NewCollectionFormTest {
         compose.onNode(create).assertExists()
         compose.onAllNodes(hasText("New collection") and hasClickAction()).assertCountEquals(0)
         compose.onNodeWithText("Sunday walks").assertExists()
+        // Clearing it to start again keeps the form too.
+        compose.onNode(title).performTextClearance()
+        compose.onNode(title).assertIsFocused()
+        compose.onNode(create).assertExists()
         // It is now a form among collections, so it can be closed like an opened one.
         compose.onNode(hasText("Cancel") and hasClickAction()).performClick()
         compose.onAllNodes(title).assertCountEquals(0)
@@ -182,9 +204,22 @@ class NewCollectionFormTest {
     }
 
     @Test
+    fun typingInTheDescriptionFirstLeavesTheCursorThere() {
+        val state = show(ListPageState(placeName = "Conditorei Schober", lists = emptyList()))
+        val description = hasText("Description (optional)") and hasSetTextAction()
+        compose.onNode(description).performClick()
+        compose.onNode(description).performTextInput("Worth the walk")
+        // Typing opened the form; that does not pull the cursor up into the title.
+        assertTrue(state().newOpen)
+        compose.onNode(description).assertIsFocused()
+        compose.onNode(title).assertIsNotFocused()
+    }
+
+    @Test
     fun cancelGivesFocusBackToTheNewCollectionRow() {
         show(ListPageState(placeName = "Conditorei Schober", lists = listOf(walks), newOpen = true))
         compose.onNode(title).assertIsFocused()
+        // Cancel tapped with a finger: the phone is in touch mode, where a clickable takes no focus of its own.
         compose.onNode(hasText("Cancel") and hasClickAction()).performClick()
         // TalkBack follows the focus: it stays where the form was, not at the top of the page.
         compose.onNode(hasText("New collection") and hasClickAction()).assertIsFocused()

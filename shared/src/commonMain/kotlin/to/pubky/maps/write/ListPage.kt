@@ -37,7 +37,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
@@ -105,8 +107,9 @@ data class ListPageState(
     /** They could not be read now: the ones shown are as last read. */
     val stale: Boolean = false,
     /**
-     * The New collection form is open. With no collections it shows anyway (there is nothing to tick),
-     * see [newFormShown].
+     * The New collection form is open: the user opened it, or typed in the one shown because they had
+     * none, until Cancel, back or Create. With no collections it shows anyway (there is nothing to
+     * tick), see [newFormShown].
      */
     val newOpen: Boolean = false,
     /** The new list's name as typed. */
@@ -119,21 +122,14 @@ data class ListPageState(
     val keptChoices: List<Kept> = Kept.entries.toList(),
 ) {
     /**
-     * The form holds the user's work: opened by them, or typed in. A form that was there because they
-     * had none stays when the read then finds collections (made on another device) once they have typed
-     * in it, so the text and the keyboard do not vanish under their fingers.
-     */
-    private val newFormInUse: Boolean get() = newOpen || newName.isNotEmpty() || newDescription.isNotEmpty()
-
-    /**
-     * The New collection form is on the page: in use, or the user has no collections to tick. Also
+     * The New collection form is on the page: opened, or the user has no collections to tick. Also
      * while they are read: the read starts a moment after the page opens, and a form that left and came
      * back with it would make the page jump on every open for a user with none.
      */
-    val newFormShown: Boolean get() = newFormInUse || lists.isEmpty()
+    val newFormShown: Boolean get() = newOpen || lists.isEmpty()
 
     /** The form can be closed back to the collections (with none, the page's Close is the way out). */
-    val newFormClosable: Boolean get() = newFormInUse && lists.isNotEmpty()
+    val newFormClosable: Boolean get() = newOpen && lists.isNotEmpty()
 }
 
 /**
@@ -181,7 +177,24 @@ fun ListPage(
         }
         if (state.lists.isEmpty()) NoCollectionsLine(state.loading)
         if (state.newFormShown) {
-            NewCollectionForm(state, onNewNameChange, onNewDescriptionChange, onNewKeptChange, onCreate, closeForm)
+            // Typing opens the form: one shown because the user had none stays, Cancel and all, when the
+            // read then finds collections (made on another device), so what they typed and the keyboard do
+            // not vanish under their fingers, also when they clear the text to start again.
+            val typed = { if (!state.newOpen) onNewOpenChange(true) }
+            NewCollectionForm(
+                state,
+                onNewNameChange = {
+                    typed()
+                    onNewNameChange(it)
+                },
+                onNewDescriptionChange = {
+                    typed()
+                    onNewDescriptionChange(it)
+                },
+                onNewKeptChange = onNewKeptChange,
+                onCreate = onCreate,
+                onCancel = closeForm,
+            )
         }
         if (state.lists.isNotEmpty()) {
             WriteSection("Your collections") {
@@ -244,7 +257,9 @@ private fun NewCollectionRow(
                 Icon(AppIcons.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             }
         },
-        modifier = Modifier.focusRequester(focus).clickable(role = Role.Button, onClick = onOpen),
+        // A clickable takes no focus in touch mode (where Cancel was tapped), so the row says it can:
+        // still one focus target, so a keyboard stops on it once.
+        modifier = Modifier.focusRequester(focus).focusProperties { canFocus = true }.clickable(role = Role.Button, onClick = onOpen),
     )
 }
 
@@ -260,8 +275,9 @@ private fun NewCollectionForm(
 ) {
     val title = remember { FocusRequester() }
     // Opened by the user: the title is what they type first. Not when the form is simply there because
-    // there are no collections, so the keyboard does not cover the page as it opens; and once only, so
-    // a turn of the phone does not pull the cursor back from the description.
+    // there are no collections, so the keyboard does not cover the page as it opens; not when it opens
+    // because they typed in a field of it; and once only, so a turn of the phone does not pull the
+    // cursor back from the description.
     var focused by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(state.newOpen) {
         if (state.newOpen && !focused) {
@@ -286,7 +302,7 @@ private fun NewCollectionForm(
             singleLine = true,
             isError = state.newName.length > LIST_NAME_MAX,
             supportingText = { Text("${state.newName.length} / $LIST_NAME_MAX") },
-            modifier = Modifier.fillMaxWidth().focusRequester(title),
+            modifier = Modifier.fillMaxWidth().focusRequester(title).onFocusChanged { if (it.isFocused) focused = true },
         )
         // Title and Description, as pubky.app's New Collection asks; the description shows under the
         // collection's name on the Bookmarks page and on pubky.app's collection cards.
@@ -299,7 +315,7 @@ private fun NewCollectionForm(
             maxLines = 4,
             isError = descriptionChars > LIST_DESCRIPTION_MAX,
             supportingText = { Text("$descriptionChars / $LIST_DESCRIPTION_MAX") },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.isFocused) focused = true },
         )
         Column(Modifier.selectableGroup()) {
             state.keptChoices.forEach { kept ->
