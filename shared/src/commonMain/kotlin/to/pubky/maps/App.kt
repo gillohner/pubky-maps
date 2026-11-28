@@ -40,6 +40,8 @@ import to.pubky.maps.offline.OfflineMapsScreen
 import to.pubky.maps.offline.offlineMapsSummary
 import to.pubky.maps.osm.NoteRoute
 import to.pubky.maps.osm.NoteTarget
+import to.pubky.maps.osm.NotesWaitingRoute
+import to.pubky.maps.osm.notesWaitingSummary
 import to.pubky.maps.osm.osmIdOfRouteText
 import to.pubky.maps.osm.routeText
 import to.pubky.maps.place.OpenInApps
@@ -104,6 +106,9 @@ private data object AccountDestination
 
 @Serializable
 private data object SavedDestination
+
+@Serializable
+private data object NotesWaitingDestination
 
 /**
  * A write page about the place [uri] (named [name]): which page is [intent]'s name. [pointPage]: the
@@ -374,6 +379,14 @@ private fun AppNavigation(
                         ?.value
                         ?.let(::offlineMapsSummary),
                 onOpenOfflineMaps = { navController.open(OfflineMapsDestination) },
+                notesWaiting =
+                    places
+                        ?.notes
+                        ?.notesWaiting
+                        ?.collectAsStateWithLifecycle()
+                        ?.value
+                        ?.let(::notesWaitingSummary),
+                onOpenNotesWaiting = { navController.open(NotesWaitingDestination) },
             )
         }
         if (offline != null) {
@@ -478,6 +491,7 @@ private fun AppNavigation(
             composable<NoteDestination> { entry ->
                 NoteRoute(notes, entry.toRoute<NoteDestination>().target, onClose = back)
             }
+            composable<NotesWaitingDestination> { NotesWaitingRoute(notes, onBack = back) }
         }
         composable<ServersDestination> {
             ServersScreen(

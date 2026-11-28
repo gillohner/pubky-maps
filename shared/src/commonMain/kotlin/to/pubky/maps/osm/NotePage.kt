@@ -88,7 +88,7 @@ fun NotePage(
             Done(
                 "Your note waits on this phone",
                 "No OpenStreetMap server could be reached. The app tries again by itself as soon as one can be, also when " +
-                    "it is closed.",
+                    "it is closed. Until then it is under Notes waiting in Settings.",
                 onClose,
             )
         } else {

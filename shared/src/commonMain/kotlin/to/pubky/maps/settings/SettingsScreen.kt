@@ -28,7 +28,8 @@ private const val LICENCE_URL = "$SOURCE_URL/blob/main/LICENSE"
 
 /**
  * Settings: a grouped list, one group per topic (the [account] where there is one, offline maps
- * where there are ([offlineMaps], their summary, not null), servers, privacy, other apps, local
+ * where there are ([offlineMaps], their summary, not null) and the notes to OpenStreetMap waiting on
+ * the phone while some do ([notesWaiting], their summary, not null), servers, privacy, other apps, local
  * rules, about, map data). Groups with more to set open their own page. About shows
  * the update rows in builds that update themselves ([updates] not null). Privacy has "Clear search
  * history" where search keeps one ([recentSearchCount] not null).
@@ -52,6 +53,8 @@ fun SettingsScreen(
     onClearRecentSearches: () -> Unit = {},
     offlineMaps: String? = null,
     onOpenOfflineMaps: () -> Unit = {},
+    notesWaiting: String? = null,
+    onOpenNotesWaiting: () -> Unit = {},
 ) {
     val openLink = rememberSafeLinkOpener()
     var confirmClear by remember { mutableStateOf(false) }
@@ -62,9 +65,12 @@ fun SettingsScreen(
             item { SectionHeader("Account") }
             item { AccountSettingsRow(state = account, onOpen = onOpenAccount) }
         }
+        if (offlineMaps != null || notesWaiting != null) item { SectionHeader("Offline") }
         if (offlineMaps != null) {
-            item { SectionHeader("Offline") }
             item { LinkRow(title = "Offline maps", summary = offlineMaps, onClick = onOpenOfflineMaps) }
+        }
+        if (notesWaiting != null) {
+            item { LinkRow(title = "Notes waiting", summary = notesWaiting, onClick = onOpenNotesWaiting) }
         }
         item { SectionHeader("Servers") }
         item {
