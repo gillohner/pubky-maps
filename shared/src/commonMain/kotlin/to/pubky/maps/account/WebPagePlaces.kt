@@ -48,7 +48,7 @@ interface WebPagePlaces {
  * hides a bookmark, tag or collection item only until a refresh after that. At most [kept] answers
  * are kept.
  *
- * At most [parallel] card reads run at a time, whoever asks: the account refresh and a collections
+ * At most [PARALLEL_CHECKS] card reads run at a time, whoever asks: the account refresh and a collections
  * read both check pages at sign-in, and they share Pinakes with the place pages and the map's Pubky
  * places, so a burst could make a server refuse them. A page asked about while its read runs waits
  * for that read's answer instead of reading the card again (a page both bookmarked and in a
@@ -61,10 +61,9 @@ class PinakesWebPagePlaces(
     private val now: () -> Long,
     private val kept: Int = KEPT,
     private val notPlaceKept: Long = NOT_PLACE_KEPT_MS,
-    parallel: Int = PARALLEL_CHECKS,
 ) : WebPagePlaces {
     private val lock = Mutex()
-    private val permits = Semaphore(parallel)
+    private val permits = Semaphore(PARALLEL_CHECKS)
 
     /** By page: the answer of its card read that runs now. */
     private val reading = HashMap<String, CompletableDeferred<Boolean?>>()
@@ -74,17 +73,21 @@ class PinakesWebPagePlaces(
 
     override fun needsCard(target: String): Boolean = rule(target)
 
-    override suspend fun known(uri: String): Boolean? {
-        val known = lock.withLock { answers[uri] } ?: return null
+    override suspend fun known(uri: String): Boolean? = lock.withLock { keptAnswer(uri) }
+
+    /** The kept answer for [uri] that still holds; under [lock]. */
+    private fun keptAnswer(uri: String): Boolean? {
+        val known = answers[uri] ?: return null
         return known.first.takeIf { it || now() - known.second < notPlaceKept }
     }
 
     override suspend fun isPlace(uri: String): Boolean? {
         while (true) {
-            known(uri)?.let { return it }
             var own = false
+            // One look under the lock, so a read that ends meanwhile is not started again.
             val answer =
                 lock.withLock {
+                    keptAnswer(uri)?.let { return it }
                     reading.getOrPut(uri) { CompletableDeferred<Boolean?>().also { own = true } }
                 }
             if (own) return read(uri, answer)
@@ -115,17 +118,18 @@ class PinakesWebPagePlaces(
                 }
             }
         val place = read.getOrNull()
+        val failure = read.exceptionOrNull()
         withContext(NonCancellable) {
             lock.withLock {
-                if (place != null && (answers.size < kept || uri in answers)) answers[uri] = place to now()
-                reading.remove(uri)
+                try {
+                    if (place != null && (answers.size < kept || uri in answers)) answers[uri] = place to now()
+                } finally {
+                    reading.remove(uri)
+                    if (failure != null) answer.completeExceptionally(failure) else answer.complete(place)
+                }
             }
         }
-        read.exceptionOrNull()?.let {
-            answer.completeExceptionally(it)
-            throw it
-        }
-        answer.complete(place)
+        failure?.let { throw it }
         return place
     }
 
@@ -146,7 +150,9 @@ internal const val MAX_PAGE_CHECKS = 100
 
 /**
  * Web pages are checked this many at a time, by each caller of [notPlaces] (so it stops soon once no
- * server answers) and by [PinakesWebPagePlaces] for all of them together.
+ * server answers) and by [PinakesWebPagePlaces] for all of them together. With every server down,
+ * each caller's pages already waiting for one of the shared reads are still asked about, so the
+ * account refresh and a collections read at once make up to twice this many reads, in two rounds.
  */
 private const val PARALLEL_CHECKS = 3
 
