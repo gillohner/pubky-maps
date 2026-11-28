@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
 import to.pubky.maps.account.AccountController
 import to.pubky.maps.account.SharedCore
+import to.pubky.maps.account.WebPagePlaces
 import to.pubky.maps.config.AppSettings
 import to.pubky.maps.write.db.PhoneDataDatabase
 import java.io.File
@@ -17,7 +18,8 @@ import java.util.UUID
 /**
  * The user's writes for the app process: the outbox and lists in the account cache's database
  * ([accountDriver], deleted at sign-out), what is kept on the phone only in its own database, and
- * photos waiting to be sent in the no-backup folder. Create it once per process.
+ * photos waiting to be sent in the no-backup folder. Create it once per process. Collection items on
+ * web pages that [webPages] says are not places show as other links.
  */
 fun androidWriteController(
     context: Context,
@@ -26,6 +28,7 @@ fun androidWriteController(
     accountDriver: SqlDriver,
     core: SharedCore,
     settings: StateFlow<AppSettings?>,
+    webPages: WebPagePlaces,
 ): WriteController {
     val phoneDriver =
         AndroidSqliteDriver(PhoneDataDatabase.Schema, context, File(context.noBackupFilesDir, "phone-data.db").path)
@@ -41,6 +44,7 @@ fun androidWriteController(
         scope = scope,
         io = Dispatchers.IO,
         now = System::currentTimeMillis,
+        webPages = webPages,
     )
 }
 

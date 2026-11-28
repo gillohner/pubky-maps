@@ -1,6 +1,7 @@
 package to.pubky.maps.write
 
 import kotlinx.coroutines.CompletableDeferred
+import to.pubky.maps.account.WebPagePlaces
 import to.pubky.maps.cache.CachedBookmark
 import to.pubky.maps.cache.CachedTag
 import to.pubky.maps.links.GeoPoint
@@ -261,4 +262,13 @@ class MemoryOutboxFiles : OutboxFiles {
     override fun deleteAllBut(keep: Set<String>) {
         files.keys.retainAll(keep)
     }
+}
+
+/** A [WebPagePlaces] that takes no link for a web page: no collection item is checked. */
+object NoWebPages : WebPagePlaces {
+    override fun needsCard(target: String): Boolean = false
+
+    override suspend fun known(uri: String): Boolean? = null
+
+    override suspend fun isPlace(uri: String): Boolean? = null
 }

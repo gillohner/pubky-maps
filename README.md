@@ -243,7 +243,12 @@ lists the user's collections to tick, under a "New collection" row that opens th
 (title, description, where it goes; Cancel or back closes it); with no collections the form is open
 from the start. A collection shows only its places; other Pubky apps' objects in it (pubky.app posts, profiles: the folder is
 shared) are counted under its places ("3 other links not shown") and kept when the app edits it, and
-a collection that holds only such objects is left out. Bookmark keeps the place privately on the homeserver or on the phone only, per the
+a collection that holds only such objects is left out. So are web pages in it that are no map link and
+that Pinakes answers it does not know or knows as no place, by the check and answers of bookmarked
+web pages below (each list read sends up to 100 such pages not answered yet; one with no answer stays,
+and a collection the user just took its last place out of, or has a change waiting for, stays until
+the next read or a restart of the app; the answers are kept as for bookmarks, so after a start such a
+page shows until its answer comes). Bookmark keeps the place privately on the homeserver or on the phone only, per the
 setting; the **Bookmarks** screen (from the search page) has one Bookmarked places row (how many,
 how many not sent yet) above the collections, as pubky.app's collections page has its Bookmarks card
 first, so a long run of bookmarks never pushes the collections away (bookmarks of other Pubky apps'

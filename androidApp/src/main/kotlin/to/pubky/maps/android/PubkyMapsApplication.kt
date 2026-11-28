@@ -209,8 +209,10 @@ class PubkyMapsApplication : Application() {
         )
         updates = startUpdater(this, serverConfigRepository)
         // Restores a stored session in the background; the map never waits for it.
-        // Bookmarked web pages are checked on Pinakes through the place services' client and server list.
-        val (started, cacheDriver) = startAccount(this, scope, serviceHealth, core, androidWebPagePlaces { places.data })
+        // Bookmarked web pages and those in collections are checked on Pinakes through the place
+        // services' client and server list, one set of answers for both.
+        val webPages = androidWebPagePlaces { places.data }
+        val (started, cacheDriver) = startAccount(this, scope, serviceHealth, core, webPages)
         account = started
         writes =
             androidWriteController(
@@ -220,6 +222,7 @@ class PubkyMapsApplication : Application() {
                 accountDriver = cacheDriver,
                 core = core,
                 settings = settingsRepository.settings,
+                webPages = webPages,
             )
         // With the app closed too: a job Android runs when the phone has a network starts the process.
         followOutbox(this, outboxWaiting, scope)

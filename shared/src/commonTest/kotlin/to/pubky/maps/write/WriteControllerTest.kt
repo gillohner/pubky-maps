@@ -10,10 +10,15 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import to.pubky.maps.account.ARTICLE
 import to.pubky.maps.account.AccountState
 import to.pubky.maps.account.AccountUser
 import to.pubky.maps.account.Connection
 import to.pubky.maps.account.CoreFailure
+import to.pubky.maps.account.FakeWebPagePlaces
+import to.pubky.maps.account.MUSEUM
+import to.pubky.maps.account.UNANSWERED
+import to.pubky.maps.account.WebPagePlaces
 import to.pubky.maps.cache.CachedAccount
 import to.pubky.maps.cache.CachedBookmark
 import to.pubky.maps.cache.CachedTag
@@ -47,6 +52,7 @@ class WriteControllerTest {
     private val account = MutableStateFlow<AccountState>(AccountState.Loading)
     private var settings = AppSettings()
     private var accountRefreshes = 0
+    private var webPages: WebPagePlaces = NoWebPages
     private val messages = mutableListOf<String>()
     private val actions = mutableListOf<WriteMessage>()
     private val target = WriteTarget(OSM, "Conditorei Schober", SCHOBER)
@@ -79,6 +85,7 @@ class WriteControllerTest {
                 scope = backgroundScope,
                 io = StandardTestDispatcher(testScheduler),
                 now = { 1_000L },
+                webPages = webPages,
             )
         backgroundScope.launch {
             controller.messages.collect {
@@ -893,6 +900,261 @@ class WriteControllerTest {
         }
 
     @Test
+    fun aCollectionItemOnAWebPageThatIsNoPlaceCountsAsAnOtherLink() =
+        runTest {
+            val places = FakeWebPagePlaces()
+            webPages = places
+            val mixed = coffeeList.copy(items = listOf("geo:1,2", MUSEUM, ARTICLE, UNANSWERED, OSM), otherItems = 1)
+            writes.scans = mapOf(false to ListScan(listOf(mixed), emptyList()), true to ListScan(emptyList(), emptyList()))
+            signedIn()
+            val writer = controller()
+            runCurrent()
+
+            val shown =
+                writer.own.value.lists
+                    .single()
+            assertEquals(listOf("geo:1,2", MUSEUM, UNANSWERED, OSM), shown.items, "a page no Pinakes answers for stays")
+            assertEquals(2, shown.otherItems)
+            assertEquals(listOf(MUSEUM, ARTICLE, UNANSWERED), places.asked, "map links are never asked about")
+            assertEquals(listOf(mixed), store.lists(), "the stored list keeps every item")
+        }
+
+    @Test
+    fun aCollectionOfOnlyPagesThatAreNoPlaceIsLeftOutUnlessJustEdited() =
+        runTest {
+            webPages = FakeWebPagePlaces()
+            val articles = OwnList("pubky://me/pub/social/v1/posts/L2", Kept.Public, "Reading", listOf(ARTICLE))
+            val mixed = coffeeList.copy(items = listOf("geo:1,2", ARTICLE))
+            val empty = OwnList("pubky://me/pub/social/v1/posts/L3", Kept.Public, "Empty", emptyList())
+            writes.scans = mapOf(false to ListScan(listOf(articles, mixed, empty), emptyList()), true to ListScan(emptyList(), emptyList()))
+            signedIn()
+            val writer = controller()
+            runCurrent()
+            assertEquals(
+                listOf(mixed.uri, empty.uri),
+                writer.own.value.lists
+                    .map { it.uri },
+            )
+
+            writer.removeFromList(
+                WriteTarget("geo:1,2", "Bench"),
+                setOf("geo:1,2"),
+                writer.own.value.lists
+                    .first(),
+            )
+            runCurrent()
+            val edited =
+                writer.own.value.lists
+                    .first { it.uri == mixed.uri }
+            assertEquals(emptyList(), edited.items, "the list stays so its place can be ticked again")
+            assertEquals(1, edited.otherItems)
+
+            writes.scans =
+                mapOf(
+                    false to ListScan(listOf(articles, edited.copy(items = listOf(ARTICLE), otherItems = 0), empty), emptyList()),
+                    true to ListScan(emptyList(), emptyList()),
+                )
+            writer.refreshLists()
+            runCurrent()
+            assertEquals(
+                listOf(empty.uri),
+                writer.own.value.lists
+                    .map { it.uri },
+                "the next scan leaves it out",
+            )
+        }
+
+    @Test
+    fun answersGivenBeforeApplyToTheStoredCollectionsWithoutAsking() =
+        runTest {
+            val places = FakeWebPagePlaces()
+            places.isPlace(ARTICLE)
+            places.asked.clear()
+            webPages = places
+            store.putList(coffeeList.copy(items = listOf("geo:1,2", ARTICLE, UNANSWERED)))
+            signedIn(Connection.Offline)
+            val writer = controller()
+            runCurrent()
+
+            assertEquals(
+                listOf("geo:1,2", UNANSWERED),
+                writer.own.value.lists
+                    .single()
+                    .items,
+            )
+            assertEquals(emptyList(), places.asked, "offline, nothing is asked")
+        }
+
+    @Test
+    fun aCoreThatDoesNotLoadForThePageRuleLeavesTheCollectionsAndWritesWorking() =
+        runTest {
+            webPages =
+                object : WebPagePlaces by NoWebPages {
+                    override fun needsCard(target: String): Boolean = throw NotImplementedError("libpubky_maps_core.so not found")
+                }
+            writes.scans = mapOf(false to ListScan(listOf(coffeeList), emptyList()), true to ListScan(emptyList(), emptyList()))
+            signedIn()
+            val writer = controller()
+            runCurrent()
+            assertEquals(listOf(coffeeList), writer.own.value.lists)
+
+            writer.addToList(target, coffeeList)
+            runCurrent()
+            assertEquals(
+                listOf("geo:1,2", OSM),
+                writer.own.value.lists
+                    .single()
+                    .items,
+            )
+        }
+
+    @Test
+    fun theCollectionsShowFirstAndTheAnswersChangeThemOnceTheyCome() =
+        runTest {
+            val places = FakeWebPagePlaces(answerTime = 1.seconds)
+            webPages = places
+            val mixed = coffeeList.copy(items = listOf("geo:1,2", ARTICLE))
+            val phoneList = OwnList("phone:1", Kept.Phone, "On the phone", listOf(ARTICLE))
+            phone.data = PhoneData(lists = listOf(phoneList))
+            writes.scans = mapOf(false to ListScan(listOf(mixed), emptyList()), true to ListScan(emptyList(), emptyList()))
+            signedIn()
+            val writer = controller()
+            runCurrent()
+            assertEquals(
+                listOf("geo:1,2", ARTICLE),
+                writer.own.value.lists
+                    .first { it.uri == mixed.uri }
+                    .items,
+            )
+
+            advanceTimeBy(2.seconds)
+            runCurrent()
+            assertEquals(
+                listOf("geo:1,2"),
+                writer.own.value.lists
+                    .first { it.uri == mixed.uri }
+                    .items,
+            )
+            assertEquals(
+                listOf(ARTICLE),
+                writer.own.value.lists
+                    .first { it.uri == phoneList.uri }
+                    .items,
+                "lists on the phone are the user's own",
+            )
+        }
+
+    @Test
+    fun aKeptAnswerAndANewOneBothLeaveTheirPagesOut() =
+        runTest {
+            val places = FakeWebPagePlaces(answerTime = 1.seconds)
+            places.isPlace(ARTICLE)
+            webPages = places
+            val news = "https://news.example.org/a-story"
+            writes.scans =
+                mapOf(
+                    false to ListScan(listOf(coffeeList.copy(items = listOf("geo:1,2", ARTICLE, news))), emptyList()),
+                    true to ListScan(emptyList(), emptyList()),
+                )
+            signedIn()
+            val writer = controller()
+            runCurrent()
+            assertEquals(
+                listOf("geo:1,2", news),
+                writer.own.value.lists
+                    .single()
+                    .items,
+                "the kept answer applies at once",
+            )
+
+            advanceTimeBy(2.seconds)
+            runCurrent()
+            assertEquals(
+                listOf("geo:1,2"),
+                writer.own.value.lists
+                    .single()
+                    .items,
+            )
+            assertEquals(
+                2,
+                writer.own.value.lists
+                    .single()
+                    .otherItems,
+            )
+        }
+
+    @Test
+    fun aPageShownAsNoPlaceStaysSoWhileItIsAskedAgain() =
+        runTest {
+            // Each answer is forgotten at once, as a not-a-place answer is after an hour.
+            val places =
+                object : WebPagePlaces by FakeWebPagePlaces(answerTime = 1.seconds) {
+                    override suspend fun known(uri: String): Boolean? = null
+                }
+            webPages = places
+            val articles = OwnList("pubky://me/pub/social/v1/posts/L2", Kept.Public, "Reading", listOf(ARTICLE))
+            writes.scans = mapOf(false to ListScan(listOf(coffeeList, articles), emptyList()), true to ListScan(emptyList(), emptyList()))
+            signedIn()
+            val writer = controller()
+            advanceTimeBy(2.seconds)
+            runCurrent()
+            assertEquals(
+                listOf(coffeeList.uri),
+                writer.own.value.lists
+                    .map { it.uri },
+            )
+
+            writer.refreshLists()
+            runCurrent()
+            assertEquals(
+                listOf(coffeeList.uri),
+                writer.own.value.lists
+                    .map { it.uri },
+                "it does not show while asked again",
+            )
+            advanceTimeBy(2.seconds)
+            runCurrent()
+            assertEquals(
+                listOf(coffeeList.uri),
+                writer.own.value.lists
+                    .map { it.uri },
+            )
+        }
+
+    @Test
+    fun aCollectionWithAnEditWaitingStaysWhenItsOtherPagesAreNoPlace() =
+        runTest {
+            webPages = FakeWebPagePlaces(answerTime = 1.seconds)
+            val articles = OwnList("pubky://me/pub/social/v1/posts/L2", Kept.Public, "Reading", listOf(ARTICLE))
+            writes.scans = mapOf(false to ListScan(listOf(articles), emptyList()), true to ListScan(emptyList(), emptyList()))
+            signedIn()
+            val writer = controller()
+            runCurrent()
+            writes.gate = CompletableDeferred()
+
+            writer.addToList(
+                target,
+                writer.own.value.lists
+                    .single(),
+            )
+            advanceTimeBy(2.seconds)
+            runCurrent()
+            assertEquals(
+                listOf(OSM),
+                writer.own.value.lists
+                    .single()
+                    .items,
+                "the place the user added shows while it is sent",
+            )
+            assertEquals(
+                1,
+                writer.own.value.lists
+                    .single()
+                    .otherItems,
+            )
+        }
+
+    @Test
     fun aFullListRefusesAnotherPlace() =
         runTest {
             signedIn()
@@ -1086,6 +1348,7 @@ class WriteControllerTest {
                     scope = backgroundScope,
                     io = StandardTestDispatcher(testScheduler),
                     now = { 1_000L },
+                    webPages = NoWebPages,
                 )
             runCurrent()
 
@@ -1246,6 +1509,7 @@ class WriteControllerTest {
                     scope = backgroundScope,
                     io = io,
                     now = { 1_000L },
+                    webPages = NoWebPages,
                 )
             runCurrent()
             writer.save(target)
