@@ -18,6 +18,7 @@ internal val Service.title: String
             Service.Overpass -> "Offline place details"
             Service.Valhalla -> "Routes"
             Service.OsmApi -> "Map notes"
+            Service.Panoramax -> "Street-level photos"
             Service.PkarrRelay -> "Finding homeservers"
             Service.AuthRelay -> "Sign-in relay"
         }
@@ -57,6 +58,10 @@ internal val Service.description: String
             Service.OsmApi -> {
                 "OpenStreetMap API servers: the map problems you report, as public notes without your name. " +
                     "They learn each note and where it is."
+            }
+
+            Service.Panoramax -> {
+                "Panoramax servers: street-level photos of the places you open. They learn where each place you open is."
             }
 
             Service.PkarrRelay -> {

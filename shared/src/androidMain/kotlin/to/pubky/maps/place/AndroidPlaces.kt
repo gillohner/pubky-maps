@@ -38,7 +38,8 @@ import java.io.File
  * come from the Valhalla servers of the list, and notes about a place go to the OpenStreetMap API
  * servers of the list (a note no server could be reached for waits in the no-backup folder until the
  * phone is online); the Pubky places the base map has as points of interest take its own icons from
- * the map style's files. Create it once per process.
+ * the map style's files, and a page shows the street-level photos of its place from the Panoramax
+ * servers of the list. Create it once per process.
  */
 fun androidPlaceServices(
     context: Context,
@@ -95,5 +96,6 @@ fun androidPlaceServices(
                 ready = { settings.filterNotNull().first() },
             ),
         styleIcons = StyleIcons(client),
+        streetPhotos = StreetPhotosController(HttpPanoramax(client, servers = { servers(Service.Panoramax) }), main, health),
     )
 }

@@ -69,7 +69,8 @@ cat > "$out/settings.json" <<JSON
 {"schemaVersion": 1, "servers": {
   "pinakes": [{"name": "Fixtures", "url": "http://127.0.0.1:$port"}],
   "nexus": [{"name": "Fixtures", "url": "http://127.0.0.1:$port"}],
-  "valhalla": [{"name": "Fixtures", "url": "http://127.0.0.1:$port"}]}}
+  "valhalla": [{"name": "Fixtures", "url": "http://127.0.0.1:$port"}],
+  "panoramax": [{"name": "Fixtures", "url": "http://127.0.0.1:$port"}]}}
 JSON
 adb push "$out/settings.json" /data/local/tmp/pubky-maps-settings.json > /dev/null
 adb shell chmod 644 /data/local/tmp/pubky-maps-settings.json
@@ -202,6 +203,20 @@ done
 wait_for "Posts" 5 > /dev/null || fail "no posts about the place"
 screenshot place-full
 check_alive "place page full"
+# Street-level photos of the place at the end of the page, from the fixture Panoramax (the recorded
+# answer, its thumbnails served by the fixture server; a thumbnail that fails takes its photo off).
+found=""
+for _ in 1 2 3 4 5; do
+    if wait_for "Street-level photos" 3 > /dev/null; then found=1; break; fi
+    adb shell input swipe 540 1700 540 900 400
+    sleep 1
+done
+[ -n "$found" ] || fail "no street-level photos on the place page"
+sleep 3
+wait_for "Street-level photo by Koreller taken Jul 2025" 5 > /dev/null || fail "the first street-level photo is not shown"
+wait_for "Photos: Panoramax, CC BY-SA 4.0" 5 > /dev/null || fail "no licence under the street-level photos"
+screenshot place-street-photos
+check_alive "street-level photos"
 
 adb shell input keyevent KEYCODE_BACK
 sleep 2
@@ -285,6 +300,12 @@ for i, r in enumerate(routes):
     assert r["ua"].startswith("PubkyMaps/"), r
 pin = routes[4]["locations"][0]
 assert abs(pin["lat"] - 47.37) < 0.1 and abs(pin["lon"] - 8.54) < 0.1, pin
+# Street-level photos: Panoramax asked once per place opened, for the card's point, with the app's
+# User-Agent; the thumbnails loaded.
+photos = [l for l in lines if l["path"] == "/api/search"]
+assert photos and all(p["ua"].startswith("PubkyMaps/") for p in photos), photos
+assert photos[0]["place_position"] == "8.5418241,47.3708689", photos[0]
+assert any(l["path"].startswith("/panoramax/thumb/") for l in lines), paths
 print("requests:", len(lines), sorted(set(paths)))
 PY
 

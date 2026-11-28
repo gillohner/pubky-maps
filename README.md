@@ -122,13 +122,14 @@ Settings:
   profiles, are not listed or counted, nor are bookmarks and tags of web pages Pinakes does not know or knows
   as no place (the same check as on the Bookmarks screen).
 - **Server lists:** an ordered list of servers per service (map styles, Photon, Pinakes, Nexus,
-  Overpass, Valhalla, OpenStreetMap API, Pkarr relays, sign-in relay). Users add, remove, reorder and reset them; servers run by Synonym are
+  Overpass, Valhalla, OpenStreetMap API, Panoramax, Pkarr relays, sign-in relay). Users add, remove, reorder and reset them; servers run by Synonym are
   marked. The map uses its style list in order, the next style taking over when one fails to load;
   sign-in uses the Pkarr and sign-in relay lists (from the next start after a change); opening a
   map link asks the Pinakes list; search uses the Photon and Pinakes lists the same way (the next
   server takes over on an error, a timeout or "too many requests"); place pages and the map's Pubky
   places use the Pinakes and Nexus lists the same way, the offline areas' place details the
-  Overpass list, directions the Valhalla list, and map notes the OpenStreetMap API list.
+  Overpass list, directions the Valhalla list, map notes the OpenStreetMap API list, and a place
+  page's street-level photos the Panoramax list.
 - **What is stored online:** per kind of data (bookmarks, home and work, collections, check-ins, tracks,
   location history, photo locations) phone only, homeserver private or public. Tags and reviews are
   public by nature. Bookmarks, collections and photo locations follow the choices; the other kinds are
@@ -212,6 +213,19 @@ send again. A note page Android brought back after stopping the app still thanks
 says a waiting note waits (also when another run of the app has sent it since), and one whose note
 was on its way or got no answer in time says it may be on the map already, so none offers the same
 note again as new.
+
+**Street-level photos** of a place show near the end of its page, after "Also on": Panoramax' photos
+taken 3 to 40 m from the place's own point with the place within 60° of where the camera looked (or
+360° ones), nearest first, one per sequence (a walk or drive past takes many nearly equal frames), at
+most six in a row that scrolls sideways. Each shows who took it and the month, is one TalkBack stop
+naming both, and opens in the Panoramax viewer of the instance that holds it; under them, each
+licence of the photos shown (CC BY-SA 4.0, Etalab 2.0) opens its text. They come from the Panoramax
+list (the federation's index `api.panoramax.xyz`, then the OpenStreetMap France and IGN instances), asked
+once per place while the app runs (the answers for the last 32 places are kept; after an outage the
+next opening asks again); the server learns the point of each place opened. A
+page without its own point (a map view, a search centre) asks nothing. A photo whose thumbnail does
+not load is left out, and so is the section without photos; every server failing names street-level
+photos in the map's line of missing parts.
 
 **Writing about a place** (signed in; a write that needs the homeserver opens the sign-in first and
 continues after it). The page's action row has Bookmark, Tag, Post and Add to collection; its sections have

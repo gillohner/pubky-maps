@@ -79,6 +79,15 @@ object ServerDefaults {
                 // (operations.osmfoundation.org/policies/api). There is one OSM database, so no
                 // fallback holds the same notes; the list lets a user point the app elsewhere.
                 Service.OsmApi to listOf(ServerEntry("OpenStreetMap", "https://api.openstreetmap.org")),
+                // Street-level photos: Panoramax is a federation of keyless open instances (photos under
+                // CC BY-SA 4.0 or Etalab 2.0, credited on the page). Its federation index searches every
+                // instance; the two largest instances answer for their own photos when it is down.
+                Service.Panoramax to
+                    listOf(
+                        ServerEntry("Panoramax (all instances)", "https://api.panoramax.xyz"),
+                        ServerEntry("Panoramax OpenStreetMap France", "https://panoramax.openstreetmap.fr"),
+                        ServerEntry("Panoramax IGN", "https://panoramax.ign.fr"),
+                    ),
                 // The Pubky SDK's default relays (pkarr::DEFAULT_RELAYS).
                 Service.PkarrRelay to
                     listOf(

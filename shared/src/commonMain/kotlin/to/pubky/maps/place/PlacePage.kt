@@ -120,6 +120,8 @@ data class PlacePageActions(
     val onReportProblem: (() -> Unit)? = null,
     /** The place as the start of directions to other places; null where [onDirections] is. */
     val routeStart: RouteStartChoice? = null,
+    /** Street-level photos that show the place, from Panoramax; empty while none are known. */
+    val streetPhotos: List<StreetPhoto> = emptyList(),
 )
 
 /** "Start here" on a place page: the place as the start of directions to the places opened next. */
@@ -414,8 +416,8 @@ private val SectionTitleWeight = FontWeight.SemiBold
 
 /**
  * The sections under the header, each shown only when it has something, each from its own source:
- * the steps of the route the user opened, the card's photo and text, OSM details, Pubky tags, photos, posts, lists, "Also on" and the data
- * credits (with the card text's credit).
+ * the steps of the route the user opened, the card's photo and text, OSM details, Pubky tags, photos, posts, lists, "Also on",
+ * street-level photos and the data credits (with the card text's credit).
  */
 @Composable
 fun PlaceSections(
@@ -482,6 +484,8 @@ fun PlaceSections(
         if (page.nothingOnPubky && writes == null) NothingOnPubky()
         val alsoOn = card?.let { alsoOnShown(it.alsoOn, page.place.uri, context.language, hasWebsite = osm?.website != null) }.orEmpty()
         if (alsoOn.isNotEmpty()) AlsoOnSection(alsoOn, actions)
+        // From outside Pubky, as "Also on": after the Pubky sections, before the map problem button.
+        if (actions.streetPhotos.isNotEmpty()) StreetPhotosSection(actions.streetPhotos, actions.onOpenLink)
         // After the card, as the coordinates: under a loading page it would drop down as the sections come.
         if (!page.cardLoading) actions.onReportProblem?.let { ReportProblemButton(it) }
         DataCredits(page, actions)
@@ -489,7 +493,7 @@ fun PlaceSections(
 }
 
 @Composable
-private fun SectionTitle(
+internal fun SectionTitle(
     text: String,
     action: (@Composable () -> Unit)? = null,
 ) {
@@ -543,7 +547,7 @@ private fun LoadingBlock() {
 
 /** Small text that must stay readable: 12 sp, the theme's secondary text colour (WCAG AA on its surfaces). */
 @Composable
-private fun SmallText(
+internal fun SmallText(
     text: String,
     modifier: Modifier = Modifier,
 ) {

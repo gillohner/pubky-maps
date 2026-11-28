@@ -957,6 +957,14 @@ private fun rememberPlacePage(
         if (place != null) places.pages.open(place) else places.pages.close()
     }
     val pageState by places.pages.state.collectAsStateWithLifecycle()
+    // The place's own point, once the page knows it (a link's may come with its card).
+    val photoPoint = pageState?.takeIf { shown != null && it.place.uri == shown.place.uri }?.placePoint
+    LaunchedEffect(photoPoint) { places.streetPhotos?.open(photoPoint) }
+    val streetPhotos =
+        places.streetPhotos
+            ?.state
+            ?.collectAsStateWithLifecycle()
+            ?.value
     val own = writes?.own?.collectAsStateWithLifecycle()?.value
     val publicTagsExplained = writes?.publicTagsExplained?.collectAsStateWithLifecycle()?.value ?: true
     val chosenStart =
@@ -1009,6 +1017,7 @@ private fun rememberPlacePage(
             directions = directions?.takeIf { it.directions.placeUri == shown.place.uri },
             onReportProblem = page.noteTarget?.let { target -> onReportProblem?.let { open -> { open(target) } } },
             routeStart = routeStartChoice(places.directions.takeIf { startDirections != null }, chosenStart, page),
+            streetPhotos = streetPhotos?.takeIf { it.point == page.placePoint }?.photos.orEmpty(),
         )
     return PlacePageSlot(
         full = stop == SheetStop.Full,
