@@ -13,6 +13,7 @@ import to.pubky.maps.status.ServicePart
 import kotlin.math.abs
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 import kotlin.time.TimeMark
 import kotlin.time.TimeSource
 
@@ -197,6 +198,9 @@ class DirectionsController(
     /** Where and when the last new route was asked for while guiding the user, for [mayRerouteFrom]. */
     private var rerouted: Pair<GeoPoint, TimeMark>? = null
 
+    /** When the last position the guidance had was measured, so the same fix sent again is not counted twice. */
+    private var measured: Instant? = null
+
     /** Every [start] so far, for [Directions.opening]. */
     private var openings = 0
 
@@ -355,18 +359,21 @@ class DirectionsController(
     fun startGuidance(
         position: GeoPoint?,
         accuracyMeters: Double? = null,
+        measuredAt: Instant? = null,
     ) {
         val current = state.value ?: return
         if (!current.canGuide || current.guiding) return
         offFixes = 0
         rerouted = null
+        measured = null
         val started = current.copy(guiding = true, stepsShown = false, shownStep = null, routeFitted = true, progress = null)
         state.value = started
-        if (position != null) guide(position, accuracyMeters)
+        if (position != null) guide(position, accuracyMeters, measuredAt)
     }
 
     /**
-     * The user's [position] while the route guides them (within [accuracyMeters], when known): where
+     * The user's [position] while the route guides them (within [accuracyMeters], when known; measured
+     * at [measuredAt], when known: the fix Start began with, sent again by the map, is one position): where
      * they are on it now, looked for from where they were ([routeProgress]). Off the route on
      * [REROUTE_AFTER_FIXES] positions in a row, a new route from there is asked for by itself
      * ([mayRerouteFrom]), as Google Maps and OsmAnd reroute; back on the route before it comes, it is
@@ -375,6 +382,7 @@ class DirectionsController(
     fun guide(
         position: GeoPoint,
         accuracyMeters: Double? = null,
+        measuredAt: Instant? = null,
     ) {
         val current = state.value ?: return
         val route = (current.status as? RouteStatus.Found)?.route ?: return
@@ -391,7 +399,9 @@ class DirectionsController(
             state.value = current.copy(progress = progress, position = position, rerouting = false, noNewRoute = null)
             return
         }
-        offFixes += 1
+        val sameFix = measuredAt != null && measuredAt == measured
+        measured = measuredAt
+        if (!sameFix) offFixes += 1
         val now = current.copy(progress = progress, position = position)
         state.value = now
         if (!now.rerouting && offFixes >= REROUTE_AFTER_FIXES && mayRerouteFrom(position)) reroute(now)
@@ -399,7 +409,8 @@ class DirectionsController(
 
     /**
      * Whether a new route may be asked for by itself from [position]: not within [REROUTE_SPACING] of
-     * the last one, and not until the user moved [OFF_ROUTE_METERS] from where it was asked, so a user
+     * the last one asked for (also one dropped as the user came back on the route), and not until the
+     * user moved [OFF_ROUTE_METERS] from where it was asked, so a user
      * who stays off a new route (it starts on the nearest road, out of reach of a fix in a park; no
      * server answered) is not asked a route for again and again from the same place; Find a new route
      * asks still.
@@ -471,10 +482,6 @@ class DirectionsController(
     }
 
     private fun ask(directions: Directions) {
-        if (directions.guiding) {
-            reroute(directions)
-            return
-        }
         val origin = directions.origin ?: return
         request?.cancel()
         locating?.cancel()

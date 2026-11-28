@@ -15,6 +15,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 class DirectionsControllerTest {
     private val here = GeoPoint(47.3779, 8.5403)
@@ -779,6 +781,25 @@ class DirectionsControllerTest {
             assertEquals(false, d.progress?.offRoute)
             assertTrue(d.guiding)
             assertNull(d.routeToFit)
+        }
+
+    @Test
+    fun theFixGuidanceStartedFromSentAgainIsNotASecondPositionOffTheRoute() =
+        runTest {
+            val routing = FakeRouting { RouteAnswer.Found(route, "s") }
+            val c = controller(routing)
+            c.start("osm:node/1", kunsthaus, here)
+            advanceUntilIdle()
+            // Start off the route (the route begins on the road): the map's location sends the same fix again.
+            val at = Instant.parse("2026-11-28T05:00:00Z")
+            c.startGuidance(off, measuredAt = at)
+            c.guide(off, measuredAt = at)
+            advanceUntilIdle()
+            assertEquals(1, routing.asked.size)
+            // A new fix at the same point (the user stands there) is another position.
+            c.guide(off, measuredAt = at + 1.seconds)
+            advanceUntilIdle()
+            assertEquals(2, routing.asked.size)
         }
 
     @Test

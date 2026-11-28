@@ -324,7 +324,8 @@ geo_loop 8.543611 47.377685
 wait_routes 7 || fail "150 m off the route no new route was asked for by itself ($(routes_asked) routes)"
 wait_for "You're off the route" 20 > /dev/null || fail "150 m from the route the guidance does not say the user is off it"
 screenshot guidance-off-route
-sleep 6
+# Past the 10 s spacing, so only the 50 m the user has not moved holds the next one back.
+sleep 12
 [ "$(routes_asked)" -eq 7 ] || fail "standing off the route asked for a new route again ($(routes_asked) routes)"
 xy=$(wait_for "Find a new route" 5) || fail "no Find a new route off the route"
 adb shell input tap $xy

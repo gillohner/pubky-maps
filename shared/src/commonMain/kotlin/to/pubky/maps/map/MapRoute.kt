@@ -491,6 +491,7 @@ fun MapRoute(
                     directions.startGuidance(
                         fix?.position?.let { GeoPoint(it.latitude, it.longitude) },
                         fix?.horizontalAccuracy?.inMeters,
+                        fix?.measuredAt,
                     )
                 },
             )

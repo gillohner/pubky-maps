@@ -201,8 +201,8 @@ positions in a row (one fix that jumped is not a wrong turn) a new route from wh
 for by itself, the old one staying on the map and guiding them until it comes ("Finding a new route…"),
 then it guides on along the new one; back on the old route first, it is no longer asked for. None came
 (no route, no server reached): the banner says why and the old route still guides. Another one is asked
-by itself at most every 10 s and only once the user moved 50 m from where the last was asked (a new
-route that starts on a road out of reach would come again); Find a new route in the banner asks at
+by itself at most every 10 s and only once the user moved 50 m from where the last was asked, also
+one dropped on the way back (a new route that starts on a road out of reach would come again); Find a new route in the banner asks at
 once. Within 25 m of the end it says they have arrived. While it guides, a tap or long-press on the map
 opens no place (panning works). Back or End ends the guidance: the route card is back and the map turns
 north (a new route still asked for comes to the card). Guidance does not speak, and a new route needs a
