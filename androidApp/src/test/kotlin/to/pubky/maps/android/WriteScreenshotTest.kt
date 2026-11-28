@@ -448,7 +448,7 @@ class WriteScreenshotTest {
         capture("write-photo-ready", Device.Phone, dark = true, largeFont = true) { PhotoPageReadyShot() }
 
     @Composable
-    private fun ListPageShot() {
+    private fun ListPageShot(newOpen: Boolean = false) {
         ListPage(
             state =
                 ListPageState(
@@ -466,11 +466,13 @@ class WriteScreenshotTest {
                                 holds = false,
                             ),
                         ),
-                    newName = "Cake",
-                    newDescription = "Worth the walk",
+                    newOpen = newOpen,
+                    newName = if (newOpen) "Cake" else "",
+                    newDescription = if (newOpen) "Worth the walk" else "",
                     newKept = Kept.Public,
                 ),
             onToggle = {},
+            onNewOpenChange = {},
             onNewNameChange = {},
             onNewDescriptionChange = {},
             onNewKeptChange = {},
@@ -490,6 +492,44 @@ class WriteScreenshotTest {
 
     @Test
     fun listPageTabletDark() = capture("write-lists", Device.Tablet, dark = true) { ListPageShot() }
+
+    @Composable
+    private fun ListPageEmptyShot() {
+        ListPage(
+            state = ListPageState(placeName = "Conditorei Schober", lists = emptyList(), newKept = Kept.Private),
+            onToggle = {},
+            onNewOpenChange = {},
+            onNewNameChange = {},
+            onNewDescriptionChange = {},
+            onNewKeptChange = {},
+            onCreate = {},
+            onClose = {},
+        )
+    }
+
+    @Test
+    fun listPageEmptyPhoneLight() = capture("write-lists-empty", Device.Phone, dark = false) { ListPageEmptyShot() }
+
+    @Test
+    fun listPageEmptyPhoneDark() = capture("write-lists-empty", Device.Phone, dark = true) { ListPageEmptyShot() }
+
+    @Test
+    fun listPageEmptyTabletLight() = capture("write-lists-empty", Device.Tablet, dark = false) { ListPageEmptyShot() }
+
+    @Test
+    fun listPageEmptyTabletDark() = capture("write-lists-empty", Device.Tablet, dark = true) { ListPageEmptyShot() }
+
+    @Test
+    fun listPageNewPhoneLight() = capture("write-lists-new", Device.Phone, dark = false) { ListPageShot(newOpen = true) }
+
+    @Test
+    fun listPageNewPhoneDark() = capture("write-lists-new", Device.Phone, dark = true) { ListPageShot(newOpen = true) }
+
+    @Test
+    fun listPageNewTabletLight() = capture("write-lists-new", Device.Tablet, dark = false) { ListPageShot(newOpen = true) }
+
+    @Test
+    fun listPageNewTabletDark() = capture("write-lists-new", Device.Tablet, dark = true) { ListPageShot(newOpen = true) }
 
     @Composable
     private fun SavedScreenShot() {

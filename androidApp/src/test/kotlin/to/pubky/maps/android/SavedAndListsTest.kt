@@ -284,11 +284,13 @@ class SavedAndListsTest {
                         ListPageState(
                             placeName = "Conditorei Schober",
                             lists = listOf(ListChoice(OwnList("phone:1", Kept.Phone, "Sunday walks", emptyList()), holds = false)),
+                            newOpen = true,
                             newName = "Cake",
                             newKept = Kept.Public,
                             keptChoices = listOf(Kept.Phone, Kept.Public),
                         ),
                     onToggle = {},
+                    onNewOpenChange = {},
                     onNewNameChange = {},
                     onNewDescriptionChange = {},
                     onNewKeptChange = {},
@@ -345,6 +347,7 @@ class SavedAndListsTest {
                 ListPage(
                     state = state,
                     onToggle = {},
+                    onNewOpenChange = {},
                     onNewNameChange = {},
                     onNewDescriptionChange = { state = state.copy(newDescription = it) },
                     onNewKeptChange = {},

@@ -193,8 +193,7 @@ fun ListRoute(
             .map(Kept::of)
             .filter { signedIn || it == Kept.Phone }
     val preferred = Kept.of(settings.storage(DataKind.Lists))
-    var newName by rememberSaveable { mutableStateOf("") }
-    var newDescription by rememberSaveable { mutableStateOf("") }
+    var draft by rememberSaveable(stateSaver = NewCollectionDraft.Saver) { mutableStateOf(NewCollectionDraft()) }
     var newKept by rememberSaveable { mutableStateOf(if (preferred in choices) preferred else Kept.Phone) }
     val snackbars = remember { SnackbarHostState() }
     WriteMessages(writes, snackbars)
@@ -208,21 +207,22 @@ fun ListRoute(
                         .map { ListChoice(it, holds = it.items.any { item -> item in links }) },
                 loading = own.listsLoading,
                 stale = signedIn && !own.listsLoaded && !own.listsLoading,
-                newName = newName,
-                newDescription = newDescription,
+                newOpen = draft.open,
+                newName = draft.name,
+                newDescription = draft.description,
                 newKept = newKept,
                 keptChoices = choices,
             ),
         onToggle = { choice ->
             if (choice.holds) writes.removeFromList(target, links, choice.list) else writes.addToList(target, choice.list)
         },
-        onNewNameChange = { newName = it },
-        onNewDescriptionChange = { newDescription = it },
+        onNewOpenChange = { draft = draft.withOpen(it) },
+        onNewNameChange = { draft = draft.copy(name = it) },
+        onNewDescriptionChange = { draft = draft.copy(description = it) },
         onNewKeptChange = { newKept = it },
         onCreate = {
-            writes.createList(target, newName, newKept, newDescription)
-            newName = ""
-            newDescription = ""
+            writes.createList(target, draft.name, newKept, draft.description)
+            draft = draft.created()
         },
         onClose = onClose,
         snackbarHostState = snackbars,
