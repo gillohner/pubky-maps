@@ -35,6 +35,7 @@ enum class Service(
     Overpass("overpass"),
     Valhalla("valhalla"),
     OsmApi("osm_api"),
+    Panoramax("panoramax"),
     PkarrRelay("pkarr_relay"),
     AuthRelay("auth_relay"),
     ;

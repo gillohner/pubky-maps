@@ -12,7 +12,7 @@ import to.pubky.maps.config.SynonymHosts
 private val serviceGroups =
     listOf(
         "Map" to listOf(Service.MapStyleLight, Service.MapStyleDark),
-        "Search and places" to listOf(Service.Photon, Service.Pinakes, Service.Overpass),
+        "Search and places" to listOf(Service.Photon, Service.Pinakes, Service.Overpass, Service.Panoramax),
         "Directions" to listOf(Service.Valhalla),
         "OpenStreetMap" to listOf(Service.OsmApi),
         "Pubky" to listOf(Service.Nexus, Service.PkarrRelay, Service.AuthRelay),
