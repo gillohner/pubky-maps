@@ -141,6 +141,31 @@ class AccountControllerTest {
         }
 
     @Test
+    fun aTagOnAWebPageThatIsNoPlaceIsLeftOutOfTheCachedTags() =
+        runTest {
+            val tags = listOf(ARTICLE to "read", MUSEUM to "art", UNANSWERED to "later", "geo:47.1,8.5" to "bench")
+            core.tagPaths = tags.indices.map { "/pub/social/v1/tags/$it.json" }
+            // Newest first, as the tags are listed: the page no server answers for comes after the others.
+            tags.forEachIndexed { i, (place, label) ->
+                core.files["/pub/social/v1/tags/$i.json"] =
+                    """{"uri":"$place","label":"$label","created_at":${tags.size - i}}""".encodeToByteArray()
+            }
+            val places = FakeWebPagePlaces()
+            val account = controller(webPages = places)
+            account.start()
+            account.onForeground()
+            signIn(account)
+
+            approve()
+            runCurrent()
+
+            val state = assertIs<AccountState.SignedIn>(account.state.value)
+            assertEquals(listOf("art", "later", "bench"), state.cached.tags.map { it.label })
+            assertEquals(listOf("art", "later", "bench"), cache.stored?.tags?.map { it.label })
+            assertEquals(listOf(ARTICLE, MUSEUM, UNANSWERED), places.asked, "map links are never asked about")
+        }
+
+    @Test
     fun theHomeserversDataShowsBeforePinakesAnswersAndAWriteMeanwhileStays() =
         runTest {
             core.bookmarks =

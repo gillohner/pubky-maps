@@ -14,10 +14,10 @@ import to.pubky.maps.search.SourceAnswer
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Which of the user's bookmarked web pages are places. The bookmarks folder is shared with other
- * apps: a web page is a place only when Pinakes has a place card for it (the app keeps a card
- * without an OpenStreetMap element under the card's URI, e.g. a museum's site), while an article
- * another app bookmarked is not one.
+ * Which of the web pages the user bookmarked or tagged are places. The bookmarks and tags folders
+ * are shared with other apps: a web page is a place only when Pinakes has a place card for it (the
+ * app keeps a card without an OpenStreetMap element under the card's URI, e.g. a museum's site),
+ * while an article another app bookmarked or tagged is not one.
  */
 interface WebPagePlaces {
     /** Whether [target] is a web page that needs a place card to be a place (the core's `needsPlaceCard`); map links do not. */
@@ -38,7 +38,7 @@ interface WebPagePlaces {
  * [WebPagePlaces] by the card reads of [data] (Pinakes through the user's server list). A place
  * answer is kept while the process lives; a not-a-place answer for [notPlaceKept] ms ([now] in epoch
  * ms), so a 404 from a later server of the list while the first was down, or a card retyped since,
- * hides a bookmark only until a refresh after that. At most [kept] answers are kept.
+ * hides a bookmark or tag only until a refresh after that. At most [kept] answers are kept.
  */
 class PinakesWebPagePlaces(
     private val rule: (String) -> Boolean,
@@ -77,8 +77,8 @@ class PinakesWebPagePlaces(
 }
 
 /**
- * At most this many bookmarked web pages are asked about in one refresh; the others are kept until a
- * later refresh asks about them. Pages with a kept answer ([WebPagePlaces.known]) are not asked and
+ * At most this many bookmarked or tagged web pages are asked about in one refresh; the others are
+ * kept until a later refresh asks about them. Pages with a kept answer ([WebPagePlaces.known]) are not asked and
  * do not count, so each refresh reaches pages the ones before did not.
  */
 internal const val MAX_PAGE_CHECKS = 100
@@ -98,13 +98,16 @@ internal val CHECKS_BUDGET = 10.seconds
 /** [account] after the answers [places] already holds, and the web pages to ask about. */
 internal class KnownPlaces(
     val account: CachedAccount,
-    /** At most [MAX_PAGE_CHECKS] bookmarked web pages [places] holds no answer for, in bookmark order. */
+    /**
+     * At most [MAX_PAGE_CHECKS] web pages [places] holds no answer for: the bookmarked ones in
+     * bookmark order, then the tagged ones in tag order.
+     */
     val unchecked: List<String>,
 )
 
 /**
- * [account] without the bookmarked web pages whose kept answer says they are no place (map links
- * and pages without a kept answer stay), and the pages to ask about.
+ * [account] without the bookmarks and tags of web pages whose kept answer says they are no place
+ * (map links and pages without a kept answer stay), and the pages to ask about.
  */
 internal suspend fun withKnownPlaces(
     account: CachedAccount,
@@ -113,8 +116,7 @@ internal suspend fun withKnownPlaces(
     val notPlaces = HashSet<String>()
     val unchecked = ArrayList<String>()
     val pages =
-        account.bookmarks
-            .map { it.place }
+        (account.bookmarks.map { it.place } + account.tags.map { it.place })
             .filter(places::needsCard)
             .distinct()
     for (page in pages) {
@@ -130,7 +132,7 @@ internal suspend fun withKnownPlaces(
             true -> {}
         }
     }
-    return KnownPlaces(account.withoutBookmarksOf(notPlaces), unchecked)
+    return KnownPlaces(account.withoutPagesOf(notPlaces), unchecked)
 }
 
 /**
@@ -168,6 +170,10 @@ internal suspend fun notPlaces(
     return lock.withLock { notPlaces.toSet() }
 }
 
-/** This account without the bookmarks of [pages]; the same account when it has none of them. */
-internal fun CachedAccount.withoutBookmarksOf(pages: Set<String>): CachedAccount =
-    if (bookmarks.none { it.place in pages }) this else copy(bookmarks = bookmarks.filterNot { it.place in pages })
+/** This account without the bookmarks and tags of [pages]; the same account when it has none of them. */
+internal fun CachedAccount.withoutPagesOf(pages: Set<String>): CachedAccount =
+    if (bookmarks.none { it.place in pages } && tags.none { it.place in pages }) {
+        this
+    } else {
+        copy(bookmarks = bookmarks.filterNot { it.place in pages }, tags = tags.filterNot { it.place in pages })
+    }
