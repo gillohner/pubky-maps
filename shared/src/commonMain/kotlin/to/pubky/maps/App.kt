@@ -60,6 +60,7 @@ import to.pubky.maps.ui.SystemBack
 import to.pubky.maps.update.UpdateController
 import to.pubky.maps.update.UpdateDialogHost
 import to.pubky.maps.update.UpdatesUiState
+import to.pubky.maps.update.readyToInstall
 import to.pubky.maps.write.ListRoute
 import to.pubky.maps.write.PhotoRoute
 import to.pubky.maps.write.PostRoute
@@ -312,6 +313,7 @@ private fun AppNavigation(
             MapRoute(
                 servers = settings.servers,
                 onOpenSettings = { navController.open(SettingsDestination) },
+                updateReady = updatesState?.readyToInstall != null,
                 linkedPlace = linkedPlace,
                 onSharePlace = links?.let { l -> { place -> l.share(OpenIn.shareText(place, l.mapLinks)) } },
                 onClosePlace = { links?.linkedPlaces?.close() },
@@ -368,6 +370,7 @@ private fun AppNavigation(
                 updates = updatesState,
                 onCheckForUpdates = { updates?.checkNow() },
                 onAutoCheckUpdatesChange = { updates?.setAutoCheck(it) },
+                onInstallUpdate = { updates?.install() },
                 account = accountState,
                 onOpenAccount = { navController.open(AccountDestination) },
                 recentSearchCount = recentSearches?.size,

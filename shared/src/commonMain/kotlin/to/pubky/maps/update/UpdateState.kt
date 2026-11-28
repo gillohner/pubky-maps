@@ -64,6 +64,10 @@ data class UpdatesUiState(
     val dialog: UpdateDialog?,
 )
 
+/** The update a check found and the user can install now; null while there is none (or a check runs). */
+val UpdatesUiState.readyToInstall: AvailableUpdate?
+    get() = (status as? UpdateStatus.Available)?.update
+
 /** The in-app updater, for builds that update themselves (the APK published on GitHub). */
 interface UpdateController {
     val state: StateFlow<UpdatesUiState>

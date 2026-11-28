@@ -149,6 +149,8 @@ private const val STEP_ZOOM = 17.0
 fun MapRoute(
     servers: ServerLists,
     onOpenSettings: () -> Unit,
+    /** An update is ready to install: the Settings button carries a dot. */
+    updateReady: Boolean = false,
     missing: Set<ServicePart> = emptySet(),
     linkedPlace: LinkedPlaceState = LinkedPlaceState(),
     onSharePlace: ((PlaceRef) -> Unit)? = null,
@@ -614,6 +616,7 @@ fun MapRoute(
         onRetryMap = { fallbackIndex = fallback.retry().index },
         onMyLocation = myLocation,
         onOpenSettings = onOpenSettings,
+        updateReady = updateReady,
         missing = missing,
         snackbarHostState = snackbarHostState,
         search = mapSearch,

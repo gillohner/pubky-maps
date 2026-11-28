@@ -112,6 +112,14 @@ object AppIcons {
 
     val Delete: ImageVector = icon("Delete", "M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z")
 
+    /** Material "system_update": a phone with a down arrow. */
+    val SystemUpdate: ImageVector =
+        icon(
+            "SystemUpdate",
+            "M17 1.01L7 1c-1.1 0-1.99.9-1.99 2v18c0 1.1.89 2 1.99 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z" +
+                "m-1-6h-3V8h-2v5H8l4 4 4-4z",
+        )
+
     val Share: ImageVector =
         icon(
             "Share",
