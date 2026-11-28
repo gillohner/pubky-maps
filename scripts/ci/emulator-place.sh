@@ -216,7 +216,16 @@ for _ in 1 2 3 4 5 6; do
 done
 [ -n "$found" ] || fail "no street-level photos with their licences on the place page"
 sleep 3
-wait_for "Street-level photos" 5 > /dev/null || fail "no Street-level photos title"
+# The route card stays at the top of the page while the rest scrolls under it, so the swipe that
+# brought the licence lines up can leave the section's title under the card: pulled back down a
+# little at a time until it shows (the photos and licences stay in view below it).
+found=""
+for _ in 1 2 3; do
+    if wait_for "Street-level photos" 3 > /dev/null; then found=1; break; fi
+    adb shell input swipe 540 1300 540 1550 400
+    sleep 1
+done
+[ -n "$found" ] || fail "no Street-level photos title"
 wait_for "Street-level photo by Koreller taken Jul 2025" 5 > /dev/null || fail "the first street-level photo is not shown"
 wait_for "Photos: Panoramax, CC BY-SA 4.0" 5 > /dev/null || fail "no CC BY-SA licence under the street-level photos"
 screenshot place-street-photos
