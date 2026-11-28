@@ -1,6 +1,7 @@
 package to.pubky.maps.account
 
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
 import to.pubky.maps.cache.CachedAccount
@@ -22,26 +23,51 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration
 
 internal const val MUSEUM = "https://www.kunsthaus.ch/"
 internal const val ARTICLE = "https://blog.example.org/an-article"
 internal const val UNANSWERED = "https://down.example.org/"
 
-/** Web pages are those starting with https:// that are no OpenStreetMap link; [answers] by page, the rest no place. */
+/**
+ * Web pages are those starting with https:// that are no OpenStreetMap link; [answers] by page, the
+ * rest no place. An answer given is kept, as Pinakes' are.
+ */
 internal class FakeWebPagePlaces(
     private val answers: Map<String, Boolean?> = mapOf(MUSEUM to true, ARTICLE to false, UNANSWERED to null),
     /** Pages whose answer never comes. */
     private val hanging: Set<String> = emptySet(),
+    /** How long each answer takes. */
+    private val answerTime: Duration = Duration.ZERO,
 ) : WebPagePlaces {
     val asked = mutableListOf<String>()
 
+    /** Pages whose answer came, in order. */
+    val answered = mutableListOf<String>()
+    private val given = HashMap<String, Boolean>()
+
     override fun needsCard(target: String): Boolean = target.startsWith("https://") && "openstreetmap.org" !in target
+
+    override suspend fun known(uri: String): Boolean? = given[uri]
 
     override suspend fun isPlace(uri: String): Boolean? {
         asked += uri
         if (uri in hanging) awaitCancellation()
-        return if (uri in answers) answers[uri] else false
+        delay(answerTime)
+        val place = if (uri in answers) answers[uri] else false
+        answered += uri
+        if (place != null) given[uri] = place
+        return place
     }
+}
+
+/** What a refresh keeps of [account]: the kept answers applied, then the other pages asked about. */
+internal suspend fun placeBookmarksOnly(
+    account: CachedAccount,
+    places: WebPagePlaces,
+): CachedAccount {
+    val known = withKnownPlaces(account, places)
+    return known.account.withoutBookmarksOf(notPlaces(known.unchecked, places))
 }
 
 class WebPagePlacesTest {
@@ -60,7 +86,7 @@ class WebPagePlacesTest {
             val places = FakeWebPagePlaces()
             val osm = "https://www.openstreetmap.org/node/1"
 
-            val kept = withPlaceBookmarksOnly(account("geo:47.1,8.5", osm, MUSEUM, ARTICLE, UNANSWERED), places)
+            val kept = placeBookmarksOnly(account("geo:47.1,8.5", osm, MUSEUM, ARTICLE, UNANSWERED), places)
 
             assertEquals(listOf("geo:47.1,8.5", osm, MUSEUM, UNANSWERED), kept.bookmarks.map { it.place })
             assertEquals(setOf(MUSEUM, ARTICLE, UNANSWERED), places.asked.toSet())
@@ -72,7 +98,7 @@ class WebPagePlacesTest {
         runTest {
             val places = FakeWebPagePlaces()
 
-            val kept = withPlaceBookmarksOnly(account(ARTICLE, MUSEUM, ARTICLE), places)
+            val kept = placeBookmarksOnly(account(ARTICLE, MUSEUM, ARTICLE), places)
 
             assertEquals(listOf(MUSEUM), kept.bookmarks.map { it.place })
             assertEquals(listOf(ARTICLE, MUSEUM), places.asked)
@@ -84,7 +110,8 @@ class WebPagePlacesTest {
             val places = FakeWebPagePlaces()
             val account = account("geo:1,2")
 
-            assertTrue(withPlaceBookmarksOnly(account, places) === account)
+            assertTrue(placeBookmarksOnly(account, places) === account)
+            assertTrue(withKnownPlaces(account, places).unchecked.isEmpty())
             assertEquals(emptyList(), places.asked)
         }
 
@@ -94,10 +121,38 @@ class WebPagePlacesTest {
             val pages = List(MAX_PAGE_CHECKS + 5) { "https://example.org/$it" }
             val places = FakeWebPagePlaces(answers = emptyMap())
 
-            val kept = withPlaceBookmarksOnly(account(*pages.toTypedArray()), places)
+            val kept = placeBookmarksOnly(account(*pages.toTypedArray()), places)
 
             assertEquals(MAX_PAGE_CHECKS, places.asked.size)
             assertEquals(pages.drop(MAX_PAGE_CHECKS), kept.bookmarks.map { it.place })
+        }
+
+    @Test
+    fun theNextRefreshAsksAboutThePagesPastTheChecksOfTheOneBefore() =
+        runTest {
+            val pages = List(MAX_PAGE_CHECKS + 5) { "https://example.org/$it" }
+            val places = FakeWebPagePlaces(answers = mapOf(pages[0] to true))
+            val account = account(*pages.toTypedArray())
+
+            placeBookmarksOnly(account, places)
+            val second = placeBookmarksOnly(account, places)
+
+            assertEquals(pages, places.asked, "each page asked once, the kept answers not again")
+            assertEquals(listOf(pages[0]), second.bookmarks.map { it.place })
+        }
+
+    @Test
+    fun keptAnswersApplyWithoutAsking() =
+        runTest {
+            val places = FakeWebPagePlaces()
+            placeBookmarksOnly(account(MUSEUM, ARTICLE), places)
+            places.asked.clear()
+
+            val known = withKnownPlaces(account(ARTICLE, MUSEUM, UNANSWERED, "geo:1,2"), places)
+
+            assertEquals(listOf(MUSEUM, UNANSWERED, "geo:1,2"), known.account.bookmarks.map { it.place })
+            assertEquals(listOf(UNANSWERED), known.unchecked)
+            assertEquals(emptyList(), places.asked)
         }
 
     @Test
@@ -106,7 +161,7 @@ class WebPagePlacesTest {
             val places = FakeWebPagePlaces(answers = mapOf(UNANSWERED to null))
             val later = List(10) { "https://example.org/$it" }
 
-            val kept = withPlaceBookmarksOnly(account(UNANSWERED, *later.toTypedArray()), places)
+            val kept = placeBookmarksOnly(account(UNANSWERED, *later.toTypedArray()), places)
 
             assertEquals(listOf(UNANSWERED) + later, kept.bookmarks.map { it.place })
             assertTrue(places.asked.size < 4, "at most the checks already running: ${places.asked}")
@@ -117,7 +172,7 @@ class WebPagePlacesTest {
         runTest {
             val places = FakeWebPagePlaces(hanging = setOf(UNANSWERED))
 
-            val kept = withPlaceBookmarksOnly(account(UNANSWERED, ARTICLE, MUSEUM), places)
+            val kept = placeBookmarksOnly(account(UNANSWERED, ARTICLE, MUSEUM), places)
 
             assertEquals(listOf(UNANSWERED, MUSEUM), kept.bookmarks.map { it.place })
             assertEquals(CHECKS_BUDGET.inWholeMilliseconds, currentTime)
@@ -130,13 +185,18 @@ class WebPagePlacesTest {
             var clock = 0L
             val places = PinakesWebPagePlaces(rule = { true }, data = { data }, now = { clock })
 
+            assertNull(places.known(MUSEUM), "nothing asked yet")
             places.isPlace(MUSEUM)
             places.isPlace(ARTICLE)
             clock = 60 * 60 * 1000L - 1
+            assertEquals(true, places.known(MUSEUM))
+            assertEquals(false, places.known(ARTICLE))
             places.isPlace(MUSEUM)
             places.isPlace(ARTICLE)
             assertEquals(listOf(MUSEUM, ARTICLE), data.asked)
             clock = 60 * 60 * 1000L
+            assertEquals(true, places.known(MUSEUM))
+            assertNull(places.known(ARTICLE), "an hour old")
             places.isPlace(MUSEUM)
             places.isPlace(ARTICLE)
             assertEquals(listOf(MUSEUM, ARTICLE, ARTICLE), data.asked)
@@ -169,6 +229,7 @@ class WebPagePlacesTest {
             assertEquals(false, places.isPlace("https://unknown.example.org/"), "a page Pinakes does not know")
             data.down = true
             assertNull(places.isPlace(UNANSWERED))
+            assertNull(places.known(UNANSWERED), "no answer is not kept")
             assertEquals(true, places.isPlace(MUSEUM), "kept from the first answer")
             assertEquals(false, places.isPlace(ARTICLE))
             data.down = false

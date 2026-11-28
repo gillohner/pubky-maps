@@ -40,7 +40,7 @@ class RealCoreWebPagePlacesTest {
                     bookmarks = (mapLinks + pages).mapIndexed { i, place -> CachedBookmark("/priv/social/v1/bookmarks/$i", place) },
                 )
 
-            val kept = withPlaceBookmarksOnly(account, places)
+            val kept = placeBookmarksOnly(account, places)
 
             assertEquals(pages, asked)
             assertEquals(mapLinks, kept.bookmarks.map { it.place })

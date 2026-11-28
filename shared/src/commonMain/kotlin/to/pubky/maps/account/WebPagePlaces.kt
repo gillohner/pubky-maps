@@ -23,6 +23,9 @@ interface WebPagePlaces {
     /** Whether [target] is a web page that needs a place card to be a place (the core's `needsPlaceCard`); map links do not. */
     fun needsCard(target: String): Boolean
 
+    /** The answer [isPlace] gave for [uri] and still holds, without asking; null when there is none. */
+    suspend fun known(uri: String): Boolean?
+
     /**
      * Whether the web page [uri] is a place: true when Pinakes' card for it is a place, false when
      * Pinakes does not know the page or knows it as something else, null when no Pinakes server
@@ -51,9 +54,13 @@ class PinakesWebPagePlaces(
 
     override fun needsCard(target: String): Boolean = rule(target)
 
+    override suspend fun known(uri: String): Boolean? {
+        val known = lock.withLock { answers[uri] } ?: return null
+        return known.first.takeIf { it || now() - known.second < notPlaceKept }
+    }
+
     override suspend fun isPlace(uri: String): Boolean? {
-        val known = lock.withLock { answers[uri] }
-        if (known != null && (known.first || now() - known.second < notPlaceKept)) return known.first
+        known(uri)?.let { return it }
         val place =
             when (val answer = data().card(listOf(uri))) {
                 is SourceAnswer.Answered -> answer.value?.isPlace == true
@@ -70,8 +77,9 @@ class PinakesWebPagePlaces(
 }
 
 /**
- * At most this many bookmarked web pages are checked in one refresh; the others are kept. Answers
- * are kept (see [PinakesWebPagePlaces]), so the next refreshes reach the pages after these.
+ * At most this many bookmarked web pages are asked about in one refresh; the others are kept until a
+ * later refresh asks about them. Pages with a kept answer ([WebPagePlaces.known]) are not asked and
+ * do not count, so each refresh reaches pages the ones before did not.
  */
 internal const val MAX_PAGE_CHECKS = 100
 
@@ -83,28 +91,59 @@ private const val PARALLEL_CHECKS = 3
 
 /**
  * The longest the checks of one refresh take; the pages not answered by then are kept. The user's
- * data from the homeserver waits for them, so a Pinakes that answers slowly never holds it back long.
+ * data from the homeserver is shown before them, so they never hold it back.
  */
 internal val CHECKS_BUDGET = 10.seconds
 
+/** [account] after the answers [places] already holds, and the web pages to ask about. */
+internal class KnownPlaces(
+    val account: CachedAccount,
+    /** At most [MAX_PAGE_CHECKS] bookmarked web pages [places] holds no answer for, in bookmark order. */
+    val unchecked: List<String>,
+)
+
 /**
- * [account] without the bookmarked web pages that [places] says are not places. A bookmark is kept
- * when it is a map link, when its page's card is a place, when no Pinakes server answered for it
- * (a missing service never hides the user's data; once no server answered, the pages not asked yet
- * are kept without asking), when no answer came within [CHECKS_BUDGET], and when it is past the
- * first [MAX_PAGE_CHECKS] pages.
+ * [account] without the bookmarked web pages whose kept answer says they are no place (map links
+ * and pages without a kept answer stay), and the pages to ask about.
  */
-internal suspend fun withPlaceBookmarksOnly(
+internal suspend fun withKnownPlaces(
     account: CachedAccount,
     places: WebPagePlaces,
-): CachedAccount {
+): KnownPlaces {
+    val notPlaces = HashSet<String>()
+    val unchecked = ArrayList<String>()
     val pages =
         account.bookmarks
             .map { it.place }
             .filter(places::needsCard)
             .distinct()
-            .take(MAX_PAGE_CHECKS)
-    if (pages.isEmpty()) return account
+    for (page in pages) {
+        when (places.known(page)) {
+            false -> {
+                notPlaces += page
+            }
+
+            null -> {
+                if (unchecked.size < MAX_PAGE_CHECKS) unchecked += page
+            }
+
+            true -> {}
+        }
+    }
+    return KnownPlaces(account.withoutBookmarksOf(notPlaces), unchecked)
+}
+
+/**
+ * Which of [pages] [places] says are no place. A page is not in the answer when its card is a place,
+ * when no Pinakes server answered for it (a missing service never hides the user's data; once no
+ * server answered, the pages not asked yet are not asked) and when no answer came within
+ * [CHECKS_BUDGET].
+ */
+internal suspend fun notPlaces(
+    pages: List<String>,
+    places: WebPagePlaces,
+): Set<String> {
+    if (pages.isEmpty()) return emptySet()
     val permits = Semaphore(PARALLEL_CHECKS)
     val lock = Mutex()
     val notPlaces = HashSet<String>()
@@ -126,6 +165,9 @@ internal suspend fun withPlaceBookmarksOnly(
                 }.joinAll()
         }
     }
-    val dropped = lock.withLock { notPlaces.toSet() }
-    return account.copy(bookmarks = account.bookmarks.filterNot { it.place in dropped })
+    return lock.withLock { notPlaces.toSet() }
 }
+
+/** This account without the bookmarks of [pages]; the same account when it has none of them. */
+internal fun CachedAccount.withoutBookmarksOf(pages: Set<String>): CachedAccount =
+    if (bookmarks.none { it.place in pages }) this else copy(bookmarks = bookmarks.filterNot { it.place in pages })
