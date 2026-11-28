@@ -95,7 +95,7 @@ class AccountController(
     private val scope: CoroutineScope,
     private val io: CoroutineDispatcher,
     private val now: () -> Long,
-    /** Which bookmarked web pages are places; the others are left out of the cached bookmarks. */
+    /** Which bookmarked or tagged web pages are places; the others' bookmarks and tags are left out of the cached data. */
     private val webPages: WebPagePlaces,
     /** Waits between restore attempts while the homeserver is unreachable; the last one repeats. */
     private val retryDelays: List<Duration> = listOf(15.seconds, 30.seconds, 60.seconds, 120.seconds, 300.seconds),
@@ -112,7 +112,7 @@ class AccountController(
     private var restoreJob: Job? = null
     private var refreshJob: Job? = null
 
-    /** Asks Pinakes about the bookmarked web pages the last refresh read (see [checkPages]). */
+    /** Asks Pinakes about the bookmarked or tagged web pages the last refresh read (see [checkPages]). */
     private var pagesJob: Job? = null
     private var retryJob: Job? = null
     private var revokeJob: Job? = null
@@ -665,12 +665,15 @@ class AccountController(
     }
 
     /**
-     * Asks Pinakes about the bookmarked web pages [pages] (none had a kept answer) and leaves out the
-     * ones that are no place, as a change on the cached data then: the refresh shows the homeserver's
-     * data first, so a slow Pinakes neither holds it back nor widens the time in which a refresh
-     * result overwrites a bookmark or tag the user changed meanwhile. A page answered no place shows
-     * until then, on the first refresh after a start or once its answer is an hour old. A new refresh
-     * starts the checks over; the answers already given are kept by [webPages].
+     * Asks Pinakes about the bookmarked or tagged web pages [pages] (none had a kept answer) and leaves
+     * out the bookmarks and tags of the ones that are no place, as a change on the cached data then:
+     * the refresh shows the homeserver's data first, so a slow Pinakes neither holds it back nor
+     * widens the time in which a refresh result overwrites a bookmark or tag the user changed
+     * meanwhile. A page answered no place shows until then, on the first refresh after a start or once
+     * its answer is an hour old. The cached tags are the user's own tags everywhere, so a page wrongly
+     * answered no place (a later server of the list that does not know it while the first is down)
+     * also hides the user's tag on it from its place page for that hour, as it hides the bookmark. A
+     * new refresh starts the checks over; the answers already given are kept by [webPages].
      */
     private fun checkPages(pages: List<String>) {
         pagesJob?.cancel()
@@ -680,7 +683,7 @@ class AccountController(
         pagesJob =
             scope.launch(guard) {
                 val dropped = notPlaces(pages, webPages)
-                if (dropped.isNotEmpty()) enqueue { if (session == current) changeCached { it.withoutBookmarksOf(dropped) } }
+                if (dropped.isNotEmpty()) enqueue { if (session == current) changeCached { it.withoutPagesOf(dropped) } }
             }
     }
 

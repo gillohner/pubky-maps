@@ -25,8 +25,8 @@ private const val SECRETS_KEY_ALIAS = "pubky-maps-secrets"
  * The account of this process: secrets (session, running sign-in) encrypted with a Keystore key,
  * the cache of the user's data in SQLite, both in the no-backup folder (they never leave the
  * phone in a backup), and the process's shared Rust [core], built off the main thread when
- * [AccountController.start] runs. A refresh leaves out bookmarked web pages that [webPages] says
- * are not places.
+ * [AccountController.start] runs. A refresh leaves out the bookmarks and tags of web pages that
+ * [webPages] says are not places.
  */
 internal fun startAccount(
     context: Context,

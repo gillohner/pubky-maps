@@ -119,7 +119,8 @@ Settings:
   profile name, tags and bookmarks, kept on the phone so they stay readable offline, and signs out.
   Its tags and bookmarks are those on places (map links and web pages, the core's `mayBeMapPlace`):
   tags and bookmarks other apps put on their own Pubky objects, such as pubky.app posts and
-  profiles, are not listed or counted, nor are bookmarked web pages Pinakes does not know or knows as no place.
+  profiles, are not listed or counted, nor are bookmarks and tags of web pages Pinakes does not know or knows
+  as no place (the same check as on the Bookmarks screen).
 - **Server lists:** an ordered list of servers per service (map styles, Photon, Pinakes, Nexus,
   Overpass, Valhalla, OpenStreetMap API, Pkarr relays, sign-in relay). Users add, remove, reorder and reset them; servers run by Synonym are
   marked. The map uses its style list in order, the next style taking over when one fails to load;
@@ -239,9 +240,9 @@ only the link, so the place's name, point and summary (what and where it is, "Ca
 8001 Zürich", as its page says once its card and offline district and town are in) are kept on the
 phone with the bookmark (by the link as the core spells it), never sent; the Bookmarks screen shows the
 summary under the name, also for the places in collections, and tells two same-named places with the same
-summary (or none) apart by their points. To tell which bookmarked web pages are places, each
-refresh sends the addresses of up to 100 bookmarked web pages (also those other apps bookmarked, such
-as a reading list) to the user's Pinakes servers, one request per page, the next server when one fails;
+summary (or none) apart by their points. To tell which bookmarked or tagged web pages are places, each
+refresh sends the addresses of up to 100 bookmarked or tagged web pages (also those other apps bookmarked
+or tagged, such as a reading list) to the user's Pinakes servers, one request per page, the next server when one fails;
 pages with an answer still kept on the phone (a place for as long as the app runs, no place for an
 hour) are not sent again, so later refreshes reach the pages after the first 100. A `geo:` link names its own point. A bookmarked or tagged place
 the phone knows no name, point or summary for (bookmarked on another device, before the last sign-out,

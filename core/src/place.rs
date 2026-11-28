@@ -112,9 +112,9 @@ pub fn may_be_map_place(target: &str) -> bool {
 }
 
 /// Whether a stored target is a web page that is a place only when Pinakes has a place card for
-/// it: [`may_be_map_place`] takes it, but it is no link the map-link reader reads. A bookmark of
-/// one is kept when Pinakes' card for the page is a place (or no Pinakes server answers); a web
-/// page Pinakes does not know as a place (an article another app bookmarked) is not one. Map
+/// it: [`may_be_map_place`] takes it, but it is no link the map-link reader reads. A bookmark or
+/// tag of one is kept when Pinakes' card for the page is a place (or no Pinakes server answers); a
+/// web page Pinakes does not know as a place (an article another app bookmarked) is not one. Map
 /// links name a place by themselves and need no card.
 #[uniffi::export]
 pub fn needs_place_card(target: &str) -> bool {

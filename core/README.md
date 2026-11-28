@@ -51,8 +51,8 @@ It bundles the `pubky` SDK (0.18), `pubky-social-specs` (1.0.0-rc.2) and the wor
   (a map link or a web page; not another app's `pubky://` object): the rule `listBookmarks`
   filters with, for counting other users' collections in the app. `needsPlaceCard(target)` says
   whether it is a web page that no map link reader reads, which is a place only when Pinakes has a
-  place card for it: the app asks Pinakes about such bookmarks and leaves out those it knows as no
-  place.
+  place card for it: the app asks Pinakes about such bookmarks and tags and leaves out those it
+  knows as no place.
 - Map links (from the `map-links` crate in `core/map-links`): `parseMapLink(url)` and
   `findMapLink(sharedText)` read a Google Maps, Apple Maps, Waze, OpenStreetMap, OsmAnd,
   Organic Maps, CoMaps, HERE or `geo:` link from its text (name, point, OSM element, zoom,
