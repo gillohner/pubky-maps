@@ -61,6 +61,8 @@ data class DirectionsUi(
     val onRetry: () -> Unit,
     /** Opens the app's system settings, where location access is turned on. */
     val onOpenSettings: (() -> Unit)?,
+    /** Opens the phone's location setting, where location is turned on; null where it cannot be opened. */
+    val onTurnOnLocation: (() -> Unit)? = null,
     /** The routing server's credits, shown with a found route. */
     val credits: List<AttributionLink>,
     /** Starts the directions from the user's position again, instead of the chosen start ([Directions.from]). */
@@ -237,12 +239,24 @@ fun DirectionsCard(
             // Under the status, not beside it: the swap button centres on the status line alone. Moved
             // left by the button's own padding, as the Steps row below, so its label starts under the
             // status text.
+            // The labels say what the tap is for, as the map's location snackbar's: "Allow location"
+            // rather than "Settings", the page it opens. With the phone's location off, Turn on location
+            // goes first (it is what brings the position back) and Try again stays beside it, for a
+            // position that is merely slow; they wrap at a large font.
             val status = directions.status
             val settings = ui.onOpenSettings
+            val turnOn = ui.onTurnOnLocation
             val underStatus = Modifier.offset(x = (-12).dp)
             when {
                 status is RouteStatus.NoLocation && status.permissionOff && settings != null -> {
-                    TextButton(onClick = settings, modifier = underStatus) { Text("Settings") }
+                    TextButton(onClick = settings, modifier = underStatus) { Text("Allow location") }
+                }
+
+                status is RouteStatus.NoLocation && status.locationOff && turnOn != null -> {
+                    FlowRow(underStatus) {
+                        TextButton(onClick = turnOn) { Text("Turn on location") }
+                        TextButton(onClick = ui.onRetry) { Text("Try again") }
+                    }
                 }
 
                 status is RouteStatus.NoLocation || status == RouteStatus.Unreachable -> {

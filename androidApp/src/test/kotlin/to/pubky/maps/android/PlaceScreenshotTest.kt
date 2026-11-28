@@ -338,6 +338,8 @@ class PlaceScreenshotTest {
     /** The start chosen on another page: Hotel Adler, by the lake. */
     private val hotel = RouteStart("osm:node/9", GeoPoint(47.3667, 8.5450), "Hotel Adler")
 
+    private val locationOff = RouteStatus.NoLocation(permissionOff = false, locationOff = true)
+
     /**
      * Directions to the Kunsthaus from Zürich HB, in [status], or back from it when [reversed]; found:
      * FOSSGIS' route by car.
@@ -371,6 +373,7 @@ class PlaceScreenshotTest {
                 onSwap = {},
                 onRetry = {},
                 onOpenSettings = {},
+                onTurnOnLocation = {},
                 credits = routeCredits(ServerDefaults.lists, null),
                 onFromYourLocation = {},
                 onStart = {},
@@ -681,7 +684,57 @@ class PlaceScreenshotTest {
             Page(sparse, actions = directionsTo(RouteStatus.NoLocation(permissionOff = true)))
         }
 
-    /** The routing server did not answer: Try again starts under the status text, as Settings above. */
+    @Test
+    fun directionsNoLocationPhoneLight() =
+        capture("place-directions-no-location", Device.Phone, dark = false) {
+            Page(sparse, actions = directionsTo(RouteStatus.NoLocation(permissionOff = true)))
+        }
+
+    @Test
+    fun directionsNoLocationTabletLight() =
+        capture("place-directions-no-location", Device.Tablet, dark = false) {
+            Page(sparse, actions = directionsTo(RouteStatus.NoLocation(permissionOff = true)))
+        }
+
+    @Test
+    fun directionsNoLocationTabletDark() =
+        capture("place-directions-no-location", Device.Tablet, dark = true) {
+            Page(sparse, actions = directionsTo(RouteStatus.NoLocation(permissionOff = true)))
+        }
+
+    /** The phone's location is off: Turn on location first, Try again beside it. */
+    @Test
+    fun directionsLocationOffPhoneLight() =
+        capture("place-directions-location-off", Device.Phone, dark = false) {
+            Page(sparse, actions = directionsTo(locationOff))
+        }
+
+    @Test
+    fun directionsLocationOffPhoneDark() =
+        capture("place-directions-location-off", Device.Phone, dark = true) {
+            Page(sparse, actions = directionsTo(locationOff))
+        }
+
+    @Test
+    fun directionsLocationOffTabletLight() =
+        capture("place-directions-location-off", Device.Tablet, dark = false) {
+            Page(sparse, actions = directionsTo(locationOff))
+        }
+
+    @Test
+    fun directionsLocationOffTabletDark() =
+        capture("place-directions-location-off", Device.Tablet, dark = true) {
+            Page(sparse, actions = directionsTo(locationOff))
+        }
+
+    /** At the largest font the two buttons still fit one line under the status text (they wrap where they do not). */
+    @Test
+    fun directionsLocationOffLargeFontPhoneLight() =
+        capture("place-directions-location-off", Device.Phone, dark = false, largeFont = true) {
+            Page(sparse, actions = directionsTo(locationOff))
+        }
+
+    /** The routing server did not answer: Try again starts under the status text, as Allow location above. */
     @Test
     fun directionsUnreachablePhoneLight() =
         capture("place-directions-unreachable", Device.Phone, dark = false) {

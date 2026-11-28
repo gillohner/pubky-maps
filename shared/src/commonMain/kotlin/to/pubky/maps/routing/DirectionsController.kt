@@ -34,9 +34,14 @@ sealed interface RouteStatus {
     /** Waiting for the user's position (the permission dialog, the first fix). */
     data object Locating : RouteStatus
 
-    /** The user's position cannot be had; [permissionOff] when only the system settings can change that. */
+    /**
+     * The user's position cannot be had: [permissionOff] when only the app's system settings can change
+     * that, [locationOff] when the phone's location is off (location tracking stopped), which the
+     * phone's location setting turns on again.
+     */
     data class NoLocation(
         val permissionOff: Boolean,
+        val locationOff: Boolean = false,
     ) : RouteStatus
 
     /** Asking the routing servers. */
@@ -302,13 +307,16 @@ class DirectionsController(
         ask(current.copy(position = position))
     }
 
-    /** The user's position cannot be had for the directions waiting for it. */
-    fun locationMissing(permissionOff: Boolean) {
+    /** The user's position cannot be had for the directions waiting for it ([RouteStatus.NoLocation]). */
+    fun locationMissing(
+        permissionOff: Boolean,
+        locationOff: Boolean = false,
+    ) {
         val current = state.value ?: return
         if (current.status != RouteStatus.Locating) return
         locating?.cancel()
         locating = null
-        set(current.copy(status = RouteStatus.NoLocation(permissionOff)))
+        set(current.copy(status = RouteStatus.NoLocation(permissionOff, locationOff)))
     }
 
     /** Asks for the route by [mode] between the same points. */

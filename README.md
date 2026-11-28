@@ -194,7 +194,9 @@ no position, say "By car from" the start's name, mark the start with a white dot
 "From your location" in the route card routes from the user's position again. The start's own page
 says "Starting here" on its Start here button (a tap clears it) and routes from the user. Another
 place, or closing the page, ends them. Without a position, a route or a
-server, the page says which is missing (with Settings when location access is off for good), and
+server, the page says which is missing (with Allow location when location access is off for good, Turn on
+location and Try again when the phone's location is off, asked again when the app comes back from
+that setting, and Try again when the position is slow to come or the routing server fails), and
 every server failing names routing in the map's line of missing parts.
 
 **Start** on a route from the user's position to the place (not one from a chosen start or back to the

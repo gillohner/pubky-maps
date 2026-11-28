@@ -2,11 +2,13 @@ package to.pubky.maps.android
 
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -27,9 +29,10 @@ import to.pubky.maps.routing.TravelMode
 import to.pubky.maps.ui.PubkyMapsTheme
 
 /**
- * The button under a route card's status (Settings when location access is off, Try again when there
- * is no location or no routing server) has its label start where the status text starts, as the
- * Steps button's label starts under the route's time.
+ * The buttons under a route card's status (Allow location when location access is off, Turn on
+ * location and Try again when the phone's location is off, Try again when there is no position or no
+ * routing server) say what they are for, and the first one's label starts where the status text
+ * starts, as the Steps button's label starts under the route's time.
  */
 @RunWith(RobolectricTestRunner::class)
 // Real text measuring: a label narrower than the button's minimum width would be centred in it.
@@ -41,7 +44,13 @@ class RouteCardStatusButtonTest {
 
     private val kunsthaus = GeoPoint(47.3702, 8.5486)
 
-    private fun card(status: RouteStatus) {
+    private var turnedOn = 0
+    private var retried = 0
+
+    private fun card(
+        status: RouteStatus,
+        canTurnOn: Boolean = true,
+    ) {
         compose.setContent {
             PubkyMapsTheme(darkTheme = false) {
                 PlaceHeader(
@@ -68,8 +77,9 @@ class RouteCardStatusButtonTest {
                                 onStep = {},
                                 onClose = {},
                                 onSwap = {},
-                                onRetry = {},
+                                onRetry = { retried++ },
                                 onOpenSettings = {},
+                                onTurnOnLocation = if (canTurnOn) ({ turnedOn++ }) else null,
                                 credits = emptyList(),
                                 onFromYourLocation = {},
                             ),
@@ -89,9 +99,36 @@ class RouteCardStatusButtonTest {
             .boundsInRoot.left
 
     @Test
-    fun settingsStartsUnderTheStatusText() {
+    fun allowLocationStartsUnderTheStatusText() {
         card(RouteStatus.NoLocation(permissionOff = true))
-        assertEquals(left("Location access is off", substring = true), left("Settings"), 1f)
+        assertEquals(left("Location access is off", substring = true), left("Allow location"), 1f)
+        compose.onNodeWithText("Settings").assertDoesNotExist()
+    }
+
+    @Test
+    fun withThePhonesLocationOffTurnOnLocationComesFirstAndTryAgainBesideIt() {
+        card(RouteStatus.NoLocation(permissionOff = false, locationOff = true))
+        assertEquals(left("Is location turned on?", substring = true), left("Turn on location"), 1f)
+        assertTrue(left("Try again") > left("Turn on location"))
+        compose.onNodeWithText("Turn on location").performClick()
+        assertEquals(1, turnedOn)
+        compose.onNodeWithText("Try again").performClick()
+        assertEquals(1, retried)
+    }
+
+    @Test
+    fun withoutALocationSettingToOpenOnlyTryAgainIsOffered() {
+        card(RouteStatus.NoLocation(permissionOff = false, locationOff = true), canTurnOn = false)
+        compose.onNodeWithText("Turn on location").assertDoesNotExist()
+        assertEquals(left("Is location turned on?", substring = true), left("Try again"), 1f)
+    }
+
+    @Test
+    fun aSlowPositionIsNotAskedToTurnLocationOn() {
+        // The wait for the first position ended, or the permission dialog was dismissed: location may be on.
+        card(RouteStatus.NoLocation(permissionOff = false))
+        compose.onNodeWithText("Turn on location").assertDoesNotExist()
+        compose.onNodeWithText("Try again").assertExists()
     }
 
     @Test
