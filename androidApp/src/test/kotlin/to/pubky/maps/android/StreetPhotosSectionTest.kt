@@ -137,7 +137,7 @@ class StreetPhotosSectionTest {
         show(listOf(koreller, ign, koreller.copy(id = "00000000-0000-4000-8000-000000000002")))
         compose.onNodeWithText("Street-level photos").assertExists()
         compose.onAllNodesWithText("Photos: Panoramax, CC BY-SA 4.0").assertCountEquals(1)
-        compose.onNodeWithText("Photos: Panoramax, etalab-2.0").performScrollTo().performClick()
+        compose.onNodeWithText("Photos: Panoramax, Etalab 2.0").performScrollTo().performClick()
         assertEquals(listOf(ign.licenceUrl), opened)
     }
 

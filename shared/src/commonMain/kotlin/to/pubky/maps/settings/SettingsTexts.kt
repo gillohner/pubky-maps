@@ -61,7 +61,8 @@ internal val Service.description: String
             }
 
             Service.Panoramax -> {
-                "Panoramax servers: street-level photos of the places you open. They learn where each place you open is."
+                "Panoramax servers: street-level photos of the places you open. They learn where each place you open is; " +
+                    "each photo loads from the Panoramax instance that holds it."
             }
 
             Service.PkarrRelay -> {

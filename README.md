@@ -219,11 +219,13 @@ taken 3 to 40 m from the place's own point with the place within 60° of where t
 360° ones), nearest first, one per sequence (a walk or drive past takes many nearly equal frames), at
 most six in a row that scrolls sideways. Each shows who took it and the month, is one TalkBack stop
 naming both, and opens in the Panoramax viewer of the instance that holds it; under them, each
-licence of the photos shown (CC BY-SA 4.0, Etalab 2.0) opens its text. They come from the Panoramax
+licence of the photos shown (CC BY-SA 4.0, Etalab 2.0) opens its text; each thumbnail loads from the
+Panoramax instance that holds it. They come from the Panoramax
 list (the federation's index `api.panoramax.xyz`, then the OpenStreetMap France and IGN instances), asked
 once per place while the app runs (the answers for the last 32 places are kept; after an outage the
 next opening asks again); the server learns the point of each place opened. A
-page without its own point (a map view, a search centre) asks nothing. A photo whose thumbnail does
+page without its own point (a map view, a search centre) and a point of the user's own (typed
+coordinates, a dropped pin, such a point bookmarked) ask nothing. A photo whose thumbnail does
 not load is left out, and so is the section without photos; every server failing names street-level
 photos in the map's line of missing parts.
 

@@ -9,6 +9,7 @@ import io.ktor.http.URLBuilder
 import io.ktor.http.Url
 import io.ktor.http.appendPathSegments
 import io.ktor.http.isSuccess
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -172,8 +173,12 @@ fun parsePanoramaxSearch(
     return photos
 }
 
-/** "CC-BY-SA-4.0" as Creative Commons writes it ("CC BY-SA 4.0"); other licence names as given. */
+/**
+ * A licence as its authors write it: "CC-BY-SA-4.0" as "CC BY-SA 4.0", the French state's
+ * "etalab-2.0" (Licence Ouverte) as "Etalab 2.0"; other names as given.
+ */
 fun licenceName(licence: String): String {
+    Regex("""etalab-(\d+(?:\.\d+)?)""", RegexOption.IGNORE_CASE).matchEntire(licence)?.let { return "Etalab ${it.groupValues[1]}" }
     val cc = Regex("""CC-([A-Z-]+)-(\d+(?:\.\d+)?)""").matchEntire(licence) ?: return licence
     return "CC ${cc.groupValues[1]} ${cc.groupValues[2]}"
 }
@@ -212,14 +217,27 @@ class StreetPhotosController(
         val current = mutableState.value
         if (current?.point == point && !current.failed) return
         job?.cancel()
-        kept[point]?.let { photos ->
+        kept.remove(point)?.let { photos ->
+            // Put back last: the answers kept are those of the places opened last.
+            kept[point] = photos
             mutableState.value = StreetPhotosState(point, photos, loading = false)
             return
         }
         mutableState.value = StreetPhotosState(point)
         job =
             scope.launch {
-                when (val answer = source.near(point)) {
+                val answer =
+                    try {
+                        source.near(point)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // Not a server's failure (the fallback takes those, e.g. the list could not be
+                        // read): no photos, asked again at the next opening, the app goes on.
+                        mutableState.value = StreetPhotosState(point, loading = false, failed = true)
+                        return@launch
+                    }
+                when (answer) {
                     is StreetPhotosAnswer.Found -> {
                         kept.remove(point)
                         kept[point] = answer.photos

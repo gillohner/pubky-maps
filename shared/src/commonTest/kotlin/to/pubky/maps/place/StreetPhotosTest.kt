@@ -127,7 +127,8 @@ class StreetPhotosTest {
     fun licencesAndDatesAreWrittenForPeople() {
         assertEquals("CC BY-SA 4.0", licenceName("CC-BY-SA-4.0"))
         assertEquals("CC BY 4.0", licenceName("CC-BY-4.0"))
-        assertEquals("etalab-2.0", licenceName("etalab-2.0"))
+        assertEquals("Etalab 2.0", licenceName("etalab-2.0"))
+        assertEquals("CC0-1.0", licenceName("CC0-1.0"))
         assertEquals("Apr 2024", monthOf("2024-04-29T16:54:30+00:00"))
         assertEquals("Dec 2019", monthOf("2019-12-01"))
         assertNull(monthOf("2024-13-01"))
@@ -262,6 +263,54 @@ class StreetPhotosTest {
             assertEquals(2, asked)
             assertEquals(listOf(photo), controller.state.value?.photos)
             assertEquals(emptySet(), health.missing.value)
+        }
+
+    @Test
+    fun theAnswersKeptAreThoseOfThePlacesOpenedLast() =
+        runTest {
+            val asked = ArrayList<GeoPoint>()
+            val controller =
+                StreetPhotosController({
+                    asked += it
+                    StreetPhotosAnswer.Found(listOf(photo))
+                }, backgroundScope)
+            val others = (1..32).map { GeoPoint(47.0 + it / 1000.0, 8.5) }
+            controller.open(place)
+            runCurrent()
+            // The first place opened again halfway is kept over the ones opened before it since.
+            others.forEachIndexed { i, point ->
+                controller.open(point)
+                runCurrent()
+                if (i == 15) {
+                    controller.open(place)
+                    runCurrent()
+                }
+            }
+            controller.open(place)
+            runCurrent()
+            controller.open(others.first())
+            runCurrent()
+            assertEquals(listOf(place) + others + others.first(), asked)
+        }
+
+    @Test
+    fun aFailureOutsideTheServersEndsTheLoadingAndTheNextOpeningAsksAgain() =
+        runTest {
+            var asked = 0
+            val controller =
+                StreetPhotosController(
+                    {
+                        asked++
+                        if (asked == 1) throw IllegalStateException("no settings") else StreetPhotosAnswer.Found(listOf(photo))
+                    },
+                    backgroundScope,
+                )
+            controller.open(place)
+            runCurrent()
+            assertEquals(StreetPhotosState(place, loading = false, failed = true), controller.state.value)
+            controller.open(place)
+            runCurrent()
+            assertEquals(listOf(photo), controller.state.value?.photos)
         }
 
     @Test
