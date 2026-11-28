@@ -3,6 +3,7 @@ package to.pubky.maps.place
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
+import io.ktor.client.engine.mock.toByteArray
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.Url
@@ -73,5 +74,31 @@ class HttpPlaceDataTest {
             // The next server is asked, with the filter: an unfiltered answer would badge every point of interest.
             assertEquals(listOf("old.example.org", "pinakes.example.org"), asked.map { it.host })
             assertEquals(listOf("true", "true"), asked.map { it.parameters["referenced"] })
+        }
+
+    @Test
+    fun aCollectionCountsOnlyTheItemsTheCoresPlaceRuleTakes() =
+        runTest {
+            val asked = ArrayList<Pair<Url, String>>()
+            val client =
+                HttpClient(
+                    MockEngine { request ->
+                        asked += request.url to request.body.toByteArray().decodeToString()
+                        respond(PlaceFixtures.read("nexus-collection-posts.json"), HttpStatusCode.OK, json)
+                    },
+                )
+            // The rule the core gives: here only OpenStreetMap links, so pubky:// objects and other web links are no places.
+            val osmOnly = { uri: String -> uri.startsWith("https://www.openstreetmap.org/") }
+            val data = HttpPlaceData(client, { emptyList() }, { listOf("https://nexus.example.org") }, mayBeMapPlace = osmOnly)
+            val post = "pubky://${PlaceFixtures.TESTER}/pub/social/v1/posts/0035ZRTMYFEZ2"
+
+            val answer = data.lists(listOf(post, "https://not-a-post.example.org"), viewer = null)
+
+            assertIs<SourceAnswer.Answered<List<PlaceList>>>(answer)
+            assertEquals(listOf(7, 7, 1), answer.value.map { it.itemCount })
+            val (url, body) = asked.single()
+            assertEquals("/v1/stream/posts/by_ids", url.encodedPath)
+            // Nexus takes author:id; a URI that is no post is not asked for.
+            assertEquals("""{"post_ids":["${PlaceFixtures.TESTER}:0035ZRTMYFEZ2"]}""", body)
         }
 }

@@ -1179,8 +1179,7 @@ private fun ListsSection(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     KeptBadge(list.kept)
                     Spacer(Modifier.width(8.dp))
-                    val places = if (list.items.size == 1) "1 place" else "${list.items.size} places"
-                    SmallText("Your collection · $places" + if (list.pending) " · not sent yet" else "")
+                    SmallText(placeListLine("Your collection", list.items.size) + if (list.pending) " · not sent yet" else "")
                 }
             }
         }
@@ -1189,8 +1188,7 @@ private fun ListsSection(
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text(list.name ?: "A collection", style = MaterialTheme.typography.bodyLarge)
                 val by = if (list.mine) "Your collection" else "By ${personName(list.author, people[list.author])}"
-                val places = list.itemCount?.let { if (it == 1) "1 place" else "$it places" }
-                SmallText(listOfNotNull(by, places).joinToString(" · "))
+                SmallText(placeListLine(by, list.itemCount))
             }
         }
         if (count > others.size + ownLists.size) {

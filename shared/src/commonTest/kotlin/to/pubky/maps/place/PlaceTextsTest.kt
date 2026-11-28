@@ -306,4 +306,13 @@ class PlaceTextsTest {
         assertEquals("https://commons.wikimedia.org/f", credit("javascript:alert(1)", "https://commons.wikimedia.org/f").link)
         assertNull(credit(null, "file:///etc/hosts").link)
     }
+
+    @Test
+    fun aCollectionLineCountsItsPlacesButNeverSaysNone() {
+        assertEquals("By Anna · 31 places", placeListLine("By Anna", 31))
+        assertEquals("Your collection · 1 place", placeListLine("Your collection", 1))
+        // Pinakes lists the collection under the place, but none of its Nexus items passes the place rule.
+        assertEquals("By Anna", placeListLine("By Anna", 0))
+        assertEquals("By Anna", placeListLine("By Anna", null))
+    }
 }
