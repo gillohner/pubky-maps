@@ -231,16 +231,19 @@ fun DirectionsCard(
                     Icon(RoutingIcons.SwapVert, contentDescription = "Swap start and destination")
                 }
             }
-            // Under the status, not beside it: the swap button centres on the status line alone.
+            // Under the status, not beside it: the swap button centres on the status line alone. Moved
+            // left by the button's own padding, as the Steps row below, so its label starts under the
+            // status text.
             val status = directions.status
             val settings = ui.onOpenSettings
+            val underStatus = Modifier.offset(x = (-12).dp)
             when {
                 status is RouteStatus.NoLocation && status.permissionOff && settings != null -> {
-                    TextButton(onClick = settings) { Text("Settings") }
+                    TextButton(onClick = settings, modifier = underStatus) { Text("Settings") }
                 }
 
                 status is RouteStatus.NoLocation || status == RouteStatus.Unreachable -> {
-                    TextButton(onClick = ui.onRetry) { Text("Try again") }
+                    TextButton(onClick = ui.onRetry, modifier = underStatus) { Text("Try again") }
                 }
 
                 else -> {}
