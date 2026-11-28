@@ -18,6 +18,29 @@ class PlaceActionsTest {
         assertEquals(0, iconActionsShown(count = 3, slots = 0))
     }
 
+    @Test
+    fun buttonsFlowIntoLinesAndAWideOneHasItsOwn() {
+        assertEquals(listOf(0..1, 2..3), flowLines(listOf(140, 140, 120, 80), maxWidth = 300, gap = 8))
+        // 140 + 8 + 152 is exactly 300: still one line.
+        assertEquals(listOf(0..1), flowLines(listOf(140, 152), maxWidth = 300, gap = 8))
+        assertEquals(listOf(0..0, 1..1, 2..2), flowLines(listOf(100, 400, 100), maxWidth = 300, gap = 8))
+        assertEquals(emptyList(), flowLines(emptyList(), maxWidth = 300, gap = 8))
+    }
+
+    @Test
+    fun theLabelledActionsThatFitInTwoLinesShowWithMoreForTheRest() {
+        // The panel's eight at the normal font, in a 368 dp row: Directions, Start here / Bookmark, Tag, More.
+        val eight = listOf(141, 140, 125, 85, 90, 175, 100, 105)
+        assertEquals(4, labelledActionsShown(eight, more = 100, maxWidth = 368, gap = 8))
+        // All that fit show, without More.
+        assertEquals(3, labelledActionsShown(listOf(141, 140, 125), more = 100, maxWidth = 368, gap = 8))
+        assertEquals(8, labelledActionsShown(eight, more = 100, maxWidth = 1000, gap = 8))
+        // More takes the place of the last one that would have fit.
+        assertEquals(3, labelledActionsShown(listOf(180, 180, 180, 180, 180), more = 180, maxWidth = 368, gap = 8))
+        // Too narrow for any but More.
+        assertEquals(0, labelledActionsShown(listOf(400, 400, 400), more = 100, maxWidth = 368, gap = 8, lines = 1))
+    }
+
     private val google = OpenInAction(OpenInApp.GoogleMaps, "Google Maps", "https://www.google.com/maps", null, inBrowser = true)
     private val tapped = mutableListOf<String>()
 

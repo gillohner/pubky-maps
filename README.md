@@ -159,7 +159,8 @@ name, what the place is, the distance and the address, Directions, Start here, S
 (the apps switched on in Settings, installed ones first), with Bookmark, Tag, Post and Add to
 collection after Start here for writes. On a phone they are one row of icon buttons (Directions filled),
 each saying its words on a long press and to TalkBack, the ones that do not fit under More; beside
-the map on a wide screen they are labelled buttons; the Pinakes card's photo and text with
+the map on a wide screen they are labelled buttons on at most two lines, the rest under a labelled
+More; the Pinakes card's photo and text with
 their credits; OpenStreetMap details from the card's facts when Pinakes serves them, or, when the card brings none, those an offline area keeps (opening hours with open or closed now, phone,
 website, wheelchair access, cuisine); Pubky tags with their counts and who tagged (people the user
 follows first, the user's own tags marked); photos and posts about the place from Nexus, newest first;
