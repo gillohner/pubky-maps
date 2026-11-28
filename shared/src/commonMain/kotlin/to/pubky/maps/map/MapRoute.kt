@@ -33,6 +33,8 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -467,6 +469,15 @@ fun MapRoute(
     }
     val startDirections = directions?.let { rememberStartDirections(it, locationState) }
     val settingsLauncher = rememberSystemSettingsLauncher()
+    // Back from the phone's location setting (Turn on location, or the user's own way there): the
+    // position is asked for again, as Try again would, instead of the card still saying location is off.
+    val directionsNow by rememberUpdatedState(directionsState)
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        val waiting = directionsNow
+        if (startDirections != null && waiting != null && asksAgainOnReturn(waiting.status)) {
+            startDirections(waiting.placeUri, waiting.place, waiting.reversed)
+        }
+    }
     val directionsUi =
         if (directions != null && directionsState != null && startDirections != null) {
             DirectionsUi(
@@ -488,6 +499,16 @@ fun MapRoute(
                         (
                             {
                                 settingsLauncher.openApplicationSettings()
+                            }
+                        )
+                    } else {
+                        null
+                    },
+                onTurnOnLocation =
+                    if (settingsLauncher.canOpenLocationServicesSettings) {
+                        (
+                            {
+                                settingsLauncher.openLocationServicesSettings()
                             }
                         )
                     } else {
@@ -1268,7 +1289,8 @@ private fun rememberMyLocationAction(
             val result =
                 snackbarHostState.showOnly(
                     message = "Location access is off for Pubky Maps.",
-                    actionLabel = if (settings.canOpenApplicationSettings) "Settings" else null,
+                    // What the tap is for, as the route card's "Allow location": not the page it opens.
+                    actionLabel = if (settings.canOpenApplicationSettings) "Allow" else null,
                 )
             if (result == SnackbarResult.ActionPerformed) settings.openApplicationSettings()
         }

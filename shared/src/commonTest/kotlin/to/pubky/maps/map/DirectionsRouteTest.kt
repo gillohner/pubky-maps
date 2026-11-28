@@ -212,6 +212,16 @@ class DirectionsRouteTest {
 
     private val kunsthaus = GeoPoint(47.3702, 8.5486)
 
+    @Test
+    fun onlyDirectionsToldTheLocationIsOffAskAgainWhenTheAppComesBack() {
+        assertTrue(asksAgainOnReturn(RouteStatus.NoLocation(permissionOff = false, locationOff = true)))
+        // A slow first fix or a dismissed permission dialog: not asked again behind the user's back.
+        assertFalse(asksAgainOnReturn(RouteStatus.NoLocation(permissionOff = false)))
+        assertFalse(asksAgainOnReturn(RouteStatus.NoLocation(permissionOff = true)))
+        assertFalse(asksAgainOnReturn(RouteStatus.Locating))
+        assertFalse(asksAgainOnReturn(RouteStatus.Unreachable))
+    }
+
     /** A controller whose directions wait for a position, as after a tap on Directions with location unavailable. */
     private fun TestScope.waitingDirections(): DirectionsController {
         val directions = DirectionsController(Routing { _, _, _ -> RouteAnswer.Unreachable }, backgroundScope)
@@ -229,8 +239,8 @@ class DirectionsRouteTest {
             assertTrue(retried)
             assertEquals(RouteStatus.Locating, directions.directions.value?.status, "not before the grace ends")
             advanceTimeBy(2.seconds)
-            // Long before the controller's own wait (30 s) ends.
-            assertEquals(RouteStatus.NoLocation(permissionOff = false), directions.directions.value?.status)
+            // Long before the controller's own wait (30 s) ends; the phone's location is off.
+            assertEquals(RouteStatus.NoLocation(permissionOff = false, locationOff = true), directions.directions.value?.status)
         }
 
     @Test
@@ -255,7 +265,7 @@ class DirectionsRouteTest {
             directions.swap()
             advanceTimeBy(LocationRetryGrace)
             val shown = directions.directions.value
-            assertEquals(RouteStatus.NoLocation(permissionOff = false), shown?.status)
+            assertEquals(RouteStatus.NoLocation(permissionOff = false, locationOff = true), shown?.status)
             assertEquals(TravelMode.Walk, shown?.mode)
             assertTrue(shown?.reversed == true)
         }

@@ -65,7 +65,7 @@ internal fun rememberStartDirections(
     LaunchedEffect(directions, locationState) {
         snapshotFlow { locationState.status is LocationTrackingStatus.Unavailable }
             .drop(1)
-            .collect { unavailable -> if (unavailable && waiting()) directions.locationMissing(permissionOff = false) }
+            .collect { unavailable -> if (unavailable && waiting()) directions.locationMissing(permissionOff = false, locationOff = true) }
     }
     return remember(directions, locationState) {
         start@{ uri, to, reversed ->
@@ -112,6 +112,14 @@ internal fun rememberStartDirections(
         }
     }
 }
+
+/**
+ * Whether directions with [status] ask for the user's position again when the app comes back to the
+ * foreground: only while they say the phone's location is off ([RouteStatus.NoLocation.locationOff]),
+ * which the user may just have turned on in its setting. Directions waiting for the permission dialog,
+ * or told the permission is off, are left as they are.
+ */
+internal fun asksAgainOnReturn(status: RouteStatus): Boolean = status is RouteStatus.NoLocation && status.locationOff
 
 /**
  * What Directions do about the user's position: nothing from a chosen start (null: no permission
@@ -246,6 +254,8 @@ internal fun CoroutineScope.retryLocationFor(
     val opening = directions.directions.value?.opening
     launch {
         if (retryRecovers(retry, unavailable)) return@launch
-        if (opening != null && directions.directions.value?.opening == opening) directions.locationMissing(permissionOff = false)
+        if (opening != null && directions.directions.value?.opening == opening) {
+            directions.locationMissing(permissionOff = false, locationOff = true)
+        }
     }
 }

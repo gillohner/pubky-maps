@@ -86,6 +86,21 @@ class DirectionsControllerTest {
         }
 
     @Test
+    fun thePhonesLocationOffIsToldApartAndItsFirstFixStillStartsTheRoute() =
+        runTest {
+            val routing = FakeRouting { RouteAnswer.Found(route, "s") }
+            val c = controller(routing)
+            c.start("osm:node/1", kunsthaus, null)
+            c.locationMissing(permissionOff = false, locationOff = true)
+            assertEquals(RouteStatus.NoLocation(permissionOff = false, locationOff = true), c.directions.value?.status)
+            // Location turned on in the phone's settings: its first fix starts the route.
+            c.located(here)
+            advanceUntilIdle()
+            assertEquals(1, routing.asked.size)
+            assertTrue(c.directions.value?.status is RouteStatus.Found)
+        }
+
+    @Test
     fun aPositionThatDoesNotComeIsMissingAndOneThatComesLaterStillStartsTheRoute() =
         runTest {
             val routing = FakeRouting { RouteAnswer.Found(route, "s") }
