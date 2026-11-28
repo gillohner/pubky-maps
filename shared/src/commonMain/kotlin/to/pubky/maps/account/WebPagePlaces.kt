@@ -1,12 +1,18 @@
 package to.pubky.maps.account
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import to.pubky.maps.cache.CachedAccount
 import to.pubky.maps.place.PlaceData
@@ -14,10 +20,11 @@ import to.pubky.maps.search.SourceAnswer
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Which of the web pages the user bookmarked or tagged are places. The bookmarks and tags folders
- * are shared with other apps: a web page is a place only when Pinakes has a place card for it (the
- * app keeps a card without an OpenStreetMap element under the card's URI, e.g. a museum's site),
- * while an article another app bookmarked or tagged is not one.
+ * Which of the web pages the user bookmarked, tagged or put in a collection are places. The
+ * bookmarks, tags and collections folders are shared with other apps: a web page is a place only
+ * when Pinakes has a place card for it (the app keeps a card without an OpenStreetMap element under
+ * the card's URI, e.g. a museum's site), while an article another app bookmarked, tagged or collected
+ * is not one. The account refresh and the collections' reads ask the same instance.
  */
 interface WebPagePlaces {
     /** Whether [target] is a web page that needs a place card to be a place (the core's `needsPlaceCard`); map links do not. */
@@ -38,7 +45,15 @@ interface WebPagePlaces {
  * [WebPagePlaces] by the card reads of [data] (Pinakes through the user's server list). A place
  * answer is kept while the process lives; a not-a-place answer for [notPlaceKept] ms ([now] in epoch
  * ms), so a 404 from a later server of the list while the first was down, or a card retyped since,
- * hides a bookmark or tag only until a refresh after that. At most [kept] answers are kept.
+ * hides a bookmark, tag or collection item only until a refresh after that. At most [kept] answers
+ * are kept.
+ *
+ * At most [PARALLEL_CHECKS] card reads run at a time, whoever asks: the account refresh and a collections
+ * read both check pages at sign-in, and they share Pinakes with the place pages and the map's Pubky
+ * places, so a burst could make a server refuse them. A page asked about while its read runs waits
+ * for that read's answer instead of reading the card again (a page both bookmarked and in a
+ * collection); when that read is cancelled (its refresh's budget ran out or a new refresh started),
+ * the next one waiting reads it.
  */
 class PinakesWebPagePlaces(
     private val rule: (String) -> Boolean,
@@ -48,25 +63,73 @@ class PinakesWebPagePlaces(
     private val notPlaceKept: Long = NOT_PLACE_KEPT_MS,
 ) : WebPagePlaces {
     private val lock = Mutex()
+    private val permits = Semaphore(PARALLEL_CHECKS)
+
+    /** By page: the answer of its card read that runs now. */
+    private val reading = HashMap<String, CompletableDeferred<Boolean?>>()
 
     /** By page: whether it is a place, and when a server said so. */
     private val answers = HashMap<String, Pair<Boolean, Long>>()
 
     override fun needsCard(target: String): Boolean = rule(target)
 
-    override suspend fun known(uri: String): Boolean? {
-        val known = lock.withLock { answers[uri] } ?: return null
+    override suspend fun known(uri: String): Boolean? = lock.withLock { keptAnswer(uri) }
+
+    /** The kept answer for [uri] that still holds; under [lock]. */
+    private fun keptAnswer(uri: String): Boolean? {
+        val known = answers[uri] ?: return null
         return known.first.takeIf { it || now() - known.second < notPlaceKept }
     }
 
     override suspend fun isPlace(uri: String): Boolean? {
-        known(uri)?.let { return it }
-        val place =
-            when (val answer = data().card(listOf(uri))) {
-                is SourceAnswer.Answered -> answer.value?.isPlace == true
-                SourceAnswer.Unreachable -> return null
+        while (true) {
+            var own = false
+            // One look under the lock, so a read that ends meanwhile is not started again.
+            val answer =
+                lock.withLock {
+                    keptAnswer(uri)?.let { return it }
+                    reading.getOrPut(uri) { CompletableDeferred<Boolean?>().also { own = true } }
+                }
+            if (own) return read(uri, answer)
+            try {
+                return answer.await()
+            } catch (e: CancellationException) {
+                // This caller was cancelled itself, or the read it waited for was: then it reads.
+                currentCoroutineContext().ensureActive()
             }
-        lock.withLock { if (answers.size < kept || uri in answers) answers[uri] = place to now() }
+        }
+    }
+
+    /**
+     * Reads the card of [uri] and hands its answer, or its failure (also its cancellation), to those
+     * waiting on [answer]. The bookkeeping cannot be cancelled, so no one waits on a read that ended.
+     */
+    private suspend fun read(
+        uri: String,
+        answer: CompletableDeferred<Boolean?>,
+    ): Boolean? {
+        val read =
+            runCatching {
+                permits.withPermit {
+                    when (val card = data().card(listOf(uri))) {
+                        is SourceAnswer.Answered -> card.value?.isPlace == true
+                        SourceAnswer.Unreachable -> null
+                    }
+                }
+            }
+        val place = read.getOrNull()
+        val failure = read.exceptionOrNull()
+        withContext(NonCancellable) {
+            lock.withLock {
+                try {
+                    if (place != null && (answers.size < kept || uri in answers)) answers[uri] = place to now()
+                } finally {
+                    reading.remove(uri)
+                    if (failure != null) answer.completeExceptionally(failure) else answer.complete(place)
+                }
+            }
+        }
+        failure?.let { throw it }
         return place
     }
 
@@ -77,15 +140,19 @@ class PinakesWebPagePlaces(
 }
 
 /**
- * At most this many bookmarked or tagged web pages are asked about in one refresh; the others are
- * kept until a later refresh asks about them. Pages with a kept answer ([WebPagePlaces.known]) are not asked and
- * do not count, so each refresh reaches pages the ones before did not.
+ * At most this many bookmarked or tagged web pages are asked about in one account refresh, and at
+ * most this many web pages in collections in one read of the collections ([to.pubky.maps.write.knownListPages]);
+ * the others are kept until a later one asks about them. Pages with a kept answer
+ * ([WebPagePlaces.known]) are not asked and do not count, so each refresh or read reaches pages the
+ * ones before did not.
  */
 internal const val MAX_PAGE_CHECKS = 100
 
 /**
- * Web pages are checked this many at a time: the place pages and the map's Pubky places share
- * Pinakes, and a burst could make a server refuse them.
+ * Web pages are checked this many at a time, by each caller of [notPlaces] (so it stops soon once no
+ * server answers) and by [PinakesWebPagePlaces] for all of them together. With every server down,
+ * each caller's pages already waiting for one of the shared reads are still asked about, so the
+ * account refresh and a collections read at once make up to twice this many reads, in two rounds.
  */
 private const val PARALLEL_CHECKS = 3
 

@@ -1,9 +1,14 @@
 package to.pubky.maps.account
 
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.currentTime
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeoutOrNull
 import to.pubky.maps.cache.CachedAccount
 import to.pubky.maps.cache.CachedBookmark
 import to.pubky.maps.cache.CachedTag
@@ -21,10 +26,12 @@ import to.pubky.maps.place.parsePinakesCard
 import to.pubky.maps.search.SourceAnswer
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 internal const val MUSEUM = "https://www.kunsthaus.ch/"
 internal const val ARTICLE = "https://blog.example.org/an-article"
@@ -306,15 +313,129 @@ class WebPagePlacesTest {
 
             assertEquals(listOf(MUSEUM, ARTICLE, ARTICLE), data.asked)
         }
+
+    @Test
+    fun atMostThreeCardsAreReadAtATimeWhenTheAccountAndTheCollectionsCheckTogether() =
+        runTest {
+            val data = CardData(answerTime = 1.seconds)
+            val places = PinakesWebPagePlaces(rule = { true }, data = { data }, now = { 0 })
+            val bookmarked = List(6) { "https://example.org/b$it" }
+            val collected = List(6) { "https://example.org/c$it" }
+
+            listOf(bookmarked, collected).map { async { notPlaces(it, places) } }.awaitAll()
+
+            assertEquals(3, data.mostReading)
+            assertEquals(12, data.asked.size)
+            assertEquals(4000, currentTime, "12 reads, 3 at a time")
+        }
+
+    @Test
+    fun aPageBookmarkedAndInACollectionIsReadOnceWhenBothCheckIt() =
+        runTest {
+            val data = CardData(answerTime = 1.seconds)
+            val places = PinakesWebPagePlaces(rule = { true }, data = { data }, now = { 0 })
+
+            val (account, collections) =
+                listOf(listOf(ARTICLE, MUSEUM), listOf(MUSEUM, ARTICLE)).map { async { notPlaces(it, places) } }.awaitAll()
+
+            assertEquals(setOf(ARTICLE), account)
+            assertEquals(setOf(ARTICLE), collections)
+            assertEquals(listOf(ARTICLE, MUSEUM), data.asked)
+            assertEquals(1000, currentTime)
+        }
+
+    @Test
+    fun noServerAnsweringIsHandedToThoseWaitingAndAskedAgainLater() =
+        runTest {
+            val data = CardData(answerTime = 1.seconds)
+            data.down = true
+            val places = PinakesWebPagePlaces(rule = { true }, data = { data }, now = { 0 })
+
+            assertEquals(listOf(null, null), List(2) { async { places.isPlace(ARTICLE) } }.awaitAll())
+            assertEquals(listOf(ARTICLE), data.asked)
+            data.down = false
+            assertEquals(false, places.isPlace(ARTICLE))
+            assertEquals(listOf(ARTICLE, ARTICLE), data.asked)
+        }
+
+    @Test
+    fun whenTheReadAPageWaitsForIsCancelledTheOneWaitingReadsIt() =
+        runTest {
+            val data = CardData(answerTime = 1.seconds)
+            val places = PinakesWebPagePlaces(rule = { true }, data = { data }, now = { 0 })
+
+            val cancelled = async { withTimeoutOrNull(500) { places.isPlace(ARTICLE) } }
+            val waiting =
+                async {
+                    delay(100)
+                    places.isPlace(ARTICLE)
+                }
+
+            assertNull(cancelled.await(), "out of its budget")
+            assertEquals(false, waiting.await())
+            assertEquals(listOf(ARTICLE, ARTICLE), data.asked)
+            assertEquals(1500, currentTime, "read again when the first read was cancelled")
+        }
+
+    @Test
+    fun aCallerCancelledWhileItWaitsLeavesTheReadToTheOneThatAsked() =
+        runTest {
+            val data = CardData(answerTime = 1.seconds)
+            val places = PinakesWebPagePlaces(rule = { true }, data = { data }, now = { 0 })
+
+            val asking = async { places.isPlace(ARTICLE) }
+            val waiting = launch { places.isPlace(ARTICLE) }
+            runCurrent()
+            waiting.cancel()
+
+            assertEquals(false, asking.await())
+            assertTrue(waiting.isCancelled)
+            assertEquals(listOf(ARTICLE), data.asked)
+        }
+
+    @Test
+    fun aReadThatFailsFailsThoseWaitingAndTheNextCallReadsAgain() =
+        runTest {
+            val data = CardData(answerTime = 1.seconds)
+            data.broken = true
+            val places = PinakesWebPagePlaces(rule = { true }, data = { data }, now = { 0 })
+
+            val calls = List(2) { async { runCatching { places.isPlace(ARTICLE) } } }.awaitAll()
+
+            calls.forEach { assertFailsWith<IllegalStateException> { it.getOrThrow() } }
+            assertEquals(listOf(ARTICLE), data.asked)
+            data.broken = false
+            assertEquals(false, places.isPlace(ARTICLE))
+            assertEquals(listOf(ARTICLE, ARTICLE), data.asked)
+        }
 }
 
-/** Pinakes with the Kunsthaus' card under [MUSEUM] and an article's under [ARTICLE]; nothing else is asked. */
-private class CardData : PlaceData {
+/**
+ * Pinakes with the Kunsthaus' card under [MUSEUM] and an article's under [ARTICLE]; nothing else is
+ * asked. Each card read takes [answerTime].
+ */
+private class CardData(
+    private val answerTime: Duration = Duration.ZERO,
+) : PlaceData {
     var down = false
+
+    /** Each read throws. */
+    var broken = false
     val asked = mutableListOf<String>()
+    private var reading = 0
+
+    /** The most card reads that ran at once. */
+    var mostReading = 0
 
     override suspend fun card(uris: List<String>): SourceAnswer<PlaceCardInfo?> {
         asked += uris
+        mostReading = maxOf(mostReading, ++reading)
+        try {
+            delay(answerTime)
+        } finally {
+            reading--
+        }
+        check(!broken) { "broken" }
         if (down) return SourceAnswer.Unreachable
         val card =
             when (uris.single()) {
