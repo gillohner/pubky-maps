@@ -47,7 +47,6 @@ import to.pubky.maps.settings.SettingsScreen
 import to.pubky.maps.settings.StoredOnlineScreen
 import to.pubky.maps.settings.parseLicences
 import to.pubky.maps.status.ServicePart
-import to.pubky.maps.ui.PubkyMapsTheme
 import to.pubky.maps.update.AvailableUpdate
 import to.pubky.maps.update.UpdateChannel
 import to.pubky.maps.update.UpdateDialog
@@ -90,7 +89,7 @@ class ScreenshotTest {
                     if (largeFont) fontScale(2f)
                 },
         ) {
-            PubkyMapsTheme { content() }
+            ScreenshotTheme { content() }
         }
     }
 

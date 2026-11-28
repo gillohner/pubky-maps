@@ -31,7 +31,6 @@ import to.pubky.maps.offline.OfflineMapsScreen
 import to.pubky.maps.offline.OfflineMapsState
 import to.pubky.maps.search.SearchActions
 import to.pubky.maps.search.SearchState
-import to.pubky.maps.ui.PubkyMapsTheme
 
 /**
  * Screenshots of offline maps (phone 412x915 dp, tablet 1280x800 dp, light and dark): the list with
@@ -69,7 +68,7 @@ class OfflineMapsScreenshotTest {
                     if (largeFont) fontScale(2f)
                 },
         ) {
-            PubkyMapsTheme { content() }
+            ScreenshotTheme { content() }
         }
     }
 

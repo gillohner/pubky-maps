@@ -46,7 +46,6 @@ import to.pubky.maps.place.PlaceSource
 import to.pubky.maps.place.PlaceTag
 import to.pubky.maps.place.PlaceWriteActions
 import to.pubky.maps.place.SheetStop
-import to.pubky.maps.ui.PubkyMapsTheme
 import to.pubky.maps.write.Kept
 import to.pubky.maps.write.ListChoice
 import to.pubky.maps.write.ListPage
@@ -106,7 +105,7 @@ class WriteScreenshotTest {
                     if (largeFont) fontScale(2f)
                 },
         ) {
-            PubkyMapsTheme { content() }
+            ScreenshotTheme { content() }
         }
     }
 

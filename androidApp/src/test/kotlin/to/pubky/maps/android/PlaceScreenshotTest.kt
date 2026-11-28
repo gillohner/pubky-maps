@@ -68,7 +68,6 @@ import to.pubky.maps.routing.RouteStatus
 import to.pubky.maps.routing.RouteStep
 import to.pubky.maps.routing.TravelMode
 import to.pubky.maps.routing.Turn
-import to.pubky.maps.ui.PubkyMapsTheme
 
 /**
  * Screenshots of the place page (phone 412x915 dp, tablet 1280x800 dp, light and dark): a place with
@@ -114,7 +113,7 @@ class PlaceScreenshotTest {
                     if (largeFont) fontScale(2f)
                 },
         ) {
-            PubkyMapsTheme {
+            ScreenshotTheme {
                 CompositionLocalProvider(LocalRemoteImage provides if (imagesFail) FailingImage else StandInImage) { content() }
             }
         }

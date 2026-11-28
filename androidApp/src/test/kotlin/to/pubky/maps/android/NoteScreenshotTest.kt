@@ -19,7 +19,6 @@ import to.pubky.maps.osm.NoteAnswer
 import to.pubky.maps.osm.NotePage
 import to.pubky.maps.osm.NoteSend
 import to.pubky.maps.osm.NoteTarget
-import to.pubky.maps.ui.PubkyMapsTheme
 
 /**
  * Screenshots of the note page that reports a map problem to OpenStreetMap (phone 412x915 dp, tablet
@@ -55,7 +54,7 @@ class NoteScreenshotTest {
                     if (largeFont) fontScale(2f)
                 },
         ) {
-            PubkyMapsTheme { content() }
+            ScreenshotTheme { content() }
         }
     }
 

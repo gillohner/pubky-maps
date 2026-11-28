@@ -26,7 +26,6 @@ import to.pubky.maps.place.PlaceSource
 import to.pubky.maps.place.RemoteImageContent
 import to.pubky.maps.place.SheetStop
 import to.pubky.maps.place.StreetPhoto
-import to.pubky.maps.ui.PubkyMapsTheme
 
 /**
  * Screenshots of a place page with Panoramax' street-level photos (phone at its top stop and at a
@@ -108,7 +107,7 @@ class StreetPhotosScreenshotTest {
                     if (largeFont) fontScale(2f)
                 },
         ) {
-            PubkyMapsTheme { CompositionLocalProvider(LocalRemoteImage provides StreetImage) { content() } }
+            ScreenshotTheme { CompositionLocalProvider(LocalRemoteImage provides StreetImage) { content() } }
         }
     }
 

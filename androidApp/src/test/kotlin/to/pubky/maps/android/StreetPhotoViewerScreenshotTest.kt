@@ -26,7 +26,6 @@ import to.pubky.maps.place.RemoteImageContent
 import to.pubky.maps.place.StreetPhoto
 import to.pubky.maps.place.StreetPhotoViewer
 import to.pubky.maps.place.StreetPhotosState
-import to.pubky.maps.ui.PubkyMapsTheme
 
 /**
  * Screenshots of the street-level photo viewer (phone, tablet, light and dark, a 200 % font): a flat
@@ -84,7 +83,7 @@ class StreetPhotoViewerScreenshotTest {
                     if (largeFont) fontScale(2f)
                 },
         ) {
-            PubkyMapsTheme {
+            ScreenshotTheme {
                 CompositionLocalProvider(LocalRemoteImage provides StandInPhoto) {
                     StreetPhotoViewer(
                         photos = StreetPhotosState(place, photos, loading = false),

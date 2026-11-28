@@ -70,8 +70,7 @@ class GuidanceScreenshotTest {
                     if (largeFont) fontScale(2f)
                 },
         ) {
-            to.pubky.maps.ui
-                .PubkyMapsTheme { content() }
+            ScreenshotTheme { content() }
         }
     }
 
