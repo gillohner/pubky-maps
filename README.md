@@ -255,9 +255,16 @@ note again as new.
 taken 3 to 40 m from the place's own point with the place within 60° of where the camera looked (or
 360° ones), nearest first, one per sequence (a walk or drive past takes many nearly equal frames), at
 most six in a row that scrolls sideways. Each shows who took it and the month, is one TalkBack stop
-naming both, and opens in the Panoramax viewer of the instance that holds it; under them, each
-licence of the photos shown (CC BY-SA 4.0, Etalab 2.0) opens its text; each thumbnail loads from the
-Panoramax instance that holds it. They come from the Panoramax
+naming both, and opens in the app's photo viewer; under them, each licence of the photos shown
+(CC BY-SA 4.0, Etalab 2.0) opens its text; each thumbnail loads from the Panoramax instance that
+holds it. The viewer shows the photo large on a dark stage (the instance's 2048 px copy): a flat
+photo fitted whole, its thumbnail standing in until the copy loads; a 360° one at the least size that
+covers the stage, turned so the place is in the middle (from where the photo was taken and where its
+camera looked) and dragged around (one without a larger copy is shown flat, as Panoramax' thumbnail
+of a 360° photo is a crop of its front). Under it (beside it on a phone on its side): who took it, when, its licence (opens its text), Open
+in Panoramax (the instance's own viewer, to walk the street) and the place's other photos to switch
+to, the one shown outlined. Opened again after the app was closed, it asks Panoramax for the place
+once more. They come from the Panoramax
 list (the federation's index `api.panoramax.xyz`, then the OpenStreetMap France and IGN instances), asked
 once per place while the app runs (the answers for the last 32 places are kept; after an outage the
 next opening asks again); the server learns the point of each place opened. A

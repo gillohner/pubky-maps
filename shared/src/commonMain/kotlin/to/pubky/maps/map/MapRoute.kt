@@ -174,6 +174,8 @@ fun MapRoute(
     onOpenSaved: (() -> Unit)? = null,
     /** Opens a note to OpenStreetMap about a place; null where notes are not available. */
     onReportProblem: ((NoteTarget) -> Unit)? = null,
+    /** Opens a place's street-level photo (its id) in the photo viewer, the place's point first. */
+    onOpenStreetPhoto: (GeoPoint, String) -> Unit = { _, _ -> },
     /** Offline maps: the map shows the area picker while they ask for one; null where there are none. */
     offline: OfflineMaps? = null,
     /** Shows the offline maps once a download started from the picker. */
@@ -575,6 +577,7 @@ fun MapRoute(
                 startDirections,
                 directionsUi,
                 onReportProblem,
+                onOpenStreetPhoto,
             ) {
                 sheetMoved = true
             }
@@ -1007,6 +1010,7 @@ private fun rememberPlacePage(
     startDirections: ((String, GeoPoint, Boolean) -> Unit)?,
     directions: DirectionsUi?,
     onReportProblem: ((NoteTarget) -> Unit)?,
+    onOpenStreetPhoto: (GeoPoint, String) -> Unit,
     onSheetMoved: () -> Unit,
 ): PlacePageSlot? {
     LaunchedEffect(shown?.place) {
@@ -1074,6 +1078,7 @@ private fun rememberPlacePage(
             onReportProblem = page.noteTarget?.let { target -> onReportProblem?.let { open -> { open(target) } } },
             routeStart = routeStartChoice(places.directions.takeIf { startDirections != null }, chosenStart, page),
             streetPhotos = streetPhotos?.takeIf { it.point == page.streetPhotoPoint }?.photos.orEmpty(),
+            onOpenStreetPhoto = { photo -> streetPhotos?.point?.let { onOpenStreetPhoto(it, photo.id) } },
         )
     return PlacePageSlot(
         full = stop == SheetStop.Full,

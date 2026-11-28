@@ -758,11 +758,11 @@ class PlaceScreenshotTest {
 }
 
 /** Images load over the network, which tests do not use: a drawn stand-in (sky over a roof line). */
-private val StandInImage: RemoteImageContent = { _, _, modifier, _, _ ->
+private val StandInImage: RemoteImageContent = { _, _, modifier, _, _, _ ->
     Box(modifier.background(Brush.verticalGradient(listOf(Color(0xFF8DB6D9), Color(0xFFC9DCEB), Color(0xFF7A6A5A)))))
 }
 
 /** An image that cannot be loaded: the page leaves it out. */
-internal val FailingImage: RemoteImageContent = { _, _, _, _, onError ->
+internal val FailingImage: RemoteImageContent = { _, _, _, _, _, onError ->
     SideEffect { onError() }
 }

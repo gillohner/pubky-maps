@@ -59,6 +59,10 @@ class StreetPhotosTest {
                 taken = "Jul 2025",
                 licence = "CC-BY-SA-4.0",
                 licenceUrl = "https://creativecommons.org/licenses/by-sa/4.0/",
+                photoUrl = "https://panoramax.openstreetmap.fr/derivates/88/94/9d/59/c992-4016-ac51-5b983e8f5426/sd.jpg",
+                panorama = true,
+                point = GeoPoint(47.218295565, -1.553600284),
+                heading = 250.0,
             ),
             first,
         )
@@ -68,6 +72,78 @@ class StreetPhotosTest {
         assertEquals("https://alliance.numerique.gouv.fr/licence-ouverte-open-licence/", ign.licenceUrl)
         assertTrue(ign.viewerUrl.startsWith("https://panoramax.ign.fr/#focus=pic&pic="))
         assertEquals(photos.size, photos.map { it.id }.toSet().size)
+    }
+
+    @Test
+    fun theViewerShowsAPhotosStandardCopyAndTurnsOnlyThe360Ones() {
+        val photos = parsePanoramaxSearch(nantes, "https://api.panoramax.xyz")
+        assertEquals(listOf(true, true, false, false), photos.map { it.panorama })
+        // A camera of 95° and one that names no field of view take flat photos.
+        val flat = photos[3]
+        assertTrue(flat.photoUrl.endsWith("/sd.jpg"), flat.photoUrl)
+        assertEquals(306.0, flat.heading)
+        assertEquals(GeoPoint(47.218289218, -1.553474814), flat.point)
+    }
+
+    @Test
+    fun aPhotoWithoutAStandardCopyShowsItsThumbnailAndOneWithoutAPointOrHeadingHasNone() {
+        val id = "00000000-0000-4000-8000-000000000001"
+        val bare = parsePanoramaxSearch("""{"features":[${feature(id)}]}""", "https://api.panoramax.xyz").single()
+        assertEquals(bare.thumbnailUrl, bare.photoUrl)
+        assertNull(bare.point)
+        assertNull(bare.heading)
+        assertEquals(false, bare.panorama)
+        val odd =
+            """{"features":[{"id":"$id","assets":{"thumb":{"href":"https://x.test/t.jpg"},"sd":{"href":"file:///sdcard/sd.jpg"}},
+                "geometry":{"type":"Point","coordinates":[200.0,47.2]},
+                "properties":{"view:azimuth":"250","pers:interior_orientation":{"field_of_view":"360"}}}]}"""
+        val refused = parsePanoramaxSearch(odd, "https://api.panoramax.xyz").single()
+        assertEquals("https://x.test/t.jpg", refused.photoUrl)
+        // A 360° photo without its larger copy has only a crop of its front: shown flat.
+        val cropOnly =
+            """{"features":[{"id":"$id","assets":{"thumb":{"href":"https://x.test/t.jpg"}},
+                "properties":{"pers:interior_orientation":{"field_of_view":360}}}]}"""
+        assertEquals(false, parsePanoramaxSearch(cropOnly, "https://api.panoramax.xyz").single().panorama)
+        assertEquals(
+            true,
+            parsePanoramaxSearch(
+                cropOnly.replace("}},", "},\"sd\":{\"href\":\"https://x.test/sd.jpg\"}},"),
+                "https://api.panoramax.xyz",
+            ).single().panorama,
+        )
+        assertNull(refused.point)
+        assertNull(refused.heading)
+        assertEquals(false, refused.panorama)
+    }
+
+    @Test
+    fun a360PhotoOpensTurnedToThePlace() {
+        val at = GeoPoint(0.0, 0.0)
+
+        fun facing(
+            heading: Double?,
+            place: GeoPoint,
+            point: GeoPoint? = at,
+        ) = panoramaFacing(
+            StreetPhoto("p", "https://x.test/t.jpg", "https://x.test/#p", null, null, null, null, point = point, heading = heading),
+            place,
+        )
+        val east = GeoPoint(0.0, 0.001)
+        // The middle looks where the camera looked; the place to its right is right of the middle.
+        assertEquals(0.5, facing(90.0, east), 1e-6)
+        assertEquals(0.75, facing(0.0, east), 1e-6)
+        assertEquals(0.25, facing(180.0, east), 1e-6)
+        // Behind the camera: the photo's left edge (its right edge is the same direction).
+        assertEquals(0.0, facing(270.0, east), 1e-6)
+        assertEquals(0.5, facing(null, east))
+        assertEquals(0.5, facing(90.0, east, point = null))
+        assertEquals(0.5, facing(90.0, at))
+        // The Nantes photo looks west-south-west (250°); the place is north of it, 110° to its right.
+        val nantes = parsePanoramaxSearch(nantes, "https://api.panoramax.xyz").first()
+        assertEquals(0.5 + 110.0 / 360, panoramaFacing(nantes, GeoPoint(47.2184, -1.5536)), 0.002)
+        assertEquals(0.0, bearingOf(at, GeoPoint(0.001, 0.0)), 1e-9)
+        assertEquals(90.0, bearingOf(at, east), 1e-9)
+        assertEquals(270.0, bearingOf(east, at), 1e-9)
     }
 
     @Test

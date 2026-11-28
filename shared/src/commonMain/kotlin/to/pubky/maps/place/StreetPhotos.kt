@@ -24,6 +24,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import to.pubky.maps.links.GeoPoint
@@ -32,6 +33,10 @@ import to.pubky.maps.search.ServerFallback
 import to.pubky.maps.search.SourceAnswer
 import to.pubky.maps.status.ServiceHealth
 import to.pubky.maps.status.ServicePart
+import kotlin.math.PI
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlin.time.Duration.Companion.seconds
 
 /** A street-level photo that shows a place, from a Panoramax instance. */
@@ -49,6 +54,17 @@ data class StreetPhoto(
     val licence: String?,
     /** The licence's text. */
     val licenceUrl: String?,
+    /** The copy the app's viewer shows: the instance's standard one (2048 px wide), else the thumbnail. */
+    val photoUrl: String = thumbnailUrl,
+    /**
+     * A 360° photo (equirectangular, twice as wide as high) with a larger copy, which the viewer turns
+     * around; one with only a thumbnail (Panoramax crops a 360° one's to its front) is shown flat.
+     */
+    val panorama: Boolean = false,
+    /** Where it was taken; null when the answer does not say. */
+    val point: GeoPoint? = null,
+    /** Where the camera looked (a 360° photo's middle), in degrees from north; null when the answer does not say. */
+    val heading: Double? = null,
 )
 
 /** What the Panoramax servers answered for one place. */
@@ -144,6 +160,7 @@ fun parsePanoramaxSearch(
             ((assets?.get("thumb") as? JsonObject)?.string("href") ?: properties.string("geovisio:thumbnail"))
                 ?.takeIf(::isWebAddress)
                 ?: continue
+        val photo = (assets?.get("sd") as? JsonObject)?.string("href")?.takeIf(::isWebAddress) ?: thumbnail
         val sequence = feature.string("collection")
         if (sequence != null && !sequences.add(sequence)) continue
         val links = (feature["links"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
@@ -168,9 +185,45 @@ fun parsePanoramaxSearch(
                 taken = properties.string("datetime")?.let(::monthOf),
                 licence = properties.string("license"),
                 licenceUrl = links.firstOrNull { it.string("rel") == "license" }?.string("href")?.takeIf(::isWebAddress),
+                photoUrl = photo,
+                // Without its larger copy a 360° photo has only its thumbnail, a crop of its front: shown flat.
+                panorama = photo != thumbnail && (properties["pers:interior_orientation"] as? JsonObject)?.number("field_of_view") == 360.0,
+                point = pointOf(feature["geometry"]),
+                heading = properties.number("view:azimuth")?.takeIf { it.isFinite() },
             )
     }
     return photos
+}
+
+/**
+ * Where across a 360° [photo] the place at [place] is, as a share of the photo's width from its left
+ * edge: the middle of an equirectangular photo looks where the camera looked ([StreetPhoto.heading]),
+ * its edges behind the camera. The middle when the photo does not say where it was taken or which way
+ * it looked, or was taken on the place's point.
+ */
+fun panoramaFacing(
+    photo: StreetPhoto,
+    place: GeoPoint,
+): Double {
+    val from = photo.point ?: return 0.5
+    val heading = photo.heading ?: return 0.5
+    if (from == place) return 0.5
+    val offset = ((bearingOf(from, place) - heading) % 360 + 540) % 360 - 180
+    return 0.5 + offset / 360
+}
+
+/** The initial great-circle bearing from [from] to [to], in degrees from north (0 to 360). */
+internal fun bearingOf(
+    from: GeoPoint,
+    to: GeoPoint,
+): Double {
+    val radians = PI / 180
+    val lat1 = from.lat * radians
+    val lat2 = to.lat * radians
+    val dLon = (to.lon - from.lon) * radians
+    val y = sin(dLon) * cos(lat2)
+    val x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon)
+    return (atan2(y, x) / radians + 360) % 360
 }
 
 /**
@@ -292,6 +345,19 @@ private fun originOf(url: String): String? =
         ?.let { URLBuilder(protocol = it.protocol, host = it.host, port = it.specifiedPort).buildString().trimEnd('/') }
 
 private fun JsonObject.string(key: String): String? = (get(key) as? JsonPrimitive)?.contentOrNull
+
+private fun JsonObject.number(key: String): Double? = (get(key) as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull
+
+/** A GeoJSON point's place; null for anything else. */
+private fun pointOf(geometry: JsonElement?): GeoPoint? {
+    val point = geometry as? JsonObject ?: return null
+    if (point.string("type") != "Point") return null
+    val coordinates = (point["coordinates"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.doubleOrNull } ?: return null
+    if (coordinates.size < 2) return null
+    val (lon, lat) = coordinates
+    if (lat !in -90.0..90.0 || lon !in -180.0..180.0) return null
+    return GeoPoint(lat, lon)
+}
 
 private fun JsonArray?.orEmpty(): List<JsonElement> = this ?: emptyList()
 

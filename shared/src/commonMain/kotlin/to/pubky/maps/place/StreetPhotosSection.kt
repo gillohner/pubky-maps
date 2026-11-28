@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -33,13 +34,13 @@ import androidx.compose.ui.unit.dp
 /**
  * Street-level photos that show the place, nearest first, as Google Maps shows Street View beside a
  * place's photos: each with who took it and when (its licence asks for the author), a tap opens it in
- * Panoramax' viewer, where the user can look around and walk the street. Under them, the licences
- * of the photos shown, each opening its text. A photo whose thumbnail fails is left out; with none
- * left, so is the section.
+ * the app's photo viewer ([onOpenPhoto]). Under them, the licences of the photos shown, each opening
+ * its text. A photo whose thumbnail fails is left out; with none left, so is the section.
  */
 @Composable
 internal fun StreetPhotosSection(
     photos: List<StreetPhoto>,
+    onOpenPhoto: (StreetPhoto) -> Unit,
     onOpenLink: (String) -> Unit,
 ) {
     val failed = remember(photos) { mutableStateListOf<String>() }
@@ -49,7 +50,7 @@ internal fun StreetPhotosSection(
         SectionTitle("Street-level photos")
         LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(shown, key = { it.id }) { photo ->
-                StreetPhotoTile(photo, onOpen = { onOpenLink(photo.viewerUrl) }, onFailed = { failed += photo.id })
+                StreetPhotoTile(photo, onOpen = { onOpenPhoto(photo) }, onFailed = { failed += photo.id })
             }
         }
         val licences = shown.mapNotNull { photo -> photo.licence?.let { it to photo.licenceUrl } }.distinctBy { it.first }
@@ -62,7 +63,7 @@ internal fun StreetPhotosSection(
 
 /** A credit line; with a [link] it is a touch target of its own (48 dp high) that opens the licence. */
 @Composable
-private fun LicenceLine(
+internal fun LicenceLine(
     text: String,
     link: String?,
     onOpenLink: (String) -> Unit,
@@ -85,12 +86,7 @@ private fun StreetPhotoTile(
     onOpen: () -> Unit,
     onFailed: () -> Unit,
 ) {
-    val description =
-        listOfNotNull(
-            "Street-level photo",
-            photo.author?.let { "by $it" },
-            photo.taken?.let { "taken $it" },
-        ).joinToString(" ")
+    val description = streetPhotoDescription(photo)
     Column(
         Modifier
             .width(TILE_WIDTH)
@@ -99,7 +95,7 @@ private fun StreetPhotoTile(
             .clearAndSetSemantics {
                 contentDescription = description
                 role = Role.Button
-                onClick(label = "Open in Panoramax") {
+                onClick(label = "Open the photo") {
                     onOpen()
                     true
                 }
@@ -111,6 +107,7 @@ private fun StreetPhotoTile(
             null,
             Modifier.size(TILE_WIDTH, TILE_HEIGHT).clip(RoundedCornerShape(8.dp)),
             true,
+            ContentScale.Crop,
             onFailed,
         )
         Spacer(Modifier.size(4.dp))
@@ -118,6 +115,14 @@ private fun StreetPhotoTile(
         photo.taken?.let { SmallText(it) }
     }
 }
+
+/** What TalkBack says of a street-level photo: who took it and when. */
+internal fun streetPhotoDescription(photo: StreetPhoto): String =
+    listOfNotNull(
+        "Street-level photo",
+        photo.author?.let { "by $it" },
+        photo.taken?.let { "taken $it" },
+    ).joinToString(" ")
 
 /** 4:3, as most street-level cameras take them. */
 private val TILE_WIDTH = 160.dp

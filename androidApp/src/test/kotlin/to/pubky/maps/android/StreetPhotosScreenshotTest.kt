@@ -132,6 +132,6 @@ class StreetPhotosScreenshotTest {
 }
 
 /** A drawn stand-in for a street photo: sky, house fronts, the street. */
-private val StreetImage: RemoteImageContent = { _, _, modifier, _, _ ->
+private val StreetImage: RemoteImageContent = { _, _, modifier, _, _, _ ->
     Box(modifier.background(Brush.verticalGradient(listOf(Color(0xFF9CC3E4), Color(0xFFB9A58E), Color(0xFF6E6A66)))))
 }
