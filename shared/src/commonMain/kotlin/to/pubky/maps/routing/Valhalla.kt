@@ -29,9 +29,10 @@ data class Route(
 /**
  * One step of a route: what to do there ([instruction], the routing server's sentence, "Turn right
  * onto Museumstrasse."), which way it goes ([turn], for its icon), how far the route then goes
- * until the next step ([meters], 0 at the end) and where on the route's line it is ([at], the map
- * shows it there when the step is tapped; [shapeIndex], the index of that point in [Route.points],
- * where guidance takes it as the next step to do until the user is past it).
+ * until the next step ([meters], 0 at the end) and how long that takes ([seconds]), where on the
+ * route's line it is ([at], the map shows it there when the step is tapped; [shapeIndex], the index
+ * of that point in [Route.points], where guidance takes it as the next step to do until the user is
+ * past it), and what guidance says aloud for it ([spoken]; null when the server wrote nothing to say).
  */
 data class RouteStep(
     val instruction: String,
@@ -39,6 +40,20 @@ data class RouteStep(
     val meters: Double,
     val at: GeoPoint,
     val shapeIndex: Int = 0,
+    val seconds: Double = 0.0,
+    val spoken: SpokenStep? = null,
+)
+
+/**
+ * The routing server's sentences to say aloud for a step, written for a voice (Valhalla's verbal
+ * instructions): [alert] well before it ("Turn right onto Museumstrasse."), [before] just before it,
+ * with the step after when that one comes soon ("Turn right onto Museumstrasse. Then Bear right onto
+ * Bahnhofquai."), [after] once the user did it ("Continue for 400 meters."). Each may be missing.
+ */
+data class SpokenStep(
+    val alert: String?,
+    val before: String?,
+    val after: String?,
 )
 
 /** Which way a route step goes. */
@@ -157,7 +172,15 @@ fun parseValhallaRoute(json: String): Route {
             if (maneuver.instruction.isBlank()) continue
             val index = maneuver.beginShapeIndex.coerceIn(0, line.size - 1)
             steps +=
-                RouteStep(maneuver.instruction.trim(), valhallaTurn(maneuver.type), maneuver.length * 1_000, line[index], offset + index)
+                RouteStep(
+                    instruction = maneuver.instruction.trim(),
+                    turn = valhallaTurn(maneuver.type),
+                    meters = maneuver.length * 1_000,
+                    at = line[index],
+                    shapeIndex = offset + index,
+                    seconds = maneuver.time,
+                    spoken = maneuver.spoken(),
+                )
         }
     }
     require(points.size >= 2) { "A route needs two points" }
@@ -232,9 +255,21 @@ private data class ValhallaManeuver(
     val instruction: String = "",
     /** Kilometres, as the request's units ask. */
     val length: Double = 0.0,
+    /** Seconds from this maneuver to the next. */
+    val time: Double = 0.0,
     /** Where the maneuver begins: the index of its point in its leg's [ValhallaLeg.shape]. */
     @SerialName("begin_shape_index") val beginShapeIndex: Int = 0,
-)
+    @SerialName("verbal_transition_alert_instruction") val verbalAlert: String? = null,
+    @SerialName("verbal_pre_transition_instruction") val verbalBefore: String? = null,
+    @SerialName("verbal_post_transition_instruction") val verbalAfter: String? = null,
+) {
+    fun spoken(): SpokenStep? {
+        val spoken = SpokenStep(verbalAlert.sentence(), verbalBefore.sentence(), verbalAfter.sentence())
+        return spoken.takeIf { it.alert != null || it.before != null || it.after != null }
+    }
+
+    private fun String?.sentence(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
+}
 
 @Serializable
 private data class ValhallaSummary(

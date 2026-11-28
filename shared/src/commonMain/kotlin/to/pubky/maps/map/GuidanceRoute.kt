@@ -30,6 +30,8 @@ import to.pubky.maps.routing.Directions
 import to.pubky.maps.routing.DirectionsController
 import to.pubky.maps.routing.GuidanceUi
 import to.pubky.maps.routing.KeepScreenOn
+import to.pubky.maps.routing.VoicePrompts
+import to.pubky.maps.routing.rememberSpeaker
 import to.pubky.maps.ui.SystemBack
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
@@ -50,8 +52,9 @@ private const val GUIDANCE_ROOM_AHEAD = 0.4f
  * A route guiding the user ([Directions.guiding]) on the live map: each position goes to
  * [directions] ([DirectionsController.guide]); the map follows the user at [GUIDANCE_ZOOM], turned to
  * the way the route goes ahead of them and with them low on the screen, until they move it
- * (Re-centre follows again); the screen stays on; Back ends the guidance, which turns the map north
- * and takes the room ahead off again. Null while no route guides the user.
+ * (Re-centre follows again); the screen stays on; guidance speaks its prompts ([VoicePrompts]) while
+ * [voice] is on and the phone can speak; Back ends the guidance, which turns the map north and takes
+ * the room ahead off again. Null while no route guides the user.
  */
 @Composable
 internal fun rememberGuidance(
@@ -61,8 +64,22 @@ internal fun rememberGuidance(
     locationState: LocationState,
     mapState: MapState,
     credits: List<AttributionLink>,
+    voice: Boolean = true,
+    onVoiceChange: (Boolean) -> Unit = {},
 ): GuidanceUi? {
     val guiding = open?.guiding == true
+    // The speech engine only while guiding: it starts with Start and stops with End.
+    val speaker = if (guiding) rememberSpeaker() else null
+    // Each guidance speaks from its start; one turned off and on again goes on from where it is.
+    val prompts = remember(guiding) { VoicePrompts() }
+    LaunchedEffect(directions, speaker, voice, prompts) {
+        if (speaker == null) return@LaunchedEffect
+        if (!voice) {
+            speaker.stop()
+            return@LaunchedEffect
+        }
+        directions.directions.collect { d -> d?.let(prompts::next)?.let(speaker::say) }
+    }
     var following by remember { mutableStateOf(true) }
     var guided by remember { mutableStateOf(false) }
     LaunchedEffect(guiding) {
@@ -133,6 +150,8 @@ internal fun rememberGuidance(
         onRouteAgain = { locationState.lastLocation?.let { directions.routeAgainFrom(it.point) } },
         onEnd = directions::endGuidance,
         credits = credits,
+        voice = voice.takeIf { speaker != null },
+        onVoiceChange = onVoiceChange,
     )
 }
 

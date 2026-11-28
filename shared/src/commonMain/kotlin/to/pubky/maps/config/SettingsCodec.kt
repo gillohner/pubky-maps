@@ -95,6 +95,8 @@ private data class StoredSettings(
     val openIn: Map<String, Boolean> = emptyMap(),
     /** Written only when off, so the default (on) can change for users who never touched it. */
     val followLocalRules: Boolean? = null,
+    /** Written only when off, as [followLocalRules]. */
+    val voiceGuidance: Boolean? = null,
 )
 
 private fun AppSettings.toStored(schemaVersion: Int) =
@@ -111,6 +113,7 @@ private fun AppSettings.toStored(schemaVersion: Int) =
         storage = storageChoices.entries.associate { it.key.key to it.value.key },
         openIn = openInChoices.mapKeys { it.key.key },
         followLocalRules = if (followLocalRules) null else false,
+        voiceGuidance = if (voiceGuidance) null else false,
     )
 
 private fun StoredSettings.toSettings(): AppSettings {
@@ -141,5 +144,5 @@ private fun StoredSettings.toSettings(): AppSettings {
                 kind to choice
             }.toMap()
     val openInChoices = openIn.entries.mapNotNull { (key, on) -> OpenInApp.fromKey(key)?.let { it to on } }.toMap()
-    return AppSettings(serverOverrides, storageChoices, openInChoices, followLocalRules ?: true)
+    return AppSettings(serverOverrides, storageChoices, openInChoices, followLocalRules ?: true, voiceGuidance ?: true)
 }

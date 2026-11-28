@@ -1,6 +1,7 @@
 package to.pubky.maps.routing
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -21,8 +23,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -47,6 +52,10 @@ data class GuidanceUi(
     val onEnd: () -> Unit,
     /** The routing server's credits and the link to report a map error, as under the route on its card. */
     val credits: List<AttributionLink>,
+    /** Whether guidance speaks ([VoicePrompts]); null where the phone cannot speak, which shows no voice button. */
+    val voice: Boolean? = null,
+    /** Switches the voice on or off. */
+    val onVoiceChange: (Boolean) -> Unit = {},
 )
 
 /**
@@ -179,8 +188,9 @@ fun GuidanceBanner(
 
 /**
  * The bar under the map while a route guides the user: the time and the way left and when they get
- * there, End, the routing server's credits under them while its route is on the map, and Re-centre
- * once they moved the map away from where they are.
+ * there, End, the routing server's credits under them while its route is on the map; over it at the
+ * end, Re-centre once they moved the map away from where they are, and the voice's switch where the
+ * phone can speak (a round button with a speaker, as Google Maps' sound button beside the map).
  */
 @Composable
 fun GuidanceBar(
@@ -188,11 +198,16 @@ fun GuidanceBar(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (!ui.following) {
-            Button(onClick = ui.onRecenter) {
-                Icon(RoutingIcons.Navigation, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Re-centre")
+        if (!ui.following || ui.voice != null) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (!ui.following) {
+                    Button(onClick = ui.onRecenter) {
+                        Icon(RoutingIcons.Navigation, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Re-centre")
+                    }
+                }
+                if (ui.voice != null) VoiceSwitch(ui.voice, ui.onVoiceChange)
             }
         }
         Surface(
@@ -231,6 +246,35 @@ fun GuidanceBar(
         }
     }
 }
+
+/** Guidance's voice on or off: TalkBack reads it as the switch "Voice guidance", on or off. */
+@Composable
+private fun VoiceSwitch(
+    on: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
+    Surface(
+        checked = on,
+        onCheckedChange = onChange,
+        modifier =
+            Modifier.size(VOICE_SWITCH_SIZE).semantics {
+                contentDescription = "Voice guidance"
+                role = Role.Switch
+            },
+        shape = CircleShape,
+        color = MapSurfaces.control,
+        border = MapSurfaces.edge,
+        contentColor = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        shadowElevation = 3.dp,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(if (on) RoutingIcons.VolumeUp else RoutingIcons.VolumeOff, contentDescription = null)
+        }
+    }
+}
+
+/** As the map's own round buttons beside it. */
+private val VOICE_SWITCH_SIZE = 48.dp
 
 private fun GuidanceIcon.vector(directions: Directions): ImageVector =
     when (this) {

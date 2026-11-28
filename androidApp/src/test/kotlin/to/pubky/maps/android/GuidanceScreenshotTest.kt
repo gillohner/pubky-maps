@@ -37,7 +37,8 @@ import to.pubky.maps.status.ServicePart
 /**
  * Screenshots of the map while a route guides the user (phone 412x915 dp, tablet 1280x800 dp, light
  * and dark): the next step's banner on top, the time left and End at the bottom; off the route with a
- * new route to ask for and Re-centre after the user moved the map; arrived; at the largest font.
+ * new route to ask for and Re-centre after the user moved the map; arrived; at the largest font; the
+ * voice's switch on, off, and missing where the phone cannot speak.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -113,6 +114,8 @@ class GuidanceScreenshotTest {
         progress: RouteProgress?,
         following: Boolean = true,
         status: RouteStatus = RouteStatus.Found(route, "https://valhalla1.openstreetmap.de"),
+        // On a phone that can speak, the voice's switch is over the bar.
+        voice: Boolean? = true,
     ) = GuidanceUi(
         directions = Directions("osm:relation/3768127", kunsthaus, TravelMode.Car, hb, status, guiding = true, progress = progress),
         placeName = "Kunsthaus Zürich",
@@ -122,6 +125,7 @@ class GuidanceScreenshotTest {
         onRouteAgain = {},
         onEnd = {},
         credits = routeCredits(ServerDefaults.lists, (status as? RouteStatus.Found)?.server),
+        voice = voice,
     )
 
     /** 120 m off the route, the map following the user, the directions [changed]. */
@@ -167,6 +171,17 @@ class GuidanceScreenshotTest {
 
     @Test
     fun nextStepLargeFontPhoneLight() = capture("guidance", Device.Phone, dark = false, largeFont = true) { Guiding(guidance(onTheWay)) }
+
+    /** The voice switched off: the speaker crossed out, in the control colour instead of the app's. */
+    @Test
+    fun voiceOffPhoneLight() = capture("guidance-voice-off", Device.Phone, dark = false) { Guiding(guidance(onTheWay, voice = false)) }
+
+    @Test
+    fun voiceOffPhoneDark() = capture("guidance-voice-off", Device.Phone, dark = true) { Guiding(guidance(onTheWay, voice = false)) }
+
+    /** A phone without a speech engine or an English voice: no voice switch. */
+    @Test
+    fun noVoicePhoneLight() = capture("guidance-no-voice", Device.Phone, dark = false) { Guiding(guidance(onTheWay, voice = null)) }
 
     /** Off the route, the map moved by the user: Find a new route in the banner, Re-centre over the bar. */
     @Test

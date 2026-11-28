@@ -44,9 +44,42 @@ class ValhallaTest {
                 RouteStep("Bear right onto Heimplatz.", Turn.SlightRight, 81.0, at[7], index[7]),
                 RouteStep("Your destination is on the right.", Turn.Arrive, 0.0, at[8], index[8]),
             ),
-            route.steps.map { it.copy(meters = round(it.meters)) },
+            route.steps.map { it.copy(meters = round(it.meters), seconds = 0.0, spoken = null) },
         )
         assertEquals(route.points.last(), route.steps.last().at)
+    }
+
+    @Test
+    fun aStepKeepsItsTimeAndWhatToSayAloud() {
+        val steps = parseValhallaRoute(Fixtures.read("hauptbahnhof-kunsthaus.valhalla.json")).steps
+        assertEquals(listOf(18.0, 11.4, 5.8, 77.2, 70.7, 40.7, 50.0, 15.5, 0.0), steps.map { round(it.seconds * 10) / 10 })
+        // Valhalla's verbal instructions: the depart step has no alert, the arrival nothing after it.
+        assertEquals(
+            SpokenStep(null, "Drive north. Then, in 40 meters, Turn right onto Museumstrasse.", "Continue for 40 meters."),
+            steps[0].spoken,
+        )
+        assertEquals(
+            SpokenStep(
+                "Turn right onto Museumstrasse.",
+                "Turn right onto Museumstrasse. Then Bear right onto Bahnhofquai.",
+                "Continue for 50 meters.",
+            ),
+            steps[1].spoken,
+        )
+        assertEquals(SpokenStep("Your destination will be on the right.", "Your destination is on the right.", null), steps.last().spoken)
+    }
+
+    @Test
+    fun aStepWithNothingToSayHasNoSpokenSentences() {
+        val json =
+            """{"trip":{"legs":[{"shape":"${encode(GeoPoint(1.0, 2.0), GeoPoint(1.5, 2.5))}","maneuvers":[""" +
+                """{"type":1,"instruction":"Walk east.","length":0.5,"verbal_pre_transition_instruction":" "},""" +
+                """{"type":6,"instruction":"You have arrived.","begin_shape_index":1,""" +
+                """"verbal_post_transition_instruction":" Done. "}]}],""" +
+                """"summary":{"time":60,"length":0.5}}}"""
+        val steps = parseValhallaRoute(json).steps
+        assertNull(steps[0].spoken)
+        assertEquals(SpokenStep(null, null, "Done."), steps[1].spoken)
     }
 
     @Test
