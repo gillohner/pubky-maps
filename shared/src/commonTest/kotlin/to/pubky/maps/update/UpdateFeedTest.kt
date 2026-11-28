@@ -193,12 +193,13 @@ class UpdateFeedTest {
 
     @Test
     fun offersOnlyNewerBuilds() {
-        val feed = (read(signedFile(goodFeed.toString())) as FeedReadResult.Valid).feed
-        assertIs<CheckResult.Available>(decide(feed, installed(1_000_011)))
-        assertEquals(CheckResult.UpToDate("0.1.0-edge.12"), decide(feed, installed(1_000_012)))
+        val file = signedFile(goodFeed.toString()).decodeToString()
+        val feed = (read(file.encodeToByteArray()) as FeedReadResult.Valid).feed
+        assertEquals(CheckResult.Available(feed, file), decide(feed, installed(1_000_011), file))
+        assertEquals(CheckResult.UpToDate("0.1.0-edge.12"), decide(feed, installed(1_000_012), file))
         // A feed older than the installed build is never offered: no downgrades.
-        assertEquals(CheckResult.UpToDate("0.1.0-edge.12"), decide(feed, installed(1_000_013)))
-        assertIs<CheckResult.NeedsNewerAndroid>(decide(feed.copy(minSdk = 36), installed(1_000_011, sdk = 35)))
+        assertEquals(CheckResult.UpToDate("0.1.0-edge.12"), decide(feed, installed(1_000_013), file))
+        assertIs<CheckResult.NeedsNewerAndroid>(decide(feed.copy(minSdk = 36), installed(1_000_011, sdk = 35), file))
     }
 
     @Test
@@ -237,10 +238,29 @@ class UpdateFeedTest {
             val checker = UpdateChecker(fetch = { responses.getValue(it) }, trustedKeys = listOf(key), verifier = verifier)
             val result = checker.check(listOf("https://stale.example/f", "https://new.example/f"), installed(1_000_010))
             assertEquals(1_000_012, assertIs<CheckResult.Available>(result).feed.versionCode)
+            // The file kept for a restart is the newest one, exactly as served.
+            assertEquals(newest.decodeToString(), result.signedFile)
             // A server that hangs or fails does not hide the others either.
             val failing = UpdateChecker(fetch = { if (it.contains("stale")) error("timed out") else newest }, listOf(key), verifier)
             assertIs<CheckResult.Available>(failing.check(listOf("https://stale.example/f", "https://new.example/f"), installed(1)))
         }
+
+    @Test
+    fun readsAKeptFeedAgainWithTheSameRules() {
+        val file = signedFile(goodFeed.toString()).decodeToString()
+        val checker = UpdateChecker(fetch = { error("no network") }, trustedKeys = listOf(key), verifier = verifier)
+        val kept = assertIs<CheckResult.Available>(checker.reread(file, installed(1_000_011)))
+        assertEquals(1_000_012, kept.feed.versionCode)
+        assertEquals(file, kept.signedFile)
+        // Installed meanwhile: nothing to offer any more.
+        assertEquals(CheckResult.UpToDate("0.1.0-edge.12"), checker.reread(file, installed(1_000_012)))
+        // Changed on the phone, or the app now trusts another key: refused.
+        val changed = file.replace("0.1.0-edge.12", "0.1.0-edge.99")
+        assertEquals(CheckResult.Refused(FeedProblem.BadSignature), checker.reread(changed, installed(1)))
+        val rotated = UpdateChecker(fetch = { error("no network") }, trustedKeys = listOf(otherKey), verifier = verifier)
+        assertEquals(CheckResult.Refused(FeedProblem.BadSignature), rotated.reread(file, installed(1)))
+        assertEquals(CheckResult.Refused(FeedProblem.Unreadable), checker.reread("not a feed", installed(1)))
+    }
 
     @Test
     fun checksAutomaticallyAtMostOnceADay() {
@@ -265,7 +285,7 @@ class UpdateFeedTest {
         val feed = Json { ignoreUnknownKeys = true }.decodeFromString<UpdateFeed>(goodFeed.toString())
         assertEquals(
             UpdateStatus.Available(AvailableUpdate(1_000_012, "0.1.0-edge.12", 14_200_000)),
-            CheckResult.Available(feed).toStatus(),
+            CheckResult.Available(feed, "").toStatus(),
         )
     }
 }

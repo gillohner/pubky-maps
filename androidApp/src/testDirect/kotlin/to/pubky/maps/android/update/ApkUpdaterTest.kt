@@ -99,7 +99,10 @@ class ApkUpdaterTest {
         return """{"feed":"${feed.replace("\"", "\\\"")}","signature":"$signature"}""".encodeToByteArray()
     }
 
-    private fun TestScope.updater(platform: FakePlatform): ApkUpdater {
+    private fun TestScope.updater(
+        platform: FakePlatform,
+        installed: InstalledBuild = installedBuild,
+    ): ApkUpdater {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val checker =
             UpdateChecker(
@@ -112,7 +115,7 @@ class ApkUpdaterTest {
             )
         return ApkUpdater(
             app,
-            installedBuild,
+            installed,
             InMemoryServerConfigRepository(ServerDefaults.config),
             checker,
             platform,
@@ -214,17 +217,137 @@ class ApkUpdaterTest {
         }
 
     @Test
-    fun noOfferOnTheMapWhenTheNextCheckFindsNothing() =
+    fun noOfferWhenTheNextCheckFindsNothing() =
         runTest {
             val platform = FakePlatform(apk)
             val updater = updater(platform)
             updater.onAppStart()
             advanceUntilIdle()
-            serverDown = true
+            // The release was taken back: the feed names the installed build again.
+            feedVersionCode = 1000
+            feedVersionName = "0.0.1-probe.1"
             updater.checkNow()
             advanceUntilIdle()
-            assertTrue(updater.state.value.status is UpdateStatus.Failed)
+            assertTrue(updater.state.value.status is UpdateStatus.UpToDate)
             assertNull(updater.state.value.prompt)
+            assertNull(updater.state.value.dialog)
+            // Not offered after a restart either.
+            assertNull(prefs().getString("found_feed", null))
+            platform.clock += 60_000
+            val restarted = updater(platform)
+            restarted.onAppStart()
+            advanceUntilIdle()
+            assertEquals(UpdateStatus.NotChecked, restarted.state.value.status)
+        }
+
+    @Test
+    fun aFoundUpdateIsStillReadyAfterARestartThatDay() =
+        runTest {
+            val platform = FakePlatform(apk)
+            val first = updater(platform)
+            first.onAppStart()
+            advanceUntilIdle()
+            first.promptShown()
+            advanceUntilIdle()
+            assertTrue(prefs().getString("found_feed", null)!!.contains("0.0.1-probe.2"))
+
+            // The daily check is not due again, but the update stays ready in Settings, not on the map again.
+            platform.clock += 60 * 60 * 1000
+            val restarted = updater(platform)
+            Robolectric.buildActivity(Activity::class.java).setup()
+            restarted.onAppStart()
+            advanceUntilIdle()
+            assertEquals(1, fetches)
+            val ready = restarted.state.value.status as UpdateStatus.Available
+            assertEquals("0.0.1-probe.2", ready.update.versionName)
+            assertEquals(apk.size.toLong(), ready.update.sizeBytes)
+            assertNull(restarted.state.value.prompt)
+            assertNull(restarted.state.value.dialog)
+            // Install works from the kept feed: the same download and checks.
+            platform.canInstall = true
+            restarted.install()
+            advanceUntilIdle()
+            assertEquals(1, platform.handedToInstaller.size)
+            assertTrue(platform.handedToInstaller.single().contentEquals(apk))
+        }
+
+    @Test
+    fun aFoundUpdateNeverOfferedOnTheMapIsOfferedAfterARestart() =
+        runTest {
+            val platform = FakePlatform(apk)
+            updater(platform).onAppStart()
+            advanceUntilIdle()
+            // The app stopped before the map could offer it.
+            platform.clock += 60_000
+            val restarted = updater(platform)
+            restarted.onAppStart()
+            advanceUntilIdle()
+            assertEquals(1, fetches)
+            assertEquals(
+                "0.0.1-probe.2",
+                restarted.state.value.prompt
+                    ?.versionName,
+            )
+        }
+
+    @Test
+    fun aFoundUpdateStaysReadyWhenNoServerCanBeReached() =
+        runTest {
+            val platform = FakePlatform(apk)
+            val first = updater(platform)
+            first.onAppStart()
+            advanceUntilIdle()
+            first.promptShown()
+            advanceUntilIdle()
+
+            // The next day's check reaches no server: still ready, not offered on the map again.
+            serverDown = true
+            platform.clock += day
+            val offline = updater(platform)
+            offline.onAppStart()
+            advanceUntilIdle()
+            assertEquals(2, fetches)
+            assertTrue(offline.state.value.status is UpdateStatus.Available)
+            assertNull(offline.state.value.prompt)
+            // "Check for updates" without a connection found nothing: no dialog, the update stays ready.
+            offline.checkNow()
+            advanceUntilIdle()
+            assertEquals(3, fetches)
+            assertTrue(offline.state.value.status is UpdateStatus.Available)
+            assertNull(offline.state.value.dialog)
+            assertTrue(prefs().getString("found_feed", null) != null)
+        }
+
+    @Test
+    fun aFoundUpdateIsForgottenOnceInstalled() =
+        runTest {
+            val platform = FakePlatform(apk)
+            updater(platform).onAppStart()
+            advanceUntilIdle()
+            platform.clock += 60_000
+            val newer = updater(platform, installedBuild.copy(versionCode = 1001, versionName = "0.0.1-probe.2"))
+            newer.onAppStart()
+            advanceUntilIdle()
+            assertEquals(1, fetches)
+            assertEquals(UpdateStatus.NotChecked, newer.state.value.status)
+            assertNull(newer.state.value.prompt)
+            assertNull(prefs().getString("found_feed", null))
+        }
+
+    @Test
+    fun aKeptFeedThatNoLongerReadsIsForgotten() =
+        runTest {
+            val platform = FakePlatform(apk)
+            updater(platform).onAppStart()
+            advanceUntilIdle()
+            prefs().edit().putString("found_feed", "{\"feed\":\"changed\"}").commit()
+            platform.clock += 60_000
+            val restarted = updater(platform)
+            restarted.onAppStart()
+            advanceUntilIdle()
+            assertEquals(UpdateStatus.NotChecked, restarted.state.value.status)
+            assertNull(restarted.state.value.prompt)
+            assertNull(prefs().getString("found_feed", null))
         }
 
     @Test

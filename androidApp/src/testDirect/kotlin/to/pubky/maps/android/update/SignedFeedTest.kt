@@ -79,7 +79,7 @@ class SignedFeedTest {
     fun refusesADowngrade() {
         val feed = (read(feedFile) as FeedReadResult.Valid).feed
         val newer = InstalledBuild("to.pubky.maps", 1_000_020, "0.1.0-edge.20", 35, UpdateChannel.Edge)
-        assertEquals(CheckResult.UpToDate("0.1.0-edge.12"), decide(feed, newer))
+        assertEquals(CheckResult.UpToDate("0.1.0-edge.12"), decide(feed, newer, feedFile.decodeToString()))
     }
 
     @Test

@@ -13,9 +13,13 @@ data class InstalledBuild(
 
 /** What a check found. */
 sealed interface CheckResult {
-    /** A newer build for this phone. */
+    /**
+     * A newer build for this phone. [signedFile] is the signed feed file it was read from, which the app
+     * keeps to offer the build again after a restart ([UpdateChecker.reread] checks it again).
+     */
     data class Available(
         val feed: UpdateFeed,
+        val signedFile: String,
     ) : CheckResult
 
     /** Nothing newer: the feed names this build or an older one (never offered: no downgrades). */
@@ -53,6 +57,7 @@ class UpdateChecker(
         installed: InstalledBuild,
     ): CheckResult {
         var newest: UpdateFeed? = null
+        var newestFile = ""
         var refusal: FeedProblem? = null
         for (url in feedUrls) {
             val bytes =
@@ -65,25 +70,58 @@ class UpdateChecker(
                 }
             val read = readSignedFeed(bytes, trustedKeys, verifier, installed.appId, installed.channel, allowLocalHttp)
             when (read) {
-                is FeedReadResult.Valid -> if (newest == null || read.feed.versionCode > newest.versionCode) newest = read.feed
-                is FeedReadResult.Invalid -> refusal = refusal ?: read.problem
+                is FeedReadResult.Valid -> {
+                    if (newest == null || read.feed.versionCode > newest.versionCode) {
+                        newest = read.feed
+                        newestFile = bytes.decodeToString()
+                    }
+                }
+
+                is FeedReadResult.Invalid -> {
+                    refusal = refusal ?: read.problem
+                }
             }
         }
-        return newest?.let { decide(it, installed) }
+        return newest?.let { decide(it, installed, newestFile) }
             ?: refusal?.let { CheckResult.Refused(it) }
             ?: CheckResult.Unreachable
     }
+
+    /**
+     * Reads a signed feed file a check accepted before ([CheckResult.Available.signedFile]) again, without
+     * the network: with the same keys and rules as a fresh one, and decided against the build installed
+     * now, so a kept update is offered only while it is still validly signed and newer than this build.
+     */
+    fun reread(
+        signedFile: String,
+        installed: InstalledBuild,
+    ): CheckResult =
+        when (
+            val read =
+                readSignedFeed(
+                    signedFile.encodeToByteArray(),
+                    trustedKeys,
+                    verifier,
+                    installed.appId,
+                    installed.channel,
+                    allowLocalHttp,
+                )
+        ) {
+            is FeedReadResult.Valid -> decide(read.feed, installed, signedFile)
+            is FeedReadResult.Invalid -> CheckResult.Refused(read.problem)
+        }
 }
 
-/** What a valid feed means for the installed build. */
+/** What a valid feed, read from [signedFile], means for the installed build. */
 fun decide(
     feed: UpdateFeed,
     installed: InstalledBuild,
+    signedFile: String,
 ): CheckResult =
     when {
         feed.versionCode <= installed.versionCode -> CheckResult.UpToDate(feed.versionName)
         feed.minSdk > installed.sdkInt -> CheckResult.NeedsNewerAndroid(feed)
-        else -> CheckResult.Available(feed)
+        else -> CheckResult.Available(feed, signedFile)
     }
 
 /** Automatic checks run at most once a day. */
