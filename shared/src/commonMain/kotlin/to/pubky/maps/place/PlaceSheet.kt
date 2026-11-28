@@ -219,7 +219,15 @@ fun PlaceSheet(
                     ),
             ) {
                 Handle(stop) { onStopChange(stops.afterTap(stop)) }
-                if (!headerScrolls) PlaceHeader(page, context, sheetActions, Modifier.onSizeChanged { headerPx = it.height })
+                if (!headerScrolls) {
+                    PlaceHeader(
+                        page,
+                        context,
+                        sheetActions,
+                        Modifier.onSizeChanged { headerPx = it.height },
+                        iconActions = true,
+                    )
+                }
             }
             Column(
                 Modifier
@@ -229,7 +237,15 @@ fun PlaceSheet(
                     .verticalScroll(pageScroll),
             ) {
                 // Dragged by the page's own scrolling (the nested scroll above), as the sections are.
-                if (headerScrolls) PlaceHeader(page, context, sheetActions, Modifier.onSizeChanged { headerPx = it.height })
+                if (headerScrolls) {
+                    PlaceHeader(
+                        page,
+                        context,
+                        sheetActions,
+                        Modifier.onSizeChanged { headerPx = it.height },
+                        iconActions = true,
+                    )
+                }
                 PlaceSections(
                     page,
                     context,
