@@ -19,6 +19,7 @@ import to.pubky.maps.map.savedPointPlace
 import to.pubky.maps.place.PlacePageController
 import to.pubky.maps.place.PlacePageState
 import to.pubky.maps.place.PlaceRef
+import to.pubky.maps.update.makeRoom
 
 /** The user's writes as the app's screens use them; [photos] is null where photos cannot be picked. */
 class WriteUi(
@@ -42,7 +43,7 @@ fun WriteMessages(
 
 /** Shows [message], replacing the snackbar on screen instead of queueing behind it. */
 suspend fun SnackbarHostState.showWriteMessage(message: WriteMessage) {
-    currentSnackbarData?.dismiss()
+    makeRoom()
     val result =
         showSnackbar(
             message = message.text,

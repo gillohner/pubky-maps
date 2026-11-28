@@ -84,11 +84,13 @@ class ApkUpdaterTest {
 
     private var fetches = 0
     private var serverDown = false
+    private var feedVersionCode = 1001L
+    private var feedVersionName = "0.0.1-probe.2"
 
     private fun feedFile(): ByteArray {
         val sha = MessageDigest.getInstance("SHA-256").digest(apk).joinToString("") { "%02x".format(it) }
         val feed =
-            """{"format":1,"app":"to.pubky.maps","channel":"edge","versionCode":1001,"versionName":"0.0.1-probe.2",""" +
+            """{"format":1,"app":"to.pubky.maps","channel":"edge","versionCode":$feedVersionCode,"versionName":"$feedVersionName",""" +
                 """"minSdk":26,"apk":{"url":"https://example.org/pubky-maps.apk","size":${apk.size},"sha256":"$sha"}}"""
         val signature =
             java.util.Base64
@@ -124,16 +126,105 @@ class ApkUpdaterTest {
     private fun updatesDir() = File(app.cacheDir, "updates")
 
     @Test
-    fun checksAtStartAndOffersTheNewerBuild() =
+    fun checksAtStartAndOffersTheNewerBuildOnTheMap() =
         runTest {
             val updater = updater(FakePlatform(apk))
             updater.onAppStart()
             advanceUntilIdle()
             assertEquals(1, fetches)
+            // No dialog over the map at start: the map offers it in a snackbar.
+            assertNull(updater.state.value.dialog)
+            val prompt = updater.state.value.prompt!!
+            assertEquals("0.0.1-probe.2", prompt.versionName)
+            assertEquals(apk.size.toLong(), prompt.sizeBytes)
+            assertTrue(updater.state.value.status is UpdateStatus.Available)
+        }
+
+    @Test
+    fun aVersionIsOfferedOnTheMapOnlyOnce() =
+        runTest {
+            val platform = FakePlatform(apk)
+            val first = updater(platform)
+            first.onAppStart()
+            advanceUntilIdle()
+            first.promptShown()
+            advanceUntilIdle()
+            assertNull(first.state.value.prompt)
+            assertTrue("still ready in Settings", first.state.value.status is UpdateStatus.Available)
+            assertEquals(1001L, prefs().getLong("prompted_version_code", 0L))
+
+            // The next day's check finds the same version: ready in Settings, not offered on the map.
+            platform.clock += day
+            val next = updater(platform)
+            next.onAppStart()
+            advanceUntilIdle()
+            assertEquals(2, fetches)
+            assertTrue(next.state.value.status is UpdateStatus.Available)
+            assertNull(next.state.value.prompt)
+            assertNull(next.state.value.dialog)
+
+            // A newer one is offered again.
+            feedVersionCode = 1002
+            feedVersionName = "0.0.1-probe.3"
+            platform.clock += day
+            val newer = updater(platform)
+            newer.onAppStart()
+            advanceUntilIdle()
+            assertEquals(
+                "0.0.1-probe.3",
+                newer.state.value.prompt
+                    ?.versionName,
+            )
+        }
+
+    @Test
+    fun aCheckTheUserAsksForAnswersInADialog() =
+        runTest {
+            val platform = FakePlatform(apk)
+            val updater = updater(platform)
+            updater.checkNow()
+            advanceUntilIdle()
             val offer = updater.state.value.dialog as UpdateDialog.Offer
             assertEquals("0.0.1-probe.2", offer.update.versionName)
             assertEquals(apk.size.toLong(), offer.update.sizeBytes)
             assertEquals("0.0.1-probe.1", offer.installedVersionName)
+            assertNull(updater.state.value.prompt)
+            // Seen in the dialog: the map does not offer it again after Later.
+            updater.dismissDialog()
+            platform.clock += day
+            val next = updater(platform)
+            next.onAppStart()
+            advanceUntilIdle()
+            assertEquals(2, fetches)
+            assertNull(next.state.value.prompt)
+        }
+
+    @Test
+    fun installingTheUpdateEndsItsOfferOnTheMap() =
+        runTest {
+            val updater = updater(FakePlatform(apk))
+            Robolectric.buildActivity(Activity::class.java).setup()
+            updater.onAppStart()
+            advanceUntilIdle()
+            updater.install()
+            advanceUntilIdle()
+            assertNull(updater.state.value.prompt)
+            assertTrue(updater.state.value.dialog is UpdateDialog.NeedsPermission)
+            assertEquals(1001L, prefs().getLong("prompted_version_code", 0L))
+        }
+
+    @Test
+    fun noOfferOnTheMapWhenTheNextCheckFindsNothing() =
+        runTest {
+            val platform = FakePlatform(apk)
+            val updater = updater(platform)
+            updater.onAppStart()
+            advanceUntilIdle()
+            serverDown = true
+            updater.checkNow()
+            advanceUntilIdle()
+            assertTrue(updater.state.value.status is UpdateStatus.Failed)
+            assertNull(updater.state.value.prompt)
         }
 
     @Test
@@ -309,8 +400,9 @@ class ApkUpdaterTest {
     fun laterClosesTheOfferAndForgetsAPendingInstall() =
         runTest {
             val updater = updater(FakePlatform(apk))
-            updater.onAppStart()
+            updater.checkNow()
             advanceUntilIdle()
+            assertTrue(updater.state.value.dialog is UpdateDialog.Offer)
             updater.dismissDialog()
             advanceUntilIdle()
             assertNull(updater.state.value.dialog)

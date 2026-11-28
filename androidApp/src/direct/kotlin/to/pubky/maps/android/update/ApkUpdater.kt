@@ -41,6 +41,7 @@ private const val PREFS = "updates"
 private const val KEY_AUTO_CHECK = "auto_check"
 private const val KEY_LAST_CHECK = "last_check_ms"
 private const val KEY_PENDING = "pending_version_code"
+private const val KEY_PROMPTED = "prompted_version_code"
 
 /** What Android reads from an APK file: its package and versionCode. */
 data class ArchiveFacts(
@@ -77,7 +78,9 @@ interface UpdatePlatform {
 
 /**
  * The in-app updater of the APK published on GitHub. It checks the signed feed of the build's channel
- * (at start at most once a day, and on request), offers a newer build, downloads it into the app's
+ * (at start at most once a day, and on request), offers a newer build (in a dialog after a check the
+ * user asked for or one interrupted by "Install unknown apps"; after the daily check on the map, once
+ * per version, see [UpdatesUiState.prompt]), downloads it into the app's
  * cache, checks its size and SHA-256 against the signed feed and its package and versionCode, checks
  * the file again right before, and hands it to Android's installer. Android then installs it only
  * when it is signed with the same key as the installed app.
@@ -112,6 +115,9 @@ class ApkUpdater(
     override val state: StateFlow<UpdatesUiState> = mutableState.asStateFlow()
 
     private var offered: UpdateFeed? = null
+
+    /** The versionCode the map last offered; read at app start. */
+    private var prompted = 0L
     private var verified: Pair<File, UpdateFeed>? = null
     private var checkJob: Job? = null
     private var downloadJob: Job? = null
@@ -136,8 +142,10 @@ class ApkUpdater(
                         autoCheck = prefs.getBoolean(KEY_AUTO_CHECK, true),
                         lastCheck = prefs.getLong(KEY_LAST_CHECK, 0L).takeIf { it > 0 },
                         pending = prefs.getLong(KEY_PENDING, 0L),
+                        prompted = prefs.getLong(KEY_PROMPTED, 0L),
                     )
                 }
+            prompted = maxOf(prompted, stored.prompted)
             mutableState.update { it.copy(autoCheck = stored.autoCheck) }
             val auto = if (stored.autoCheck) "on" else "off"
             Log.i(TAG, "updates: ${installed.versionName} (${installed.versionCode}) on ${installed.channel.id}; automatic checks $auto")
@@ -171,8 +179,13 @@ class ApkUpdater(
                     }
                     Log.i(TAG, "updates: ${if (automatic) "automatic" else "manual"} check: ${describe(result)}")
                     offered = (result as? CheckResult.Available)?.feed
-                    val offer = offered?.let { UpdateDialog.Offer(AvailableUpdate.of(it), installed.versionName) }
-                    mutableState.update { it.copy(status = result.toStatus(), dialog = offer ?: it.dialog) }
+                    val found = offered?.let { AvailableUpdate.of(it) }
+                    // A check the user asked for answers in a dialog. The automatic one at start does not
+                    // open a dialog over the map: the map offers a version once, in a snackbar.
+                    val offer = found?.takeIf { !automatic }?.let { UpdateDialog.Offer(it, installed.versionName) }
+                    val prompt = found?.takeIf { automatic && it.versionCode != prompted }
+                    if (offer != null) markSeen(offer.update)
+                    mutableState.update { it.copy(status = result.toStatus(), dialog = offer ?: it.dialog, prompt = prompt) }
                 } finally {
                     // Cancelled or failed: never left showing "Checking…".
                     mutableState.update { if (it.status == UpdateStatus.Checking) it.copy(status = UpdateStatus.NotChecked) else it }
@@ -184,6 +197,7 @@ class ApkUpdater(
         val feed = offered ?: return
         if (downloadJob?.isActive == true) return
         val update = AvailableUpdate.of(feed)
+        markSeen(update)
         val ready = verified
         if (ready != null && ready.second == feed && ready.first.exists()) {
             mutableState.update { it.copy(dialog = null) }
@@ -331,6 +345,18 @@ class ApkUpdater(
         mutableState.update { it.copy(dialog = null) }
     }
 
+    override fun promptShown() {
+        markSeen(state.value.prompt ?: return)
+    }
+
+    /** The user has seen [update] offered: the map does not offer that version again. */
+    private fun markSeen(update: AvailableUpdate) {
+        mutableState.update { it.copy(prompt = null) }
+        if (update.versionCode == prompted) return
+        prompted = update.versionCode
+        scope.launch { withContext(io) { prefs.edit().putLong(KEY_PROMPTED, update.versionCode).apply() } }
+    }
+
     private fun setPending(versionCode: Long?) {
         scope.launch {
             withContext(io) {
@@ -352,6 +378,7 @@ class ApkUpdater(
         val autoCheck: Boolean,
         val lastCheck: Long?,
         val pending: Long,
+        val prompted: Long,
     )
 
     private inner class ResumedActivityTracker : Application.ActivityLifecycleCallbacks {

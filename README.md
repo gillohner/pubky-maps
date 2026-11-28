@@ -464,7 +464,11 @@ accepts it only with a valid signature from the key in `release/update-feed-key.
 package and channel, and only for a newer versionCode. It then downloads the APK, checks its size and
 SHA-256 against the feed and its package and versionCode, checks it again, and hands it to Android's
 installer, which installs it only when it is signed with the same release key. A feed or file that
-fails a check is never installed, and the app says why. While a found update waits to be
+fails a check is never installed, and the app says why. "Check for updates" answers in a dialog; the
+check at start opens none over the map (unless the app was stopped while the user was allowing
+"Install unknown apps" for an update, which it then offers again): the map says "Update ready:
+Pubky Maps <version>" once per version in a snackbar with Install and a close button, which stays
+until one of them is tapped, and only while no place, search, route or guidance is open on it. While a found update waits to be
 installed, the map's Settings button carries a dot ("Settings, update ready" for TalkBack) and
 Settings opens with a card at the top: the version, its size and the installed version, and
 Install. The feed addresses are a server list like
