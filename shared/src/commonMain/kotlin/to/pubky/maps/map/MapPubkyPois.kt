@@ -24,8 +24,11 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.serialization.json.JsonArray
@@ -48,6 +51,7 @@ import org.maplibre.compose.expressions.value.ImageValue
 import org.maplibre.compose.expressions.value.StringValue
 import org.maplibre.compose.expressions.value.SymbolAnchor
 import org.maplibre.compose.interaction.ClickResult
+import org.maplibre.compose.layers.Anchor
 import org.maplibre.compose.layers.SymbolLayer
 import org.maplibre.compose.map.MapEvent
 import org.maplibre.compose.map.MapState
@@ -76,11 +80,15 @@ private val PubkyPoiSize = DpSize(24.dp, 24.dp)
 /** How long a style whose files could not be read waits before its icons are asked again. */
 private val STYLE_ICONS_RETRY = 30.seconds
 
-/** The base map's sources of points of interest and the font its labels use, read from the style at [styleUrl]. */
+/**
+ * The base map's sources of points of interest, the font its labels use and its lowest layer of
+ * place names ([placeNamesLayerOf]), read from the style at [styleUrl].
+ */
 internal data class PoiBase(
     val sources: List<PoiSource>,
     val font: List<String>?,
     val styleUrl: String?,
+    val placeNames: String?,
 )
 
 /**
@@ -103,8 +111,8 @@ internal class PoiTiles {
 /**
  * Keeps [tiles] up to date for [places]: the style's sources each time a style from the list is in
  * place, and from [POI_HIGHLIGHT_MIN_ZOOM], each time the map is idle (its tiles drawn) or the places
- * change, which of the places the tiles hold as a point of interest. Below that zoom, or before a
- * style is in place, none (every place is a dot). Once a place is highlighted, the style's own icons
+ * change, which of the places the tiles hold as a point of interest ([poisFoundOf]). Below that
+ * zoom, or before a style is in place, none (every place is a dot). Once a place is highlighted, the style's own icons
  * of its points of interest are read through [styleIcons] (none without it).
  */
 @Composable
@@ -144,16 +152,48 @@ internal fun TrackPubkyPois(
             tiles.found = emptyMap()
             return@LaunchedEffect
         }
-        val idle = mapState.events.filter { it == MapEvent.Idle }.onStart { emit(MapEvent.Idle) }
-        // Crossing the zoom also asks at once: zoomed out under it mid-gesture, the highlights hide and
-        // their places are dots again before the map is next idle.
-        val near = snapshotFlow { mapState.cameraPosition.zoom >= POI_HIGHLIGHT_MIN_ZOOM }.distinctUntilChanged()
-        combine(idle, near, snapshotFlow { shown }) { _, isNear, now -> isNear to now }
-            .collectLatest { (isNear, now) ->
-                tiles.found = if (isNear) mapState.poisAmong(base.sources, now) else emptyMap()
-            }
+        poisFoundOf(
+            zooms = snapshotFlow { poiZoomOf(mapState.cameraPosition.zoom) },
+            places = snapshotFlow { shown },
+            idle = mapState.events.filter { it == MapEvent.Idle }.map { },
+        ) { mapState.poisAmong(base.sources, it) }
+            .collect { tiles.found = it }
     }
 }
+
+/**
+ * Which of the places the tiles hold as a point of interest ([read]), asked at once, again each time
+ * the map is [idle] (its tiles drawn), and each time the places or the zoom band change; none
+ * below [POI_HIGHLIGHT_MIN_ZOOM]. Zoomed out under [POI_HIGHLIGHT_OVER_PLACE_NAMES_ZOOM], none until
+ * the map is next idle: the tiles of 14 still loaded mid-gesture hold the cafés and museums the
+ * tiles of 13 do not, which the highlights there could not draw, so their places are dots again at
+ * once, and the stations highlighted again once the map rests.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+internal fun poisFoundOf(
+    zooms: Flow<PoiZoom>,
+    places: Flow<List<MapPlace>>,
+    idle: Flow<Unit>,
+    read: suspend (List<MapPlace>) -> Map<Long, Map<String, String>>,
+): Flow<Map<Long, Map<String, String>>> =
+    flow {
+        var last: PoiZoom? = null
+        // Zoomed out under 14 and the map not idle since.
+        var settling = false
+        emitAll(
+            combine(zooms.distinctUntilChanged(), places, ::Pair).transformLatest { (zoom, now) ->
+                if (last == PoiZoom.OverPlaceNames && zoom == PoiZoom.UnderPlaceNames) settling = true
+                if (zoom != PoiZoom.UnderPlaceNames) settling = false
+                last = zoom
+                if (zoom == PoiZoom.None || settling) emit(emptyMap())
+                if (zoom == PoiZoom.None) return@transformLatest
+                (if (settling) idle else idle.onStart { emit(Unit) }).collect {
+                    settling = false
+                    emit(read(now))
+                }
+            },
+        )
+    }
 
 /** Whose icons to read: the style at [styleUrl], for its sources of points of interest. */
 internal data class IconsAsk(
@@ -192,9 +232,9 @@ internal fun styleIconsOf(
 private suspend fun MapState.poiBase(styleUrl: String?): PoiBase? =
     try {
         val layers = style.layers.toList()
-        val sources = poiSourcesOf(layers.map { StyleLayerRef(it.source, it.sourceLayer) })
+        val refs = layers.map { StyleLayerRef(it.source, it.sourceLayer, it.id, it.type) }
         val fonts = layers.filter { it.type == "symbol" }.map { it.getProperty("text-font") }
-        PoiBase(sources, highlightFont(fonts), styleUrl)
+        PoiBase(poiSourcesOf(refs), highlightFont(fonts), styleUrl, placeNamesLayerOf(refs))
     } catch (e: CancellationException) {
         throw e
     } catch (_: Exception) {
@@ -245,10 +285,12 @@ private fun idIn(ids: List<Long>): Expression<BooleanValue> =
  * [POI_HIGHLIGHT_MIN_ZOOM] whatever the style's own zoom for that point is: the style's own icon of
  * the point ([icons]: OpenFreeMap's coloured one, VersaTiles' glyph in teal) in a teal ring, or where
  * the style has none (OpenFreeMap's dark style draws no points of interest, a value its sprite has
- * no image for) a teal badge with the kind's glyph; the name in teal under it. They are placed
- * before every label of the base map, so a label in their way gives way (the point's own icon and
- * name among them). Every icon is drawn, also where two meet; a name with no room is left out.
- * Tapping one opens its place.
+ * no image for) a teal badge with the kind's glyph; the name in teal under it. From
+ * [POI_HIGHLIGHT_OVER_PLACE_NAMES_ZOOM] they are placed before every label of the base map, so a
+ * label in their way gives way (the point's own icon and name among them); zoomed out further they
+ * are drawn under the base map's place names ([PoiBase.placeNames]), which are placed first: the
+ * names of towns and suburbs stay, a highlight's name in their way is left out. Every icon is drawn,
+ * also where two meet; a name with no room is left out. Tapping one opens its place.
  */
 @Composable
 internal fun PubkyPoiHighlights(
@@ -257,6 +299,38 @@ internal fun PubkyPoiHighlights(
     icons: Map<PoiSource, PoiIcon>,
     dark: Boolean,
     onSelect: (MapPlace) -> Unit,
+) {
+    val zoomedOut = HighlightBand("out", POI_HIGHLIGHT_MIN_ZOOM, POI_HIGHLIGHT_OVER_PLACE_NAMES_ZOOM)
+    val near = HighlightBand("near", POI_HIGHLIGHT_OVER_PLACE_NAMES_ZOOM, MAX_ZOOM)
+    val under = base.placeNames
+    if (under != null) {
+        // Keyed: another style has its place names in another layer.
+        key(under) { Anchor.Below(under) { HighlightLayers(base, pois, icons, dark, onSelect, zoomedOut) } }
+    } else {
+        HighlightLayers(base, pois, icons, dark, onSelect, zoomedOut)
+    }
+    HighlightLayers(base, pois, icons, dark, onSelect, near)
+}
+
+/** The style spec's default maxzoom of a layer (maplibre-compose's too). */
+private const val MAX_ZOOM = 24.0
+
+/** The zooms one set of highlight layers is drawn at, from [minZoom] up to (without) [maxZoom]; [name] is in their ids. */
+private data class HighlightBand(
+    val name: String,
+    val minZoom: Double,
+    val maxZoom: Double,
+)
+
+/** The layers of [PubkyPoiHighlights] for the zooms of [band]. */
+@Composable
+private fun HighlightLayers(
+    base: PoiBase,
+    pois: PubkyPois,
+    icons: Map<PoiSource, PoiIcon>,
+    dark: Boolean,
+    onSelect: (MapPlace) -> Unit,
+    band: HighlightBand,
 ) {
     val byKind = remember(pois) { pois.highlights.groupBy { it.kind } }
     val allIds = remember(pois) { pois.highlights.flatMap { it.tileIds } }
@@ -267,16 +341,18 @@ internal fun PubkyPoiHighlights(
             val styleSource: Source? = getBaseSource(poiSource.source)
             val source = styleSource as? VectorSource
             val icon = icons[poiSource]
+            val prefix = "pubky-pois-${band.name}-$index"
             if (source != null) {
                 if (icon != null) {
                     val ringFill = if (dark) PubkyPoiRingDark else Color.White
                     val ring = rememberVectorPainter(remember(ringFill) { ringIcon(ringFill, PubkyPoiColor) })
                     // Under the icon; it takes no room, the icon above it takes the ring's.
                     SymbolLayer(
-                        id = "pubky-pois-$index-ring",
+                        id = "$prefix-ring",
                         source = source,
                         sourceLayer = poiSource.sourceLayer,
-                        minZoom = POI_HIGHLIGHT_MIN_ZOOM.toFloat(),
+                        minZoom = band.minZoom.toFloat(),
+                        maxZoom = band.maxZoom.toFloat(),
                         filter = withStyleIcon(allIds, icon, has = true),
                         iconImage = image(ring, PubkyPoiSize),
                         iconAllowOverlap = const(true),
@@ -285,9 +361,10 @@ internal fun PubkyPoiHighlights(
                         onClick = { clicked -> clickedPoi(clicked.firstOrNull()?.id, select) },
                     )
                     PubkyPoiLayer(
-                        id = "pubky-pois-$index-own",
+                        id = "$prefix-own",
                         source = source,
                         sourceLayer = poiSource.sourceLayer,
+                        band = band,
                         filter = withStyleIcon(allIds, icon, has = true),
                         iconImage = image(expressionOf<StringValue>(icon.image)),
                         iconSize = icon.size,
@@ -303,9 +380,10 @@ internal fun PubkyPoiHighlights(
                         val ids = ofKind.flatMap { it.tileIds }
                         val painter = rememberVectorPainter(remember(kind) { badgeIcon(kind, PubkyPoiColor) })
                         PubkyPoiLayer(
-                            id = "pubky-pois-$index-${kind.name.lowercase()}",
+                            id = "$prefix-${kind.name.lowercase()}",
                             source = source,
                             sourceLayer = poiSource.sourceLayer,
+                            band = band,
                             filter = if (icon != null) withStyleIcon(ids, icon, has = false) else idIn(ids),
                             iconImage = image(painter, PubkyPoiSize),
                             iconSize = 1f,
@@ -347,6 +425,7 @@ private fun PubkyPoiLayer(
     id: String,
     source: VectorSource,
     sourceLayer: String,
+    band: HighlightBand,
     filter: Expression<BooleanValue>,
     iconImage: Expression<ImageValue?>,
     iconSize: Float,
@@ -359,7 +438,8 @@ private fun PubkyPoiLayer(
         id = id,
         source = source,
         sourceLayer = sourceLayer,
-        minZoom = POI_HIGHLIGHT_MIN_ZOOM.toFloat(),
+        minZoom = band.minZoom.toFloat(),
+        maxZoom = band.maxZoom.toFloat(),
         filter = filter,
         iconImage = iconImage,
         iconSize = const(iconSize),
