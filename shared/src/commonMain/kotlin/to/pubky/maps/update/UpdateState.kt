@@ -59,7 +59,9 @@ sealed interface UpdateDialog {
 /**
  * Everything the update UI shows. [prompt] is an update the automatic check found that the map offers
  * once, in a snackbar: null once it was offered (or the user saw it otherwise), so a version is offered
- * on the map only once.
+ * on the map only once. [ready] is the update found before (also before a restart) while a check runs
+ * or after a check that got no valid answer (no server reached, every answer refused): it stays ready,
+ * and [status] says what the check itself found.
  */
 data class UpdatesUiState(
     val channel: UpdateChannel,
@@ -67,11 +69,17 @@ data class UpdatesUiState(
     val status: UpdateStatus,
     val dialog: UpdateDialog?,
     val prompt: AvailableUpdate? = null,
+    val ready: AvailableUpdate? = null,
 )
 
-/** The update a check found and the user can install now; null while there is none (or a check runs). */
+/** The update the user can install now; null while there is none. */
 val UpdatesUiState.readyToInstall: AvailableUpdate?
-    get() = (status as? UpdateStatus.Available)?.update
+    get() =
+        when (status) {
+            is UpdateStatus.Available -> status.update
+            UpdateStatus.Checking, is UpdateStatus.Failed -> ready
+            else -> null
+        }
 
 /** The in-app updater, for builds that update themselves (the APK published on GitHub). */
 interface UpdateController {

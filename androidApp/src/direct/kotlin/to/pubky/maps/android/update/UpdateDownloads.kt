@@ -100,6 +100,12 @@ fun sha256Hex(file: File): String {
     return digest.digest().joinToString("") { "%02x".format(it) }
 }
 
+/** A server answered with an HTTP status other than 2xx. */
+class HttpStatusException(
+    val code: Int,
+    host: String,
+) : IOException("HTTP $code from $host")
+
 private fun openGet(url: String): HttpURLConnection {
     val connection = URL(url).openConnection() as HttpURLConnection
     connection.connectTimeout = TIMEOUT_MS
@@ -112,7 +118,7 @@ private fun openGet(url: String): HttpURLConnection {
 private fun <T> HttpURLConnection.useBody(read: (InputStream) -> T): T =
     try {
         val code = responseCode
-        if (code !in 200..299) throw IOException("HTTP $code from ${url.host}")
+        if (code !in 200..299) throw HttpStatusException(code, url.host)
         inputStream.use(read)
     } finally {
         disconnect()

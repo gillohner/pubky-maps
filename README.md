@@ -482,9 +482,11 @@ Pubky Maps <version>" once per version in a snackbar with Install and a close bu
 until one of them is tapped, and only while no place, search, route or guidance is open on it. While a found update waits to be
 installed, the map's Settings button carries a dot ("Settings, update ready" for TalkBack) and
 Settings opens with a card at the top: the version, its size and the installed version, and
-Install. A found update stays so after the app restarts and while no feed server can be reached: the
-app keeps its signed feed file and reads it again at start with the same key and rules, and forgets
-it once that version is installed or a server's answer no longer offers it. The feed addresses are a server list like
+Install. A found update stays ready after a restart and while no feed server gives a valid answer:
+the app keeps its signed feed file, reads it again at start with the same key and rules, and, while
+it waits, checks the feed at every start (a newer build can have replaced it). It forgets the update
+once that version is installed or a valid feed no longer offers it; a check without a valid answer
+says so under "Check for updates" and leaves the update ready. The feed addresses are a server list like
 every other server (`ServerDefaults.updateFeeds`): any mirror can serve the same signed files.
 
 ## Screenshots

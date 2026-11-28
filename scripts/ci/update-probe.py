@@ -11,14 +11,14 @@ makes it the phone's localhost. Nothing reaches GitHub.
    signing. No update is offered; Settings shows why.
 2. Tampered APK: the feed is right, but the APK served has one byte changed. "Check for updates",
    Install: the app must refuse the download, say why, and Android must keep N.
-2b. Restart the same day: the app is stopped and started again; the daily check is not due, but the
-   update found in 2 is still ready (the map's Settings button has its dot, Settings its card), read
-   again from its kept signed feed, and the map does not offer it again.
+2b. Restart the same day: the app is stopped and started again; the update found in 2 is ready at
+   once (the map's Settings button has its dot, Settings its card), read again from its kept signed
+   feed and confirmed by the start-up check, and the map does not offer it again.
 3. Update: automatic checks are turned off (data that must survive), the right APK is served.
    Install; "Install unknown apps" is off, so the app explains and opens its settings page; the
    setting is allowed (appops), back to the app, which hands the APK to Android; Android's
    confirmation is accepted. N+1 must be installed, open from Android's "App installed" dialog, start
-   with automatic checks still off, drop the kept feed of the update it is (no dot), and find itself
+   with automatic checks still off, drop the kept feed (it is that version: no dot), and find itself
    the newest version.
 
 Usage: update-probe.py <apk N> <apk N+1> <feed key PEM> <feed public key file> <out dir>
@@ -294,19 +294,28 @@ def main():
             failures.append(f"tampered APK: versionCode is {version_code()} afterwards, not {OLD_CODE}")
         tap(find(is_("OK"), 30, "OK"), "OK")
 
-        # 2b. The app stops and starts again the same day (the daily check is not due): the update the
-        # check found is still ready, from its kept signed feed, and not offered on the map again.
+        # 2b. The app stops and starts again the same day: the update found in 2 is ready at once, read
+        # again from its kept signed feed, stays so while the start-up check confirms it (it runs while
+        # an update waits, even when the daily one is not due), and is not offered on the map again.
         adb("shell", "am", "force-stop", PKG)
         launch()
         kept = wait_log(r"updates: \S+ \(\d+\), found before, is still ready", 120)
         report["steps"]["kept_after_restart"] = bool(kept)
         if not kept:
             failures.append("restart: the update found before was not read again from its kept feed")
-        node = find(is_("Settings, update ready"), 120, "the Settings button with its update dot after a restart")
-        if any(has("Update ready")(n) for n in ui_nodes()):
-            failures.append("restart: the map offered the update again after the dialog had offered it")
-        tap(node, "Settings")
-        find(has("is ready"), 60, "the update card at the top of Settings after a restart")
+        if not wait_log(r"updates: automatic check: \S+ \(\d+\) is available", 120):
+            failures.append("restart: no start-up check confirmed the kept update")
+        find(is_("Settings, update ready"), 120, "the Settings button with its update dot after a restart")
+        for _ in range(2):
+            time.sleep(3)
+            nodes = ui_nodes()
+            if any(has("Update ready")(n) or has("Update available")(n) for n in nodes):
+                failures.append("restart: the update was offered again over the map after the dialog had offered it")
+                break
+        tap(find(is_("Settings, update ready"), 30, "the Settings button with its dot"), "Settings")
+        card = f"Pubky Maps {NEW_NAME} is ready"
+        find(lambda n: has(card)(n) and not has(card + " to install")(n), 60,
+             "the update card at the top of Settings after a restart")
         shot("2b-ready-after-restart")
 
         # 3. The real update.

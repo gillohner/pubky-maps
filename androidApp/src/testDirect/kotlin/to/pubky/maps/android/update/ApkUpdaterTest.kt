@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.Application
 import android.content.ActivityNotFoundException
 import android.content.Context
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -20,19 +21,21 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import to.pubky.maps.config.InMemoryServerConfigRepository
 import to.pubky.maps.config.ServerDefaults
+import to.pubky.maps.update.FeedProblem
 import to.pubky.maps.update.InstalledBuild
 import to.pubky.maps.update.SignatureVerifier
 import to.pubky.maps.update.UpdateChannel
 import to.pubky.maps.update.UpdateChecker
 import to.pubky.maps.update.UpdateDialog
 import to.pubky.maps.update.UpdateStatus
+import to.pubky.maps.update.readyToInstall
 import java.io.File
 import java.security.MessageDigest
 
 /**
  * The updater's flow on Robolectric with a fake network and installer: when it checks, what it
- * offers, and that only the file the feed names reaches the installer. The signature check itself is
- * SignedFeedTest's; here every feed counts as signed.
+ * offers, and that only the file the feed names reaches the installer. The Ed25519 check itself is
+ * SignedFeedTest's; here a feed counts as signed when its signature is [fakeSign] of its exact text.
  */
 @RunWith(RobolectricTestRunner::class)
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -84,6 +87,11 @@ class ApkUpdaterTest {
 
     private var fetches = 0
     private var serverDown = false
+    private var tampered = false
+    private var answerGate: CompletableDeferred<Unit>? = null
+
+    private fun fakeSign(message: ByteArray): ByteArray = MessageDigest.getInstance("SHA-256").digest(message) + ByteArray(32)
+
     private var feedVersionCode = 1001L
     private var feedVersionName = "0.0.1-probe.2"
 
@@ -92,15 +100,16 @@ class ApkUpdaterTest {
         val feed =
             """{"format":1,"app":"to.pubky.maps","channel":"edge","versionCode":$feedVersionCode,"versionName":"$feedVersionName",""" +
                 """"minSdk":26,"apk":{"url":"https://example.org/pubky-maps.apk","size":${apk.size},"sha256":"$sha"}}"""
+        val signed = fakeSign(feed.encodeToByteArray()).also { if (tampered) it[0] = (it[0].toInt() xor 1).toByte() }
         val signature =
             java.util.Base64
                 .getEncoder()
-                .encodeToString(ByteArray(64))
+                .encodeToString(signed)
         return """{"feed":"${feed.replace("\"", "\\\"")}","signature":"$signature"}""".encodeToByteArray()
     }
 
     private fun TestScope.updater(
-        platform: FakePlatform,
+        platform: UpdatePlatform,
         installed: InstalledBuild = installedBuild,
     ): ApkUpdater {
         val dispatcher = StandardTestDispatcher(testScheduler)
@@ -108,10 +117,11 @@ class ApkUpdaterTest {
             UpdateChecker(
                 fetch = {
                     fetches++
+                    answerGate?.await()
                     if (serverDown) error("unreachable") else feedFile()
                 },
                 trustedKeys = listOf(ByteArray(32)),
-                verifier = SignatureVerifier { _, _, _ -> true },
+                verifier = SignatureVerifier { _, message, signature -> signature.contentEquals(fakeSign(message)) },
             )
         return ApkUpdater(
             app,
@@ -251,13 +261,25 @@ class ApkUpdaterTest {
             advanceUntilIdle()
             assertTrue(prefs().getString("found_feed", null)!!.contains("0.0.1-probe.2"))
 
-            // The daily check is not due again, but the update stays ready in Settings, not on the map again.
+            // The daily check is not due again, but the update stays ready in Settings (and on the map's
+            // button) while the check that confirms it runs, and is not offered on the map again.
             platform.clock += 60 * 60 * 1000
+            val gate = CompletableDeferred<Unit>()
+            answerGate = gate
             val restarted = updater(platform)
             Robolectric.buildActivity(Activity::class.java).setup()
             restarted.onAppStart()
             advanceUntilIdle()
-            assertEquals(1, fetches)
+            assertEquals(UpdateStatus.Checking, restarted.state.value.status)
+            assertEquals(
+                "0.0.1-probe.2",
+                restarted.state.value.readyToInstall
+                    ?.versionName,
+            )
+            assertNull(restarted.state.value.prompt)
+            gate.complete(Unit)
+            advanceUntilIdle()
+            assertEquals(2, fetches)
             val ready = restarted.state.value.status as UpdateStatus.Available
             assertEquals("0.0.1-probe.2", ready.update.versionName)
             assertEquals(apk.size.toLong(), ready.update.sizeBytes)
@@ -282,7 +304,7 @@ class ApkUpdaterTest {
             val restarted = updater(platform)
             restarted.onAppStart()
             advanceUntilIdle()
-            assertEquals(1, fetches)
+            assertEquals(2, fetches)
             assertEquals(
                 "0.0.1-probe.2",
                 restarted.state.value.prompt
@@ -300,20 +322,31 @@ class ApkUpdaterTest {
             first.promptShown()
             advanceUntilIdle()
 
-            // The next day's check reaches no server: still ready, not offered on the map again.
+            // The next start's check reaches no server: still ready, not offered on the map again; the
+            // status says the server could not be reached.
             serverDown = true
             platform.clock += day
             val offline = updater(platform)
             offline.onAppStart()
             advanceUntilIdle()
             assertEquals(2, fetches)
-            assertTrue(offline.state.value.status is UpdateStatus.Available)
+            assertTrue(offline.state.value.status is UpdateStatus.Failed)
+            assertEquals(
+                "0.0.1-probe.2",
+                offline.state.value.readyToInstall
+                    ?.versionName,
+            )
             assertNull(offline.state.value.prompt)
-            // "Check for updates" without a connection found nothing: no dialog, the update stays ready.
+            // "Check for updates" without a connection: no dialog, the update stays ready.
             offline.checkNow()
             advanceUntilIdle()
             assertEquals(3, fetches)
-            assertTrue(offline.state.value.status is UpdateStatus.Available)
+            assertTrue(offline.state.value.status is UpdateStatus.Failed)
+            assertEquals(
+                "0.0.1-probe.2",
+                offline.state.value.readyToInstall
+                    ?.versionName,
+            )
             assertNull(offline.state.value.dialog)
             assertTrue(prefs().getString("found_feed", null) != null)
         }
@@ -340,19 +373,85 @@ class ApkUpdaterTest {
             val platform = FakePlatform(apk)
             updater(platform).onAppStart()
             advanceUntilIdle()
-            prefs().edit().putString("found_feed", "{\"feed\":\"changed\"}").commit()
-            platform.clock += 60_000
-            val restarted = updater(platform)
-            restarted.onAppStart()
+            val kept = prefs().getString("found_feed", null)!!
+            // Changed on the phone after it was kept (a higher version than the one signed), or unreadable.
+            for (changed in listOf(kept.replace("1001", "1009"), "{\"feed\":\"changed\"}")) {
+                prefs().edit().putString("found_feed", changed).commit()
+                platform.clock += 60_000
+                val restarted = updater(platform)
+                restarted.onAppStart()
+                advanceUntilIdle()
+                assertEquals(changed, UpdateStatus.NotChecked, restarted.state.value.status)
+                assertNull(restarted.state.value.readyToInstall)
+                assertNull(restarted.state.value.prompt)
+                assertNull(prefs().getString("found_feed", null))
+            }
+            // Forgotten, not confirmed: the daily check was not due.
+            assertEquals(1, fetches)
+        }
+
+    @Test
+    fun aRefusedAnswerLeavesTheUpdateFoundBeforeReady() =
+        runTest {
+            val platform = FakePlatform(apk)
+            val updater = updater(platform)
+            updater.onAppStart()
             advanceUntilIdle()
-            assertEquals(UpdateStatus.NotChecked, restarted.state.value.status)
-            assertNull(restarted.state.value.prompt)
-            assertNull(prefs().getString("found_feed", null))
+            val kept = prefs().getString("found_feed", null)
+            tampered = true
+            updater.checkNow()
+            advanceUntilIdle()
+            assertEquals(UpdateStatus.Failed(FeedProblem.BadSignature.message), updater.state.value.status)
+            assertEquals(
+                "0.0.1-probe.2",
+                updater.state.value.readyToInstall
+                    ?.versionName,
+            )
+            assertNull(updater.state.value.dialog)
+            assertEquals(kept, prefs().getString("found_feed", null))
+        }
+
+    @Test
+    fun aNewerUpdateReplacesTheKeptOne() =
+        runTest {
+            val updater = updater(FakePlatform(apk))
+            updater.onAppStart()
+            advanceUntilIdle()
+            feedVersionCode = 1002
+            feedVersionName = "0.0.1-probe.3"
+            updater.checkNow()
+            advanceUntilIdle()
+            val kept = prefs().getString("found_feed", null)!!
+            assertTrue(kept.contains("0.0.1-probe.3"))
+            assertFalse(kept.contains("0.0.1-probe.2"))
+        }
+
+    @Test
+    fun aDownloadGoneFromTheServerSaysToCheckAgain() =
+        runTest {
+            val platform =
+                object : UpdatePlatform by FakePlatform(apk) {
+                    override fun download(
+                        url: String,
+                        target: File,
+                        expectedSize: Long,
+                        onProgress: (Long) -> Unit,
+                    ): Long = throw HttpStatusException(404, "example.org")
+                }
+            val updater = updater(platform)
+            updater.checkNow()
+            advanceUntilIdle()
+            updater.install()
+            advanceUntilIdle()
+            val refused = updater.state.value.dialog as UpdateDialog.NotInstalled
+            assertTrue(refused.message, refused.message.contains("no longer on the update server"))
         }
 
     @Test
     fun checksAutomaticallyAtMostOnceADay() =
         runTest {
+            // Nothing newer: no kept update to confirm at the next start.
+            feedVersionCode = 1000
             val platform = FakePlatform(apk)
             updater(platform).onAppStart()
             advanceUntilIdle()
