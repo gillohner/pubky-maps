@@ -151,7 +151,10 @@ map left in view (also under the notices below the search bar) once the sheet ha
 the page loads, once its growing header covers it; not after the user moved the map or the
 sheet. A search result or a link's place goes there in one move as its page opens. It shows the
 name, what the place is, the distance and the address, Directions, Start here, Share and Open in
-(the apps switched on in Settings, installed ones first); the Pinakes card's photo and text with
+(the apps switched on in Settings, installed ones first), with Bookmark, Tag, Post and Add to
+collection after Start here for writes. On a phone they are one row of icon buttons (Directions filled),
+each saying its words on a long press and to TalkBack, the ones that do not fit under More; beside
+the map on a wide screen they are labelled buttons; the Pinakes card's photo and text with
 their credits; OpenStreetMap details from the card's facts when Pinakes serves them, or, when the card brings none, those an offline area keeps (opening hours with open or closed now, phone,
 website, wheelchair access, cuisine); Pubky tags with their counts and who tagged (people the user
 follows first, the user's own tags marked); photos and posts about the place from Nexus, newest first;
@@ -183,7 +186,7 @@ here on a place page (also a dropped pin, as CoMaps' "Route from") makes that pl
 directions to every other place until the user clears it, for as long as the app runs: they ask for
 no position, say "By car from" the start's name, mark the start with a white dot in a dark ring, and
 "From your location" in the route card routes from the user's position again. The start's own page
-reads "Starting here" (a tap clears it) and routes from the user. Another
+says "Starting here" on its Start here button (a tap clears it) and routes from the user. Another
 place, or closing the page, ends them. Without a position, a route or a
 server, the page says which is missing (with Settings when location access is off for good), and
 every server failing names routing in the map's line of missing parts.

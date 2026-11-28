@@ -9,7 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
-import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.Density
@@ -133,7 +133,7 @@ class PlaceSheetPeekTest {
      */
     private fun assertHeaderShown(bottomInset: Dp = 0.dp) {
         val bottom = compose.onRoot().getUnclippedBoundsInRoot().bottom - bottomInset
-        val share = compose.onNode(hasText("Share") and hasClickAction()).getUnclippedBoundsInRoot()
+        val share = compose.onNode(hasContentDescription("Share") and hasClickAction()).getUnclippedBoundsInRoot()
         val height = share.bottom - share.top
         assertTrue("the Share button is $height tall", height >= ButtonDefaults.MinHeight)
         assertTrue("the Share button ends at ${share.bottom}, the sheet at $bottom", share.bottom <= bottom)

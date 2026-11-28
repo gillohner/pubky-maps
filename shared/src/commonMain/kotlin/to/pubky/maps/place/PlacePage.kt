@@ -4,7 +4,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -13,7 +12,6 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,13 +23,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -84,7 +77,6 @@ import to.pubky.maps.links.OpenInAction
 import to.pubky.maps.routing.DirectionsCard
 import to.pubky.maps.routing.DirectionsUi
 import to.pubky.maps.routing.RouteStepList
-import to.pubky.maps.routing.RoutingIcons
 import to.pubky.maps.ui.AppIcons
 import to.pubky.maps.ui.TextIcon
 import to.pubky.maps.write.Kept
@@ -172,7 +164,8 @@ private val RedDark = Color(0xFFF28B82)
 
 /**
  * The top of the place page: what it is and the actions. On a phone it is the part of the sheet that
- * shows at its lowest stop.
+ * shows at its lowest stop. With [iconActions] (the phone's sheet) the actions are one row of icon
+ * buttons, else labelled buttons (the panel beside the map on a wide screen).
  */
 @Composable
 fun PlaceHeader(
@@ -180,6 +173,7 @@ fun PlaceHeader(
     context: PlacePageContext,
     actions: PlacePageActions,
     modifier: Modifier = Modifier,
+    iconActions: Boolean = false,
 ) {
     Column(modifier.padding(start = 16.dp, end = 8.dp, bottom = 12.dp)) {
         Row(verticalAlignment = Alignment.Top) {
@@ -207,48 +201,11 @@ fun PlaceHeader(
                 ?.let { line -> OpeningText(line) }
             OfflineNote(page, context)
         }
-        // Google Maps' order: Directions, the place's own actions, then Share and Open in; the row
-        // scrolls sideways when it is wider than the page.
-        Row(
-            modifier = Modifier.padding(top = 12.dp).horizontalScroll(rememberScrollState()).padding(end = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            actions.onDirections?.let { directions ->
-                Button(onClick = directions) {
-                    Icon(RoutingIcons.Directions, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Directions")
-                }
-            }
-            actions.routeStart?.let { StartHereButton(it) }
-            val writes = actions.writes
-            if (writes != null) {
-                val saved = writes.own.isSaved
-                FilledTonalButton(onClick = writes.onToggleSave) {
-                    Icon(
-                        if (saved) WriteIcons.Bookmark else WriteIcons.BookmarkBorder,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (saved) "Bookmarked" else "Bookmark")
-                }
-                ActionButton(WriteIcons.Tag, "Tag", writes.onTag)
-                ActionButton(WriteIcons.Post, "Post", writes.onPost)
-                ActionButton(WriteIcons.AddToList, "Add to collection", writes.onAddToList)
-            }
-            actions.onShare?.let { share ->
-                if (writes != null) {
-                    ActionButton(AppIcons.Share, "Share", share)
-                } else {
-                    FilledTonalButton(onClick = share) {
-                        Icon(AppIcons.Share, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Share")
-                    }
-                }
-            }
-            if (actions.openIn.isNotEmpty()) OpenInButton(actions)
+        val row = placeActions(actions)
+        if (iconActions) {
+            IconActionRow(row, Modifier.padding(top = 12.dp))
+        } else {
+            LabelledActionRow(row, Modifier.padding(top = 12.dp))
         }
         if (actions.routeStart?.chosen == true) {
             Text(
@@ -259,38 +216,6 @@ fun PlaceHeader(
             )
         }
         actions.directions?.let { DirectionsCard(it, Modifier.padding(top = 12.dp, end = 8.dp)) }
-    }
-}
-
-/**
- * "Start here", as CoMaps' "Route from" beside its "Route to": directions to the places opened next
- * start from this one (a hotel, a station) instead of the user's position. Chosen, it reads "Starting
- * here" and clears the start again, as Bookmark reads "Bookmarked" (the label is the state TalkBack reads).
- */
-@Composable
-private fun StartHereButton(start: RouteStartChoice) {
-    val content: @Composable RowScope.() -> Unit = {
-        Icon(RoutingIcons.TripOrigin, contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(if (start.chosen) "Starting here" else "Start here")
-    }
-    if (start.chosen) {
-        FilledTonalButton(onClick = start.onToggle, content = content)
-    } else {
-        OutlinedButton(onClick = start.onToggle, content = content)
-    }
-}
-
-@Composable
-private fun ActionButton(
-    icon: ImageVector,
-    text: String,
-    onClick: () -> Unit,
-) {
-    OutlinedButton(onClick = onClick) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(text)
     }
 }
 
@@ -332,30 +257,6 @@ private fun OfflineNote(
         )
         Spacer(Modifier.width(6.dp))
         Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-/** "Open in" with the apps in a menu, like Google Maps' and CoMaps' share/open menus. */
-@Composable
-private fun OpenInButton(actions: PlacePageActions) {
-    var open by remember { mutableStateOf(false) }
-    Box {
-        OutlinedButton(onClick = { open = true }) {
-            Icon(PlaceIcons.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Open in")
-        }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            actions.openIn.forEach { action ->
-                DropdownMenuItem(
-                    text = { Text(if (action.inBrowser) "${action.title} (web)" else action.title) },
-                    onClick = {
-                        open = false
-                        actions.onOpenIn(action)
-                    },
-                )
-            }
-        }
     }
 }
 
